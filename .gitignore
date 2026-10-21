@@ -17,3 +17,4 @@
 /local.properties
 ci-logs/
 !app/google-services.json.example
+keystore.properties

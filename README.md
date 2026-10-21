@@ -87,6 +87,27 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 > Le wrapper Gradle n'est pas versionné : Android Studio propose la distribution locale,
 > ou utilisez `gradle` (8.9+) installé sur la machine. La CI utilise Gradle 8.9.
 
+### Signer une version release (facultatif)
+
+`assembleRelease` produit un APK **non signé** tant qu'aucun keystore n'est configuré. Pour signer :
+
+```bash
+# à la racine du dépôt — ce fichier est ignoré par git
+cat > keystore.properties <<'EOF'
+storeFile=atlas-release.jks
+storePassword=********
+keyAlias=atlas
+keyPassword=********
+EOF
+
+gradle :app:assembleRelease
+# → app/build/outputs/apk/release/app-release.apk
+```
+
+La release active R8 (`isMinifyEnabled`), réduit les ressources et **refuse HTTP en clair**.
+Pour les App Links, le certificat de signature doit être déclaré dans le
+[`assetlinks.json`](https://stock.afmarbre.com/.well-known/assetlinks.json) du serveur.
+
 ### Choisir son serveur (première ouverture)
 
 1. L'app propose **Production** (`https://stock.afmarbre.com`), **Émulateur** (`http://10.0.2.2:8787`)

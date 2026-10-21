@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,6 +7,15 @@ plugins {
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
 }
+
+// Optional release signing: drop a keystore.properties next to settings.gradle.kts
+// (storeFile, storePassword, keyAlias, keyPassword) and `assembleRelease` is signed.
+// Without it the build still works and produces an unsigned release APK.
+val signingProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val hasReleaseKeystore = signingProperties.getProperty("storeFile") != null
 
 android {
     namespace = "ma.etherealmber.atlascommerce"
@@ -27,6 +38,17 @@ android {
         buildConfigField("String", "SECURITY_EMAIL", "\"security@afmarbre.com\"")
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = rootProject.file(signingProperties.getProperty("storeFile"))
+                storePassword = signingProperties.getProperty("storePassword")
+                keyAlias = signingProperties.getProperty("keyAlias")
+                keyPassword = signingProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -34,6 +56,7 @@ android {
             buildConfigField("boolean", "ALLOW_CLEARTEXT", "true")
         }
         release {
+            if (hasReleaseKeystore) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             buildConfigField("boolean", "ALLOW_CLEARTEXT", "false")
@@ -83,7 +106,6 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.navigation:navigation-compose:2.8.4")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
