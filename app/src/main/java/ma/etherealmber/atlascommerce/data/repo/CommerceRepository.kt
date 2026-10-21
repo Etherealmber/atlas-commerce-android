@@ -11,6 +11,7 @@ import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
+import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -46,6 +47,19 @@ class CommerceRepository @Inject constructor(
     /** Exact barcode/SKU lookup used by the scanner. */
     suspend fun scan(code: String): ApiResult<ProductDto> =
         runner.envelope { apiProvider.api().scanBarcode(code) }
+
+    /** Manual stock movement: `type` = "in" | "out" | "adjustment". */
+    suspend fun adjustStock(
+        productId: Long,
+        quantity: Double,
+        type: String,
+        reason: String?,
+    ): ApiResult<ProductDto> = runner.envelope {
+        apiProvider.api().adjustStock(
+            productId,
+            StockAdjustRequest(quantity = quantity, type = type, reason = reason?.takeIf { it.isNotBlank() }),
+        )
+    }
 
     suspend fun createQuickSale(request: QuickSaleRequest): ApiResult<CreatedInvoiceDto> =
         runner.envelope { apiProvider.api().createInvoice(request) }

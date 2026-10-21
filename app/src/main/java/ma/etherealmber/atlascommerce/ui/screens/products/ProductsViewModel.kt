@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
@@ -106,6 +107,34 @@ class ProductsViewModel @Inject constructor(
         if (quantity <= 0.0) return
         cartStore.add(product, quantity)
         _messages.tryEmit("${product.name} · ajouté au panier")
+    }
+
+    /**
+     * Records a manual stock movement (entrée / sortie) and refreshes the list.
+     * The worker keeps an audit trail, so a reason is always worth typing.
+     */
+    fun adjustStock(product: ProductDto, quantity: Double, out: Boolean, reason: String) {
+        if (quantity <= 0.0) {
+            _messages.tryEmit("Indiquez une quantité supérieure à zéro.")
+            return
+        }
+        viewModelScope.launch {
+            val result = commerceRepository.adjustStock(
+                productId = product.id,
+                quantity = quantity,
+                type = if (out) "out" else "in",
+                reason = reason,
+            )
+            when (result) {
+                is ApiResult.Failure -> _messages.tryEmit(result.message)
+                is ApiResult.Success -> {
+                    _messages.tryEmit(
+                        "${result.data.name} · stock ${AtlasFormat.quantity(result.data.stock)}",
+                    )
+                    fetchState(query = _state.value.query, initial = false)
+                }
+            }
+        }
     }
 
     private fun fetchState(query: String, initial: Boolean) {

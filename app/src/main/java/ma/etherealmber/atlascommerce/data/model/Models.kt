@@ -152,6 +152,13 @@ data class ProductDto(
         ).joinToString(" · ")
 }
 
+data class StockAdjustRequest(
+    val quantity: Double,
+    /** "in" (entrée), "out" (sortie) or "adjustment". */
+    val type: String = "adjustment",
+    val reason: String? = null,
+)
+
 // ---------------------------------------------------------------------------
 // Clients
 // ---------------------------------------------------------------------------

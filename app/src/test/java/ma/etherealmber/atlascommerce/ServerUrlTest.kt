@@ -45,6 +45,12 @@ class ServerUrlTest {
     }
 
     @Test
+    fun `bare lan hostname is accepted`() {
+        assertEquals("https://atlas.local:8787", ServerUrl.normalize("atlas.local:8787"))
+        assertEquals("https://boutique", ServerUrl.normalize("boutique"))
+    }
+
+    @Test
     fun `display hides the scheme`() {
         assertEquals("stock.afmarbre.com", ServerUrl.display("https://stock.afmarbre.com"))
         assertEquals("10.0.2.2:8787", ServerUrl.display("http://10.0.2.2:8787/"))

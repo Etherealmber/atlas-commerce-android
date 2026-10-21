@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddShoppingCart
 import androidx.compose.material.icons.outlined.Inventory2
@@ -24,6 +25,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -65,6 +68,7 @@ fun ProductsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val density = Atlas.density
     var selected by remember { mutableStateOf<ProductDto?>(null) }
+    var adjustTarget by remember { mutableStateOf<ProductDto?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { message -> onToast(message) }
@@ -206,6 +210,22 @@ fun ProductsScreen(
                 selected = null
                 onOpenSale()
             },
+            onAdjustStock = {
+                adjustTarget = product
+                selected = null
+            },
+        )
+    }
+
+    val target = adjustTarget
+    if (target != null) {
+        StockAdjustDialog(
+            product = target,
+            onDismiss = { adjustTarget = null },
+            onSubmit = { quantity, out, reason ->
+                viewModel.adjustStock(target, quantity, out, reason)
+                adjustTarget = null
+            },
         )
     }
 }
@@ -268,6 +288,7 @@ private fun ProductDetailDialog(
     onDismiss: () -> Unit,
     onAdd: (Double) -> Unit,
     onOpenSale: () -> Unit,
+    onAdjustStock: () -> Unit,
 ) {
     var quantity by remember(product.id) { mutableStateOf(1.0) }
 
@@ -340,11 +361,97 @@ private fun ProductDetailDialog(
         },
         dismissButton = {
             Row {
+                if (product.trackInventory) {
+                    TextButton(onClick = onAdjustStock) { Text("Stock") }
+                }
                 if (canSell) {
                     TextButton(onClick = onOpenSale) { Text("Voir le panier") }
                 }
                 TextButton(onClick = onDismiss) { Text("Fermer") }
             }
+        },
+    )
+}
+
+/**
+ * Manual stock movement. Posts to `/api/products/:id/adjust-stock`, which keeps
+ * an audit entry; the reason is optional but strongly recommended.
+ */
+@Composable
+private fun StockAdjustDialog(
+    product: ProductDto,
+    onDismiss: () -> Unit,
+    onSubmit: (quantity: Double, out: Boolean, reason: String) -> Unit,
+) {
+    var rawQuantity by remember(product.id) { mutableStateOf("") }
+    var isOut by remember(product.id) { mutableStateOf(true) }
+    var reason by remember(product.id) { mutableStateOf("") }
+    val quantity = rawQuantity.replace(',', '.').toDoubleOrNull() ?: 0.0
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ajuster le stock") },
+        text = {
+            Column {
+                Text(
+                    text = product.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "Stock actuel : ${AtlasFormat.quantity(product.stock)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !isOut,
+                        onClick = { isOut = false },
+                        label = { Text("Entrée") },
+                    )
+                    FilterChip(
+                        selected = isOut,
+                        onClick = { isOut = true },
+                        label = { Text("Sortie") },
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = rawQuantity,
+                    onValueChange = { input ->
+                        rawQuantity = input.filter { it.isDigit() || it == '.' || it == ',' }
+                    },
+                    label = { Text("Quantité") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    label = { Text("Motif (facultatif)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Le mouvement est enregistré dans le journal d'audit du serveur.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSubmit(quantity, isOut, reason) },
+                enabled = quantity > 0.0,
+            ) { Text("Valider") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annuler") }
         },
     )
 }

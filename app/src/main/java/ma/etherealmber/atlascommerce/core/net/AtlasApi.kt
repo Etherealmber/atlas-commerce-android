@@ -12,6 +12,7 @@ import ma.etherealmber.atlascommerce.data.model.MeDto
 import ma.etherealmber.atlascommerce.data.model.OtpRequest
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
+import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Path
@@ -63,6 +64,13 @@ interface AtlasApi {
      * Returns 404 with `code = NOT_FOUND` (unknown code) or `PENDING_APPROVAL`
      * (already proposed from this phone, waiting on the desktop).
      */
+    /** Manual stock movement (entrée / sortie), audited server-side. */
+    @POST("api/products/{id}/adjust-stock")
+    suspend fun adjustStock(
+        @Path("id") id: Long,
+        @Body body: StockAdjustRequest,
+    ): ApiEnvelope<ProductDto>
+
     @GET("api/scan/barcode/{code}")
     suspend fun scanBarcode(@Path("code") code: String): ApiEnvelope<ProductDto>
 

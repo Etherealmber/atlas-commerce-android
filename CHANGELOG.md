@@ -20,6 +20,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
 - Scan de codes-barres (CameraX + ML Kit) avec saisie manuelle de secours.
 - Vente rapide : panier, quantités, client, note, création d'un ticket VR sans TVA.
 - Pages **Licence MIT**, **Sécurité & confidentialité** et **À propos** intégrées.
+- **Ajustement de stock** depuis la fiche produit (entrée / sortie + motif) via
+  `POST /api/products/:id/adjust-stock`, avec rafraîchissement de la liste.
+- **App Links** vérifiés pour `stock.afmarbre.com` (ouverture des liens de l'ERP dans l'app).
+- Scanner branché sur le chemin rapide du worker (`GET /api/scan/barcode/:code`, code-barres ou SKU
+  exact) et catalogue demandé en projection `fields=mobile` (plus léger, plus rapide).
 - Thème système / clair / sombre et densité compacte / confortable.
 - Tests unitaires (normalisation d'adresse serveur, formatage fr-MA) et CI GitHub Actions
   (assemble debug, tests, APK en artefact).

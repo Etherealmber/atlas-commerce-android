@@ -36,8 +36,8 @@ Atlas et travaille en client léger sur son API REST. Elle est complémentaire d
 | **Choix du serveur** | Avant toute connexion : serveur de production, émulateur, serveur local ou adresse personnalisée, avec test réel de `/api/health` |
 | **Connexion** | Identifiant + mot de passe, puis **OTP e-mail** si l'appareil est inconnu (le worker le décide) |
 | **Accueil** | Trésorerie, valeur du stock, produits, stock faible, créances, tendance mensuelle, derniers documents |
-| **Produits** | Recherche (nom / SKU / code-barres), filtre « stock faible », fiche produit, ajout au panier, **catalogue hors ligne** |
-| **Scan** | CameraX + ML Kit (modèle embarqué) : code-barres → produit → panier, avec saisie manuelle de secours |
+| **Produits** | Recherche (nom / SKU / code-barres), filtre « stock faible », fiche produit, ajout au panier, **ajustement de stock** (entrée / sortie, motif audité), **catalogue hors ligne** |
+| **Scan** | CameraX + ML Kit (modèle embarqué) : code-barres → `/api/scan/barcode/:code` (chemin rapide sans DDL) → produit → panier, avec saisie manuelle de secours |
 | **Vente** | Panier, quantification, client, note, création d'un **ticket VR sans TVA** prêt à encaisser |
 | **Réglages** | Serveur, thème (système / clair / sombre), densité, compte, déconnexion |
 | **Pages légales** | Licence MIT complète, sécurité & confidentialité, à propos — intégrées à l'app |
@@ -53,6 +53,11 @@ Atlas et travaille en client léger sur son API REST. Elle est complémentaire d
   aucune analytic, pages *Sécurité* et *Licence* dans l'app.
 - **Thème** clair / sombre / système et densité compacte ou confortable, persistés.
 - **Mode hors ligne** : dernier catalogue conservé sur l'appareil, bandeau explicite.
+- **Liens vérifiés (App Links)** vers `stock.afmarbre.com` : un lien de facture ou de produit
+  s'ouvre dans l'app quand elle est installée.
+- **Robustesse** : booléens SQLite (`track_inventory`, `is_active`) et colonnes nullables
+  (`low_stock_threshold`, `amount_paid`) décodés sans casser le JSON ; restauration de session
+  tolérante à un Keystore réinitialisé ; chaque écran recharge ses données quand le compte change.
 - **CI Android** : compilation + tests unitaires sur GitHub Actions, APK debug en artefact.
 
 ## 🚀 Démarrage
@@ -148,7 +153,9 @@ Choix techniques :
 | `POST` | `/api/auth/verify-otp` | Validation du code e-mail |
 | `GET` | `/api/auth/me` | Profil / rôle / rafraîchissement de session |
 | `GET` | `/api/dashboard` | Tableau de bord |
-| `GET` | `/api/products` | Catalogue (recherche `q`, `limit`) |
+| `GET` | `/api/products` | Catalogue (`q`, `limit`, `fields=mobile` : projection téléphone, sans image ni DDL) |
+| `GET` | `/api/scan/barcode/:code` | Chemin rapide du scanner (code-barres **ou** SKU exact) |
+| `POST` | `/api/products/:id/adjust-stock` | Entrée / sortie de stock manuelle, auditée côté worker |
 | `GET` | `/api/settings` | Nom de société, devise |
 | `GET` | `/api/clients` | Liste clients (préparé pour les évolutions) |
 | `GET` | `/api/invoices` | Documents |
@@ -162,6 +169,8 @@ En-têtes attendus par le worker : `Authorization: Bearer <token>`, `X-Device-Fi
 - Jeton de session **chiffré au repos** (AES-256-GCM, clé non exportable du Keystore Android).
 - **HTTPS obligatoire** en release, `usesCleartextTraffic=false`, réseau en clair réservé au debug.
 - **Aucun analytics**, aucun crash reporter, aucune requête vers un tiers.
+- **App Links** `autoVerify` : le binaire ne capte que `https://stock.afmarbre.com`, via la
+  déclaration Digital Asset Links publiée par l'application web.
 - La caméra sert uniquement au décodage local des codes-barres (ML Kit embarqué).
 - Déconnexion = jeton effacé, panier vidé, cache purgé.
 - Détails, périmètre et procédure de signalement : [SECURITY.md](SECURITY.md).

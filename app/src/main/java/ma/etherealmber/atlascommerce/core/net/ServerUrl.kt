@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.core.net
 
+import ma.etherealmber.atlascommerce.BuildConfig
 import java.net.URI
 
 /**
@@ -17,26 +18,35 @@ object ServerUrl {
 
     data class Preset(val label: String, val url: String, val hint: String, val recommended: Boolean)
 
-    fun presets(): List<Preset> = listOf(
-        Preset(
-            label = "Production",
-            url = PRODUCTION,
-            hint = "Serveur Atlas officiel (Cloudflare)",
-            recommended = true,
-        ),
-        Preset(
-            label = "Émulateur",
-            url = EMULATOR,
-            hint = "Worker local vu depuis l'émulateur (npm run dev)",
-            recommended = false,
-        ),
-        Preset(
-            label = "Local",
-            url = DEVICE_LOCALHOST,
-            hint = "Worker local depuis cet appareil",
-            recommended = false,
-        ),
-    )
+    fun presets(): List<Preset> = buildList {
+        add(
+            Preset(
+                label = "Production",
+                url = PRODUCTION,
+                hint = "Serveur Atlas officiel (Cloudflare)",
+                recommended = true,
+            ),
+        )
+        // Plain-HTTP presets only make sense where cleartext is allowed (debug).
+        if (BuildConfig.ALLOW_CLEARTEXT) {
+            add(
+                Preset(
+                    label = "Émulateur",
+                    url = EMULATOR,
+                    hint = "Worker local vu depuis l'émulateur (npm run dev)",
+                    recommended = false,
+                ),
+            )
+            add(
+                Preset(
+                    label = "Local",
+                    url = DEVICE_LOCALHOST,
+                    hint = "Worker local depuis cet appareil",
+                    recommended = false,
+                ),
+            )
+        }
+    }
 
     /**
      * Normalises user input into `scheme://host[:port][/path]` without a trailing
@@ -64,8 +74,9 @@ object ServerUrl {
         val scheme = uri.scheme?.lowercase() ?: return null
         if (scheme != "http" && scheme != "https") return null
         val host = uri.host ?: return null
-        val looksLikeHost = host.contains('.') || host == "localhost" || host.startsWith("[")
-        if (host.isBlank() || host.contains(' ') || !looksLikeHost) return null
+        // Accept dotted names, "localhost", bracketed IPv6 and bare LAN hostnames.
+        val looksLikeHost = host.startsWith("[") || HOST_PATTERN.matches(host)
+        if (host.isBlank() || !looksLikeHost) return null
         if (uri.userInfo != null || uri.query != null || uri.fragment != null) return null
         val port = if (uri.port > 0) ":${uri.port}" else ""
         val path = uri.path.orEmpty().trimEnd('/')
@@ -93,4 +104,7 @@ object ServerUrl {
     fun withSlash(url: String): String = if (url.endsWith("/")) url else "$url/"
 
     fun isProduction(url: String?): Boolean = normalize(url) == normalize(PRODUCTION)
+
+    private val HOST_PATTERN =
+        Regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$", RegexOption.IGNORE_CASE)
 }
