@@ -31,13 +31,20 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK packages
+      # ubuntu-latest ships the Android SDK; install the exact platform we compile
+      # against when cmdline-tools are available, otherwise let AGP auto-download.
+      - name: Prepare Android SDK
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          echo "Android SDK: $SDK_ROOT"
+          ls "$SDK_ROOT" || true
+          SDKM="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$SDKM" ]; then
+            yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+            "$SDKM" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
+          else
+            echo "sdkmanager not found - relying on AGP SDK auto-download"
+          fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -65,6 +72,14 @@ jobs:
           git commit -m "ci: build log [skip ci]" || exit 0
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ${{ runner.temp }}/build.log
+          if-no-files-found: ignore
+
       - name: Upload APK
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
@@ -89,7 +104,16 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - name: Prepare Android SDK
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          SDKM="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$SDKM" ]; then
+            yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+            "$SDKM" "platforms;android-35" "build-tools;35.0.0" || true
+          else
+            echo "sdkmanager not found - relying on AGP SDK auto-download"
+          fi
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
