@@ -31,6 +31,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
 - Aucun analytics ni SDK tiers ; caméra traitée localement.
 - En-têtes `X-Atlas-Client`, `X-Device-Fingerprint` et `User-Agent` Atlas sur chaque requête.
 - `allowBackup=false`, journalisation HTTP désactivée et `Authorization` masqué en release.
+- App Links vérifiés pour `stock.afmarbre.com` (Digital Asset Links publiés par l'application web).
 
 ### Corrigé
 
@@ -38,6 +39,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
   thème, DI, réseau, écrans et ressources manquaient dans l'ébauche.
 - Suppression des références Firebase / Room / identifiants Google inutilisés qui empêchaient
   la compilation et alourdissaient l'APK.
+- Les booléens SQLite (`track_inventory`, `is_active`) et les colonnes numériques nullables
+  (`low_stock_threshold`, `amount_paid`) sont désormais décodés sans casser le parsing JSON.
+- Les écrans rechargent leurs données quand le compte connecté change : aucune donnée du
+  précédent utilisateur ne subsiste sur un appareil partagé.
+- Un seul `SnackbarHost` pour toute l'application (plus de messages affichés deux fois).
+- Barres système lisibles avec le thème sombre, écrans de connexion et de serveur protégés
+  par les insets (encoche, gestes).
+- Champ de texte : bascule d'affichage du mot de passe, action « Terminé » du clavier et
+  libellés d'aide accessibles.
+- Adresse serveur : tout autre schéma que `http`/`https` est refusé au lieu d'être transformé.
+- Nettoyage des imports inutilisés et des doublons de libellés de statut.
 - Manifest nettoyé : plus de service de push fantôme ni de deep link non traité.
 
 ## [1.0.4] — ébauche précédente
