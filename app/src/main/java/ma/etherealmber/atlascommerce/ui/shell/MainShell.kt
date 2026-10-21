@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.shell
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -71,6 +72,9 @@ fun MainShell(
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
     val switchTab: (MainTab) -> Unit = { target -> tabName = target.name }
+
+    // Back from a secondary tab returns to Accueil instead of closing the app.
+    BackHandler(enabled = tab != MainTab.HOME) { switchTab(MainTab.HOME) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

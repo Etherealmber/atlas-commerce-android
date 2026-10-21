@@ -428,10 +428,19 @@ private fun analyzeFrame(
         proxy.close()
         return
     }
-    val image = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
-    scanner.process(image)
-        .addOnSuccessListener { barcodes ->
-            barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue?.let(onBarcode)
-        }
-        .addOnCompleteListener { proxy.close() }
+    val image = runCatching {
+        InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
+    }.getOrNull()
+    if (image == null) {
+        proxy.close()
+        return
+    }
+    // The frame must always be released, even if ML Kit refuses the image.
+    runCatching {
+        scanner.process(image)
+            .addOnSuccessListener { barcodes ->
+                barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue?.let(onBarcode)
+            }
+            .addOnCompleteListener { proxy.close() }
+    }.onFailure { proxy.close() }
 }
