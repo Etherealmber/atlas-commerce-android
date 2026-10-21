@@ -24,6 +24,7 @@ import ma.etherealmber.atlascommerce.data.model.QuickSaleItemDto
 import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import java.time.LocalDate
+import java.util.UUID
 import javax.inject.Inject
 
 @HiltViewModel
@@ -46,6 +47,13 @@ class SaleViewModel @Inject constructor(
     }
 
     val lines: StateFlow<List<CartLine>> = cartStore.lines
+
+    /**
+     * One key per basket: if the same submission is retried (network hiccup,
+     * button tapped twice), the worker returns the original ticket instead of
+     * creating a duplicate. It is renewed once the sale is committed.
+     */
+    private var idempotencyKey: String = UUID.randomUUID().toString()
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -98,6 +106,7 @@ class SaleViewModel @Inject constructor(
 
     fun clearCart() {
         cartStore.clear()
+        idempotencyKey = UUID.randomUUID().toString()
         _state.update { it.copy(error = null) }
     }
 
@@ -138,13 +147,14 @@ class SaleViewModel @Inject constructor(
 
         viewModelScope.launch {
             _state.update { it.copy(submitting = true, error = null) }
-            when (val result = commerceRepository.createQuickSale(request)) {
+            when (val result = commerceRepository.createQuickSale(request, idempotencyKey)) {
                 is ApiResult.Failure -> _state.update {
                     it.copy(submitting = false, error = result.message)
                 }
 
                 is ApiResult.Success -> {
                     cartStore.clear()
+                    idempotencyKey = UUID.randomUUID().toString()
                     _state.update {
                         it.copy(
                             submitting = false,

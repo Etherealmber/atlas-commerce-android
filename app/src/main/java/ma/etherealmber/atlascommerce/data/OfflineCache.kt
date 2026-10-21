@@ -5,6 +5,8 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import dagger.hilt.android.qualifiers.ApplicationContext
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,16 +30,22 @@ class OfflineCache @Inject constructor(
         Types.newParameterizedType(List::class.java, ProductDto::class.java),
     )
 
-    fun saveProducts(products: List<ProductDto>) {
+    /** Disk I/O, so callers never block the main thread with a 300-product JSON. */
+    suspend fun saveProducts(products: List<ProductDto>) = withContext(Dispatchers.IO) {
         write(PRODUCTS_FILE) { productAdapter.toJson(products) }
     }
 
-    fun readProducts(): List<ProductDto> {
-        val raw = read(PRODUCTS_FILE) ?: return emptyList()
-        return runCatching { productAdapter.fromJson(raw) }.getOrNull().orEmpty()
+    suspend fun readProducts(): List<ProductDto> = withContext(Dispatchers.IO) {
+        val raw = read(PRODUCTS_FILE) ?: return@withContext emptyList()
+        runCatching { productAdapter.fromJson(raw) }.getOrNull().orEmpty()
     }
 
-    fun clear() {
+    /**
+     * Drops the cached catalogue. Called on sign-out and on server change: the
+     * cache is shared by all accounts, so keeping it would leak the previous
+     * shop's prices into an offline session.
+     */
+    suspend fun clear() = withContext(Dispatchers.IO) {
         runCatching { directory.listFiles()?.forEach { it.delete() } }
     }
 

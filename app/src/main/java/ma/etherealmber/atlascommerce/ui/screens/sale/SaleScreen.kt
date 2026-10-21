@@ -299,7 +299,8 @@ private fun CartLineRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = "${AtlasFormat.money(line.product.price, currency)} · ${AtlasFormat.quantity(line.quantity)} × = " +
+                text = "${AtlasFormat.quantity(line.quantity)} × " +
+                    "${AtlasFormat.money(line.product.price, currency)} = " +
                     AtlasFormat.money(line.lineTotal, currency),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

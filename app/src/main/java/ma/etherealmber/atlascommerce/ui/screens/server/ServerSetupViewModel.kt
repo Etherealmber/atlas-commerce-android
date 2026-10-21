@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce.ui.screens.server
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +33,8 @@ class ServerSetupViewModel @Inject constructor(
         val canContinue: Boolean get() = !testing && !saving && !input.isBlank()
     }
 
+    private var probeJob: Job? = null
+
     private val _state = MutableStateFlow(
         UiState(
             input = serverConfig.selection.value?.baseUrl ?: ServerUrl.PRODUCTION,
@@ -41,7 +44,8 @@ class ServerSetupViewModel @Inject constructor(
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     fun onInputChange(value: String) {
-        _state.update { it.copy(input = value, report = null, error = null) }
+        probeJob?.cancel()
+        _state.update { it.copy(input = value, report = null, testing = false, error = null) }
     }
 
     fun choosePreset(url: String) {
@@ -56,10 +60,14 @@ class ServerSetupViewModel @Inject constructor(
             _state.update { it.copy(error = "Saisissez une adresse de serveur.") }
             return
         }
-        viewModelScope.launch {
+        probeJob?.cancel()
+        probeJob = viewModelScope.launch {
             _state.update { it.copy(testing = true, error = null) }
             val report = serverProbe.probe(raw)
-            _state.update { it.copy(testing = false, report = report) }
+            // The address may have been edited while the probe was running.
+            if (_state.value.input.trim() == raw) {
+                _state.update { it.copy(testing = false, report = report) }
+            }
         }
     }
 

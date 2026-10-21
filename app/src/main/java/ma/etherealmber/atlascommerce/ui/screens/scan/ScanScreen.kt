@@ -258,7 +258,8 @@ private fun ScanResultPanel(
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
-                text = "Le produit est ajouté au panier de vente rapide. Fonctionne hors ligne si le catalogue est en cache.",
+                text = "Le produit est ajouté au panier de vente rapide. La recherche d'un code " +
+                    "nécessite le serveur ; sans réseau, saisissez le code depuis l'onglet Produits.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -376,9 +377,13 @@ private fun CameraPreview(
         val providerFuture = ProcessCameraProvider.getInstance(context)
         var provider: ProcessCameraProvider? = null
         var analysis: ImageAnalysis? = null
+        var disposed = false
 
         providerFuture.addListener(
             {
+                // The user may have left the tab before the provider resolved;
+                // binding then would keep the camera open forever.
+                if (disposed) return@addListener
                 runCatching {
                     val cameraProvider = providerFuture.get()
                     provider = cameraProvider
@@ -407,6 +412,7 @@ private fun CameraPreview(
         )
 
         onDispose {
+            disposed = true
             runCatching { provider?.unbindAll() }
             runCatching { analysis?.clearAnalyzer() }
             runCatching { scanner.close() }

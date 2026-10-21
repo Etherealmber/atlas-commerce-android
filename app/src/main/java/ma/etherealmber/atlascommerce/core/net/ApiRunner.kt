@@ -5,6 +5,7 @@ import com.squareup.moshi.JsonEncodingException
 import com.squareup.moshi.Moshi
 import retrofit2.HttpException
 import java.io.IOException
+import kotlin.coroutines.cancellation.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,6 +32,8 @@ class ApiRunner @Inject constructor(moshi: Moshi) {
                     message = envelope.error ?: envelope.message ?: "Réponse inattendue du serveur.",
                 )
             }
+        } catch (c: CancellationException) {
+            throw c
         } catch (t: Throwable) {
             failure(t)
         }
@@ -47,6 +50,8 @@ class ApiRunner @Inject constructor(moshi: Moshi) {
                     message = response.error ?: "Action refusée par le serveur.",
                 )
             }
+        } catch (c: CancellationException) {
+            throw c
         } catch (t: Throwable) {
             failure(t)
         }

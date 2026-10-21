@@ -29,20 +29,6 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-            <!--
-              App Links for the hosted Atlas Commerce instance. The matching
-              Digital Asset Links statement (package + signing fingerprints) is
-              published by the web app at https://stock.afmarbre.com/.well-known/assetlinks.json,
-              so invoice / product links open the app instead of the browser.
-              Verification failure is graceful: links simply stay in the browser.
-            -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="stock.afmarbre.com" />
-            </intent-filter>
         </activity>
     </application>
 </manifest>

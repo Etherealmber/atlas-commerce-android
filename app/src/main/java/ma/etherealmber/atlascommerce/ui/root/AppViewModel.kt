@@ -38,6 +38,10 @@ class AppViewModel @Inject constructor(
     val densityMode: StateFlow<DensityMode> = preferences.densityMode
         .stateIn(viewModelScope, SharingStarted.Eagerly, DensityMode.COMPACT)
 
+    /** False until the stored appearance is known, so the first frame is neutral. */
+    val appearanceLoaded: StateFlow<Boolean> = preferences.appearanceLoaded
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     val server: StateFlow<ServerSelection?> = serverConfig.selection
     val serverLoaded: StateFlow<Boolean> = serverConfig.loaded
     val session: StateFlow<SessionState> = sessionManager.state

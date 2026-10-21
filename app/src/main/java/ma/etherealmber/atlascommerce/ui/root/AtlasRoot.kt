@@ -64,6 +64,7 @@ private object Overlay {
 fun AtlasRoot(viewModel: AppViewModel = hiltViewModel()) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val densityMode by viewModel.densityMode.collectAsStateWithLifecycle()
+    val appearanceLoaded by viewModel.appearanceLoaded.collectAsStateWithLifecycle()
 
     AtlasTheme(themeMode = themeMode, densityMode = densityMode) {
         val dark = LocalAtlasDarkTheme.current
@@ -76,7 +77,13 @@ fun AtlasRoot(viewModel: AppViewModel = hiltViewModel()) {
                 isAppearanceLightNavigationBars = !dark
             }
         }
-        AtlasGate(viewModel)
+        // Until the saved appearance is known, paint the themed window background
+        // only — this avoids a light flash for users who chose dark.
+        if (!appearanceLoaded) {
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
+        } else {
+            AtlasGate(viewModel)
+        }
     }
 }
 

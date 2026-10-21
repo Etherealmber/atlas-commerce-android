@@ -22,7 +22,6 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
 - Pages **Licence MIT**, **Sécurité & confidentialité** et **À propos** intégrées.
 - **Ajustement de stock** depuis la fiche produit (entrée / sortie + motif) via
   `POST /api/products/:id/adjust-stock`, avec rafraîchissement de la liste.
-- **App Links** vérifiés pour `stock.afmarbre.com` (ouverture des liens de l'ERP dans l'app).
 - Scanner branché sur le chemin rapide du worker (`GET /api/scan/barcode/:code`, code-barres ou SKU
   exact) et catalogue demandé en projection `fields=mobile` (plus léger, plus rapide).
 - Thème système / clair / sombre et densité compacte / confortable.
@@ -55,6 +54,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
   libellés d'aide accessibles.
 - Adresse serveur : tout autre schéma que `http`/`https` est refusé au lieu d'être transformé.
 - Nettoyage des imports inutilisés et des doublons de libellés de statut.
+- Aucune requête `POST` rejouée automatiquement (OkHttp) : un ticket VR ou un ajustement de stock
+  ne peut plus être appliqué deux fois ; les tickets portent un en-tête `Idempotency-Key`.
+- Le test d'adresse serveur utilise un client **anonyme** : le jeton de session n'est jamais envoyé
+  à un hôte saisi par l'utilisateur.
+- Résultats de scan et de test de serveur : seule la dernière demande compte (plus de produit ou
+  de rapport périmé).
+- Recherche hors ligne corrigée (le catalogue en cache est réellement filtré) et cache produit
+  effacé à la déconnexion / au changement de serveur.
+- Thème : plus de flash clair au démarrage pour un utilisateur en thème sombre.
+- Caméra : liaison annulée si l'écran est quitté avant l'initialisation.
 - Manifest nettoyé : plus de service de push fantôme ni de deep link non traité.
 
 ## [1.0.4] — ébauche précédente

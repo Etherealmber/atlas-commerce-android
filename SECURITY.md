@@ -74,8 +74,10 @@ No location, contacts, microphone, storage or advertising permissions are reques
 ### Third parties
 
 There is **no analytics, telemetry, crash reporting or advertising SDK**. Network calls go only to
-the server you chose. ML Kit barcode decoding runs on-device with the bundled model. Opening GitHub
-or e-mail links hands control to the user's browser/mail app.
+the server you chose. ML Kit barcode decoding runs on-device with the bundled model; per Google's
+ML Kit terms the SDK also reports its own usage/performance metrics (app version, installation and
+device identifiers — never images or scanned codes). Opening GitHub or e-mail links hands control
+to the user's browser/mail app.
 
 ## Hardening checklist for self-hosters
 

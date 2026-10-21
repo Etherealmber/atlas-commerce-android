@@ -15,6 +15,7 @@ import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.security.CryptoStore
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
 import ma.etherealmber.atlascommerce.data.CartStore
+import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.data.model.LoginResponse
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
 import ma.etherealmber.atlascommerce.di.ApplicationScope
@@ -57,6 +58,7 @@ class SessionManager @Inject constructor(
     private val cryptoStore: CryptoStore,
     private val deviceIdentity: DeviceIdentity,
     private val cartStore: CartStore,
+    private val offlineCache: OfflineCache,
     @ApplicationScope private val scope: CoroutineScope,
 ) {
 
@@ -213,6 +215,8 @@ class SessionManager @Inject constructor(
         tokenHolder.clear()
         runCatching { preferences.clearSession() }
         cartStore.clear()
+        // The catalogue cache is shared by every account and every server.
+        runCatching { offlineCache.clear() }
         _state.value = SessionState.SignedOut
         if (!reason.isNullOrBlank()) _notices.tryEmit(reason)
     }

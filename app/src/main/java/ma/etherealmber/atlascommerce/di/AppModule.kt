@@ -56,10 +56,39 @@ object AppModule {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .callTimeout(45, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
+            // OkHttp would otherwise replay a request (including POSTs) after a
+            // stale pooled connection. Writes here must not happen twice, so
+            // automatic retries are off; the UI can retry deliberately.
+            .retryOnConnectionFailure(false)
             .addInterceptor(AtlasHeaderInterceptor(tokenHolder, deviceIdentity))
             .addInterceptor(SessionGuardInterceptor(sessionEvents))
             .addInterceptor(logging)
             .build()
     }
+
+    /**
+     * Client used to test a server address the user typed.
+     *
+     * It must be **anonymous**: the probe may target a host that is not the one
+     * the session belongs to, so it carries no `Authorization` header and no
+     * device fingerprint — only the header the worker needs to answer.
+     */
+    @Provides
+    @Singleton
+    @ProbeClient
+    fun provideProbeClient(): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .callTimeout(20, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(false)
+        .addInterceptor(
+            HttpLoggingInterceptor().apply {
+                level = if (BuildConfig.DEBUG) {
+                    HttpLoggingInterceptor.Level.BASIC
+                } else {
+                    HttpLoggingInterceptor.Level.NONE
+                }
+            },
+        )
+        .build()
 }

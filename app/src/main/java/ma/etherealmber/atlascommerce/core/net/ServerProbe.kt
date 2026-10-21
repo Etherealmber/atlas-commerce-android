@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.data.model.HealthDto
+import ma.etherealmber.atlascommerce.di.ProbeClient
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
@@ -31,7 +32,7 @@ data class ProbeReport(
  */
 @Singleton
 class ServerProbe @Inject constructor(
-    private val client: OkHttpClient,
+    @ProbeClient private val client: OkHttpClient,
     moshi: Moshi,
 ) {
 

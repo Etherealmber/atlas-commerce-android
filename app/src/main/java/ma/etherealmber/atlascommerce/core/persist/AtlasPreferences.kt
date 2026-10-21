@@ -54,6 +54,11 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         .map { it[Keys.API_BASE] }
         .distinctUntilChanged()
 
+    /** `null` until DataStore has emitted: the UI must not paint a default theme first. */
+    val appearanceLoaded: Flow<Boolean> = store.data
+        .map { true }
+        .distinctUntilChanged()
+
     val themeMode: Flow<ThemeMode> = store.data
         .map { ThemeMode.fromKey(it[Keys.THEME]) }
         .distinctUntilChanged()

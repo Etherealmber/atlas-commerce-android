@@ -53,8 +53,6 @@ Atlas et travaille en client léger sur son API REST. Elle est complémentaire d
   aucune analytic, pages *Sécurité* et *Licence* dans l'app.
 - **Thème** clair / sombre / système et densité compacte ou confortable, persistés.
 - **Mode hors ligne** : dernier catalogue conservé sur l'appareil, bandeau explicite.
-- **Liens vérifiés (App Links)** vers `stock.afmarbre.com` : un lien de facture ou de produit
-  s'ouvre dans l'app quand elle est installée.
 - **Robustesse** : booléens SQLite (`track_inventory`, `is_active`) et colonnes nullables
   (`low_stock_threshold`, `amount_paid`) décodés sans casser le JSON ; restauration de session
   tolérante à un Keystore réinitialisé ; chaque écran recharge ses données quand le compte change.
@@ -185,13 +183,22 @@ Choix techniques :
 En-têtes attendus par le worker : `Authorization: Bearer <token>`, `X-Device-Fingerprint`,
 `X-Atlas-Client: android`. Le worker lie chaque session à l'IP et à l'empreinte de l'appareil.
 
+## 🧪 Intégration continue
+
+Le workflow `.github/workflows/android.yml` compile (`assembleDebug`), exécute les tests unitaires,
+construit aussi la variante release (R8 + shrinkResources) puis publie l'APK debug en artefact.
+Les écritures réseau (`POST`) ne sont **jamais** rejouées automatiquement par OkHttp ; la création
+d'un ticket VR porte un en-tête `Idempotency-Key` que le worker déduplique.
+
 ## 🔐 Sécurité
 
 - Jeton de session **chiffré au repos** (AES-256-GCM, clé non exportable du Keystore Android).
 - **HTTPS obligatoire** en release, `usesCleartextTraffic=false`, réseau en clair réservé au debug.
-- **Aucun analytics**, aucun crash reporter, aucune requête vers un tiers.
-- **App Links** `autoVerify` : le binaire ne capte que `https://stock.afmarbre.com`, via la
-  déclaration Digital Asset Links publiée par l'application web.
+- **Aucun analytics**, aucun crash reporter, aucune requête vers un tiers — à l'exception des
+  métriques d'usage de **ML Kit** (Google), nécessaires au décodage des codes-barres : aucune
+  image, aucun code scanné ne sont transmis.
+- **Deep links** : aucun filtre `autoVerify` n'est déclaré tant que l'app ne sait pas router
+  les URL de l'ERP ; les liens restent donc ouverts dans le navigateur.
 - La caméra sert uniquement au décodage local des codes-barres (ML Kit embarqué).
 - Déconnexion = jeton effacé, panier vidé, cache purgé.
 - Détails, périmètre et procédure de signalement : [SECURITY.md](SECURITY.md).

@@ -60,6 +60,7 @@ class ProductsViewModel @Inject constructor(
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
     private var searchJob: Job? = null
+    private var fetchJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -138,7 +139,9 @@ class ProductsViewModel @Inject constructor(
     }
 
     private fun fetchState(query: String, initial: Boolean) {
-        viewModelScope.launch {
+        // A newer query must win: a slow response for "ab" may not overwrite "abc".
+        fetchJob?.cancel()
+        fetchJob = viewModelScope.launch {
             _state.update {
                 it.copy(
                     loading = initial && it.products.isEmpty(),
@@ -149,13 +152,20 @@ class ProductsViewModel @Inject constructor(
             when (val result = commerceRepository.products(query = query, limit = 300)) {
                 is ApiResult.Failure -> {
                     val offline = result.code == ApiRunner.CODE_NETWORK
-                    val cached = if (offline) commerceRepository.cachedProducts().filter { matches(it, query) } else emptyList()
+                    // Offline: always serve the (filtered) disk catalogue, otherwise
+                    // typing a query after a first successful load silently shows
+                    // the stale online list.
+                    val cached = if (offline) {
+                        commerceRepository.cachedProducts().filter { matches(it, query) }
+                    } else {
+                        emptyList()
+                    }
                     _state.update {
                         it.copy(
                             loading = false,
                             refreshing = false,
                             offline = offline,
-                            products = if (offline && it.products.isEmpty()) cached else it.products,
+                            products = if (offline) cached else it.products,
                             error = if (offline) null else result.message,
                         )
                     }

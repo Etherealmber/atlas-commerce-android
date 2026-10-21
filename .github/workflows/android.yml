@@ -7,9 +7,9 @@ on:
     branches: ['main']
   workflow_dispatch:
 
-# Needed to publish the build log back to the branch when compilation fails.
+# Read-only by default; only the build job may publish a failure log back to the branch.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: android-${{ github.ref }}
@@ -20,6 +20,9 @@ jobs:
     name: Assemble debug + unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Scoped to this job only: the failure log is committed back to the branch.
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -62,7 +65,11 @@ jobs:
       # Compiler output is the only way to debug without an Android SDK locally,
       # so on failure the tail of the log is committed to the branch.
       - name: Publish failure log
-        if: steps.build.outcome == 'failure' && github.ref_name != 'main'
+        # Push events only: on pull_request the ref is a detached `<n>/merge`, and
+        # fork PRs have a read-only token. A failed publish must never mask the
+        # real build error, hence continue-on-error.
+        if: steps.build.outcome == 'failure' && github.event_name == 'push' && github.ref_name != 'main'
+        continue-on-error: true
         run: |
           mkdir -p ci-logs
           tail -n 600 "$RUNNER_TEMP/build.log" > ci-logs/build.log
@@ -80,11 +87,12 @@ jobs:
           path: ${{ runner.temp }}/build.log
           if-no-files-found: ignore
 
-      # Shipping sanity: R8 + resource shrinking on the release variant. Kept
-      # non-blocking so a shrinker warning never hides the debug signal.
+      # Shipping sanity: the R8 + resource-shrinking variant must build too.
+      # pipefail keeps Gradle's exit code through the `tail` truncation.
       - name: Assemble release (R8, unsigned)
-        continue-on-error: true
-        run: gradle :app:assembleRelease --no-daemon --console=plain 2>&1 | tail -n 80
+        run: |
+          set -o pipefail
+          gradle :app:assembleRelease --no-daemon --console=plain 2>&1 | tail -n 80
 
       - name: Upload APK
         if: steps.build.outcome == 'success'
@@ -123,8 +131,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Android Lint (non blocking)
-        run: gradle :app:lintDebug --no-daemon --console=plain || true
+      - name: Android Lint
+        # app/build.gradle.kts sets abortOnError = false, so this reports findings
+        # without gating the PR; it still fails on configuration/tooling errors.
+        run: gradle :app:lintDebug --no-daemon --console=plain
       - name: Upload lint report
         if: always()
         uses: actions/upload-artifact@v4

@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce.ui.screens.scan
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -82,7 +83,9 @@ class ScanViewModel @Inject constructor(
             )
         }
 
-        viewModelScope.launch {
+        // Scanning B right after A must not let A's (slower) answer win.
+        lookupJob?.cancel()
+        lookupJob = viewModelScope.launch {
             when (val result = commerceRepository.scan(code)) {
                 is ApiResult.Failure -> _state.update {
                     when (result.code) {
@@ -126,6 +129,8 @@ class ScanViewModel @Inject constructor(
         lastHandledCode = null
         _state.value = UiState()
     }
+
+    private var lookupJob: Job? = null
 
     private companion object {
         const val THROTTLE_MS = 2_500L

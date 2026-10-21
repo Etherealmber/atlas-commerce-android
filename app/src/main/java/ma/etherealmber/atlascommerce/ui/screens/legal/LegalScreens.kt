@@ -201,17 +201,23 @@ fun SecurityScreen(onBack: () -> Unit) {
                 AtlasMark(size = 36.dp)
                 Spacer(Modifier.width(6.dp))
                 Column {
-                    Text("Aucun traqueur", style = MaterialTheme.typography.titleSmall)
+                    Text("Aucun traqueur publicitaire", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        text = "Pas d'analytics, pas de publicité, pas de tiers.",
+                        text = "Pas d'analytics, pas de publicité. Seul ML Kit (scan) transmet ses " +
+                            "statistiques d'usage à Google.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
             Spacer(Modifier.height(10.dp))
-            AtlasBullet("L'application ne contacte que le serveur Atlas que vous avez choisi.")
+            AtlasBullet("L'application ne contacte que le serveur Atlas que vous avez choisi, à une exception : ML Kit.")
             AtlasBullet("Aucune image de caméra n'est envoyée : les codes-barres sont décodés sur l'appareil.")
+            AtlasBullet(
+                "ML Kit (Google, lecture des codes-barres) transmet ses métriques d'usage et de " +
+                    "performance à Google : version de l'app, identifiant d'installation, appareil. " +
+                    "Aucune image, aucun code scanné.",
+            )
             AtlasBullet("Aucun contact, aucune localisation, aucun accès au stockage n'est demandé.")
         }
 

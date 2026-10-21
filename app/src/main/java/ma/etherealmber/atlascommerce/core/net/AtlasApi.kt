@@ -15,6 +15,7 @@ import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
 import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Path
 import retrofit2.http.POST
 import retrofit2.http.Query
@@ -81,5 +82,8 @@ interface AtlasApi {
     suspend fun invoices(@Query("kind") kind: String = "all"): ApiEnvelope<List<InvoiceDto>>
 
     @POST("api/invoices")
-    suspend fun createInvoice(@Body body: QuickSaleRequest): ApiEnvelope<CreatedInvoiceDto>
+    suspend fun createInvoice(
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Body body: QuickSaleRequest,
+    ): ApiEnvelope<CreatedInvoiceDto>
 }

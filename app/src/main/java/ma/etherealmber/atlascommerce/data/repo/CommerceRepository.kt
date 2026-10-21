@@ -39,6 +39,7 @@ class CommerceRepository @Inject constructor(
             apiProvider.api().products(query?.takeIf { it.isNotBlank() }, limit)
         }
         if (result is ApiResult.Success && query.isNullOrBlank()) {
+            // Offloaded to Dispatchers.IO inside OfflineCache.
             offlineCache.saveProducts(result.data)
         }
         return result
@@ -61,9 +62,17 @@ class CommerceRepository @Inject constructor(
         )
     }
 
-    suspend fun createQuickSale(request: QuickSaleRequest): ApiResult<CreatedInvoiceDto> =
-        runner.envelope { apiProvider.api().createInvoice(request) }
+    /**
+     * Creates the VR ticket. [idempotencyKey] is forwarded as `Idempotency-Key`,
+     * which the worker deduplicates: a retried submission returns the original
+     * ticket instead of creating a second one.
+     */
+    suspend fun createQuickSale(
+        request: QuickSaleRequest,
+        idempotencyKey: String,
+    ): ApiResult<CreatedInvoiceDto> =
+        runner.envelope { apiProvider.api().createInvoice(idempotencyKey, request) }
 
     /** Last catalogue seen while online — used when the network is unavailable. */
-    fun cachedProducts(): List<ProductDto> = offlineCache.readProducts()
+    suspend fun cachedProducts(): List<ProductDto> = offlineCache.readProducts()
 }
