@@ -12,10 +12,14 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
+import ma.etherealmber.atlascommerce.core.session.SessionManager
+import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.CartStore
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
@@ -25,6 +29,7 @@ import javax.inject.Inject
 class ProductsViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
     private val cartStore: CartStore,
+    private val sessionManager: SessionManager,
 ) : ViewModel() {
 
     data class UiState(
@@ -56,8 +61,18 @@ class ProductsViewModel @Inject constructor(
     private var searchJob: Job? = null
 
     init {
-        fetchState(query = "", initial = true)
-        loadCurrency()
+        viewModelScope.launch {
+            sessionManager.state
+                .map { (it as? SessionState.Active)?.user?.username }
+                .distinctUntilChanged()
+                .collect { username ->
+                    _state.value = UiState()
+                    if (username != null) {
+                        loadCurrency()
+                        fetchState(query = "", initial = true)
+                    }
+                }
+        }
     }
 
     private fun loadCurrency() {

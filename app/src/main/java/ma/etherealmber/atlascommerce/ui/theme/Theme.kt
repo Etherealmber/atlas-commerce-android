@@ -94,6 +94,9 @@ val DarkPalette = AtlasPalette(
 
 val LocalAtlasPalette = staticCompositionLocalOf { LightPalette }
 
+/** Resolved (not requested) dark flag, used by the system bars. */
+val LocalAtlasDarkTheme = staticCompositionLocalOf { false }
+
 @Immutable
 data class AtlasDensity(
     val screenPadding: Dp,
@@ -220,6 +223,7 @@ fun AtlasTheme(
     val compact = densityMode == DensityMode.COMPACT
     CompositionLocalProvider(
         LocalAtlasPalette provides if (dark) DarkPalette else LightPalette,
+        LocalAtlasDarkTheme provides dark,
         LocalAtlasDensity provides if (compact) CompactDensity else ComfortDensity,
     ) {
         MaterialTheme(

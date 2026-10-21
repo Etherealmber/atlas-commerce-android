@@ -10,9 +10,13 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.session.SessionManager
+import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.CartLine
 import ma.etherealmber.atlascommerce.data.CartStore
 import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
@@ -26,6 +30,7 @@ import javax.inject.Inject
 class SaleViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
     private val cartStore: CartStore,
+    private val sessionManager: SessionManager,
 ) : ViewModel() {
 
     data class UiState(
@@ -52,7 +57,15 @@ class SaleViewModel @Inject constructor(
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
     init {
-        loadCurrency()
+        viewModelScope.launch {
+            sessionManager.state
+                .map { (it as? SessionState.Active)?.user?.username }
+                .distinctUntilChanged()
+                .collect { username ->
+                    _state.value = UiState(currency = _state.value.currency)
+                    if (username != null) loadCurrency()
+                }
+        }
     }
 
     private fun loadCurrency() {

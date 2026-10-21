@@ -7,6 +7,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.net.ApiResult
@@ -14,6 +16,7 @@ import ma.etherealmber.atlascommerce.core.net.ApiRunner
 import ma.etherealmber.atlascommerce.core.net.failureOrNull
 import ma.etherealmber.atlascommerce.core.net.successOrNull
 import ma.etherealmber.atlascommerce.core.session.SessionManager
+import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.model.CompanySettingsDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
@@ -39,7 +42,17 @@ class HomeViewModel @Inject constructor(
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     init {
-        load(initial = true)
+        // Reload whenever the signed-in account changes so one device can be
+        // shared between staff without leaking the previous user's figures.
+        viewModelScope.launch {
+            sessionManager.state
+                .map { (it as? SessionState.Active)?.user?.username }
+                .distinctUntilChanged()
+                .collect { username ->
+                    _state.value = UiState()
+                    if (username != null) load(initial = true)
+                }
+        }
     }
 
     fun refresh() {

@@ -15,6 +15,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +25,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -31,6 +35,7 @@ import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
+import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 import ma.etherealmber.atlascommerce.ui.screens.legal.AboutScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.LicenseScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.SecurityScreen
@@ -38,6 +43,7 @@ import ma.etherealmber.atlascommerce.ui.screens.login.LoginScreen
 import ma.etherealmber.atlascommerce.ui.screens.server.ServerSetupScreen
 import ma.etherealmber.atlascommerce.ui.shell.MainShell
 import ma.etherealmber.atlascommerce.ui.theme.AtlasTheme
+import ma.etherealmber.atlascommerce.ui.util.findActivity
 
 private object Overlay {
     const val SERVER = "server"
@@ -60,6 +66,16 @@ fun AtlasRoot(viewModel: AppViewModel = hiltViewModel()) {
     val densityMode by viewModel.densityMode.collectAsStateWithLifecycle()
 
     AtlasTheme(themeMode = themeMode, densityMode = densityMode) {
+        val dark = LocalAtlasDarkTheme.current
+        val activity = LocalContext.current.findActivity()
+        val view = LocalView.current
+        SideEffect {
+            val window = activity?.window ?: return@SideEffect
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !dark
+                isAppearanceLightNavigationBars = !dark
+            }
+        }
         AtlasGate(viewModel)
     }
 }

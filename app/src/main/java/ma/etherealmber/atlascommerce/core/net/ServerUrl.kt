@@ -45,7 +45,10 @@ object ServerUrl {
     fun normalize(raw: String?): String? {
         var value = raw?.trim().orEmpty()
         if (value.isEmpty()) return null
-        if (!value.startsWith("http://", true) && !value.startsWith("https://", true)) {
+        val hasScheme = value.startsWith("http://", true) || value.startsWith("https://", true)
+        if (!hasScheme) {
+            // Reject other schemes outright instead of prefixing them with https://
+            if (value.contains("://")) return null
             // Local dev servers (emulator, LAN) speak http; everything else is https.
             val looksLocal = Regex("^(localhost|127\\.|10\\.|192\\.168\\.|\\[::1\\])", RegexOption.IGNORE_CASE)
                 .containsMatchIn(value)

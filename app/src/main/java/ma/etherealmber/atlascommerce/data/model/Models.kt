@@ -128,12 +128,18 @@ data class ProductDto(
     val unit: String? = null,
     val price: Double = 0.0,
     @Json(name = "stock_quantity") val stock: Double = 0.0,
-    @Json(name = "low_stock_threshold") val lowStockThreshold: Double = 0.0,
-    @Json(name = "track_inventory") val trackInventory: Boolean = true,
-    @Json(name = "is_active") val isActive: Boolean = true,
+    // SQLite stores these as INTEGER; keep the raw value and expose booleans.
+    @Json(name = "low_stock_threshold") val lowStockThresholdRaw: Double? = null,
+    @Json(name = "track_inventory") val trackInventoryRaw: Int? = 1,
+    @Json(name = "is_active") val isActiveRaw: Int? = 1,
     @Json(name = "image_url") val imageUrl: String? = null,
     @Json(name = "variant_label") val variantLabel: String? = null,
 ) {
+    val lowStockThreshold: Double get() = lowStockThresholdRaw ?: 0.0
+
+    val trackInventory: Boolean get() = (trackInventoryRaw ?: 1) != 0
+    val isActive: Boolean get() = (isActiveRaw ?: 1) != 0
+
     val isLowStock: Boolean get() = trackInventory && stock <= lowStockThreshold
     val isOutOfStock: Boolean get() = trackInventory && stock <= 0.0
     val subtitle: String
@@ -168,10 +174,12 @@ data class InvoiceDto(
     @Json(name = "issue_date") val issueDate: String? = null,
     @Json(name = "due_date") val dueDate: String? = null,
     val total: Double = 0.0,
-    @Json(name = "amount_paid") val amountPaid: Double = 0.0,
+    // Legacy rows can have amount_paid = NULL.
+    @Json(name = "amount_paid") val amountPaidRaw: Double? = null,
     val status: String? = null,
     @Json(name = "doc_kind") val docKind: String? = null,
 ) {
+    val amountPaid: Double get() = amountPaidRaw ?: 0.0
     val remaining: Double get() = (total - amountPaid).coerceAtLeast(0.0)
     val isQuickSale: Boolean
         get() = docKind == "quick_sale" || docKind == "ticket" || number?.startsWith("VR") == true

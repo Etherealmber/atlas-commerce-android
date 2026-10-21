@@ -6,7 +6,7 @@ import androidx.compose.ui.Modifier
 /** Human label + tone for an invoice status coming from the worker. */
 fun statusLabel(status: String?): String = when (status?.lowercase()) {
     null, "" -> "—"
-    "pa_id", "paid" -> "Payée"
+    "paid" -> "Payée"
     "partial" -> "Partiellement payée"
     "sent" -> "Envoyée"
     "overdue" -> "En retard"
@@ -18,7 +18,7 @@ fun statusLabel(status: String?): String = when (status?.lowercase()) {
 }
 
 fun statusTone(status: String?): AtlasTone = when (status?.lowercase()) {
-    "paid", "pa_id" -> AtlasTone.POSITIVE
+    "paid" -> AtlasTone.POSITIVE
     "partial" -> AtlasTone.WARNING
     "overdue" -> AtlasTone.DANGER
     "quote", "devis" -> AtlasTone.INFO

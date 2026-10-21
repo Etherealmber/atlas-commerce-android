@@ -361,28 +361,43 @@ fun AtlasTextField(
     var revealed by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
+    val placeholderContent: (@Composable () -> Unit)? = if (placeholder == null) {
+        null
+    } else {
+        { Text(text = placeholder) }
+    }
+    val supportingContent: (@Composable () -> Unit)? = if (supportingText == null) {
+        null
+    } else {
+        { Text(text = supportingText) }
+    }
+    val leadingContent: (@Composable () -> Unit)? = if (leadingIcon == null) {
+        null
+    } else {
+        { Icon(imageVector = leadingIcon, contentDescription = null) }
+    }
+    val trailingContent: (@Composable () -> Unit)? = if (!isPassword) {
+        null
+    } else {
+        {
+            IconButton(onClick = { revealed = !revealed }) {
+                Icon(
+                    imageVector = if (revealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                    contentDescription = if (revealed) "Masquer" else "Afficher",
+                )
+            }
+        }
+    }
+
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
         label = { Text(label) },
-        placeholder = placeholder?.let { { Text(it) } },
-        leadingIcon = leadingIcon?.let { icon ->
-            { Icon(imageVector = icon, contentDescription = null) }
-        },
-        trailingIcon = if (isPassword) {
-            {
-                IconButton(onClick = { revealed = !revealed }) {
-                    Icon(
-                        imageVector = if (revealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                        contentDescription = if (revealed) "Masquer" else "Afficher",
-                    )
-                }
-            }
-        } else {
-            null
-        },
-        supportingText = supportingText?.let { { Text(it) } },
+        placeholder = placeholderContent,
+        leadingIcon = leadingContent,
+        trailingIcon = trailingContent,
+        supportingText = supportingContent,
         visualTransformation = if (isPassword && !revealed) {
             PasswordVisualTransformation()
         } else {

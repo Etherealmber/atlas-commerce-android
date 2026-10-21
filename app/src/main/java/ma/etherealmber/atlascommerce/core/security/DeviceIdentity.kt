@@ -1,6 +1,5 @@
 package ma.etherealmber.atlascommerce.core.security
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
@@ -44,7 +43,6 @@ class DeviceIdentity @Inject constructor(@ApplicationContext private val context
     fun shortId(): String = fingerprint.take(8)
 
     private fun androidId(): String = runCatching {
-        @SuppressLint("HardwareIds")
         Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
     }.getOrDefault("unknown")
 
