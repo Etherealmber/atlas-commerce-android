@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -8,14 +6,34 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
+// Running `git pull` on top of an earlier local 1.0.4 checkout leaves untracked
+// files in `app/src/` (e.g. `push/AtlasFirebaseMessagingService.kt`), causing
+// `:app:kspReleaseKotlin` to fail on removed Firebase / Room / Hilt classes.
+// Quarantine any untracked files under `app/src/` outside `build/` before KSP runs
+// (stage intentional new sources with `git add`, or pass `-PkeepUntrackedSources=true`).
+if (findProperty("keepUntrackedSources") != "true") {
+    val quarantineDir = rootProject.file(".atlas-1.0.4-quarantine")
+    val movedLegacy = LegacySourceQuarantine.quarantineUntracked(
+        rootProject.projectDir,
+        project.file("src"),
+        quarantineDir,
+    )
+    if (movedLegacy.isNotEmpty()) {
+        layout.buildDirectory.dir("kspCaches").get().asFile.deleteRecursively()
+        layout.buildDirectory.dir("generated/ksp").get().asFile.deleteRecursively()
+        logger.warn(
+            "[AtlasCommerce] Quarantined ${movedLegacy.size} untracked file(s) from app/src/ " +
+                "to ${quarantineDir.path}: ${movedLegacy.joinToString()}",
+        )
+    }
+}
+
 // Optional release signing: drop a keystore.properties next to settings.gradle.kts
 // (storeFile, storePassword, keyAlias, keyPassword) and `assembleRelease` is signed.
 // Without it the build still works and produces an unsigned release APK.
-val signingProperties = Properties().apply {
-    val file = rootProject.file("keystore.properties")
-    if (file.exists()) file.inputStream().use { load(it) }
-}
-val hasReleaseKeystore = signingProperties.getProperty("storeFile") != null
+val signingProperties = SigningSupport.loadKeystoreProperties(rootProject.file("keystore.properties"))
+val releaseStorePath = signingProperties.getProperty("storeFile")?.takeIf { it.isNotBlank() }
+val hasReleaseKeystore = releaseStorePath != null
 
 android {
     namespace = "ma.etherealmber.atlascommerce"
@@ -39,9 +57,9 @@ android {
     }
 
     signingConfigs {
-        if (hasReleaseKeystore) {
+        if (releaseStorePath != null) {
             create("release") {
-                storeFile = rootProject.file(signingProperties.getProperty("storeFile"))
+                storeFile = rootProject.file(releaseStorePath)
                 storePassword = signingProperties.getProperty("storePassword")
                 keyAlias = signingProperties.getProperty("keyAlias")
                 keyPassword = signingProperties.getProperty("keyPassword")

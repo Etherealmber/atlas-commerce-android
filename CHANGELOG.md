@@ -35,7 +35,6 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
 - Aucun analytics ni SDK tiers ; caméra traitée localement.
 - En-têtes `X-Atlas-Client`, `X-Device-Fingerprint` et `User-Agent` Atlas sur chaque requête.
 - `allowBackup=false`, journalisation HTTP désactivée et `Authorization` masqué en release.
-- App Links vérifiés pour `stock.afmarbre.com` (Digital Asset Links publiés par l'application web).
 
 ### Corrigé
 
@@ -65,6 +64,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
 - Thème : plus de flash clair au démarrage pour un utilisateur en thème sombre.
 - Caméra : liaison annulée si l'écran est quitté avant l'initialisation.
 - Manifest nettoyé : plus de service de push fantôme ni de deep link non traité.
+- Compilation release (`:app:kspReleaseKotlin`) après `git pull` sur un dossier local `1.0.4` :
+  quarantaine automatique des fichiers non suivis sous `app/src/` (comme
+  `push/AtlasFirebaseMessagingService.kt`) vers `.atlas-1.0.4-quarantine/` et purge du cache
+  incrémental KSP.
+- `keystore.properties` sous Windows : prise en charge des chemins contenant des antislashs non
+  échappés (`C:\Users\...\release.jks`).
 
 ## [1.0.4] — ébauche précédente
 
