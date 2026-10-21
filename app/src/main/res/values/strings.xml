@@ -1,4 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Atlas Commerce</string>
+    <string name="app_tagline">Stock · Caisse · Facturation</string>
+
+    <!-- Common actions -->
+    <string name="action_continue">Continuer</string>
+    <string name="action_cancel">Annuler</string>
+    <string name="action_retry">Réessayer</string>
+    <string name="action_refresh">Rafraîchir</string>
+    <string name="action_save">Enregistrer</string>
+    <string name="action_close">Fermer</string>
+    <string name="action_back">Retour</string>
+    <string name="action_sign_out">Se déconnecter</string>
+    <string name="action_change_server">Changer de serveur</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Accueil</string>
+    <string name="nav_products">Produits</string>
+    <string name="nav_scan">Scan</string>
+    <string name="nav_sale">Vente</string>
+    <string name="nav_settings">Réglages</string>
+
+    <!-- Auth -->
+    <string name="login_title">Connexion</string>
+    <string name="login_username">Identifiant</string>
+    <string name="login_password">Mot de passe</string>
+    <string name="login_submit">Se connecter</string>
+    <string name="login_otp_title">Vérification</string>
+    <string name="login_otp_hint">Code reçu par e-mail</string>
+    <string name="login_otp_submit">Valider le code</string>
+
+    <!-- Legal -->
+    <string name="legal_license">Licence</string>
+    <string name="legal_security">Sécurité &amp; confidentialité</string>
+    <string name="legal_about">À propos</string>
 </resources>

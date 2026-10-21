@@ -11,4 +11,9 @@
 *.apk
 *.aab
 *.jks
+*.keystore
+*.log
+.kotlin/
+/local.properties
+ci-logs/
 !app/google-services.json.example
