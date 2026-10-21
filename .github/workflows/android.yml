@@ -54,12 +54,14 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build and test
+      # Builds debug, runs JUnit tests, and builds the R8 + resource-shrinking
+      # release variant in one log so any debug or release KSP/R8 failure is captured.
+      - name: Build, test, and assemble release (R8)
         id: build
         continue-on-error: true
         run: |
           set -o pipefail
-          gradle :app:assembleDebug :app:testDebugUnitTest \
+          gradle :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:assembleRelease \
             --no-daemon --console=plain --stacktrace 2>&1 | tee "$RUNNER_TEMP/build.log"
 
       # Compiler output is the only way to debug without an Android SDK locally,
@@ -87,19 +89,20 @@ jobs:
           path: ${{ runner.temp }}/build.log
           if-no-files-found: ignore
 
-      # Shipping sanity: the R8 + resource-shrinking variant must build too.
-      # pipefail keeps Gradle's exit code through the `tail` truncation.
-      - name: Assemble release (R8, unsigned)
-        run: |
-          set -o pipefail
-          gradle :app:assembleRelease --no-daemon --console=plain 2>&1 | tail -n 80
-
-      - name: Upload APK
+      - name: Upload debug APK
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: atlas-commerce-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+
+      - name: Upload release APK
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-commerce-release-apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
 
       - name: Report build result
@@ -114,10 +117,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      # Exercise JDK 21 too (matches Android Studio Ladybug+ bundled JBR on Windows/macOS).
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
       - name: Prepare Android SDK
         run: |
           SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
@@ -131,10 +135,42 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Android Lint
-        # app/build.gradle.kts sets abortOnError = false, so this reports findings
-        # without gating the PR; it still fails on configuration/tooling errors.
-        run: gradle :app:lintDebug --no-daemon --console=plain
+      - name: Verify legacy 1.0.4 source quarantine, KSP release & Android Lint
+        # Simulates a dirty local 1.0.4 working tree after `git pull` (leftover
+        # push/AtlasFirebaseMessagingService.kt + stale Hilt module), verifies
+        # automatic quarantine, and runs kspReleaseKotlin + lintDebug under JDK 21.
+        run: |
+          mkdir -p app/src/main/java/ma/etherealmber/atlascommerce/push
+          cat > app/src/main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt <<'EOF'
+          package ma.etherealmber.atlascommerce.push
+          import com.google.firebase.messaging.FirebaseMessagingService
+          import dagger.hilt.android.AndroidEntryPoint
+          import javax.inject.Inject
+
+          @AndroidEntryPoint
+          class AtlasFirebaseMessagingService : FirebaseMessagingService() {
+              @Inject lateinit var pushTokenRegistrar: PushTokenRegistrar
+          }
+          EOF
+          cat > app/src/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt <<'EOF'
+          package ma.etherealmber.atlascommerce.di
+          import dagger.Module
+          import dagger.hilt.InstallIn
+          import dagger.hilt.components.SingletonComponent
+
+          @Module
+          @InstallIn(SingletonComponent::class)
+          object LegacyNetworkModule
+          EOF
+          touch -d '2026-10-21T20:08:04Z' app/src/main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt
+          touch -d '2026-10-21T20:08:04Z' app/src/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt
+
+          gradle :app:kspReleaseKotlin :app:lintDebug --no-daemon --console=plain
+
+          test ! -e app/src/main/java/ma/etherealmber/atlascommerce/push
+          test ! -e app/src/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt
+          test -f .atlas-1.0.4-quarantine/main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt
+          test -f .atlas-1.0.4-quarantine/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt
       - name: Upload lint report
         if: always()
         uses: actions/upload-artifact@v4

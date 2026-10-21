@@ -16,5 +16,6 @@
 .kotlin/
 /local.properties
 ci-logs/
+/.atlas-1.0.4-quarantine/
 !app/google-services.json.example
 keystore.properties

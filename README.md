@@ -103,8 +103,23 @@ gradle :app:assembleRelease
 ```
 
 La release active R8 (`isMinifyEnabled`), réduit les ressources et **refuse HTTP en clair**.
-Pour les App Links, le certificat de signature doit être déclaré dans le
-[`assetlinks.json`](https://stock.afmarbre.com/.well-known/assetlinks.json) du serveur.
+Sous Windows, les chemins contenant des antislashs dans `keystore.properties`
+(`storeFile=C:\Users\...\atlas-release.jks`) sont acceptés tels quels.
+
+### Mise à jour depuis une copie locale 1.0.4
+
+`git pull` ne supprime jamais les fichiers **non suivis** laissés par l'ancienne ébauche `1.0.4`
+(par exemple `app/src/main/java/.../push/AtlasFirebaseMessagingService.kt`, qui fait échouer
+`:app:kspReleaseKotlin` car Firebase a été retiré en `1.0.5`). Le script `app/build.gradle.kts`
+déplace désormais automatiquement tout fichier non suivi sous `app/src/` vers
+`.atlas-1.0.4-quarantine/` et purge le cache KSP (pensez à `git add` vos nouveaux fichiers sources,
+ou passez `-PkeepUntrackedSources=true`) ; vous pouvez aussi nettoyer `app/src/` explicitement sans
+toucher à `local.properties` ni `keystore.properties` :
+
+```bash
+git pull
+git clean -fd app/src
+```
 
 ### Choisir son serveur (première ouverture)
 
