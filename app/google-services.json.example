@@ -1,22 +1,23 @@
 {
   "project_info": {
-    "project_number": "YOUR_PROJECT_NUMBER",
-    "project_id": "YOUR_PROJECT_ID",
-    "storage_bucket": "YOUR_PROJECT_ID.appspot.com"
+    "project_number": "000000000000",
+    "project_id": "your-firebase-project",
+    "storage_bucket": "your-firebase-project.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:YOUR_PROJECT_NUMBER:android:YOUR_APP_ID",
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
         "android_client_info": {
           "package_name": "ma.etherealmber.atlascommerce"
         }
       },
-      "api_key": [
-        {
-          "current_key": "YOUR_API_KEY"
+      "api_key": [{"current_key": "REPLACE_ME"}],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
         }
-      ]
+      }
     }
   ],
   "configuration_version": "1"

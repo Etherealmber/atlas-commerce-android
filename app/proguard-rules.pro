@@ -1,9 +1,6 @@
 # Retrofit / OkHttp / Moshi
--keepattributes Signature, InnerClasses, EnclosingMethod
--keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
--keepclassmembers,allowobfuscation interface * {
-    @retrofit2.http.* <methods>;
-}
+-keepattributes Signature
+-keepattributes *Annotation*
 -dontwarn okhttp3.**
--dontwarn okio.**
 -dontwarn retrofit2.**
+-keep class ma.etherealmber.atlascommerce.data.model.** { *; }
