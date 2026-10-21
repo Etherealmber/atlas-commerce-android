@@ -1,0 +1,11 @@
+name: probe
+on:
+  workflow_dispatch:
+  push:
+    branches: ['arena/**']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "runner ok"; java -version; ls $ANDROID_HOME 2>/dev/null | head
