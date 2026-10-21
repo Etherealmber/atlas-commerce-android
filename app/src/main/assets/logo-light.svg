@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180" fill="none">
+  <defs>
+    <linearGradient id="ac-face-l" x1="90" y1="0" x2="90" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f5f2eb"/>
+      <stop offset="1" stop-color="#e8e4db"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="40" fill="url(#ac-face-l)"/>
+  <rect x="5" y="5" width="170" height="170" rx="36" stroke="#0a0a0a" stroke-opacity="0.08" fill="none"/>
+  <path fill-rule="evenodd" clip-rule="evenodd" d="M90 38L136 142H116.2L107.6 118.5H72.4L63.8 142H44L90 38ZM90 68L79.2 97.5H100.8L90 68Z" fill="#0a0a0a"/>
+</svg>
