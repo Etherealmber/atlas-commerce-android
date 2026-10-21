@@ -1,0 +1,78 @@
+package ma.etherealmber.atlascommerce.data.repo
+
+import ma.etherealmber.atlascommerce.core.net.ApiProvider
+import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.net.ApiRunner
+import ma.etherealmber.atlascommerce.data.OfflineCache
+import ma.etherealmber.atlascommerce.data.model.ClientDto
+import ma.etherealmber.atlascommerce.data.model.CompanySettingsDto
+import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
+import ma.etherealmber.atlascommerce.data.model.DashboardDto
+import ma.etherealmber.atlascommerce.data.model.InvoiceDto
+import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
+import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class CommerceRepository @Inject constructor(
+    private val apiProvider: ApiProvider,
+    private val runner: ApiRunner,
+    private val offlineCache: OfflineCache,
+) {
+
+    suspend fun dashboard(): ApiResult<DashboardDto> =
+        runner.envelope { apiProvider.api().dashboard() }
+
+    suspend fun settings(): ApiResult<CompanySettingsDto> =
+        runner.envelope { apiProvider.api().settings() }
+
+    suspend fun clients(): ApiResult<List<ClientDto>> =
+        runner.envelope { apiProvider.api().clients() }
+
+    suspend fun invoices(kind: String = "all"): ApiResult<List<InvoiceDto>> =
+        runner.envelope { apiProvider.api().invoices(kind) }
+
+    suspend fun products(query: String? = null, limit: Int = 300): ApiResult<List<ProductDto>> {
+        val result = runner.envelope {
+            apiProvider.api().products(query?.takeIf { it.isNotBlank() }, limit)
+        }
+        if (result is ApiResult.Success && query.isNullOrBlank()) {
+            // Offloaded to Dispatchers.IO inside OfflineCache.
+            offlineCache.saveProducts(result.data)
+        }
+        return result
+    }
+
+    /** Exact barcode/SKU lookup used by the scanner. */
+    suspend fun scan(code: String): ApiResult<ProductDto> =
+        runner.envelope { apiProvider.api().scanBarcode(code) }
+
+    /** Manual stock movement: `type` = "in" | "out" | "adjustment". */
+    suspend fun adjustStock(
+        productId: Long,
+        quantity: Double,
+        type: String,
+        reason: String?,
+    ): ApiResult<ProductDto> = runner.envelope {
+        apiProvider.api().adjustStock(
+            productId,
+            StockAdjustRequest(quantity = quantity, type = type, reason = reason?.takeIf { it.isNotBlank() }),
+        )
+    }
+
+    /**
+     * Creates the VR ticket. [idempotencyKey] is forwarded as `Idempotency-Key`,
+     * which the worker deduplicates: a retried submission returns the original
+     * ticket instead of creating a second one.
+     */
+    suspend fun createQuickSale(
+        request: QuickSaleRequest,
+        idempotencyKey: String,
+    ): ApiResult<CreatedInvoiceDto> =
+        runner.envelope { apiProvider.api().createInvoice(idempotencyKey, request) }
+
+    /** Last catalogue seen while online — used when the network is unavailable. */
+    suspend fun cachedProducts(): List<ProductDto> = offlineCache.readProducts()
+}

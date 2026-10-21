@@ -1,30 +1,13 @@
 package ma.etherealmber.atlascommerce
 
 import android.app.Application
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.os.Build
 import dagger.hilt.android.HiltAndroidApp
-import ma.etherealmber.atlascommerce.push.AtlasFirebaseMessagingService
 
+/**
+ * Atlas Commerce application.
+ *
+ * No analytics, no crash reporter, no third-party SDK that phones home: the app
+ * only talks to the server the user chose.
+ */
 @HiltAndroidApp
-class AtlasApp : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        ensureNotificationChannel()
-    }
-
-    private fun ensureNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val nm = getSystemService(NotificationManager::class.java) ?: return
-        nm.createNotificationChannel(
-            NotificationChannel(
-                AtlasFirebaseMessagingService.CHANNEL_ID,
-                "Atlas Agent",
-                NotificationManager.IMPORTANCE_HIGH,
-            ).apply {
-                description = "Approbations et alertes assistant IA"
-            },
-        )
-    }
-}
+class AtlasApp : Application()
