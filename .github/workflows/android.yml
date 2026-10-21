@@ -80,6 +80,12 @@ jobs:
           path: ${{ runner.temp }}/build.log
           if-no-files-found: ignore
 
+      # Shipping sanity: R8 + resource shrinking on the release variant. Kept
+      # non-blocking so a shrinker warning never hides the debug signal.
+      - name: Assemble release (R8, unsigned)
+        continue-on-error: true
+        run: gradle :app:assembleRelease --no-daemon --console=plain 2>&1 | tail -n 80
+
       - name: Upload APK
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
