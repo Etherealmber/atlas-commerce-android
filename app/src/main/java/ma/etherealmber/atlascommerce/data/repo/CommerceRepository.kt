@@ -33,7 +33,7 @@ class CommerceRepository @Inject constructor(
     suspend fun invoices(kind: String = "all"): ApiResult<List<InvoiceDto>> =
         runner.envelope { apiProvider.api().invoices(kind) }
 
-    suspend fun products(query: String? = null, limit: Int = 200): ApiResult<List<ProductDto>> {
+    suspend fun products(query: String? = null, limit: Int = 300): ApiResult<List<ProductDto>> {
         val result = runner.envelope {
             apiProvider.api().products(query?.takeIf { it.isNotBlank() }, limit)
         }
@@ -42,6 +42,10 @@ class CommerceRepository @Inject constructor(
         }
         return result
     }
+
+    /** Exact barcode/SKU lookup used by the scanner. */
+    suspend fun scan(code: String): ApiResult<ProductDto> =
+        runner.envelope { apiProvider.api().scanBarcode(code) }
 
     suspend fun createQuickSale(request: QuickSaleRequest): ApiResult<CreatedInvoiceDto> =
         runner.envelope { apiProvider.api().createInvoice(request) }

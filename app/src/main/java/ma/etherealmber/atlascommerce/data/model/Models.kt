@@ -134,6 +134,8 @@ data class ProductDto(
     @Json(name = "is_active") val isActiveRaw: Int? = 1,
     @Json(name = "image_url") val imageUrl: String? = null,
     @Json(name = "variant_label") val variantLabel: String? = null,
+    // Only present on the /api/scan/barcode response (parent + variant merged).
+    @Json(name = "display_name") val displayName: String? = null,
 ) {
     val lowStockThreshold: Double get() = lowStockThresholdRaw ?: 0.0
 

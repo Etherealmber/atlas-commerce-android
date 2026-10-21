@@ -29,15 +29,16 @@ object Roles {
     const val ADMIN = "admin"
     const val SECRETARY = "secretaire"
     const val STOCK = "stock"
+    const val STOREKEEPER = "magasinier"
     const val USER = "user"
 
     fun label(role: String?): String = when (role?.lowercase()) {
         OWNER -> "Propriétaire"
         ADMIN -> "Administrateur"
         SECRETARY -> "Secrétaire"
-        STOCK -> "Magasinier"
+        STOCK, STOREKEEPER -> "Magasinier"
         USER -> "Utilisateur"
-        else -> "Invité"
+        else -> role?.replaceFirstChar { it.uppercase() }?.takeIf { it.isNotBlank() } ?: "Invité"
     }
 
     /** Owner, admin and secretary can create documents (worker: requireBizMutator). */

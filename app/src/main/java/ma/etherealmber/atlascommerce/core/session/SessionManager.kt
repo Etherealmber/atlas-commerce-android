@@ -74,13 +74,22 @@ class SessionManager @Inject constructor(
     }
 
     private suspend fun restore() {
-        val stored = runCatching { preferences.readSession() }.getOrNull()
-        val token = stored?.let { cryptoStore.decrypt(it.tokenCipher) }
-        if (stored == null || token.isNullOrBlank()) {
+        // Any failure here (corrupted DataStore, rotated Keystore key) must land
+        // on the login screen — never leave the app stuck on the splash.
+        val restored = runCatching {
+            val stored = preferences.readSession() ?: return@runCatching null
+            val token = cryptoStore.decrypt(stored.tokenCipher)
+            if (token.isNullOrBlank()) null else stored to token
+        }.getOrNull()
+
+        if (restored == null) {
             tokenHolder.clear()
+            runCatching { preferences.clearSession() }
             _state.value = SessionState.SignedOut
             return
         }
+
+        val (stored, token) = restored
         tokenHolder.set(token)
         _state.value = SessionState.Active(
             SessionUser(
@@ -90,6 +99,8 @@ class SessionManager @Inject constructor(
                 email = stored.email,
             ),
         )
+        // Keep role/display name fresh; a failure only means we are offline.
+        runCatching { refreshProfile() }
     }
 
     suspend fun signIn(username: String, password: String): ApiResult<LoginOutcome> {

@@ -83,19 +83,24 @@ class ScanViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            when (val result = commerceRepository.products(query = code, limit = 10)) {
+            when (val result = commerceRepository.scan(code)) {
                 is ApiResult.Failure -> _state.update {
-                    it.copy(lookingUp = false, error = result.message)
+                    when (result.code) {
+                        // Not a product yet: the UI offers to create it instead.
+                        "NOT_FOUND" -> it.copy(lookingUp = false, notFound = true, error = null)
+                        else -> it.copy(lookingUp = false, error = result.message)
+                    }
                 }
 
                 is ApiResult.Success -> {
-                    val exact = result.data.firstOrNull { it.barcode == code }
-                        ?: result.data.firstOrNull()
+                    val product = result.data.displayName?.takeIf { it.isNotBlank() }
+                        ?.let { merged -> result.data.copy(name = merged) }
+                        ?: result.data
                     _state.update {
                         it.copy(
                             lookingUp = false,
-                            product = exact,
-                            notFound = exact == null,
+                            product = product,
+                            notFound = false,
                             error = null,
                         )
                     }

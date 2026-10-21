@@ -14,6 +14,7 @@ import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.Path
 import retrofit2.http.POST
 import retrofit2.http.Query
 
@@ -43,11 +44,27 @@ interface AtlasApi {
     @GET("api/settings")
     suspend fun settings(): ApiEnvelope<CompanySettingsDto>
 
+    /**
+     * Catalogue query.
+     *
+     * `fields=mobile` asks the worker for its phone-shaped projection: the same
+     * columns the app uses, minus images and heavy joins, and without the schema
+     * checks the desk client needs. It is markedly faster on mobile networks.
+     */
     @GET("api/products")
     suspend fun products(
         @Query("q") query: String?,
-        @Query("limit") limit: Int = 200,
+        @Query("limit") limit: Int = 300,
+        @Query("fields") fields: String = "mobile",
     ): ApiEnvelope<List<ProductDto>>
+
+    /**
+     * Exact barcode / SKU lookup, the worker's dedicated scan hot path.
+     * Returns 404 with `code = NOT_FOUND` (unknown code) or `PENDING_APPROVAL`
+     * (already proposed from this phone, waiting on the desktop).
+     */
+    @GET("api/scan/barcode/{code}")
+    suspend fun scanBarcode(@Path("code") code: String): ApiEnvelope<ProductDto>
 
     @GET("api/clients")
     suspend fun clients(): ApiEnvelope<List<ClientDto>>
