@@ -85,26 +85,10 @@ class AppViewModel @Inject constructor(
     val autoAddCartOnScan: StateFlow<Boolean> = preferences.autoAddCartOnScan
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    val defaultStartTab: StateFlow<String> = sessionManager.state
-        .flatMapLatest { st ->
-            val u = (st as? SessionState.Active)?.user
-            if (u != null && u.serverUrl.isNotBlank()) {
-                preferences.scopedDefaultStartTab(u.serverUrl, u.username)
-            } else {
-                preferences.defaultStartTab
-            }
-        }
+    val defaultStartTab: StateFlow<String> = preferences.defaultStartTab
         .stateIn(viewModelScope, SharingStarted.Eagerly, "HOME")
 
-    val defaultClientName: StateFlow<String> = sessionManager.state
-        .flatMapLatest { st ->
-            val u = (st as? SessionState.Active)?.user
-            if (u != null && u.serverUrl.isNotBlank()) {
-                preferences.scopedDefaultClientName(u.serverUrl, u.username)
-            } else {
-                preferences.defaultClientName
-            }
-        }
+    val defaultClientName: StateFlow<String> = preferences.defaultClientName
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
     val confirmBeforeSale: StateFlow<Boolean> = preferences.confirmBeforeSale
@@ -269,7 +253,7 @@ class AppViewModel @Inject constructor(
     fun switchSavedAccount(entry: SavedAccountEntry, onDone: (String) -> Unit) {
         viewModelScope.launch {
             when (val res = sessionManager.switchToSavedAccount(entry)) {
-                is ApiResult.Success -> onDone("Connecté en tant que ${res.data.displayName}.")
+                is ApiResult.Success -> onDone("Connecté en tant que ${res.data.user.displayName}.")
                 is ApiResult.Failure -> onDone(res.message)
             }
         }
@@ -428,17 +412,11 @@ class AppViewModel @Inject constructor(
     }
 
     fun setDefaultStartTab(tabName: String) {
-        viewModelScope.launch {
-            val u = (sessionManager.state.value as? SessionState.Active)?.user
-            preferences.setDefaultStartTab(tabName, serverUrl = u?.serverUrl, username = u?.username)
-        }
+        viewModelScope.launch { preferences.setDefaultStartTab(tabName) }
     }
 
     fun setDefaultClientName(clientName: String) {
-        viewModelScope.launch {
-            val u = (sessionManager.state.value as? SessionState.Active)?.user
-            preferences.setDefaultClientName(clientName, serverUrl = u?.serverUrl, username = u?.username)
-        }
+        viewModelScope.launch { preferences.setDefaultClientName(clientName) }
     }
 
     fun setConfirmBeforeSale(enabled: Boolean) {
