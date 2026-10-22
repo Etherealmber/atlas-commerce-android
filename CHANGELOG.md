@@ -3,6 +3,40 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
 [SemVer](https://semver.org/lang/fr/).
 
+## [1.0.7] — 2026-10-22
+
+### Ajouté
+
+- **Rendu Markdown natif complet dans Atlas Agent IA (`AtlasMarkdown`)** : tableaux GFM avec
+  alignement par colonne et défilement horizontal fluide, titres (`#`–`######`), texte **gras**,
+  *italique*, ~~barré~~, code en ligne, blocs de code copiables en un geste, listes numérotées / à
+  puces / cases à cocher, citations, liens cliquables et bouton **Copier** sur chaque réponse IA.
+- **Animations d'accueil et transitions sur chaque page (`AtlasMotion`)** : halo pulsé à
+  l'ouverture (`SplashPane`, `LoginScreen`, `ServerSetupScreen`), apparitions étagées sur le
+  tableau de bord et transitions directionnelles fluides entre tous les onglets et écrans superposés.
+- **Réglages utilisateur enrichis (`SettingsScreen`)** :
+  - Édition directe du nom affiché et de l'adresse e-mail (`PATCH /api/auth/me`) + photo de profil.
+  - Activation/désactivation des **animations fluides** et choix de l'**onglet d'ouverture par défaut**.
+  - **Caméra & lecteur code-barres** : ouverture auto caméra (désactivée par défaut), vibration au
+    scan, bip sonore au scan et **ajout automatique au panier** dès lecture d'un code-barres.
+  - **Vente rapide & caisse** : nom de client pré-rempli par défaut et confirmation optionnelle
+    avant création du ticket VR.
+  - **Catalogue hors ligne & système** : compteur d'articles en cache local, vidage en un geste et
+    contrôle de la recherche automatique des mises à jour.
+
+### Modifié / Corrigé
+
+- **Caméra fermée par défaut partout (`ScanScreen` & `QrDeviceScreen`)** : l'entrée sur *Scan*,
+  *Scanner un poste PC (QR)* ou le raccourci depuis *Produits* n'ouvre **jamais** la caméra ni la
+  demande de permission automatiquement — l'utilisateur démarre explicitement la caméra d'un appui,
+  et elle se coupe immédiatement dès qu'on quitte l'écran.
+- **En-tête unique sans doublon sur Accueil (`HomeScreen`)** : suppression de la seconde ligne
+  avatar + nom d'utilisateur sous la barre supérieure ; le profil utilisateur reste affiché une
+  seule fois dans la barre supérieure.
+- **Barre de navigation épurée (`MainShell`)** : retrait de **Réglages** de la barre inférieure
+  (conservation des 5 onglets métier : *Accueil*, *Produits*, *Scan*, *Vente*, *Agent*) et ouverture
+  des Réglages directement en touchant l'avatar utilisateur en haut à droite.
+
 ## [1.0.6] — 2026-10-22
 
 ### Ajouté

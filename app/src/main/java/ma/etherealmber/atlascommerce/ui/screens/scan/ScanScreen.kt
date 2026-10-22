@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CameraAlt
@@ -47,11 +48,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -63,11 +67,13 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.BarcodeCameraView
 import ma.etherealmber.atlascommerce.ui.components.CameraVisualStyle
 import ma.etherealmber.atlascommerce.ui.components.ProductCreateDialog
+import ma.etherealmber.atlascommerce.ui.components.ScanFeedback
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 /**
@@ -87,7 +93,11 @@ fun ScanScreen(
     viewModel: ScanViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val autoOpenCamera by viewModel.autoOpenCamera.collectAsStateWithLifecycle()
+    val scanHaptic by viewModel.scanHapticEnabled.collectAsStateWithLifecycle()
+    val scanSound by viewModel.scanSoundEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val view = LocalView.current
     var showCreateDialog by remember { mutableStateOf(false) }
 
     var granted by remember {
@@ -102,16 +112,41 @@ fun ScanScreen(
     ) { allowed ->
         granted = allowed
         askedOnce = true
-        if (!allowed) onToast("Caméra refusée — utilisez la saisie manuelle.")
+        if (allowed) {
+            viewModel.setCameraEnabled(true)
+        } else {
+            viewModel.setCameraEnabled(false)
+            onToast("Caméra refusée — utilisez la saisie manuelle.")
+        }
     }
 
-    LaunchedEffect(isActive) {
-        if (isActive && !granted) {
-            permissionLauncher.launch(Manifest.permission.CAMERA)
+    // NEVER auto-open camera on arrival unless user explicitly turned ON autoOpenCamera.
+    // ALWAYS reset cameraEnabled = false immediately whenever leaving Scan!
+    LaunchedEffect(isActive, autoOpenCamera) {
+        if (!isActive) {
+            viewModel.setCameraEnabled(false)
+        } else if (autoOpenCamera && granted) {
+            viewModel.setCameraEnabled(true)
         }
     }
     LaunchedEffect(Unit) {
         viewModel.messages.collect { message -> onToast(message) }
+    }
+    LaunchedEffect(Unit) {
+        viewModel.scanFeedbackEvents.collect {
+            ScanFeedback.trigger(view = view, haptic = scanHaptic, sound = scanSound)
+        }
+    }
+
+    val startCameraExplicitly: () -> Unit = {
+        val allowed = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        granted = allowed
+        if (allowed) {
+            viewModel.setCameraEnabled(true)
+        } else {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
     }
 
     val hardwareActive = isActive && granted && state.cameraEnabled && !showCreateDialog
@@ -121,57 +156,18 @@ fun ScanScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .background(Color.Black),
+                .background(Color(0xFF0B1220)),
         ) {
-            if (granted) {
+            if (hardwareActive) {
                 BarcodeCameraView(
-                    active = hardwareActive,
+                    active = true,
                     style = CameraVisualStyle.STOCK_BARCODE,
                     onDetected = viewModel::onBarcode,
                     modifier = Modifier.fillMaxSize(),
                 )
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Surface(
-                        color = Color(0xAA0F172A),
-                        shape = MaterialTheme.shapes.large,
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = { showCreateDialog = true }) {
-                                Icon(
-                                    Icons.Outlined.Add,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text("Nouveau produit", color = Color.White)
-                            }
-                            IconButton(onClick = { viewModel.setCameraEnabled(!state.cameraEnabled) }) {
-                                Icon(
-                                    imageVector = if (state.cameraEnabled) {
-                                        Icons.Outlined.Videocam
-                                    } else {
-                                        Icons.Outlined.VideocamOff
-                                    },
-                                    contentDescription = if (state.cameraEnabled) {
-                                        "Mettre la caméra en pause"
-                                    } else {
-                                        "Réactiver la caméra"
-                                    },
-                                    tint = Color.White,
-                                )
-                            }
-                        }
-                    }
-                }
-            } else {
+            } else if (!granted && askedOnce) {
                 CameraPermissionPane(
-                    askedOnce = askedOnce,
+                    askedOnce = true,
                     onRequest = { permissionLauncher.launch(Manifest.permission.CAMERA) },
                     onOpenSettings = {
                         val intent = Intent(
@@ -181,6 +177,87 @@ fun ScanScreen(
                         context.startActivity(intent)
                     },
                 )
+            } else {
+                // Default idle state: camera stays completely OFF until explicitly started!
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    AtlasPulseHalo {
+                        Box(
+                            modifier = Modifier
+                                .size(68.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Videocam,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = "Caméra en veille",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "La caméra ne s'ouvre plus automatiquement. Appuyez ci-dessous pour scanner un code-barres, ou saisissez le code manuellement.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.78f),
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    AtlasButton(
+                        text = "Démarrer la caméra",
+                        onClick = startCameraExplicitly,
+                        icon = Icons.Outlined.Videocam,
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Surface(
+                    color = Color(0xCC0F172A),
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { showCreateDialog = true }) {
+                            Icon(
+                                Icons.Outlined.Add,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Nouveau produit", color = Color.White)
+                        }
+                        if (hardwareActive) {
+                            IconButton(onClick = { viewModel.setCameraEnabled(false) }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.VideocamOff,
+                                    contentDescription = "Fermer la caméra",
+                                    tint = Color.White,
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
 

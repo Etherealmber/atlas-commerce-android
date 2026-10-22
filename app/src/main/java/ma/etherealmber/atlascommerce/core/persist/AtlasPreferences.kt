@@ -27,13 +27,8 @@ private val Context.atlasDataStore: DataStore<Preferences> by preferencesDataSto
 )
 
 /**
- * Single source of persistent app preferences: chosen server, appearance and the
- * (encrypted) session. Nothing here is world-readable — DataStore lives in the
- * app-private data directory and the session token is additionally encrypted
- * with an Android Keystore key (see [ma.etherealmber.atlascommerce.core.security.CryptoStore]).
- *
- * All reads are guarded against corrupted protobuf files and type-mismatched keys
- * left behind by older installs (e.g. upgrading in-place from 1.0.4 / 1.0.5).
+ * Single source of persistent app preferences: chosen server, appearance, motion,
+ * camera/scanner behavior, quick-sale defaults, and the encrypted session.
  */
 @Singleton
 class AtlasPreferences @Inject constructor(@ApplicationContext context: Context) {
@@ -47,6 +42,15 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         val API_BASE = stringPreferencesKey("api_base_url")
         val THEME = stringPreferencesKey("theme_mode")
         val DENSITY = stringPreferencesKey("density_mode")
+        val ANIMATIONS_ENABLED = booleanPreferencesKey("animations_enabled")
+        val AUTO_OPEN_CAMERA = booleanPreferencesKey("auto_open_camera")
+        val SCAN_HAPTIC = booleanPreferencesKey("scan_haptic_enabled")
+        val SCAN_SOUND = booleanPreferencesKey("scan_sound_enabled")
+        val AUTO_ADD_CART_ON_SCAN = booleanPreferencesKey("auto_add_cart_on_scan")
+        val DEFAULT_START_TAB = stringPreferencesKey("default_start_tab")
+        val DEFAULT_CLIENT_NAME = stringPreferencesKey("default_client_name")
+        val CONFIRM_BEFORE_SALE = booleanPreferencesKey("confirm_before_sale")
+        val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
         val SESSION_TOKEN = stringPreferencesKey("session_token")
         val SESSION_USERNAME = stringPreferencesKey("session_username")
         val SESSION_ROLE = stringPreferencesKey("session_role")
@@ -69,7 +73,6 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         .map { it.safeString(Keys.API_BASE.name) }
         .distinctUntilChanged()
 
-    /** False in consumers until DataStore has emitted: the UI must not flash a default theme first. */
     val appearanceLoaded: Flow<Boolean> = safeData
         .map { true }
         .distinctUntilChanged()
@@ -100,6 +103,43 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         }
         .distinctUntilChanged()
 
+    val animationsEnabled: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.ANIMATIONS_ENABLED.name) ?: true }
+        .distinctUntilChanged()
+
+    /** Strictly false by default so entering Scan / Scan Device never starts camera immediately. */
+    val autoOpenCamera: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.AUTO_OPEN_CAMERA.name) ?: false }
+        .distinctUntilChanged()
+
+    val scanHapticEnabled: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.SCAN_HAPTIC.name) ?: true }
+        .distinctUntilChanged()
+
+    val scanSoundEnabled: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.SCAN_SOUND.name) ?: true }
+        .distinctUntilChanged()
+
+    val autoAddCartOnScan: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.AUTO_ADD_CART_ON_SCAN.name) ?: false }
+        .distinctUntilChanged()
+
+    val defaultStartTab: Flow<String> = safeData
+        .map { it.safeString(Keys.DEFAULT_START_TAB.name)?.takeIf { s -> s.isNotBlank() } ?: "HOME" }
+        .distinctUntilChanged()
+
+    val defaultClientName: Flow<String> = safeData
+        .map { it.safeString(Keys.DEFAULT_CLIENT_NAME.name).orEmpty() }
+        .distinctUntilChanged()
+
+    val confirmBeforeSale: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.CONFIRM_BEFORE_SALE.name) ?: false }
+        .distinctUntilChanged()
+
+    val autoCheckUpdates: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.AUTO_CHECK_UPDATES.name) ?: true }
+        .distinctUntilChanged()
+
     val onboardingDone: Flow<Boolean> = safeData
         .map { it.safeBoolean(Keys.ONBOARDING_DONE.name) ?: false }
         .distinctUntilChanged()
@@ -112,21 +152,51 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
     }
 
     suspend fun setThemeMode(mode: ThemeMode) {
-        safeEdit { prefs ->
-            prefs.putClean(Keys.THEME, mode.storageKey)
-        }
+        safeEdit { prefs -> prefs.putClean(Keys.THEME, mode.storageKey) }
     }
 
     suspend fun setDensityMode(mode: DensityMode) {
-        safeEdit { prefs ->
-            prefs.putClean(Keys.DENSITY, mode.storageKey)
-        }
+        safeEdit { prefs -> prefs.putClean(Keys.DENSITY, mode.storageKey) }
+    }
+
+    suspend fun setAnimationsEnabled(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.ANIMATIONS_ENABLED, enabled) }
+    }
+
+    suspend fun setAutoOpenCamera(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.AUTO_OPEN_CAMERA, enabled) }
+    }
+
+    suspend fun setScanHapticEnabled(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.SCAN_HAPTIC, enabled) }
+    }
+
+    suspend fun setScanSoundEnabled(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.SCAN_SOUND, enabled) }
+    }
+
+    suspend fun setAutoAddCartOnScan(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.AUTO_ADD_CART_ON_SCAN, enabled) }
+    }
+
+    suspend fun setDefaultStartTab(tabName: String) {
+        safeEdit { prefs -> prefs.putClean(Keys.DEFAULT_START_TAB, tabName) }
+    }
+
+    suspend fun setDefaultClientName(name: String) {
+        safeEdit { prefs -> prefs.putClean(Keys.DEFAULT_CLIENT_NAME, name.trim()) }
+    }
+
+    suspend fun setConfirmBeforeSale(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.CONFIRM_BEFORE_SALE, enabled) }
+    }
+
+    suspend fun setAutoCheckUpdates(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.AUTO_CHECK_UPDATES, enabled) }
     }
 
     suspend fun markOnboardingDone() {
-        safeEdit { prefs ->
-            prefs.putClean(Keys.ONBOARDING_DONE, true)
-        }
+        safeEdit { prefs -> prefs.putClean(Keys.ONBOARDING_DONE, true) }
     }
 
     suspend fun readSession(): StoredSession? {

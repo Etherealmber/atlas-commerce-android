@@ -45,7 +45,12 @@ class AgentViewModel @Inject constructor(
         val error: String? = null,
     )
 
-    private val threadId = "android-${UUID.randomUUID().toString().take(8)}"
+    private var threadId = "android-${UUID.randomUUID().toString().take(8)}"
+
+    fun clearConversation() {
+        threadId = "android-${UUID.randomUUID().toString().take(8)}"
+        _state.update { it.copy(messages = emptyList(), error = null, sending = false) }
+    }
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()

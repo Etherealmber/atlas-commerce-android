@@ -9,14 +9,17 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.CartStore
@@ -33,10 +36,15 @@ class ScanViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
     private val cartStore: CartStore,
     private val sessionManager: SessionManager,
+    preferences: AtlasPreferences,
 ) : ViewModel() {
 
     data class UiState(
-        val cameraEnabled: Boolean = true,
+        /**
+         * Camera is OFF (`false`) by default — entering Scan or jumping from Products
+         * NEVER opens the camera automatically unless the user starts it explicitly.
+         */
+        val cameraEnabled: Boolean = false,
         val lookingUp: Boolean = false,
         val creating: Boolean = false,
         val lastCode: String? = null,
@@ -49,6 +57,24 @@ class ScanViewModel @Inject constructor(
         val neededItems: List<ProductDto> = emptyList(),
         val openRequests: List<ProductCreationRequestDto> = emptyList(),
     )
+
+    val autoOpenCamera: StateFlow<Boolean> = preferences.autoOpenCamera
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val scanHapticEnabled: StateFlow<Boolean> = preferences.scanHapticEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val scanSoundEnabled: StateFlow<Boolean> = preferences.scanSoundEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    private val autoAddCartOnScan: StateFlow<Boolean> = preferences.autoAddCartOnScan
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val _scanFeedbackEvents = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 4,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val scanFeedbackEvents: SharedFlow<Unit> = _scanFeedbackEvents.asSharedFlow()
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -101,6 +127,7 @@ class ScanViewModel @Inject constructor(
         if (code == lastHandledCode && now - lastHandledAt < THROTTLE_MS) return
         lastHandledCode = code
         lastHandledAt = now
+        _scanFeedbackEvents.tryEmit(Unit)
 
         // Guard against scanning a PC QR security link inside Stock Scan:
         val maybeQrToken = QrTokenParser.extractQrToken(code)
@@ -159,12 +186,18 @@ class ScanViewModel @Inject constructor(
                     val product = result.data.displayName?.takeIf { it.isNotBlank() }
                         ?.let { merged -> result.data.copy(name = merged) }
                         ?: result.data
+                    val autoAdded = autoAddCartOnScan.value
+                    if (autoAdded) {
+                        cartStore.add(product, 1.0)
+                        _messages.tryEmit("${product.name} · ajouté automatiquement au panier")
+                    }
                     _state.update {
                         it.copy(
                             lookingUp = false,
                             product = product,
                             notFound = false,
                             pendingApproval = false,
+                            added = autoAdded,
                             error = null,
                         )
                     }

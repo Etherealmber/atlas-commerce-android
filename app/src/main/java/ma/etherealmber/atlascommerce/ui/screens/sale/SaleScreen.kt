@@ -31,7 +31,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +51,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
+import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
@@ -64,9 +67,11 @@ fun SaleScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val lines by viewModel.lines.collectAsStateWithLifecycle()
+    val confirmBeforeSale by viewModel.confirmBeforeSale.collectAsStateWithLifecycle()
     val density = Atlas.density
     val canSell = Roles.canCreateDocuments(user.role)
     val total = remember(lines) { lines.sumOf { it.lineTotal } }
+    var showConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { message -> onToast(message) }
@@ -221,7 +226,13 @@ fun SaleScreen(
                 Spacer(Modifier.height(8.dp))
                 AtlasButton(
                     text = if (state.submitting) "Enregistrement…" else "Créer le ticket VR",
-                    onClick = viewModel::submit,
+                    onClick = {
+                        if (confirmBeforeSale) {
+                            showConfirmDialog = true
+                        } else {
+                            viewModel.submit()
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = canSell && state.canSubmit && lines.isNotEmpty(),
                     loading = state.submitting,
@@ -235,6 +246,33 @@ fun SaleScreen(
                 )
             }
         }
+    }
+
+    if (showConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDialog = false },
+            title = { Text("Confirmer la création du ticket ?") },
+            text = {
+                Text(
+                    "Client : ${state.clientName.trim()}\n" +
+                        "Articles : ${lines.size} · Total : ${AtlasFormat.money(total, state.currency)}",
+                )
+            },
+            confirmButton = {
+                AtlasButton(
+                    text = "Valider",
+                    onClick = {
+                        showConfirmDialog = false
+                        viewModel.submit()
+                    },
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDialog = false }) {
+                    Text("Annuler")
+                }
+            },
+        )
     }
 
     val created = state.created
