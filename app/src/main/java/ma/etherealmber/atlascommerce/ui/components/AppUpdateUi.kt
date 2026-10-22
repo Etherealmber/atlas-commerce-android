@@ -92,11 +92,10 @@ fun AppUpdateBanner(
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = state.info.notes?.lines()?.firstOrNull()?.takeIf { it.isNotBlank() }
-                                    ?: "Une nouvelle version d'Atlas Commerce est prête.",
+                                text = state.info.effectiveNotes,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
+                                maxLines = 5,
                             )
                         }
                     }
@@ -250,22 +249,20 @@ fun MandatoryUpdateScreen(
                 text = "Cette version d'Atlas Commerce doit être mise à jour avant de continuer.",
                 style = MaterialTheme.typography.bodyMedium,
             )
-            if (!info.notes.isNullOrBlank()) {
-                Spacer(Modifier.height(10.dp))
-                AtlasDivider()
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = "Nouveautés",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = info.notes,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Spacer(Modifier.height(10.dp))
+            AtlasDivider()
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Nouveautés",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = info.effectiveNotes,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(16.dp))
 
             when (state) {
@@ -493,14 +490,19 @@ fun SettingsUpdateCard(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
-                if (!state.info.notes.isNullOrBlank()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = state.info.notes,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Nouveautés de cette version",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = state.info.effectiveNotes,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(10.dp))
                 AtlasButton(
                     text = "Télécharger ${state.info.displayVersion}",
@@ -521,7 +523,13 @@ fun SettingsUpdateCard(
                     fontWeight = FontWeight.SemiBold,
                     color = Atlas.palette.positive,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = state.info.effectiveNotes,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
                 Text(
                     text = if (state.awaitingInstallPermission) {
                         "Activez l'autorisation « Installer des applis inconnues » pour terminer l'installation."
