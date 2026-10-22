@@ -165,7 +165,7 @@ jobs:
               )
 
           for kt in sorted(glob.glob("app/src/main/**/*.kt", recursive=True)):
-              lines = open(kt, encoding="utf-8").splitlines()
+              lines = open(kt, encoding="utf-8").read().splitlines()
               for idx, line in enumerate(lines, 1):
                   stripped = line.strip()
                   if stripped.startswith("//") or stripped.startswith("*"):
@@ -176,8 +176,8 @@ jobs:
                       code_hazards.append(f"- **Unsafe non-null assertion (`!!` NPE risk)** at `{kt}:{idx}`: `{stripped}`")
 
           server_url_kt = open("app/src/main/java/ma/etherealmber/atlascommerce/core/net/ServerUrl.kt", encoding="utf-8").read()
-          presets_block = server_url_kt.split("fun presets()", 1)[-1]
-          if "afmarbre.com" in presets_block:
+          presets_block = server_url_kt.split("fun presets()", 1)[-1].split("fun normalize", 1)[0]
+          if "afmarbre.com" in presets_block or "url = PRODUCTION" in presets_block:
               code_hazards.append("- **Hardcoded server recommendation regression**: `ServerUrl.presets()` contains `afmarbre.com`.")
 
           if code_hazards:

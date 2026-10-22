@@ -9,6 +9,7 @@ on:
       - 'LICENSE'
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/workflows/issue-bot.yml'
+      - '.github/workflows/bug-hunter.yml'
   pull_request:
     branches: ['main']
     paths-ignore:
@@ -16,6 +17,7 @@ on:
       - 'LICENSE'
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/workflows/issue-bot.yml'
+      - '.github/workflows/bug-hunter.yml'
   workflow_dispatch:
     inputs:
       version_name:
