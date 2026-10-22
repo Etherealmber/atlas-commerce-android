@@ -1,6 +1,7 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
@@ -111,12 +112,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-        )
-    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -129,6 +124,13 @@ android {
     lint {
         abortOnError = false
         checkReleaseBuilds = false
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+        freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3Api")
     }
 }
 
@@ -153,13 +155,14 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-moshi:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-    implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
-    ksp("com.squareup.moshi:moshi-kotlin-codegen:1.15.1")
+    implementation("com.squareup.moshi:moshi-kotlin:1.15.2")
+    ksp("com.squareup.moshi:moshi-kotlin-codegen:1.15.2")
+    ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.3.0")
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
-    implementation("com.google.dagger:hilt-android:2.52")
-    ksp("com.google.dagger:hilt-compiler:2.52")
+    implementation("com.google.dagger:hilt-android:2.59")
+    ksp("com.google.dagger:hilt-compiler:2.59")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // Barcode scanning (field stock operations)
