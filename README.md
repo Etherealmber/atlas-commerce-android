@@ -3,7 +3,7 @@
   <h1>Atlas Commerce — Android</h1>
   <p><strong>Compagnon Android natif de l'ERP Atlas Commerce</strong><br/>Stock · Caisse · Tickets VR · Tableau de bord · Scan</p>
 
-![Version](https://img.shields.io/badge/version-1.0.6-blue)
+![Version](https://img.shields.io/badge/version-1.0.7-blue)
 ![Licence](https://img.shields.io/badge/licence-MIT-yellow)
 ![Kotlin](https://img.shields.io/badge/kotlin-2.0.21-7f52ff)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285f4)
