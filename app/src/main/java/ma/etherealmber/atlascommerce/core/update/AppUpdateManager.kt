@@ -95,6 +95,9 @@ class AppUpdateManager internal constructor(
     @Volatile
     private var checkJob: Job? = null
 
+    @Volatile
+    private var lastAutoCheckMs: Long = 0L
+
     private val updateAdapter by lazy { moshi.adapter(AndroidUpdateDto::class.java) }
 
     val isDownloading: Boolean
@@ -456,12 +459,26 @@ class AppUpdateManager internal constructor(
      * re-downloading.
      */
     fun onAppResumed(context: Context) {
-        val current = _state.value as? UpdateState.ReadyToInstall ?: return
-        if (current.awaitingInstallPermission &&
+        val current = _state.value
+        if (current is UpdateState.ReadyToInstall &&
+            current.awaitingInstallPermission &&
             (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.packageManager.canRequestPackageInstalls())
         ) {
             installApk(context)
+            return
         }
+        // Check for updates every time the user opens or returns to the app,
+        // without overriding any active download or already-downloaded APK.
+        val now = System.currentTimeMillis()
+        if (!isDownloading && now - lastAutoCheckMs >= RESUME_RECHECK_DEBOUNCE_MS) {
+            lastAutoCheckMs = now
+            checkForUpdate(manual = false)
+        }
+    }
+
+    fun onAppStopped() {
+        // Ensure returning later re-runs a fresh server check and surfaces any available update.
+        lastAutoCheckMs = 0L
     }
 
     private fun isDownloadingLocked(): Boolean =
@@ -484,5 +501,6 @@ class AppUpdateManager internal constructor(
     private companion object {
         const val STREAM_BUFFER_BYTES = 16 * 1024
         const val MIN_VALID_APK_BYTES = 1_024L
+        const val RESUME_RECHECK_DEBOUNCE_MS = 5_000L
     }
 }

@@ -57,6 +57,25 @@ class ApiRunner @Inject constructor(private val moshi: Moshi) {
         }
     }
 
+    /** Used when an endpoint returns `{ success: true }` with optional/empty `data`. */
+    suspend fun <T> statusRaw(block: suspend () -> ApiEnvelope<T>): ApiResult<ApiEnvelope<T>> {
+        return try {
+            val envelope = block()
+            if (envelope.success) {
+                ApiResult.Success(envelope)
+            } else {
+                ApiResult.Failure(
+                    code = envelope.code ?: CODE_SERVER,
+                    message = envelope.error ?: envelope.message ?: "Action refusée par le serveur.",
+                )
+            }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            failure(t)
+        }
+    }
+
     private fun failure(t: Throwable): ApiResult.Failure = when (t) {
         is HttpException -> httpFailure(t)
         is JsonEncodingException -> notAtlas()

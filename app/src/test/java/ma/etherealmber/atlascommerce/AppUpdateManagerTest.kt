@@ -79,10 +79,10 @@ class AppUpdateManagerTest {
 
         val updateAdapter = moshi.adapter(AndroidUpdateDto::class.java)
         val update = updateAdapter.fromJson(
-            """{"success":true,"ok":true,"updateAvailable":true,"versionCode":106,"versionName":"1.0.6","apkUrl":"https://cdn1.afmarbre.com/app-updates/android/latest.apk","mandatory":false,"notes":"Stabilité"}""",
+            """{"success":true,"ok":true,"updateAvailable":true,"versionCode":107,"versionName":"1.0.7","apkUrl":"https://cdn1.afmarbre.com/app-updates/android/latest.apk","mandatory":false,"notes":"Stabilité"}""",
         )
         assertTrue(update?.updateAvailable == true)
-        assertEquals(106, update?.versionCode)
+        assertEquals(107, update?.versionCode)
 
         val dashboardAdapter = moshi.adapter(DashboardDto::class.java)
         assertNotNull(dashboardAdapter.fromJson("""{"currency":"MAD","productCount":42}"""))
@@ -113,7 +113,7 @@ class AppUpdateManagerTest {
                         }
                         val out = s.getOutputStream()
                         if (requestLine.contains("/api/app/android-update")) {
-                            val body = """{"success":true,"ok":true,"updateAvailable":true,"versionCode":106,"versionName":"1.0.6","apkUrl":"/updates/latest.apk","mandatory":false,"notes":"Correctifs Android 14"}"""
+                            val body = """{"success":true,"ok":true,"updateAvailable":true,"versionCode":107,"versionName":"1.0.7","apkUrl":"/updates/latest.apk","mandatory":false,"notes":"Correctifs Android 14"}"""
                             val bytes = body.toByteArray(StandardCharsets.UTF_8)
                             val head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
                             out.write(head.toByteArray(StandardCharsets.UTF_8))
@@ -137,8 +137,8 @@ class AppUpdateManagerTest {
             val manager = AppUpdateManager(
                 updatesDirProvider = { tempDir },
                 baseUrlProvider = { "http://127.0.0.1:$port" },
-                currentVersionCode = 105,
-                currentVersionName = "1.0.5",
+                currentVersionCode = 106,
+                currentVersionName = "1.0.6",
                 probeClient = client,
                 downloadClient = client,
                 moshi = moshi,
@@ -151,7 +151,7 @@ class AppUpdateManagerTest {
             awaitCondition { manager.state.value is UpdateState.Available }
 
             val available = manager.state.value as UpdateState.Available
-            assertEquals("v1.0.6", available.info.displayVersion)
+            assertEquals("v1.0.7", available.info.displayVersion)
 
             manager.startDownload()
             assertTrue("Expected first half of stream to arrive", midStreamReached.await(5, TimeUnit.SECONDS))

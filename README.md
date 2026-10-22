@@ -3,7 +3,7 @@
   <h1>Atlas Commerce — Android</h1>
   <p><strong>Compagnon Android natif de l'ERP Atlas Commerce</strong><br/>Stock · Caisse · Tickets VR · Tableau de bord · Scan</p>
 
-![Version](https://img.shields.io/badge/version-1.0.5-blue)
+![Version](https://img.shields.io/badge/version-1.0.6-blue)
 ![Licence](https://img.shields.io/badge/licence-MIT-yellow)
 ![Kotlin](https://img.shields.io/badge/kotlin-2.0.21-7f52ff)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285f4)
@@ -34,15 +34,26 @@ Atlas et travaille en client léger sur son API REST. Elle est complémentaire d
 | Écran | Contenu |
 | --- | --- |
 | **Choix du serveur** | Avant toute connexion : serveur de production, émulateur, serveur local ou adresse personnalisée, avec test réel de `/api/health` |
-| **Connexion** | Identifiant + mot de passe, puis **OTP e-mail** si l'appareil est inconnu (le worker le décide) |
-| **Accueil** | Trésorerie, valeur du stock, produits, stock faible, créances, tendance mensuelle, derniers documents |
-| **Produits** | Recherche (nom / SKU / code-barres), filtre « stock faible », fiche produit, ajout au panier, **ajustement de stock** (entrée / sortie, motif audité), **catalogue hors ligne** |
-| **Scan** | CameraX + ML Kit (modèle embarqué) : code-barres → `/api/scan/barcode/:code` (chemin rapide sans DDL) → produit → panier, avec saisie manuelle de secours |
+| **Connexion & QR PC** | Identifiant + mot de passe, OTP e-mail ou **connexion mobile par QR** depuis un ordinateur connecté |
+| **Accueil** | Photo de profil (`avatar_url`), trésorerie, valeur du stock, produits, stock faible, créances, tendance mensuelle, derniers documents |
+| **Produits** | Recherche, filtres **À réapprovisionner** (`Manque X u.`) et **Demandes scan**, ajout direct ou demande bureau avec checklist dynamique des champs requis (`Nom *`, `SKU *`, `Unité *`, `Quantité *`, `Prix *`), catalogue hors ligne |
+| **Scan Stock** | CameraX + ML Kit : extinction immédiate de la caméra dès changement d'onglet / dialogue / mise en arrière-plan, bande des articles nécessaires, création directe des codes inconnus |
+| **Scan Poste PC (QR)** | Interface de sécurité distincte (cadre QR carré indigo/cyan, liens profonds `/qr` & `/login-qr`), validation ou refus de connexion PC et gestion des **Appareils connectés** |
+| **Notifications** | Cloche avec badge en barre supérieure regroupant les **Alertes** (`/api/alerts`) et les **Actions terrain PC ↔ Mobile** (`/api/mobile-actions`) |
+| **Atlas Agent IA** | Copilote conversationnel natif (`/api/assist/chat`), suggestions proactives et approbation des actions proposées |
 | **Vente** | Panier, quantification, client, note, création d'un **ticket VR sans TVA** prêt à encaisser |
-| **Réglages** | Serveur, thème (système / clair / sombre), densité, compte, déconnexion |
+| **Réglages** | Photo de profil (envoi galerie → WebP), appareils connectés & révocation, mises à jour automatiques à chaque ouverture, serveur, thème, densité |
 | **Pages légales** | Licence MIT complète, sécurité & confidentialité, à propos — intégrées à l'app |
 
-## 🆕 Version 1.0.5 (versionCode 105)
+## 🆕 Version 1.0.6 (versionCode 106)
+
+- **Confidentialité caméra stricte** : fermeture et libération immédiates de CameraX (`unbindAll`, analyseur et exécuteur) dès tout changement d'onglet, ouverture d'écran superposé ou passage en arrière-plan.
+- **Vérification systématique des mises à jour** à chaque lancement et retour au premier plan, sans jamais interrompre ni écraser un téléchargement APK en cours.
+- **Scanner un poste PC (`QrDeviceScreen`) distinct du Scan Stock** : cockpit de sécurité indigo/cyan à cadre carré `QR_CODE`, liens profonds `/qr` & `/login-qr`, et gestion/révocation des **Appareils connectés** (`/api/auth/devices`).
+- **Photo de profil (`avatar_url`) partout** : décodage des avatars SVG du worker, WebP/PNG Base64, chemins relatifs et CDN HTTPS avec téléversement depuis la galerie (`PATCH /api/auth/me`).
+- **Articles nécessaires, Centre de notifications & Atlas Agent IA** intégrés nativement.
+
+## Historique — Version 1.0.5 (versionCode 105)
 
 - **Choix du serveur API avant la connexion** — écran dédié au premier lancement, presets et test de
   disponibilité (`/api/health`), changement possible depuis la connexion **et** les réglages.

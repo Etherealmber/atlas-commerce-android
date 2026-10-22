@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.core.session
 
+import android.os.Build
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.TokenHolder
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
@@ -17,6 +19,7 @@ import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
 import ma.etherealmber.atlascommerce.data.CartStore
 import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.data.model.LoginResponse
+import ma.etherealmber.atlascommerce.data.model.QrCompleteDto
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
 import ma.etherealmber.atlascommerce.di.ApplicationScope
 import java.util.Locale
@@ -28,6 +31,7 @@ data class SessionUser(
     val role: String,
     val displayName: String,
     val email: String = "",
+    val avatarUrl: String = "",
 ) {
     val isOwner: Boolean get() = role.equals("owner", ignoreCase = true)
 }
@@ -45,10 +49,7 @@ sealed interface LoginOutcome {
 
 /**
  * Owns the authenticated session: restore on start, login (password + optional
- * OTP), profile refresh and logout.
- *
- * The token is kept in memory for requests and encrypted on disk between runs.
- * Logging out also clears the in-memory cart and any cached catalogue.
+ * OTP + QR pairing), profile / avatar refresh and logout.
  */
 @Singleton
 class SessionManager @Inject constructor(
@@ -71,13 +72,18 @@ class SessionManager @Inject constructor(
     )
     val notices: SharedFlow<String> = _notices.asSharedFlow()
 
+    val fingerprint: String get() = deviceIdentity.fingerprint
+
+    val authToken: String? get() = tokenHolder.token
+
+    fun deviceUserAgent(): String =
+        "Atlas-Android/${AppDetails.VERSION_NAME} (Android ${Build.VERSION.RELEASE}; ${Build.MODEL})"
+
     init {
         scope.launch { restore() }
     }
 
     private suspend fun restore() {
-        // Any failure here (corrupted DataStore, rotated Keystore key) must land
-        // on the login screen — never leave the app stuck on the splash.
         val restored = runCatching {
             val stored = preferences.readSession() ?: return@runCatching null
             val token = cryptoStore.decrypt(stored.tokenCipher)
@@ -99,9 +105,9 @@ class SessionManager @Inject constructor(
                 role = stored.role.ifBlank { "user" },
                 displayName = stored.displayName.ifBlank { stored.username },
                 email = stored.email,
+                avatarUrl = stored.avatarUrl,
             ),
         )
-        // Keep role/display name fresh; a failure only means we are offline.
         runCatching { refreshProfile() }
     }
 
@@ -144,6 +150,39 @@ class SessionManager @Inject constructor(
         }
     }
 
+    suspend fun completeQrLogin(dto: QrCompleteDto): ApiResult<Unit> {
+        val token = dto.token
+        if (token.isNullOrBlank()) {
+            return ApiResult.Failure("NO_TOKEN", "Jeton QR manquant dans la réponse du serveur.")
+        }
+        val username = dto.username?.takeIf { it.isNotBlank() } ?: "utilisateur"
+        val role = dto.role?.takeIf { it.isNotBlank() } ?: "user"
+        val displayName = dto.displayName?.takeIf { it.isNotBlank() } ?: username
+        val avatarUrl = dto.avatarUrl.orEmpty()
+
+        tokenHolder.set(token)
+        runCatching {
+            preferences.writeSession(
+                tokenCipher = cryptoStore.encrypt(token),
+                username = username,
+                role = role,
+                displayName = displayName,
+                email = "",
+                avatarUrl = avatarUrl,
+            )
+        }
+        _state.value = SessionState.Active(
+            SessionUser(
+                username = username,
+                role = role,
+                displayName = displayName,
+                avatarUrl = avatarUrl,
+            ),
+        )
+        runCatching { refreshProfile() }
+        return ApiResult.Success(Unit)
+    }
+
     private suspend fun completeLogin(
         response: LoginResponse,
         fallbackUsername: String,
@@ -180,10 +219,12 @@ class SessionManager @Inject constructor(
         _state.value = SessionState.Active(
             SessionUser(username = username, role = role, displayName = displayName),
         )
+        // Immediately fetch /api/auth/me so user PFP (avatar_url) & email populate right away.
+        runCatching { refreshProfile() }
         return ApiResult.Success(LoginOutcome.SignedIn)
     }
 
-    /** Refresh the display name / role from `/api/auth/me`. */
+    /** Refresh display name, role, email and PFP (`avatar_url`) from `/api/auth/me`. */
     suspend fun refreshProfile() {
         val current = (_state.value as? SessionState.Active)?.user ?: return
         val result = authRepository.me()
@@ -193,7 +234,8 @@ class SessionManager @Inject constructor(
                 username = me.username?.takeIf { it.isNotBlank() } ?: current.username,
                 role = me.role?.takeIf { it.isNotBlank() } ?: current.role,
                 displayName = me.displayName?.takeIf { it.isNotBlank() } ?: current.displayName,
-                email = me.email.orEmpty(),
+                email = me.email ?: current.email,
+                avatarUrl = me.avatarUrl?.takeIf { it.isNotBlank() } ?: current.avatarUrl,
             )
             _state.value = SessionState.Active(updated)
             val token = tokenHolder.token
@@ -205,17 +247,56 @@ class SessionManager @Inject constructor(
                         role = updated.role,
                         displayName = updated.displayName,
                         email = updated.email,
+                        avatarUrl = updated.avatarUrl,
                     )
                 }
             }
         }
     }
 
+    /** Updates profile photo (`avatar_url`) or display name via `PATCH /api/auth/me`. */
+    suspend fun updateProfile(
+        displayName: String? = null,
+        email: String? = null,
+        avatarUrl: String? = null,
+    ): ApiResult<Unit> {
+        val res = authRepository.updateProfile(
+            displayName = displayName,
+            email = email,
+            avatarUrl = avatarUrl,
+        )
+        if (res is ApiResult.Success) {
+            val current = (_state.value as? SessionState.Active)?.user
+            if (current != null) {
+                val updated = current.copy(
+                    displayName = displayName ?: current.displayName,
+                    email = email ?: current.email,
+                    avatarUrl = avatarUrl ?: current.avatarUrl,
+                )
+                _state.value = SessionState.Active(updated)
+                val token = tokenHolder.token
+                if (!token.isNullOrBlank()) {
+                    runCatching {
+                        preferences.writeSession(
+                            tokenCipher = cryptoStore.encrypt(token),
+                            username = updated.username,
+                            role = updated.role,
+                            displayName = updated.displayName,
+                            email = updated.email,
+                            avatarUrl = updated.avatarUrl,
+                        )
+                    }
+                }
+            }
+            runCatching { refreshProfile() }
+        }
+        return res
+    }
+
     suspend fun signOut(reason: String? = null) {
         tokenHolder.clear()
         runCatching { preferences.clearSession() }
         cartStore.clear()
-        // The catalogue cache is shared by every account and every server.
         runCatching { offlineCache.clear() }
         _state.value = SessionState.SignedOut
         if (!reason.isNullOrBlank()) _notices.tryEmit(reason)

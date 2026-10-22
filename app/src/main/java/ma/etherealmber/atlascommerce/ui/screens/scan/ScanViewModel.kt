@@ -3,8 +3,8 @@ package ma.etherealmber.atlascommerce.ui.screens.scan
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Job
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,8 +20,12 @@ import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.CartStore
+import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
+import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
+import ma.etherealmber.atlascommerce.ui.screens.devices.QrTokenParser
 import javax.inject.Inject
 
 @HiltViewModel
@@ -32,12 +36,18 @@ class ScanViewModel @Inject constructor(
 ) : ViewModel() {
 
     data class UiState(
+        val cameraEnabled: Boolean = true,
         val lookingUp: Boolean = false,
+        val creating: Boolean = false,
         val lastCode: String? = null,
+        val detectedPcQrToken: String? = null,
         val product: ProductDto? = null,
         val notFound: Boolean = false,
+        val pendingApproval: Boolean = false,
         val added: Boolean = false,
         val error: String? = null,
+        val neededItems: List<ProductDto> = emptyList(),
+        val openRequests: List<ProductCreationRequestDto> = emptyList(),
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -51,6 +61,7 @@ class ScanViewModel @Inject constructor(
 
     private var lastHandledCode: String? = null
     private var lastHandledAt: Long = 0L
+    private var lookupJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -58,12 +69,31 @@ class ScanViewModel @Inject constructor(
                 .map { (it as? SessionState.Active)?.user?.username }
                 .distinctUntilChanged()
                 .collect { username ->
-                    if (username != null) reset()
+                    reset()
+                    if (username != null) loadNeededContext()
                 }
         }
     }
 
-    /** Called by the camera analyser; duplicate reads are throttled. */
+    fun setCameraEnabled(enabled: Boolean) {
+        _state.update { it.copy(cameraEnabled = enabled) }
+    }
+
+    fun loadNeededContext() {
+        viewModelScope.launch {
+            val prods = commerceRepository.products(limit = 200)
+            val reqs = commerceRepository.productRequests("open")
+            val needed = (prods as? ApiResult.Success)?.data
+                ?.filter { it.isLowStock || it.isOutOfStock }
+                ?.sortedBy { it.stock }
+                ?.take(6)
+                .orEmpty()
+            val openReqs = (reqs as? ApiResult.Success)?.data?.take(6).orEmpty()
+            _state.update { it.copy(neededItems = needed, openRequests = openReqs) }
+        }
+    }
+
+    /** Called by the camera analyser or manual search; duplicate reads are throttled. */
     fun onBarcode(raw: String) {
         val code = raw.trim()
         if (code.isBlank()) return
@@ -72,25 +102,55 @@ class ScanViewModel @Inject constructor(
         lastHandledCode = code
         lastHandledAt = now
 
+        // Guard against scanning a PC QR security link inside Stock Scan:
+        val maybeQrToken = QrTokenParser.extractQrToken(code)
+        if (maybeQrToken != null &&
+            (code.startsWith("http", ignoreCase = true) || code.startsWith("atlascommerce://", ignoreCase = true))
+        ) {
+            _state.update {
+                it.copy(
+                    lookingUp = false,
+                    lastCode = code,
+                    detectedPcQrToken = maybeQrToken,
+                    product = null,
+                    notFound = false,
+                    pendingApproval = false,
+                    error = null,
+                )
+            }
+            return
+        }
+
         _state.update {
             it.copy(
                 lastCode = code,
+                detectedPcQrToken = null,
                 lookingUp = true,
                 product = null,
                 notFound = false,
+                pendingApproval = false,
                 added = false,
                 error = null,
             )
         }
 
-        // Scanning B right after A must not let A's (slower) answer win.
         lookupJob?.cancel()
         lookupJob = viewModelScope.launch {
             when (val result = commerceRepository.scan(code)) {
                 is ApiResult.Failure -> _state.update {
                     when (result.code) {
-                        // Not a product yet: the UI offers to create it instead.
-                        "NOT_FOUND" -> it.copy(lookingUp = false, notFound = true, error = null)
+                        "NOT_FOUND" -> it.copy(
+                            lookingUp = false,
+                            notFound = true,
+                            pendingApproval = false,
+                            error = null,
+                        )
+                        "PENDING_APPROVAL" -> it.copy(
+                            lookingUp = false,
+                            notFound = true,
+                            pendingApproval = true,
+                            error = null,
+                        )
                         else -> it.copy(lookingUp = false, error = result.message)
                     }
                 }
@@ -104,6 +164,7 @@ class ScanViewModel @Inject constructor(
                             lookingUp = false,
                             product = product,
                             notFound = false,
+                            pendingApproval = false,
                             error = null,
                         )
                     }
@@ -119,6 +180,78 @@ class ScanViewModel @Inject constructor(
         _messages.tryEmit("${product.name} · ajouté au panier")
     }
 
+    fun createProductFromScan(request: CreateProductRequest) {
+        viewModelScope.launch {
+            _state.update { it.copy(creating = true) }
+            when (val res = commerceRepository.createProduct(request)) {
+                is ApiResult.Failure -> {
+                    _state.update { it.copy(creating = false) }
+                    _messages.tryEmit(res.message)
+                }
+
+                is ApiResult.Success -> {
+                    _state.update {
+                        it.copy(
+                            creating = false,
+                            product = res.data,
+                            notFound = false,
+                            pendingApproval = false,
+                        )
+                    }
+                    _messages.tryEmit("Produit « ${res.data.name} » ajouté au catalogue.")
+                    loadNeededContext()
+                }
+            }
+        }
+    }
+
+    fun submitRequestFromScan(
+        code: String,
+        name: String,
+        sku: String?,
+        unit: String,
+        quantity: Double,
+        category: String?,
+        note: String?,
+    ) {
+        viewModelScope.launch {
+            _state.update { it.copy(creating = true) }
+            when (
+                val res = commerceRepository.submitProductRequest(
+                    SubmitProductRequestBody(
+                        code = code,
+                        name = name,
+                        sku = sku,
+                        unit = unit,
+                        quantity = quantity,
+                        category = category,
+                        note = note,
+                    ),
+                )
+            ) {
+                is ApiResult.Failure -> {
+                    _state.update { it.copy(creating = false) }
+                    _messages.tryEmit(res.message)
+                }
+
+                is ApiResult.Success -> {
+                    _state.update {
+                        it.copy(
+                            creating = false,
+                            pendingApproval = true,
+                        )
+                    }
+                    _messages.tryEmit("Demande envoyée au bureau pour validation.")
+                    loadNeededContext()
+                }
+            }
+        }
+    }
+
+    fun clearPcQrRedirect() {
+        _state.update { it.copy(detectedPcQrToken = null) }
+    }
+
     fun retry() {
         val code = _state.value.lastCode ?: return
         lastHandledCode = null
@@ -129,8 +262,6 @@ class ScanViewModel @Inject constructor(
         lastHandledCode = null
         _state.value = UiState()
     }
-
-    private var lookupJob: Job? = null
 
     private companion object {
         const val THROTTLE_MS = 2_500L

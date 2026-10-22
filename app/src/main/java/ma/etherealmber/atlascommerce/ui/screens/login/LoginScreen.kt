@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,18 +44,19 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
+import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasServerChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 /**
- * Login screen — password first, then the e-mail OTP for a new device.
- * The server chip is always visible so the address can be corrected before
- * credentials are typed.
+ * Login screen — password first, then the e-mail OTP for a new device, plus
+ * instant QR device pairing from an already authenticated workstation.
  */
 @Composable
 fun LoginScreen(
     onChangeServer: () -> Unit,
+    onOpenQrDevice: () -> Unit = {},
     onOpenSecurity: () -> Unit,
     onOpenLicense: () -> Unit,
     onCheckUpdates: () -> Unit = {},
@@ -107,6 +109,13 @@ fun LoginScreen(
                 onUsername = viewModel::onUsernameChange,
                 onPassword = viewModel::onPasswordChange,
                 onSubmit = viewModel::submit,
+            )
+            Spacer(Modifier.height(12.dp))
+            AtlasOutlinedButton(
+                text = "Scanner un QR de connexion PC",
+                onClick = onOpenQrDevice,
+                icon = Icons.Outlined.QrCode2,
+                modifier = Modifier.fillMaxWidth(),
             )
         } else {
             OtpForm(

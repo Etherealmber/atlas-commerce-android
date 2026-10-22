@@ -7,6 +7,13 @@ import ma.etherealmber.atlascommerce.data.model.LoginRequest
 import ma.etherealmber.atlascommerce.data.model.LoginResponse
 import ma.etherealmber.atlascommerce.data.model.MeDto
 import ma.etherealmber.atlascommerce.data.model.OtpRequest
+import ma.etherealmber.atlascommerce.data.model.ProfileUpdateRequest
+import ma.etherealmber.atlascommerce.data.model.QrClaimRequest
+import ma.etherealmber.atlascommerce.data.model.QrCompleteDto
+import ma.etherealmber.atlascommerce.data.model.QrCompleteRequest
+import ma.etherealmber.atlascommerce.data.model.QrSessionStatusDto
+import ma.etherealmber.atlascommerce.data.model.RevokeDeviceRequest
+import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -44,4 +51,71 @@ class AuthRepository @Inject constructor(
     }
 
     suspend fun me(): ApiResult<MeDto> = runner.envelope { apiProvider.api().me() }
+
+    suspend fun updateProfile(
+        displayName: String? = null,
+        email: String? = null,
+        avatarUrl: String? = null,
+    ): ApiResult<Unit> {
+        val res = runner.status {
+            apiProvider.api().updateMe(
+                ProfileUpdateRequest(
+                    displayName = displayName,
+                    email = email,
+                    avatarUrl = avatarUrl,
+                ),
+            )
+        }
+        return when (res) {
+            is ApiResult.Failure -> res
+            is ApiResult.Success -> ApiResult.Success(Unit)
+        }
+    }
+
+    suspend fun devices(): ApiResult<List<TrustedDeviceDto>> =
+        runner.envelope { apiProvider.api().devices() }
+
+    suspend fun revokeDevice(fingerprint: String): ApiResult<Unit> {
+        val res = runner.status {
+            apiProvider.api().revokeDevice(RevokeDeviceRequest(fingerprint = fingerprint))
+        }
+        return when (res) {
+            is ApiResult.Failure -> res
+            is ApiResult.Success -> ApiResult.Success(Unit)
+        }
+    }
+
+    suspend fun qrStatus(token: String): ApiResult<QrSessionStatusDto> =
+        runner.envelope { apiProvider.api().qrStatus(token) }
+
+    suspend fun qrClaim(
+        token: String,
+        fingerprint: String,
+        userAgent: String,
+    ): ApiResult<QrSessionStatusDto> = runner.envelope {
+        apiProvider.api().qrClaim(
+            token = token,
+            body = QrClaimRequest(fingerprint = fingerprint, userAgent = userAgent),
+        )
+    }
+
+    suspend fun qrPhoneBind(
+        token: String,
+        fingerprint: String,
+        userAgent: String,
+        confirm: Boolean,
+    ): ApiResult<QrSessionStatusDto> = runner.envelope {
+        apiProvider.api().qrPhoneBind(
+            token = token,
+            body = QrClaimRequest(fingerprint = fingerprint, userAgent = userAgent, confirm = confirm),
+        )
+    }
+
+    suspend fun qrDeny(token: String): ApiResult<QrSessionStatusDto> =
+        runner.envelope { apiProvider.api().qrDeny(token) }
+
+    suspend fun qrComplete(token: String, fingerprint: String): ApiResult<QrCompleteDto> =
+        runner.envelope {
+            apiProvider.api().qrComplete(token, QrCompleteRequest(fingerprint = fingerprint))
+        }
 }
