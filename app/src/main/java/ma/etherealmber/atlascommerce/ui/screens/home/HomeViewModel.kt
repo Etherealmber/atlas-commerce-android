@@ -46,11 +46,11 @@ class HomeViewModel @Inject constructor(
         // shared between staff without leaking the previous user's figures.
         viewModelScope.launch {
             sessionManager.state
-                .map { (it as? SessionState.Active)?.user?.username }
+                .map { (it as? SessionState.Active)?.user?.scopeIdentity }
                 .distinctUntilChanged()
-                .collect { username ->
+                .collect { identity ->
                     _state.value = UiState()
-                    if (username != null) load(initial = true)
+                    if (identity != null) load(initial = true)
                 }
         }
     }

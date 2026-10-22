@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ShoppingCart
@@ -49,6 +50,7 @@ import ma.etherealmber.atlascommerce.ui.screens.home.HomeScreen
 import ma.etherealmber.atlascommerce.ui.screens.products.ProductsScreen
 import ma.etherealmber.atlascommerce.ui.screens.sale.SaleScreen
 import ma.etherealmber.atlascommerce.ui.screens.scan.ScanScreen
+import ma.etherealmber.atlascommerce.ui.screens.settings.ProfileScreen
 import ma.etherealmber.atlascommerce.ui.screens.settings.SettingsScreen
 
 enum class MainTab(val label: String, val icon: ImageVector) {
@@ -57,13 +59,15 @@ enum class MainTab(val label: String, val icon: ImageVector) {
     SCAN("Scan", Icons.Outlined.QrCodeScanner),
     SALE("Vente", Icons.Outlined.ShoppingCart),
     AGENT("Agent", Icons.Outlined.AutoAwesome),
-    SETTINGS("Réglages", Icons.Outlined.Settings),
+    PROFILE("Mon profil", Icons.Outlined.Person),
+    SETTINGS("Paramètres", Icons.Outlined.Settings),
     ;
 
     companion object {
         /**
-         * Settings (`SETTINGS`) is intentionally EXCLUDED from the Bottom Navigation Bar:
-         * access Settings cleanly by tapping the user's Profile Avatar in the Top Bar.
+         * Neither `PROFILE` nor `SETTINGS` appears in the Bottom Navigation Bar:
+         * tapping the Top Bar Avatar opens `PROFILE` (Account + Customizations ONLY),
+         * and the top-right Settings icon inside `PROFILE` opens `SETTINGS`.
          */
         val BottomBarTabs = listOf(HOME, PRODUCTS, SCAN, SALE, AGENT)
 
@@ -103,8 +107,8 @@ fun MainShell(
         .firstOrNull { it.name == defaultStartTab }
         ?.name ?: MainTab.HOME.name
 
-    var tabName by rememberSaveable(user.username, user.role) { mutableStateOf(resolvedInitial) }
-    var lastBottomTabName by rememberSaveable(user.username, user.role) { mutableStateOf(resolvedInitial) }
+    var tabName by rememberSaveable(user.scopeIdentity) { mutableStateOf(resolvedInitial) }
+    var lastBottomTabName by rememberSaveable(user.scopeIdentity) { mutableStateOf(resolvedInitial) }
     val rawTab = MainTab.entries.firstOrNull { it.name == tabName } ?: MainTab.HOME
     val tab = if (rawTab == MainTab.SALE && !Roles.canCreateDocuments(user.role)) {
         MainTab.HOME
@@ -118,7 +122,7 @@ fun MainShell(
             val targetAllowed = externalTabRequest != MainTab.SALE.name || Roles.canCreateDocuments(user.role)
             val resolved = if (targetAllowed) externalTabRequest else MainTab.PRODUCTS.name
             tabName = resolved
-            if (resolved != MainTab.SETTINGS.name) {
+            if (resolved != MainTab.PROFILE.name && resolved != MainTab.SETTINGS.name) {
                 lastBottomTabName = resolved
             }
             onExternalTabHandled()
@@ -136,7 +140,7 @@ fun MainShell(
         if (target == MainTab.SALE && !Roles.canCreateDocuments(user.role)) {
             onToast("Accès Vente réservé aux rôles Administrateur et Secrétaire.")
         } else {
-            if (target != MainTab.SETTINGS) {
+            if (target != MainTab.PROFILE && target != MainTab.SETTINGS) {
                 lastBottomTabName = target.name
             }
             tabName = target.name
@@ -144,10 +148,10 @@ fun MainShell(
     }
 
     BackHandler(enabled = tab != MainTab.HOME) {
-        if (tab == MainTab.SETTINGS) {
-            tabName = lastBottomTabName
-        } else {
-            switchTab(MainTab.HOME)
+        when (tab) {
+            MainTab.SETTINGS -> tabName = MainTab.PROFILE.name
+            MainTab.PROFILE -> tabName = lastBottomTabName
+            else -> switchTab(MainTab.HOME)
         }
     }
 
@@ -157,61 +161,69 @@ fun MainShell(
             AtlasTopBar(
                 title = tab.label,
                 subtitle = "${user.displayName} · ${Roles.label(user.role)}",
-                onBack = if (tab == MainTab.SETTINGS) {
-                    { tabName = lastBottomTabName }
-                } else {
-                    null
+                onBack = when (tab) {
+                    MainTab.SETTINGS -> ({ tabName = MainTab.PROFILE.name })
+                    MainTab.PROFILE -> ({ tabName = lastBottomTabName })
+                    else -> null
                 },
                 actions = {
-                    if (Roles.isAdmin(user.role) || Roles.canCreateDocuments(user.role)) {
-                        IconButton(onClick = { onOpenQrDevice(null) }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Devices,
-                                contentDescription = "Scanner un poste PC (QR)",
-                            )
-                        }
-                    }
-                    IconButton(onClick = onOpenNotifications) {
-                        if (notificationCount > 0) {
-                            BadgedBox(
-                                badge = {
-                                    Badge {
-                                        Text(if (notificationCount > 99) "99+" else notificationCount.toString())
-                                    }
-                                },
-                            ) {
+                    when (tab) {
+                        MainTab.PROFILE -> {
+                            IconButton(onClick = { switchTab(MainTab.SETTINGS) }) {
                                 Icon(
-                                    imageVector = Icons.Outlined.Notifications,
-                                    contentDescription = "Info Box & Notifications",
+                                    imageVector = Icons.Outlined.Settings,
+                                    contentDescription = "Paramètres",
                                 )
                             }
-                        } else {
-                            Icon(
-                                imageVector = Icons.Outlined.Notifications,
-                                contentDescription = "Info Box & Notifications",
+                            Spacer(Modifier.width(4.dp))
+                        }
+
+                        MainTab.SETTINGS -> {
+                            Spacer(Modifier.width(4.dp))
+                        }
+
+                        else -> {
+                            if (Roles.isAdmin(user.role) || Roles.canCreateDocuments(user.role)) {
+                                IconButton(onClick = { onOpenQrDevice(null) }) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Devices,
+                                        contentDescription = "Scanner un poste PC (QR)",
+                                    )
+                                }
+                            }
+                            IconButton(onClick = onOpenNotifications) {
+                                if (notificationCount > 0) {
+                                    BadgedBox(
+                                        badge = {
+                                            Badge {
+                                                Text(if (notificationCount > 99) "99+" else notificationCount.toString())
+                                            }
+                                        },
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Notifications,
+                                            contentDescription = "Info Box & Notifications",
+                                        )
+                                    }
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Notifications,
+                                        contentDescription = "Info Box & Notifications",
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.width(4.dp))
+                            AtlasAvatar(
+                                avatarUrl = user.avatarUrl,
+                                label = user.displayName,
+                                size = 34.dp,
+                                serverBaseUrl = serverBaseUrl,
+                                borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                onClick = { switchTab(MainTab.PROFILE) },
                             )
+                            Spacer(Modifier.width(10.dp))
                         }
                     }
-                    Spacer(Modifier.width(4.dp))
-                    AtlasAvatar(
-                        avatarUrl = user.avatarUrl,
-                        label = user.displayName,
-                        size = 34.dp,
-                        serverBaseUrl = serverBaseUrl,
-                        borderColor = if (tab == MainTab.SETTINGS) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.outlineVariant
-                        },
-                        onClick = {
-                            if (tab == MainTab.SETTINGS) {
-                                tabName = lastBottomTabName
-                            } else {
-                                switchTab(MainTab.SETTINGS)
-                            }
-                        },
-                    )
-                    Spacer(Modifier.width(10.dp))
                 },
             )
         },
@@ -288,6 +300,13 @@ fun MainShell(
                     )
 
                     MainTab.AGENT -> AgentScreen(
+                        onToast = onToast,
+                    )
+
+                    MainTab.PROFILE -> ProfileScreen(
+                        user = user,
+                        onOpenSettings = { switchTab(MainTab.SETTINGS) },
+                        onSignOut = onSignOut,
                         onToast = onToast,
                     )
 

@@ -1,12 +1,19 @@
 package ma.etherealmber.atlascommerce.data.repo
 
 import com.squareup.moshi.Moshi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import ma.etherealmber.atlascommerce.core.RoleTarget
 import ma.etherealmber.atlascommerce.core.Roles
+import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
 import ma.etherealmber.atlascommerce.data.OfflineCache
+import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
+import ma.etherealmber.atlascommerce.data.model.AgentThreadDetailDto
+import ma.etherealmber.atlascommerce.data.model.AgentThreadMessageDto
+import ma.etherealmber.atlascommerce.data.model.AgentThreadSummaryDto
 import ma.etherealmber.atlascommerce.data.model.AlertItemDto
 import ma.etherealmber.atlascommerce.data.model.AssistApproveDto
 import ma.etherealmber.atlascommerce.data.model.AssistApproveRequest
@@ -28,6 +35,7 @@ import ma.etherealmber.atlascommerce.data.model.MobileActionMetaDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionStatsDto
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.PutAgentThreadRequest
 import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
 import ma.etherealmber.atlascommerce.data.model.RejectMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
@@ -323,23 +331,197 @@ class CommerceRepository @Inject constructor(
         }
     }
 
+    suspend fun agentPolicy(): ApiResult<AgentPolicyDto> =
+        runner.envelope { apiProvider.api().agentPolicy() }
+
+    suspend fun listAgentThreads(): ApiResult<List<AgentThreadSummaryDto>> =
+        runner.envelope { apiProvider.api().listAgentThreads() }
+
+    suspend fun getAgentThread(id: String): ApiResult<AgentThreadDetailDto> =
+        runner.envelope { apiProvider.api().getAgentThread(id) }
+
+    suspend fun putAgentThread(
+        id: String,
+        title: String,
+        messages: List<AgentThreadMessageDto>,
+    ): ApiResult<Unit> {
+        val res = runner.status {
+            apiProvider.api().putAgentThread(
+                id = id,
+                body = PutAgentThreadRequest(
+                    title = title.trim().ifBlank { "Discussion" }.take(48),
+                    messages = messages.takeLast(40),
+                ),
+            )
+        }
+        return when (res) {
+            is ApiResult.Failure -> res
+            is ApiResult.Success -> ApiResult.Success(Unit)
+        }
+    }
+
+    suspend fun deleteAgentThread(id: String): ApiResult<Unit> {
+        val res = runner.status { apiProvider.api().deleteAgentThread(id) }
+        return when (res) {
+            is ApiResult.Failure -> res
+            is ApiResult.Success -> ApiResult.Success(Unit)
+        }
+    }
+
     suspend fun assistStatus(): ApiResult<AssistStatusDto> =
         runner.envelope { apiProvider.api().assistStatus() }
 
     suspend fun assistNextActions(): ApiResult<AssistNextActionsDto> =
         runner.envelope { apiProvider.api().assistNextActions() }
 
+    /**
+     * Sends a prompt to `/api/assist/chat` grounded on real-time live D1 metrics,
+     * products, stock levels, invoices, and pending actions so the LLM NEVER
+     * hallucinates random figures when asked about the business on mobile.
+     */
     suspend fun assistChat(
         message: String,
-        threadId: String = "mobile-live",
-    ): ApiResult<AssistChatResponseDto> = runner.envelope {
-        apiProvider.api().assistChat(
-            AssistChatRequest(
-                message = message,
-                userMessage = message,
-                threadId = threadId,
-            ),
-        )
+        threadId: String = "live",
+    ): ApiResult<AssistChatResponseDto> {
+        val cleanQuestion = message.trim()
+        val isGreeting = Regex(
+            "^(bonjour|bonsoir|salut|hello|hi|hey|coucou|salam|bonne\\s*(journée|soirée)|merci)[\\s!.?]*$",
+            RegexOption.IGNORE_CASE,
+        ).matches(cleanQuestion)
+
+        val outboundPrompt = if (isGreeting) {
+            cleanQuestion
+        } else {
+            val snapshot = runCatching { buildLiveBusinessSnapshot(cleanQuestion) }.getOrDefault("")
+            if (snapshot.isBlank()) {
+                cleanQuestion
+            } else {
+                buildString {
+                    appendLine("RÈGLE STRICTE : Appuie-toi UNIQUEMENT sur les données réelles en direct de la boutique ci-dessous. N'invente JAMAIS aucun chiffre, stock, prix, facture ou client.")
+                    appendLine(snapshot)
+                    appendLine("Réponds clairement et naturellement en français (tableaux ou listes claires si pertinent) sans mentionner ce bloc technique.")
+                    append("Question de l'utilisateur : $cleanQuestion")
+                }.take(2450)
+            }
+        }
+
+        return runner.envelope {
+            apiProvider.api().assistChat(
+                AssistChatRequest(
+                    message = outboundPrompt,
+                    userMessage = cleanQuestion,
+                    threadId = threadId,
+                ),
+            )
+        }
+    }
+
+    private suspend fun buildLiveBusinessSnapshot(userQuestion: String): String = coroutineScope {
+        val dashDef = async { runCatching { dashboard() }.getOrNull() }
+        val prodsDef = async { runCatching { products(query = null, limit = 250) }.getOrNull() }
+        val clientsDef = async { runCatching { clients() }.getOrNull() }
+        val actsDef = async { runCatching { mobileActions(status = "pending") }.getOrNull() }
+        val alertsDef = async { runCatching { alerts() }.getOrNull() }
+
+        val dash = (dashDef.await() as? ApiResult.Success)?.data
+        val prods = (prodsDef.await() as? ApiResult.Success)?.data
+            ?: runCatching { cachedProducts() }.getOrDefault(emptyList())
+        val cliList = (clientsDef.await() as? ApiResult.Success)?.data.orEmpty()
+        val pendingActions = (actsDef.await() as? ApiResult.Success)?.data.orEmpty()
+        val activeAlerts = (alertsDef.await() as? ApiResult.Success)?.data.orEmpty()
+
+        val cur = dash?.activeCurrency ?: "MAD"
+        val sb = StringBuilder()
+        sb.appendLine("[DONNÉES TEMPS RÉEL ATLAS COMMERCE]")
+        if (dash != null) {
+            sb.appendLine(
+                "KPIs : Produits=${dash.productCount}, Clients=${cliList.size}, " +
+                    "StockBas=${dash.lowStockCount}, ValeurStock=${AtlasFormat.money(dash.stockValue, cur)}, " +
+                    "SoldeActuel=${AtlasFormat.money(dash.currentBalance, cur)}, " +
+                    "VentesEncaissées=${AtlasFormat.money(dash.salesReceived, cur)}, " +
+                    "Dépenses=${AtlasFormat.money(dash.expensesTotal, cur)}, " +
+                    "ImpayésClients=${dash.unpaidSales.count} factures (${AtlasFormat.money(dash.unpaidSales.total, cur)}, retard=${AtlasFormat.money(dash.unpaidSales.overdue, cur)})",
+            )
+            if (dash.monthlySeries.isNotEmpty()) {
+                sb.appendLine(
+                    "Mensuel : " + dash.monthlySeries.takeLast(3).joinToString(" | ") { m ->
+                        "${m.label.ifBlank { m.key }}: ventes=${AtlasFormat.money(m.sales, cur)}, dépenses=${AtlasFormat.money(m.expenses, cur)}, profit=${AtlasFormat.money(m.profit, cur)}"
+                    },
+                )
+            }
+            if (dash.unpaidInvoiceList.isNotEmpty()) {
+                sb.appendLine(
+                    "FacturesImpayées : " + dash.unpaidInvoiceList.take(5).joinToString(" | ") { inv ->
+                        "${inv.number ?: "#${inv.id}"} (${inv.clientName ?: "Client"}: reste=${AtlasFormat.money(inv.remaining, cur)})"
+                    },
+                )
+            }
+            if (dash.recentInvoices.isNotEmpty()) {
+                sb.appendLine(
+                    "FacturesRécentes : " + dash.recentInvoices.take(5).joinToString(" | ") { inv ->
+                        "${inv.number ?: "#${inv.id}"} (${inv.clientName ?: "Client"}: ${AtlasFormat.money(inv.total, cur)}, ${inv.status ?: "-"})"
+                    },
+                )
+            }
+        }
+        val tokens = userQuestion.lowercase()
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .filter { it.length >= 3 }
+        if (cliList.isNotEmpty() && tokens.isNotEmpty()) {
+            val matchedClients = cliList.filter { c ->
+                val hay = "${c.name} ${c.phone.orEmpty()} ${c.ice.orEmpty()}".lowercase()
+                tokens.any { hay.contains(it) }
+            }.take(5)
+            if (matchedClients.isNotEmpty()) {
+                sb.appendLine(
+                    "ClientsCorrespondants : " + matchedClients.joinToString(" | ") { c ->
+                        "${c.name} (tél:${c.phone ?: "-"}, soldeDû:${AtlasFormat.money(c.balanceDue, cur)})"
+                    },
+                )
+            }
+        }
+        if (prods.isNotEmpty()) {
+            val matched = if (tokens.isNotEmpty()) {
+                prods.filter { p ->
+                    val hay = "${p.name} ${p.sku.orEmpty()} ${p.barcode.orEmpty()} ${p.category.orEmpty()}".lowercase()
+                    tokens.any { tok -> hay.contains(tok) }
+                }.take(8)
+            } else {
+                emptyList()
+            }
+            if (matched.isNotEmpty()) {
+                sb.appendLine(
+                    "ProduitsCorrespondants : " + matched.joinToString(" | ") { p ->
+                        "${p.name} [SKU:${p.sku ?: "-"}, Qté:${AtlasFormat.quantity(p.stock)}, Prix:${AtlasFormat.money(p.price, cur)}]"
+                    },
+                )
+            }
+            val lowOrOut = prods.filter { it.isOutOfStock || it.isLowStock }.sortedBy { it.stock }.take(7)
+            if (lowOrOut.isNotEmpty()) {
+                sb.appendLine(
+                    "RupturesEtStockBas : " + lowOrOut.joinToString(" | ") { p ->
+                        "${p.name} (Qté:${AtlasFormat.quantity(p.stock)} / seuil:${AtlasFormat.quantity(p.lowStockThreshold)}, ${AtlasFormat.money(p.price, cur)})"
+                    },
+                )
+            } else {
+                sb.appendLine("CatalogueAperçu (${prods.size} réf.) : " + prods.take(5).joinToString(" | ") { p ->
+                    "${p.name} (Qté:${AtlasFormat.quantity(p.stock)}, ${AtlasFormat.money(p.price, cur)})"
+                })
+            }
+        }
+        if (pendingActions.isNotEmpty()) {
+            sb.appendLine(
+                "DemandesEnAttente (${pendingActions.size}) : " + pendingActions.take(5).joinToString(" | ") { a ->
+                    "#${a.id} ${a.title} (${a.type}, par ${a.createdBy ?: "-"})"
+                },
+            )
+        }
+        if (activeAlerts.isNotEmpty()) {
+            sb.appendLine(
+                "Alertes : " + activeAlerts.take(4).joinToString(" | ") { al -> al.label },
+            )
+        }
+        sb.toString().take(1850)
     }
 
     suspend fun assistApprove(proposalId: String): ApiResult<AssistApproveDto> =

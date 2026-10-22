@@ -56,6 +56,24 @@ data class UpdateInfo(
             return if (cleaned.isNotEmpty()) "v$cleaned" else "build $versionCode"
         }
 
+    /**
+     * Always provides meaningful, human-readable release notes even if a manifest
+     * omitted notes or only supplied a bare version number like `"1.0.8"`.
+     */
+    val effectiveNotes: String
+        get() {
+            val raw = notes?.trim().orEmpty()
+            val bareVersionRegex = Regex("^[vV]?\\d+\\.\\d+(?:\\.\\d+)?(?:\\s*\\(build\\s*\\d+\\))?$", RegexOption.IGNORE_CASE)
+            if (raw.isEmpty() || bareVersionRegex.matches(raw)) {
+                return buildString {
+                    appendLine("• Mise à niveau vers Atlas Commerce $displayVersion (build $versionCode).")
+                    appendLine("• Améliorations de fluidité, stabilité et sécurité des échanges.")
+                    append("• Téléchargement redondant haute vitesse via CDN 1 et GitHub.")
+                }
+            }
+            return raw
+        }
+
     /** Returns ordered download URLs honoring user preference and automatic mirror failover. */
     fun orderedDownloadUrls(
         preferred: UpdateDownloadSource,

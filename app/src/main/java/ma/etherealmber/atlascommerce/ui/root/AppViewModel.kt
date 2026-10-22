@@ -5,13 +5,16 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -21,6 +24,8 @@ import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.SessionEvents
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
+import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
+import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.server.ServerSelection
 import ma.etherealmber.atlascommerce.core.session.SessionManager
@@ -30,21 +35,26 @@ import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
 import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.data.OfflineCache
+import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
+import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import ma.etherealmber.atlascommerce.ui.components.AvatarBitmapCache
 import javax.inject.Inject
 
 /**
- * Root view model: appearance, motion & user preferences, server choice, session state,
- * profile photo & details, connected devices, offline cache, self-updates and notices.
+ * Root view model: appearance, motion & isolated per-user preferences, server choice,
+ * saved accounts/servers, live AI quota policy, profile photo & details, connected devices,
+ * offline cache, self-updates and notices.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class AppViewModel @Inject constructor(
     private val preferences: AtlasPreferences,
     private val serverConfig: ServerConfig,
     private val sessionManager: SessionManager,
     private val authRepository: AuthRepository,
+    private val commerceRepository: CommerceRepository,
     private val sessionEvents: SessionEvents,
     private val apiProvider: ApiProvider,
     private val updateManager: AppUpdateManager,
@@ -103,6 +113,16 @@ class AppViewModel @Inject constructor(
         .map { UpdateDownloadSource.fromKey(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, UpdateDownloadSource.AUTO)
 
+    val savedServers: StateFlow<List<SavedServerEntry>> = serverConfig.savedServers
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val savedAccounts: StateFlow<List<SavedAccountEntry>> = serverConfig.selection
+        .flatMapLatest { sel -> preferences.savedAccountsForServer(sel?.baseUrl) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    private val _agentPolicy = MutableStateFlow<AgentPolicyDto?>(null)
+    val agentPolicy: StateFlow<AgentPolicyDto?> = _agentPolicy.asStateFlow()
+
     private val _devices = MutableStateFlow<List<TrustedDeviceDto>>(emptyList())
     val devices: StateFlow<List<TrustedDeviceDto>> = _devices.asStateFlow()
 
@@ -138,7 +158,7 @@ class AppViewModel @Inject constructor(
             var previous = serverConfig.selection.value?.baseUrl
             serverConfig.selection.collect { selection ->
                 val next = selection?.baseUrl
-                if (previous != null && next != null && previous != next) {
+                if (previous != null && next != null && !previous.equals(next, ignoreCase = true)) {
                     apiProvider.invalidate()
                     sessionManager.signOut("Serveur modifié — veuillez vous reconnecter.")
                     if (autoCheckUpdates.value) {
@@ -154,22 +174,26 @@ class AppViewModel @Inject constructor(
 
     private fun observeActiveSessionDevices() {
         viewModelScope.launch {
-            sessionManager.state.collect { st ->
-                if (st is SessionState.Active) {
-                    loadDevices()
-                    refreshCachedProductCount()
-                } else {
+            sessionManager.state
+                .map { st -> (st as? SessionState.Active)?.user?.scopeIdentity }
+                .distinctUntilChanged()
+                .collect { identity ->
                     _devices.value = emptyList()
+                    _agentPolicy.value = null
                     _cachedProductCount.value = 0
+                    if (identity != null) {
+                        loadDevices()
+                        refreshAgentPolicy()
+                        refreshCachedProductCount()
+                    }
                 }
-            }
         }
     }
 
     private fun checkUpdatesOnceServerReady() {
         viewModelScope.launch {
             serverConfig.loaded.filter { it }.first()
-            if (serverConfig.selection.value != null && autoCheckUpdates.value) {
+            if (autoCheckUpdates.value) {
                 updateManager.checkForUpdate(manual = false)
             }
         }
@@ -205,12 +229,61 @@ class AppViewModel @Inject constructor(
             updateManager.onAppResumed(context)
         }
         if (sessionManager.state.value is SessionState.Active) {
-            viewModelScope.launch { sessionManager.refreshProfile() }
+            viewModelScope.launch {
+                sessionManager.refreshProfile()
+                refreshAgentPolicy()
+            }
         }
     }
 
     fun onAppStopped() {
         updateManager.onAppStopped()
+    }
+
+    fun refreshAgentPolicy() {
+        if (sessionManager.state.value !is SessionState.Active) return
+        viewModelScope.launch {
+            when (val res = commerceRepository.agentPolicy()) {
+                is ApiResult.Success -> _agentPolicy.value = res.data
+                is ApiResult.Failure -> Unit
+            }
+        }
+    }
+
+    fun switchSavedAccount(entry: SavedAccountEntry, onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            when (val res = sessionManager.switchToSavedAccount(entry)) {
+                is ApiResult.Success -> onDone(
+                    "Connecté en tant que ${entry.displayName.ifBlank { entry.username }}.",
+                )
+                is ApiResult.Failure -> onDone(res.message)
+            }
+        }
+    }
+
+    fun forgetSavedAccount(entry: SavedAccountEntry, onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            sessionManager.forgetSavedAccount(entry.serverUrl, entry.username)
+            onDone("Compte @${entry.username} oublié.")
+        }
+    }
+
+    fun switchSavedServer(entry: SavedServerEntry, onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            val current = serverConfig.selection.value?.baseUrl
+            if (current != null && !current.equals(entry.url, ignoreCase = true)) {
+                sessionManager.signOut()
+            }
+            serverConfig.select(entry.url, entry.label, rememberServer = true)
+            onDone("Serveur sélectionné : ${entry.label.ifBlank { entry.url }}")
+        }
+    }
+
+    fun forgetSavedServer(entry: SavedServerEntry, onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            serverConfig.forgetSavedServer(entry.url)
+            onDone("Serveur supprimé de cet appareil.")
+        }
     }
 
     fun loadDevices() {

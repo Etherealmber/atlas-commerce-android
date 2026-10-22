@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce.core.server
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -10,6 +11,8 @@ import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
+import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
+import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.di.ApplicationScope
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,16 +25,12 @@ data class ServerSelection(val baseUrl: String) {
 }
 
 /**
- * Which Atlas server this install talks to.
- *
- * The choice is made *before* login and persisted, so a shop can host its own
- * worker. `selection == null` means "not chosen yet" and the UI shows the
- * server picker; [baseUrl] still returns the production default so background
- * code never builds a request against an empty host.
+ * Which Atlas server this install talks to, plus optional user-saved servers.
  */
 @Singleton
 class ServerConfig @Inject constructor(
     private val preferences: AtlasPreferences,
+    private val offlineCache: OfflineCache,
     @ApplicationScope private val scope: CoroutineScope,
 ) {
 
@@ -40,6 +39,8 @@ class ServerConfig @Inject constructor(
 
     private val _loaded = MutableStateFlow(false)
     val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
+
+    val savedServers: Flow<List<SavedServerEntry>> = preferences.savedServers
 
     init {
         scope.launch {
@@ -51,15 +52,19 @@ class ServerConfig @Inject constructor(
         }
     }
 
-    fun baseUrl(): String = _selection.value?.baseUrl ?: AppDetails.DEFAULT_API_BASE
+    fun baseUrl(): String = _selection.value?.baseUrl ?: "https://localhost"
 
     fun normalizedSelection(): String? = _selection.value?.baseUrl
 
     /**
-     * Validates and stores a server address. [Result.failure] carries a
-     * user-facing French message when the address is refused.
+     * Validates and stores a server address, optionally adding it to the saved
+     * server list with an optional friendly label.
      */
-    suspend fun select(rawUrl: String): Result<ServerSelection> {
+    suspend fun select(
+        rawUrl: String,
+        label: String = "",
+        rememberServer: Boolean = true,
+    ): Result<ServerSelection> {
         val normalized = ServerUrl.normalize(rawUrl)
             ?: return Result.failure(IllegalArgumentException("Adresse de serveur invalide."))
         if (ServerUrl.isCleartext(normalized) && !BuildConfig.ALLOW_CLEARTEXT) {
@@ -71,9 +76,17 @@ class ServerConfig @Inject constructor(
         }
         preferences.setApiBase(normalized)
         preferences.markOnboardingDone()
+        if (rememberServer) {
+            preferences.upsertSavedServer(normalized, label.trim())
+        }
         val selection = ServerSelection(normalized)
         _selection.value = selection
         return Result.success(selection)
+    }
+
+    suspend fun forgetSavedServer(url: String) {
+        preferences.removeSavedServer(url)
+        offlineCache.clearServerScope(url)
     }
 
     suspend fun clear() {

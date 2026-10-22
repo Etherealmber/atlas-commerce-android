@@ -9,22 +9,25 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,9 +42,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
+import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
+import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
@@ -49,12 +56,9 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.AtlasServerChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
+import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
-/**
- * Login screen — password first, then the e-mail OTP for a new device, plus
- * instant QR device pairing from an already authenticated workstation.
- */
 @Composable
 fun LoginScreen(
     onChangeServer: () -> Unit,
@@ -66,9 +70,9 @@ fun LoginScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val server by viewModel.server.collectAsStateWithLifecycle()
+    val savedAccounts by viewModel.savedAccounts.collectAsStateWithLifecycle()
     val density = Atlas.density
-    val host = server?.let { ServerUrl.display(it.baseUrl) }
-        ?: ServerUrl.display(AppDetails.DEFAULT_API_BASE)
+    val host = server?.let { ServerUrl.display(it.baseUrl) } ?: "Serveur non sélectionné"
 
     Column(
         modifier = Modifier
@@ -114,10 +118,22 @@ fun LoginScreen(
         Spacer(Modifier.height(density.sectionGap))
 
         if (state.step == LoginViewModel.Step.CREDENTIALS) {
+            if (savedAccounts.isNotEmpty()) {
+                SavedAccountsCard(
+                    accounts = savedAccounts,
+                    serverBaseUrl = server?.baseUrl,
+                    loading = state.loading,
+                    onSelect = viewModel::signInWithSavedAccount,
+                    onForget = viewModel::forgetSavedAccount,
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+
             CredentialsForm(
                 state = state,
                 onUsername = viewModel::onUsernameChange,
                 onPassword = viewModel::onPasswordChange,
+                onRememberChange = viewModel::onRememberAccountChange,
                 onSubmit = viewModel::submit,
             )
             Spacer(Modifier.height(12.dp))
@@ -155,7 +171,7 @@ fun LoginScreen(
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                text = "Session liée à cet appareil · ${AppDetails.VERSION_NAME}",
+                text = "Sessions chiffrées et isolées par utilisateur · ${AppDetails.VERSION_NAME}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -172,10 +188,76 @@ fun LoginScreen(
 }
 
 @Composable
+private fun SavedAccountsCard(
+    accounts: List<SavedAccountEntry>,
+    serverBaseUrl: String?,
+    loading: Boolean,
+    onSelect: (SavedAccountEntry) -> Unit,
+    onForget: (SavedAccountEntry) -> Unit,
+) {
+    AtlasCard {
+        Text(
+            text = "Comptes mémorisés sur ce serveur",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = "Touchez un compte pour ouvrir sa session isolée instantanément.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            accounts.forEach { acc ->
+                AtlasCard(
+                    onClick = if (loading) null else ({ onSelect(acc) }),
+                    padding = 10.dp,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AtlasAvatar(
+                            avatarUrl = acc.avatarUrl,
+                            label = acc.displayName.ifBlank { acc.username },
+                            serverBaseUrl = serverBaseUrl,
+                            size = 38.dp,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = acc.displayName.ifBlank { acc.username },
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = "@${acc.username} · ${Roles.label(acc.role)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        AtlasChip(text = Roles.label(acc.role), tone = AtlasTone.NEUTRAL)
+                        IconButton(
+                            onClick = { onForget(acc) },
+                            enabled = !loading,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = "Oublier ce compte",
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun CredentialsForm(
     state: LoginViewModel.UiState,
     onUsername: (String) -> Unit,
     onPassword: (String) -> Unit,
+    onRememberChange: (Boolean) -> Unit,
     onSubmit: () -> Unit,
 ) {
     AtlasCard {
@@ -212,6 +294,30 @@ private fun CredentialsForm(
             enabled = !state.loading,
             onDone = onSubmit,
         )
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "Mémoriser ce compte",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = "Chiffré localement et visible uniquement sur ce serveur.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Switch(
+                checked = state.rememberAccount,
+                onCheckedChange = onRememberChange,
+                enabled = !state.loading,
+            )
+        }
         Spacer(Modifier.height(16.dp))
         AtlasButton(
             text = "Se connecter",

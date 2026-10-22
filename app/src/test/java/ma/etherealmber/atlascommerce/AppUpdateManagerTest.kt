@@ -315,6 +315,22 @@ class AppUpdateManagerTest {
     }
 
     @Test
+    fun effectiveNotesAlwaysGeneratesReadableTextWhenBlankOrBareVersion() {
+        val bare = UpdateInfo(
+            versionCode = 108,
+            versionName = "1.0.8",
+            apkUrl = "https://cdn1.afmarbre.com/app-updates/android/latest.apk",
+            mandatory = false,
+            notes = "1.0.8",
+        )
+        assertTrue(bare.effectiveNotes.contains("v1.0.8"))
+        assertTrue(bare.effectiveNotes.lines().size >= 3)
+
+        val empty = bare.copy(notes = null)
+        assertTrue(empty.effectiveNotes.contains("CDN 1"))
+    }
+
+    @Test
     fun progressFormatterProducesFrenchReadableOutput() {
         assertEquals("Connexion au serveur de mise à jour…", UpdateFormatter.progressSummary(0, -1))
         val summary = UpdateFormatter.progressSummary(14 * 1_048_576L, 28 * 1_048_576L)

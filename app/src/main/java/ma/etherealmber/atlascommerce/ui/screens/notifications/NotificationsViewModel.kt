@@ -69,10 +69,13 @@ class NotificationsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             sessionManager.state
-                .map { st -> (st as? SessionState.Active)?.user?.let { "${it.username}:${it.role}" } }
+                .map { st -> (st as? SessionState.Active)?.user?.scopeIdentity }
                 .distinctUntilChanged()
-                .collect { _ ->
-                    refresh()
+                .collect { key ->
+                    _state.value = UiState()
+                    if (key != null) {
+                        refresh()
+                    }
                 }
         }
     }
