@@ -501,8 +501,8 @@ jobs:
         env:
           VERSION_NAME: ${{ needs.build.outputs.version_name }}
           VERSION_CODE: ${{ needs.build.outputs.version_code }}
-          CUSTOM_NOTES: ${{ inputs.release_notes }}
-          MANDATORY_INPUT: ${{ inputs.mandatory }}
+          CUSTOM_NOTES: ${{ github.event.inputs.release_notes || '' }}
+          MANDATORY_INPUT: ${{ github.event.inputs.mandatory || 'false' }}
           CDN1_BASE: ${{ vars.CDN1_PUBLIC_BASE_URL || 'https://cdn1.afmarbre.com/app-updates/android' }}
         run: |
           APK_FILE="signed-apk/atlas-commerce.apk"

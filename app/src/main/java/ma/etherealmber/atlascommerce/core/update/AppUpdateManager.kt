@@ -85,7 +85,12 @@ class AppUpdateManager internal constructor(
         notifier = notifier,
         scope = scope,
         sourceProvider = {
-            UpdateDownloadSource.fromKey(runCatching { preferences.updateDownloadSource.first() }.getOrNull())
+            val raw = try {
+                preferences.updateDownloadSource.first()
+            } catch (_: Throwable) {
+                null
+            }
+            UpdateDownloadSource.fromKey(raw)
         },
         cdn1LatestJsonUrl = UpdateDefaults.CDN1_LATEST_JSON_URL,
     )
@@ -244,10 +249,11 @@ class AppUpdateManager internal constructor(
 
         // Also check CDN 1 `latest.json` if configured and pick whichever manifest advertises the newest build
         var cdnManifestDto: AndroidUpdateDto? = null
-        if (!cdn1LatestJsonUrl.isNullOrBlank()) {
-            cdnManifestDto = runCatching {
+        val cdnManifestUrl = cdn1LatestJsonUrl?.takeIf { it.isNotBlank() }
+        if (cdnManifestUrl != null) {
+            cdnManifestDto = try {
                 val req = Request.Builder()
-                    .url(cdn1LatestJsonUrl)
+                    .url(cdnManifestUrl)
                     .get()
                     .header("Accept", "application/json")
                     .header("Cache-Control", "no-cache")
@@ -256,7 +262,9 @@ class AppUpdateManager internal constructor(
                     if (!resp.isSuccessful) null
                     else resp.body?.string()?.let { updateAdapter.fromJson(it) }
                 }
-            }.getOrNull()
+            } catch (_: Throwable) {
+                null
+            }
         }
 
         val dto = listOfNotNull(primaryDto, cdnManifestDto)
