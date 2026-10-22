@@ -253,7 +253,9 @@ class AppViewModel @Inject constructor(
     fun switchSavedAccount(entry: SavedAccountEntry, onDone: (String) -> Unit) {
         viewModelScope.launch {
             when (val res = sessionManager.switchToSavedAccount(entry)) {
-                is ApiResult.Success -> onDone("Connecté en tant que ${res.data.user.displayName}.")
+                is ApiResult.Success -> onDone(
+                    "Connecté en tant que ${entry.displayName.ifBlank { entry.username }}.",
+                )
                 is ApiResult.Failure -> onDone(res.message)
             }
         }
