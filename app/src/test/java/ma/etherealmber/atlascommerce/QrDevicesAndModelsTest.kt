@@ -158,13 +158,13 @@ class QrDevicesAndModelsTest {
 
             // User A on Server 1 writes secret products
             cache.bindScope("https://alpha.example.com", "alice")
-            cache.writeProducts(listOf(ProductDto(id = 1, name = "Alpha Secret Marble")))
+            cache.saveProducts(listOf(ProductDto(id = 1, name = "Alpha Secret Marble")))
             assertEquals("Alpha Secret Marble", cache.readProducts().single().name)
 
             // Switching to User B on the SAME Server 1 sees ZERO data from User A
             cache.bindScope("https://alpha.example.com", "bob")
             assertTrue("User B on same server must see zero items from User A", cache.readProducts().isEmpty())
-            cache.writeProducts(listOf(ProductDto(id = 2, name = "Bob Only Granite")))
+            cache.saveProducts(listOf(ProductDto(id = 2, name = "Bob Only Granite")))
 
             // Switching to User A (same username!) on Server 2 sees ZERO data from Server 1
             cache.bindScope("https://beta.example.com", "alice")

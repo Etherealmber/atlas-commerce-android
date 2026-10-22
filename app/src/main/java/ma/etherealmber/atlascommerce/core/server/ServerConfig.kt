@@ -12,6 +12,7 @@ import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
+import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.di.ApplicationScope
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -29,6 +30,7 @@ data class ServerSelection(val baseUrl: String) {
 @Singleton
 class ServerConfig @Inject constructor(
     private val preferences: AtlasPreferences,
+    private val offlineCache: OfflineCache,
     @ApplicationScope private val scope: CoroutineScope,
 ) {
 
@@ -84,6 +86,7 @@ class ServerConfig @Inject constructor(
 
     suspend fun forgetSavedServer(url: String) {
         preferences.removeSavedServer(url)
+        offlineCache.clearServerScope(url)
     }
 
     suspend fun clear() {

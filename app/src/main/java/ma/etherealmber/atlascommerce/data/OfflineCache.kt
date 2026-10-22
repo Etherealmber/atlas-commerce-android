@@ -16,24 +16,30 @@ import javax.inject.Singleton
 /**
  * Isolated offline product cache strictly partitioned by `(serverUrl, username)`.
  *
- * Every `(serverUrl, username)` pair maps to its own SHA-256 hashed filename, and
+ * Every `(serverUrl, username)` pair maps to `products_<srvHash>_<usrHash>.json`, and
  * unauthenticated calls read/write nothing — guaranteeing zero cross-user or
- * cross-server data leakage even across cold restarts or shared devices.
+ * cross-server data leakage across cold restarts, shared devices, and server switches.
  */
 @Singleton
-class OfflineCache @Inject constructor(
-    @ApplicationContext context: Context,
+class OfflineCache internal constructor(
+    private val directory: File,
     private val moshi: Moshi,
 ) {
 
-    private val directory = File(context.filesDir, "atlas-cache").apply {
-        mkdirs()
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        moshi: Moshi,
+    ) : this(File(context.filesDir, "atlas-cache"), moshi)
+
+    init {
+        directory.mkdirs()
         // Purge any legacy un-scoped global `products.json` immediately on startup
-        File(this, LEGACY_PRODUCTS_FILE).delete()
+        File(directory, LEGACY_PRODUCTS_FILE).delete()
     }
 
     @Volatile
-    private var activeScopeHash: String? = null
+    private var activeScopeKey: String? = null
 
     private val productAdapter by lazy {
         moshi.adapter<List<ProductDto>>(
@@ -45,29 +51,33 @@ class OfflineCache @Inject constructor(
     fun bindScope(serverUrl: String?, username: String?) {
         val srv = serverUrl?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
         val usr = username?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
-        activeScopeHash = if (srv != null && usr != null) {
-            scopeHash(srv, usr)
+        activeScopeKey = if (srv != null && usr != null) {
+            scopeKey(srv, usr)
         } else {
             null
         }
     }
 
+    fun unbindScope() {
+        activeScopeKey = null
+    }
+
     suspend fun saveProducts(products: List<ProductDto>) = withContext(Dispatchers.IO) {
-        val hash = activeScopeHash ?: return@withContext
-        write("products_$hash.json") { productAdapter.toJson(products) }
+        val key = activeScopeKey ?: return@withContext
+        write("products_$key.json") { productAdapter.toJson(products) }
     }
 
     suspend fun readProducts(): List<ProductDto> = withContext(Dispatchers.IO) {
-        val hash = activeScopeHash ?: return@withContext emptyList()
-        val raw = read("products_$hash.json") ?: return@withContext emptyList()
+        val key = activeScopeKey ?: return@withContext emptyList()
+        val raw = read("products_$key.json") ?: return@withContext emptyList()
         runCatching { productAdapter.fromJson(raw) }.getOrNull().orEmpty()
     }
 
     /** Clears only the active `(serverUrl, username)` cache file. */
     suspend fun clear() = withContext(Dispatchers.IO) {
-        val hash = activeScopeHash
-        if (hash != null) {
-            runCatching { File(directory, "products_$hash.json").delete() }
+        val key = activeScopeKey
+        if (key != null) {
+            runCatching { File(directory, "products_$key.json").delete() }
         }
         runCatching { File(directory, LEGACY_PRODUCTS_FILE).delete() }
     }
@@ -77,7 +87,19 @@ class OfflineCache @Inject constructor(
         val srv = serverUrl.trim().lowercase()
         val usr = username.trim().lowercase()
         if (srv.isNotEmpty() && usr.isNotEmpty()) {
-            runCatching { File(directory, "products_${scopeHash(srv, usr)}.json").delete() }
+            runCatching { File(directory, "products_${scopeKey(srv, usr)}.json").delete() }
+        }
+    }
+
+    /** Clears every cached account partition belonging to [serverUrl]. */
+    suspend fun clearServerScope(serverUrl: String) = withContext(Dispatchers.IO) {
+        val srv = serverUrl.trim().lowercase()
+        if (srv.isEmpty()) return@withContext
+        val prefix = "products_${shortSha(srv)}_"
+        runCatching {
+            directory.listFiles()?.forEach { f ->
+                if (f.name.startsWith(prefix)) f.delete()
+            }
         }
     }
 
@@ -86,10 +108,13 @@ class OfflineCache @Inject constructor(
         runCatching { directory.listFiles()?.forEach { it.delete() } }
     }
 
-    private fun scopeHash(serverUrl: String, username: String): String {
+    private fun scopeKey(serverUrl: String, username: String): String =
+        "${shortSha(serverUrl)}_${shortSha("$serverUrl::$username")}"
+
+    private fun shortSha(input: String): String {
         val md = MessageDigest.getInstance("SHA-256")
-        val digest = md.digest("$serverUrl::$username".toByteArray(StandardCharsets.UTF_8))
-        return digest.take(12).joinToString("") { "%02x".format(it) }
+        val digest = md.digest(input.toByteArray(StandardCharsets.UTF_8))
+        return digest.take(8).joinToString("") { "%02x".format(it) }
     }
 
     private inline fun write(name: String, block: () -> String) {
