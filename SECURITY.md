@@ -1,6 +1,6 @@
 # Security Policy — Atlas Commerce (Android)
 
-© 2026 loxdpsy — MIT — current release: **1.0.5** (versionCode 105)
+© 2026 Etherealmber — MIT — current release: **1.0.9** (versionCode 109)
 
 This document covers the **Android client** in this repository. The server (Cloudflare Worker,
 D1, R2) has its own policy in
@@ -18,7 +18,7 @@ and are not supported for production use.
 
 ## Reporting a vulnerability
 
-- Email **security@afmarbre.com** (or contact the maintainer, [@loxdpsy](https://github.com/loxdpsy),
+- Email **security@afmarbre.com** (or contact the maintainer, [@Etherealmber](https://github.com/Etherealmber),
   privately on GitHub).
 - Acknowledgement within **48 h**, status update every 7 days.
 - Please include: app version, Android version, the server used (yours or production), a minimal

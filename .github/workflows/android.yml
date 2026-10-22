@@ -29,13 +29,12 @@ on:
         required: true
         type: string
       release_type:
-        description: 'Type de publication GitHub (Release officielle ou Pre-release)'
-        required: true
+        description: 'Canal de publication GitHub (toujours promu en Latest Release)'
+        required: false
         type: choice
         default: release
         options:
           - release
-          - prerelease
       mandatory:
         description: 'Mise à jour obligatoire ?'
         required: false
@@ -470,13 +469,10 @@ jobs:
               commit_items = [f"Mise à jour {tag} — améliorations et correctifs."]
 
           if custom_raw:
-              in_app_notes = custom_raw
+              first_line = custom_raw.splitlines()[0].strip()
+              in_app_notes = first_line if len(first_line) <= 96 else (first_line[:93].rstrip() + "…")
           else:
-              short_lines = []
-              for item in commit_items[:3]:
-                  trimmed = item if len(item) <= 78 else (item[:75].rstrip() + "…")
-                  short_lines.append(f"• {trimmed}")
-              in_app_notes = "\n".join(short_lines).strip()
+              in_app_notes = f"Mise à jour {tag} — optimisations et correctifs."
 
           gh_lines = [
               f"## ✨ Atlas Commerce `{tag}` (build `{version_code}`)",
@@ -530,21 +526,14 @@ jobs:
               out.write(f"notes_b64={notes_b64}\n")
           PYEOF
 
-      - name: Publish or update GitHub Release (single APK asset)
+      - name: Publish or update GitHub Release as Latest (single APK asset)
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION_NAME: ${{ needs.build.outputs.version_name }}
-          RELEASE_TYPE: ${{ github.event.inputs.release_type || 'release' }}
         run: |
           TAG="v${VERSION_NAME}"
           git tag -f "$TAG" HEAD
           git push -f origin "refs/tags/${TAG}"
-
-          if [ "$RELEASE_TYPE" = "prerelease" ]; then
-            PRERELEASE_FLAG="--prerelease"
-          else
-            PRERELEASE_FLAG="--latest"
-          fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release delete-asset "$TAG" "atlas-commerce-v${VERSION_NAME}.apk" --yes >/dev/null 2>&1 || true
@@ -553,25 +542,18 @@ jobs:
               signed-apk/atlas-commerce.apk \
               signed-apk/latest.json \
               --clobber
-            if [ "$RELEASE_TYPE" = "prerelease" ]; then
-              gh release edit "$TAG" \
-                --title "Atlas Commerce ${TAG}" \
-                --notes-file signed-apk/GITHUB_RELEASE_NOTES.md \
-                --prerelease
-            else
-              gh release edit "$TAG" \
-                --title "Atlas Commerce ${TAG}" \
-                --notes-file signed-apk/GITHUB_RELEASE_NOTES.md \
-                --prerelease=false \
-                --latest
-            fi
+            gh release edit "$TAG" \
+              --title "Atlas Commerce ${TAG}" \
+              --notes-file signed-apk/GITHUB_RELEASE_NOTES.md \
+              --prerelease=false \
+              --latest
           else
             gh release create "$TAG" \
               signed-apk/atlas-commerce.apk \
               signed-apk/latest.json \
               --title "Atlas Commerce ${TAG}" \
               --notes-file signed-apk/GITHUB_RELEASE_NOTES.md \
-              $PRERELEASE_FLAG
+              --latest
           fi
 
       - name: Sync signed APK & latest.json to CDN 1 (Cloudflare REST API v4 -> R2 S3 -> Wrangler -> Worker HTTPS)

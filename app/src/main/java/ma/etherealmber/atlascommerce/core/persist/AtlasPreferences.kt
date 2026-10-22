@@ -77,6 +77,8 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         val DEFAULT_CLIENT_NAME = stringPreferencesKey("default_client_name")
         val CONFIRM_BEFORE_SALE = booleanPreferencesKey("confirm_before_sale")
         val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
+        val PARALLEL_UPDATE_DOWNLOAD = booleanPreferencesKey("parallel_update_download")
+        val FOLLOW_LATEST_RELEASE = booleanPreferencesKey("follow_latest_release")
         val UPDATE_SOURCE = stringPreferencesKey("update_download_source")
         val ROLE_NOTIFICATIONS_ENABLED = booleanPreferencesKey("role_notifications_enabled")
         val SESSION_SERVER = stringPreferencesKey("session_server_url")
@@ -194,6 +196,14 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
 
     val autoCheckUpdates: Flow<Boolean> = safeData
         .map { it.safeBoolean(Keys.AUTO_CHECK_UPDATES.name) ?: true }
+        .distinctUntilChanged()
+
+    val parallelUpdateDownload: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.PARALLEL_UPDATE_DOWNLOAD.name) ?: true }
+        .distinctUntilChanged()
+
+    val followLatestRelease: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.FOLLOW_LATEST_RELEASE.name) ?: true }
         .distinctUntilChanged()
 
     val updateDownloadSource: Flow<String> = safeData
@@ -338,6 +348,14 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
 
     suspend fun setAutoCheckUpdates(enabled: Boolean) {
         safeEdit { prefs -> prefs.putClean(Keys.AUTO_CHECK_UPDATES, enabled) }
+    }
+
+    suspend fun setParallelUpdateDownload(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.PARALLEL_UPDATE_DOWNLOAD, enabled) }
+    }
+
+    suspend fun setFollowLatestRelease(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.FOLLOW_LATEST_RELEASE, enabled) }
     }
 
     suspend fun setUpdateDownloadSource(sourceKey: String) {
