@@ -98,7 +98,7 @@ fun ServerSetupScreen(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "Saisissez le domaine de votre espace Atlas Commerce. Vous pouvez mémoriser plusieurs serveurs en toute confidentialité — chaque espace reste strictement isolé.",
+                    text = "Cette application est liée à la plateforme web Atlas Commerce (à déployer en premier). Saisissez l'adresse exacte de votre site — si le site semble indisponible, vérifiez qu'il n'y a aucune faute de frappe.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -316,14 +316,23 @@ fun ServerSetupScreen(
         Spacer(Modifier.height(density.sectionGap))
         AtlasCard {
             Text(
-                text = "Auto-hébergement",
+                text = "Nouveau sur Atlas Commerce ? (Étape 1 requise)",
                 style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Déployez votre propre instance Atlas Commerce sur Cloudflare Workers puis saisissez son domaine HTTPS ci-dessus.",
+                text = "1. Installez et déployez d'abord l'application web Atlas Commerce sur votre domaine HTTPS.\n" +
+                    "2. Entrez votre URL exacte ci-dessus puis touchez « Tester la connexion ».\n" +
+                    "3. Si le site apparaît indisponible, vérifiez attentivement l'orthographe de ce que vous avez tapé.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = AppDetails.WEB_REPO,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
 

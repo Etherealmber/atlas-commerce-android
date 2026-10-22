@@ -1,0 +1,340 @@
+name: Bug & Health Audit (Auto Issue Creator)
+
+on:
+  schedule:
+    # Runs automatically every Monday & Thursday at 08:00 UTC to hunt bugs, drift & mirror mismatches
+    - cron: '0 8 * * 1,4'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run only (log findings in summary without creating GitHub Issues)?'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: bug-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit-and-file-issues:
+    name: Deep Bug, Security & Mirror Health Audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare Android SDK
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          SDKM="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$SDKM" ]; then
+            yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+            "$SDKM" "platforms;android-35" "build-tools;35.0.0" || true
+          fi
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.14.6'
+
+      - name: Run Gradle Unit Tests, Release KSP & Android Lint XML
+        id: gradle_audit
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          gradle :buildSrc:test :app:testDebugUnitTest :app:kspReleaseKotlin :app:lintDebug \
+            --no-daemon --console=plain --stacktrace 2>&1 | tee "$RUNNER_TEMP/audit-gradle.log"
+
+      - name: Analyze Codebase, Backend API Parity, Lint XML & Live Release Mirrors -> Sync GitHub Issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GRADLE_OUTCOME: ${{ steps.gradle_audit.outcome }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          python3 - <<'PYEOF'
+          import glob, hashlib, json, os, re, subprocess, urllib.request
+          import xml.etree.ElementTree as ET
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          dry_run = os.environ.get("DRY_RUN", "false").lower() == "true"
+          gradle_outcome = os.environ.get("GRADLE_OUTCOME", "unknown")
+          runner_temp = os.environ.get("RUNNER_TEMP", "/tmp")
+
+          findings = []  # list of dicts: {slug, title, severity, labels, body}
+
+          def sh(*args, input_text=None):
+              res = subprocess.run(args, input=input_text, text=True, capture_output=True)
+              return res.returncode, res.stdout.strip(), res.stderr.strip()
+
+          # ------------------------------------------------------------------
+          # 1. Gradle build / unit tests / KSP release check
+          # ------------------------------------------------------------------
+          if gradle_outcome != "success":
+              log_path = os.path.join(runner_temp, "audit-gradle.log")
+              tail = ""
+              if os.path.isfile(log_path):
+                  lines = open(log_path, encoding="utf-8", errors="replace").splitlines()
+                  err_lines = [l for l in lines if l.startswith("e:") or "FAILED" in l or "AssertionError" in l]
+                  tail = "\n".join((err_lines or lines[-45:])[:35])
+              findings.append({
+                  "slug": "gradle-compile-or-unit-test-failure",
+                  "title": "🚨 [Auto-Audit] Gradle build, KSP codegen or unit test failure on main",
+                  "severity": "critical",
+                  "labels": ["automated-audit", "bug"],
+                  "body": (
+                      "### Automated Build & Unit Test Failure Detected\n\n"
+                      "The scheduled/dispatched Gradle health check (`:buildSrc:test :app:testDebugUnitTest :app:kspReleaseKotlin :app:lintDebug`) failed.\n\n"
+                      "#### Diagnostic Excerpt\n"
+                      f"```text\n{tail}\n```\n"
+                  ),
+              })
+
+          # ------------------------------------------------------------------
+          # 2. Android Lint XML (`Fatal` / `Error` issues)
+          # ------------------------------------------------------------------
+          lint_xml = "app/build/reports/lint-results-debug.xml"
+          if os.path.isfile(lint_xml):
+              try:
+                  tree = ET.parse(lint_xml)
+                  severe = []
+                  for issue in tree.getroot().findall("issue"):
+                      sev = issue.attrib.get("severity", "")
+                      if sev in ("Fatal", "Error"):
+                          iid = issue.attrib.get("id", "Unknown")
+                          msg = issue.attrib.get("message", "")
+                          loc = issue.find("location")
+                          where = ""
+                          if loc is not None:
+                              f = loc.attrib.get("file", "")
+                              if "/app/" in f:
+                                  f = "app/" + f.split("/app/", 1)[1]
+                              ln = loc.attrib.get("line", "?")
+                              where = f"`{f}:{ln}`"
+                          severe.append(f"- **[{sev}] `{iid}`** {where} — {msg}")
+                  if severe:
+                      findings.append({
+                          "slug": "android-lint-errors",
+                          "title": f"⚠️ [Auto-Audit] {len(severe)} Android Lint Error/Fatal finding(s) detected",
+                          "severity": "high",
+                          "labels": ["automated-audit", "bug"],
+                          "body": (
+                              "### Android Lint Severe Findings\n\n"
+                              + "\n".join(severe[:25])
+                              + "\n"
+                          ),
+                      })
+              except Exception as exc:
+                  print(f"Lint XML parse warning: {exc}")
+
+          # ------------------------------------------------------------------
+          # 3. Static Kotlin Safety, Privacy & Architecture Invariants
+          # ------------------------------------------------------------------
+          code_hazards = []
+          src_files = [f for f in sorted(glob.glob("app/src/**/*", recursive=True)) if os.path.isfile(f)]
+          if len(src_files) != 81:
+              code_hazards.append(
+                  f"- **Source file count drift**: found `{len(src_files)}` files under `app/src/` (expected `81` for `LegacySourceQuarantine` Windows pull compatibility)."
+              )
+
+          for kt in sorted(glob.glob("app/src/main/**/*.kt", recursive=True)):
+              lines = open(kt, encoding="utf-8").splitlines()
+              for idx, line in enumerate(lines, 1):
+                  stripped = line.strip()
+                  if stripped.startswith("//") or stripped.startswith("*"):
+                      continue
+                  if "GlobalScope." in stripped:
+                      code_hazards.append(f"- **Structured concurrency leak (`GlobalScope`)** at `{kt}:{idx}`: `{stripped}`")
+                  if "!!" in stripped and '"!!"' not in stripped:
+                      code_hazards.append(f"- **Unsafe non-null assertion (`!!` NPE risk)** at `{kt}:{idx}`: `{stripped}`")
+
+          server_url_kt = open("app/src/main/java/ma/etherealmber/atlascommerce/core/net/ServerUrl.kt", encoding="utf-8").read()
+          presets_block = server_url_kt.split("fun presets()", 1)[-1]
+          if "afmarbre.com" in presets_block:
+              code_hazards.append("- **Hardcoded server recommendation regression**: `ServerUrl.presets()` contains `afmarbre.com`.")
+
+          if code_hazards:
+              findings.append({
+                  "slug": "static-safety-and-privacy-invariants",
+                  "title": f"🔍 [Auto-Audit] {len(code_hazards)} static safety / multi-tenant invariant warning(s)",
+                  "severity": "medium",
+                  "labels": ["automated-audit", "bug"],
+                  "body": (
+                      "### Static Safety & Multi-Tenant Invariant Findings\n\n"
+                      + "\n".join(code_hazards[:30])
+                      + "\n"
+                  ),
+              })
+
+          # ------------------------------------------------------------------
+          # 4. API Route Parity against `Etherealmber/atlas-commerce` Worker
+          # ------------------------------------------------------------------
+          try:
+              rc, worker_tree_raw, _ = sh("gh", "api", "repos/Etherealmber/atlas-commerce/git/trees/main?recursive=1")
+              if rc == 0 and worker_tree_raw:
+                  tree_data = json.loads(worker_tree_raw)
+                  worker_files = [
+                      item["path"] for item in tree_data.get("tree", [])
+                      if item.get("type") == "blob" and item["path"].startswith("worker/") and item["path"].endswith(".ts")
+                  ]
+                  worker_corpus = []
+                  for wf in worker_files[:40]:
+                      rc2, content, _ = sh("gh", "api", f"repos/Etherealmber/atlas-commerce/contents/{wf}", "-H", "Accept: application/vnd.github.raw")
+                      if rc2 == 0:
+                          worker_corpus.append(content)
+                  joined_worker = "\n".join(worker_corpus)
+                  atlas_api = open("app/src/main/java/ma/etherealmber/atlascommerce/core/net/AtlasApi.kt", encoding="utf-8").read()
+                  missing_routes = []
+                  for m in re.finditer(r'@(?:GET|POST|PUT|PATCH|DELETE)\("([^"]+)"\)', atlas_api):
+                      raw_route = "/" + m.group(1).lstrip("/")
+                      # Normalize Retrofit `{id}` path params to prefix match
+                      clean_prefix = re.sub(r"/\{[^}]+\}.*$", "", raw_route)
+                      if joined_worker and clean_prefix not in joined_worker:
+                          missing_routes.append(f"- `{raw_route}` (declared in `AtlasApi.kt`, prefix `{clean_prefix}` not found in `Etherealmber/atlas-commerce/worker/*.ts`)")
+                  if missing_routes:
+                      findings.append({
+                          "slug": "backend-api-route-drift",
+                          "title": f"🔗 [Auto-Audit] {len(missing_routes)} Android API route(s) out of sync with Atlas Commerce Web",
+                          "severity": "high",
+                          "labels": ["automated-audit", "bug"],
+                          "body": (
+                              "### Backend API Contract Drift Detected\n\n"
+                              "The following endpoints declared in `AtlasApi.kt` could not be matched in `Etherealmber/atlas-commerce/worker/`:\n\n"
+                              + "\n".join(missing_routes)
+                              + "\n"
+                          ),
+                      })
+          except Exception as exc:
+              print(f"Worker route check skipped: {exc}")
+
+          # ------------------------------------------------------------------
+          # 5. Live GitHub Release <-> CDN 1 (`latest.json`) Sync Check
+          # ------------------------------------------------------------------
+          try:
+              rc, rel_raw, _ = sh("gh", "api", f"repos/{repo}/releases/latest")
+              if rc == 0 and rel_raw:
+                  rel = json.loads(rel_raw)
+                  gh_tag = rel.get("tag_name", "").lstrip("vV")
+                  apk_assets = [a["name"] for a in rel.get("assets", []) if a["name"].endswith(".apk")]
+                  mirror_issues = []
+                  if len(apk_assets) > 1:
+                      mirror_issues.append(f"- **Duplicate APK assets in latest GitHub Release (`{rel.get('tag_name')}`)**: `{', '.join(apk_assets)}` (expected single `atlas-commerce.apk`).")
+
+                  req = urllib.request.Request(
+                      "https://cdn1.afmarbre.com/app-updates/android/latest.json",
+                      headers={"User-Agent": "Mozilla/5.0 AtlasAuditBot/1.0", "Accept": "application/json"},
+                  )
+                  try:
+                      with urllib.request.urlopen(req, timeout=12) as resp:
+                          cdn_json = json.loads(resp.read().decode("utf-8"))
+                          cdn_ver = str(cdn_json.get("versionName", "")).lstrip("vV")
+                          cdn_notes = str(cdn_json.get("notes", "")).strip()
+                          if gh_tag and cdn_ver and gh_tag != cdn_ver:
+                              mirror_issues.append(
+                                  f"- **Version mismatch between GitHub Latest (`v{gh_tag}`) and CDN 1 `latest.json` (`v{cdn_ver}`)**: "
+                                  "Cloudflare Bot Fight Mode / WAF likely blocked `/api/admin/android-release` during publish. "
+                                  "Add a WAF Skip rule for `(http.request.uri.path eq \"/api/admin/android-release\")` or add GitHub Secret `CLOUDFLARE_API_TOKEN`."
+                              )
+                          if not cdn_notes:
+                              mirror_issues.append("- **Empty release notes in CDN 1 `latest.json`**: `notes` field is blank.")
+                  except Exception as cdn_err:
+                      mirror_issues.append(f"- **CDN 1 `latest.json` unreachable or invalid JSON**: `{cdn_err}`")
+
+                  if mirror_issues:
+                      findings.append({
+                          "slug": "release-and-cdn1-mirror-sync",
+                          "title": "📦 [Auto-Audit] Release mirror mismatch between GitHub Releases & CDN 1",
+                          "severity": "medium",
+                          "labels": ["automated-audit", "release-sync"],
+                          "body": (
+                              "### Release & CDN 1 Distribution Audit\n\n"
+                              + "\n".join(mirror_issues)
+                              + "\n"
+                          ),
+                      })
+          except Exception as exc:
+              print(f"Release check info (no stable Latest release yet or API error): {exc}")
+
+          # ------------------------------------------------------------------
+          # 6. Ensure labels exist & sync deduplicated GitHub Issues
+          # ------------------------------------------------------------------
+          if not dry_run:
+              for lbl, color, desc in [
+                  ("automated-audit", "5319E7", "Automatically created & managed by Bug & Health Audit workflow"),
+                  ("release-sync", "FBCA04", "GitHub Releases / CDN 1 mirror synchronization notice"),
+              ]:
+                  sh("gh", "label", "create", lbl, "--color", color, "--description", desc, "--force")
+
+          rc, open_issues_raw, _ = sh(
+              "gh", "issue", "list", "--state", "open", "--label", "automated-audit",
+              "--limit", "100", "--json", "number,title,body"
+          )
+          open_by_slug = {}
+          if rc == 0 and open_issues_raw:
+              for item in json.loads(open_issues_raw):
+                  m = re.search(r"<!-- atlas-audit-slug:([a-z0-9-]+) -->", item.get("body") or "")
+                  if m:
+                      open_by_slug[m.group(1)] = item
+
+          active_slugs = set()
+          summary_rows = []
+
+          for f in findings:
+              slug = f["slug"]
+              active_slugs.add(slug)
+              marker = f"<!-- atlas-audit-slug:{slug} -->"
+              full_body = (
+                  f"{marker}\n"
+                  f"{f['body']}\n---\n"
+                  "_Automatically detected by `.github/workflows/bug-hunter.yml`. This issue updates deduplicated findings and closes itself automatically once resolved._\n"
+              )
+              if dry_run:
+                  summary_rows.append(f"| `{slug}` | **{f['severity'].upper()}** | Dry-run (found) |")
+              elif slug in open_by_slug:
+                  num = open_by_slug[slug]["number"]
+                  sh("gh", "issue", "edit", str(num), "--title", f["title"], "--body-file", "-", input_text=full_body)
+                  summary_rows.append(f"| `{slug}` | **{f['severity'].upper()}** | Updated existing Issue #{num} |")
+              else:
+                  cmd = ["gh", "issue", "create", "--title", f["title"], "--body-file", "-"]
+                  for l in f["labels"]:
+                      cmd += ["--label", l]
+                  rc_c, url_out, _ = sh(*cmd, input_text=full_body)
+                  summary_rows.append(f"| `{slug}` | **{f['severity'].upper()}** | Opened new Issue ({url_out or rc_c}) |")
+
+          # Auto-close previously filed audit issues that are now 100% resolved!
+          if not dry_run:
+              for slug, existing in open_by_slug.items():
+                  if slug not in active_slugs:
+                      num = existing["number"]
+                      sh(
+                          "gh", "issue", "close", str(num),
+                          "--comment", "✅ Verified fixed on `main` by the automated Bug & Health Audit workflow — closing automatically."
+                      )
+                      summary_rows.append(f"| `{slug}` | ✅ Resolved | Auto-closed Issue #{num} |")
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as sf:
+                  sf.write("## 🛡️ Atlas Commerce Android — Automated Bug & Health Audit Report\n\n")
+                  if not summary_rows:
+                      sf.write("✅ **Zero bugs, lint errors, privacy leaks, API mismatches, or mirror issues found!**\n")
+                  else:
+                      sf.write("| Check Slug | Severity | Action |\n| :--- | :--- | :--- |\n")
+                      sf.write("\n".join(summary_rows) + "\n")
+          PYEOF

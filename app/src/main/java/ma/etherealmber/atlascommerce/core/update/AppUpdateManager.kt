@@ -287,14 +287,15 @@ class AppUpdateManager internal constructor(
         val resolvedGithub = dto.resolvedGithubUrl?.let { resolveApkUrl(baseUrl, it) }
             ?: if (cdn1LatestJsonUrl != null) UpdateDefaults.GITHUB_LATEST_APK_URL else null
 
-        val effectivePrimary = resolvedPrimaryUrl ?: resolvedCdn1 ?: resolvedGithub
-        val isNewer = dto.versionCode > currentVersionCode && !effectivePrimary.isNullOrBlank() &&
+        val primaryUrl = (resolvedPrimaryUrl ?: resolvedCdn1 ?: resolvedGithub)
+            ?.takeIf { it.isNotBlank() }
+        val isNewer = dto.versionCode > currentVersionCode && primaryUrl != null &&
             (dto.updateAvailable || dto.versionCode > currentVersionCode)
 
         synchronized(lock) {
             if (isDownloadingLocked()) return
 
-            if (!isNewer) {
+            if (!isNewer || primaryUrl == null) {
                 _state.value = UpdateState.UpToDate(System.currentTimeMillis())
                 return
             }
@@ -302,7 +303,7 @@ class AppUpdateManager internal constructor(
             val info = UpdateInfo(
                 versionCode = dto.versionCode,
                 versionName = dto.versionName?.takeIf { it.isNotBlank() } ?: dto.versionCode.toString(),
-                apkUrl = effectivePrimary!!,
+                apkUrl = primaryUrl,
                 mandatory = dto.mandatory,
                 notes = dto.notes?.trim()?.takeIf { it.isNotBlank() },
                 cdn1Url = resolvedCdn1,
