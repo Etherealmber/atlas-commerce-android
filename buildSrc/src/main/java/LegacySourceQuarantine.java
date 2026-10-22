@@ -62,8 +62,6 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/ui/components/AppUpdateUi.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/components/AtlasAvatar.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/components/AtlasComponents.kt",
-            "main/java/ma/etherealmber/atlascommerce/ui/components/AtlasMarkdown.kt",
-            "main/java/ma/etherealmber/atlascommerce/ui/components/AtlasMotion.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/components/BarcodeCameraView.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/components/ProductCreateDialog.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/components/StatusUi.kt",
@@ -106,7 +104,6 @@ public final class LegacySourceQuarantine {
             "main/res/xml/file_paths.xml",
             "test/java/ma/etherealmber/atlascommerce/AppUpdateManagerTest.kt",
             "test/java/ma/etherealmber/atlascommerce/AtlasFormatTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/MarkdownParserTest.kt",
             "test/java/ma/etherealmber/atlascommerce/QrDevicesAndModelsTest.kt",
             "test/java/ma/etherealmber/atlascommerce/ServerUrlTest.kt"
         ))
@@ -115,7 +112,20 @@ public final class LegacySourceQuarantine {
     private static final String V105_SENTINEL =
         "main/java/ma/etherealmber/atlascommerce/MainActivity.kt";
 
+    private static final String KEEP_MARKER = "@atlas-keep";
+
     private LegacySourceQuarantine() {}
+
+    private static boolean hasExplicitKeepHeader(Path file) {
+        try {
+            byte[] all = Files.readAllBytes(file);
+            int limit = Math.min(all.length, 512);
+            String head = new String(all, 0, limit, StandardCharsets.UTF_8);
+            return head.contains(KEEP_MARKER);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
 
     /**
      * Quarantines stale/untracked files inside {@code srcDir} (such as leftover 1.0.4 files like
@@ -135,7 +145,7 @@ public final class LegacySourceQuarantine {
         try (Stream<Path> walk = Files.walk(srcPath)) {
             walk.filter(Files::isRegularFile).forEach(file -> {
                 String rel = srcPath.relativize(file).toString().replace('\\', '/');
-                if (!allowed.contains(rel)) {
+                if (!allowed.contains(rel) && !hasExplicitKeepHeader(file)) {
                     candidates.add(file);
                 }
             });
