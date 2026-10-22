@@ -148,10 +148,11 @@ object AtlasMarkdownParser {
             }
 
             // 4. Heading (# .. ######)
-            headingRegex.matchEntire(trimmed)?.let { m ->
+            val headingMatch = headingRegex.matchEntire(trimmed)
+            if (headingMatch != null) {
                 blocks += MarkdownBlock.Heading(
-                    level = m.groupValues[1].length,
-                    text = m.groupValues[2].trim(),
+                    level = headingMatch.groupValues[1].length,
+                    text = headingMatch.groupValues[2].trim(),
                 )
                 i++
                 continue

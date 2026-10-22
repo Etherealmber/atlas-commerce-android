@@ -99,7 +99,7 @@ fun AtlasEntrance(
 @Composable
 fun <S> AtlasPageTransition(
     targetState: S,
-    orderOf: (S) -> Int,
+    indexSelector: (S) -> Int = { 0 },
     modifier: Modifier = Modifier,
     label: String = "atlas_page",
     content: @Composable (S) -> Unit,
@@ -113,8 +113,8 @@ fun <S> AtlasPageTransition(
             if (!enabled) {
                 EnterTransition.None togetherWith ExitTransition.None
             } else {
-                val initialOrder = orderOf(initialState)
-                val targetOrder = orderOf(targetState)
+                val initialOrder = indexSelector(initialState)
+                val targetOrder = indexSelector(targetState)
                 when {
                     // Overlay / Settings pushed vertically
                     targetOrder >= 100 && initialOrder < 100 -> {

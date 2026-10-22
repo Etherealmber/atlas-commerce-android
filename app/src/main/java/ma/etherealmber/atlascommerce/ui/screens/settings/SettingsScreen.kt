@@ -738,7 +738,7 @@ private fun ConnectedDeviceRow(
             }
             val meta = listOfNotNull(
                 device.lastIp?.takeIf { it.isNotBlank() },
-                device.lastSeenAt?.takeIf { it.isNotBlank() }?.take(16)?.replace('T', ' '),
+                device.lastSeen?.takeIf { it.isNotBlank() }?.take(16)?.replace('T', ' '),
             ).joinToString(" · ")
             if (meta.isNotBlank()) {
                 Text(

@@ -1,7 +1,7 @@
 package ma.etherealmber.atlascommerce
 
 import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdownParser
-import ma.etherealmber.atlascommerce.ui.components.MdBlock
+import ma.etherealmber.atlascommerce.ui.components.MarkdownBlock
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrDeviceViewModel
 import ma.etherealmber.atlascommerce.ui.screens.scan.ScanViewModel
 import ma.etherealmber.atlascommerce.ui.shell.MainTab
@@ -31,15 +31,15 @@ class MarkdownParserTest {
         val blocks = AtlasMarkdownParser.parse(sample)
         assertEquals(4, blocks.size)
 
-        assertTrue(blocks[0] is MdBlock.Paragraph)
+        assertTrue(blocks[0] is MarkdownBlock.Paragraph)
 
-        val table = blocks[1] as MdBlock.Table
+        val table = blocks[1] as MarkdownBlock.Table
         assertEquals(listOf("Indicateur", "Valeur", "Commentaire"), table.headers)
         assertEquals(
             listOf(
-                MdBlock.ColumnAlign.START,
-                MdBlock.ColumnAlign.CENTER,
-                MdBlock.ColumnAlign.END,
+                MarkdownBlock.ColumnAlign.LEFT,
+                MarkdownBlock.ColumnAlign.CENTER,
+                MarkdownBlock.ColumnAlign.RIGHT,
             ),
             table.alignments,
         )
@@ -47,11 +47,11 @@ class MarkdownParserTest {
         assertEquals("**Ventes totales**", table.rows[0][0])
         assertEquals("0,00 MAD", table.rows[0][1])
 
-        assertTrue(blocks[2] is MdBlock.Paragraph)
+        assertTrue(blocks[2] is MarkdownBlock.Paragraph)
 
-        val list = blocks[3] as MdBlock.ListItems
+        val list = blocks[3] as MarkdownBlock.NumberedList
         assertEquals(2, list.items.size)
-        assertEquals("1.", list.items[0].bullet)
+        assertEquals(1, list.items[0].number)
         assertTrue(list.items[0].text.contains("**Relancer les factures impayées**"))
     }
 
@@ -71,16 +71,16 @@ class MarkdownParserTest {
         val blocks = AtlasMarkdownParser.parse(markdown)
         assertEquals(4, blocks.size)
 
-        val heading = blocks[0] as MdBlock.Heading
+        val heading = blocks[0] as MarkdownBlock.Heading
         assertEquals(2, heading.level)
         assertEquals("Rapport Stock", heading.text)
 
-        val quote = blocks[1] as MdBlock.Blockquote
+        val quote = blocks[1] as MarkdownBlock.Blockquote
         assertTrue(quote.text.contains("Alerte"))
 
-        assertEquals(MdBlock.Divider, blocks[2])
+        assertEquals(MarkdownBlock.Divider, blocks[2])
 
-        val code = blocks[3] as MdBlock.CodeBlock
+        val code = blocks[3] as MarkdownBlock.CodeBlock
         assertEquals("sql", code.language)
         assertTrue(code.code.contains("SELECT sku"))
     }

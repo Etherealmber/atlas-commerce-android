@@ -179,7 +179,7 @@ fun MainShell(
                         borderColor = if (tab == MainTab.SETTINGS) {
                             MaterialTheme.colorScheme.primary
                         } else {
-                            null
+                            MaterialTheme.colorScheme.outlineVariant
                         },
                         onClick = {
                             if (tab == MainTab.SETTINGS) {
