@@ -2,7 +2,7 @@ name: Android CI
 
 on:
   push:
-    branches: ['main', 'arena/**']
+    branches: ['main']
     tags: ['v*']
   pull_request:
     branches: ['main']
@@ -128,18 +128,20 @@ jobs:
               out.write(f"version_name={final_name}\n")
           PY
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Prepare Android SDK
         run: |
           SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           echo "Android SDK: $SDK_ROOT"
           SDKM="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ -x "$SDKM" ]; then
+          if [ -d "$SDK_ROOT/platforms/android-35" ] && [ -d "$SDK_ROOT/build-tools/35.0.0" ]; then
+            echo "Android SDK 35 & build-tools 35.0.0 already pre-installed — skipping slow network sync."
+          elif [ -x "$SDKM" ]; then
             yes | "$SDKM" --licenses > /dev/null 2>&1 || true
             "$SDKM" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
           else
@@ -149,7 +151,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '8.14.6'
+          gradle-version: '9.8.2'
 
       - name: Configure release signing keystore (if GitHub Secrets are present)
         id: signing
@@ -221,11 +223,16 @@ jobs:
         run: |
           set -o pipefail
           readarray -t URL_ARGS < <(python3 -c 'import json,os; d=json.load(open(os.path.join(os.environ["RUNNER_TEMP"],"resolved-urls.json"))); print("-PoverrideRepoUrl=" + d["repo_url"]); print("-PoverrideCdnUrl=" + d["cdn_url"]); print("-PoverrideDownloadUrl=" + d["download_url"])')
+          set +e
           gradle :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:assembleRelease \
             "-PoverrideVersionName=${VER_NAME}" \
             "-PoverrideVersionCode=${VER_CODE}" \
             "${URL_ARGS[@]}" \
-            --no-daemon --console=plain --stacktrace 2>&1 | tee "$RUNNER_TEMP/build.log"
+            -Dkotlin.compiler.execution.strategy=in-process \
+            --no-daemon --console=plain --stacktrace > "$RUNNER_TEMP/build.log" 2>&1
+          RC=$?
+          tail -n 120 "$RUNNER_TEMP/build.log"
+          exit $RC
 
       - name: Clean temporary signing files & prepare single release APK
         if: always()
@@ -296,7 +303,9 @@ jobs:
         run: |
           SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           SDKM="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ -x "$SDKM" ]; then
+          if [ -d "$SDK_ROOT/platforms/android-35" ] && [ -d "$SDK_ROOT/build-tools/35.0.0" ]; then
+            echo "Android SDK 35 & build-tools 35.0.0 already pre-installed — skipping slow network sync."
+          elif [ -x "$SDKM" ]; then
             yes | "$SDKM" --licenses > /dev/null 2>&1 || true
             "$SDKM" "platforms;android-35" "build-tools;35.0.0" || true
           else
@@ -304,7 +313,7 @@ jobs:
           fi
       - uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '8.14.6'
+          gradle-version: '9.8.2'
       - name: Verify legacy 1.0.4 source quarantine, KSP release & Android Lint
         run: |
           mkdir -p app/src/main/java/ma/etherealmber/atlascommerce/push
@@ -333,7 +342,9 @@ jobs:
           touch -d '2026-10-21T20:08:04Z' app/src/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt
 
           mv .git "$RUNNER_TEMP/hidden-git"
-          gradle :app:kspReleaseKotlin :app:lintDebug --no-daemon --console=plain
+          gradle :app:kspReleaseKotlin :app:lintDebug \
+            -Dkotlin.compiler.execution.strategy=in-process \
+            --no-daemon --console=plain
           mv "$RUNNER_TEMP/hidden-git" .git
 
           test ! -e app/src/main/java/ma/etherealmber/atlascommerce/push
@@ -388,6 +399,7 @@ jobs:
             if [ -n "$EMU_PID" ]; then
               kill -9 "$EMU_PID" >/dev/null 2>&1 || true
             fi
+            pkill -9 -f qemu >/dev/null 2>&1 || true
             "$ADB" kill-server </dev/null >/dev/null 2>&1 || true
           }
           trap cleanup EXIT

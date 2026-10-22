@@ -44,7 +44,9 @@ jobs:
         run: |
           SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           SDKM="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ -x "$SDKM" ]; then
+          if [ -d "$SDK_ROOT/platforms/android-35" ] && [ -d "$SDK_ROOT/build-tools/35.0.0" ]; then
+            echo "Android SDK 35 & build-tools 35.0.0 already pre-installed — skipping slow network sync."
+          elif [ -x "$SDKM" ]; then
             yes | "$SDKM" --licenses > /dev/null 2>&1 || true
             "$SDKM" "platforms;android-35" "build-tools;35.0.0" || true
           fi
@@ -52,15 +54,19 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '8.14.6'
+          gradle-version: '9.8.2'
 
       - name: Run Gradle Unit Tests, Release KSP & Android Lint XML
         id: gradle_audit
         continue-on-error: true
         run: |
-          set -o pipefail
+          set +e
           gradle :buildSrc:test :app:testDebugUnitTest :app:kspReleaseKotlin :app:lintDebug \
-            --no-daemon --console=plain --stacktrace 2>&1 | tee "$RUNNER_TEMP/audit-gradle.log"
+            -Dkotlin.compiler.execution.strategy=in-process \
+            --no-daemon --console=plain --stacktrace > "$RUNNER_TEMP/audit-gradle.log" 2>&1
+          RC=$?
+          tail -n 100 "$RUNNER_TEMP/audit-gradle.log"
+          exit $RC
 
       - name: Analyze Codebase, Backend API Parity, Lint XML & Live Release Mirrors -> Sync GitHub Issues
         env:
