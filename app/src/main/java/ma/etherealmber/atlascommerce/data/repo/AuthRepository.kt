@@ -14,6 +14,7 @@ import ma.etherealmber.atlascommerce.data.model.QrCompleteRequest
 import ma.etherealmber.atlascommerce.data.model.QrSessionStatusDto
 import ma.etherealmber.atlascommerce.data.model.RevokeDeviceRequest
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
+import ma.etherealmber.atlascommerce.data.model.VerifyLinkRequest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -45,6 +46,24 @@ class AuthRepository @Inject constructor(
                 username = username,
                 password = password,
                 otp = otp,
+                fingerprint = fingerprint,
+            ),
+        )
+    }
+
+    suspend fun verifyLink(
+        username: String,
+        otp: String,
+        sig: String,
+        exp: Long,
+        fingerprint: String,
+    ): ApiResult<LoginResponse> = runner.status {
+        apiProvider.api().verifyLink(
+            VerifyLinkRequest(
+                username = username,
+                otp = otp,
+                sig = sig,
+                exp = exp,
                 fingerprint = fingerprint,
             ),
         )

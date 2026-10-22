@@ -43,6 +43,10 @@
                     android:scheme="https"
                     android:host="stock.afmarbre.com"
                     android:pathPrefix="/login-qr" />
+                <data
+                    android:scheme="https"
+                    android:host="stock.afmarbre.com"
+                    android:pathPrefix="/verify" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -51,6 +55,9 @@
                 <data
                     android:scheme="atlascommerce"
                     android:host="qr" />
+                <data
+                    android:scheme="atlascommerce"
+                    android:host="verify" />
             </intent-filter>
         </activity>
 

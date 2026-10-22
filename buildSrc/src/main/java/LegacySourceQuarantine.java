@@ -43,6 +43,7 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/core/net/ServerUrl.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/SessionEvents.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/TokenHolder.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/net/VerifyLinkParser.kt",
             "main/java/ma/etherealmber/atlascommerce/core/persist/AtlasPreferences.kt",
             "main/java/ma/etherealmber/atlascommerce/core/security/CryptoStore.kt",
             "main/java/ma/etherealmber/atlascommerce/core/security/DeviceIdentity.kt",

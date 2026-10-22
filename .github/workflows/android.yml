@@ -9,11 +9,11 @@ on:
   workflow_dispatch:
     inputs:
       version_name:
-        description: 'Version name (ex: 1.0.8 ou 1.0.9) — saisi manuellement'
+        description: 'Version name (ex: 1.0.9) — saisi manuellement'
         required: true
         type: string
       version_code:
-        description: 'Version code entier (ex: 108 ou 109) — saisi manuellement'
+        description: 'Version code entier (ex: 109) — saisi manuellement'
         required: true
         type: string
       release_type:
@@ -29,10 +29,26 @@ on:
         required: false
         default: false
         type: boolean
-      release_notes:
-        description: 'Notes de version personnalisées (optionnel — générées automatiquement si vide)'
+      download_url:
+        description: 'Lien de téléchargement APK direct (optionnel — défaut auto si vide)'
         required: false
         default: ''
+        type: string
+      repo_url:
+        description: 'URL du dépôt GitHub (optionnel — défaut: https://github.com/Etherealmber/atlas-commerce-android)'
+        required: false
+        default: ''
+        type: string
+      cdn_url:
+        description: 'URL de base CDN 1 (optionnel — défaut: https://cdn1.afmarbre.com/app-updates/android)'
+        required: false
+        default: ''
+        type: string
+      release_notes:
+        description: 'Notes courtes de mise à jour (optionnel — notes minimales auto si vide)'
+        required: false
+        default: ''
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -56,16 +72,24 @@ jobs:
       signed: ${{ steps.signing.outputs.signed }}
       version_name: ${{ steps.meta.outputs.version_name }}
       version_code: ${{ steps.meta.outputs.version_code }}
+      repo_url: ${{ steps.meta.outputs.repo_url }}
+      cdn_url: ${{ steps.meta.outputs.cdn_url }}
+      download_url: ${{ steps.meta.outputs.download_url }}
+      custom_download_url: ${{ steps.meta.outputs.custom_download_url }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Resolve app version metadata (manual inputs or app/build.gradle.kts)
+      - name: Resolve app version, repo, CDN & download URL metadata (inputs or defaults)
         id: meta
         env:
           INPUT_VERSION_NAME: ${{ github.event.inputs.version_name || '' }}
           INPUT_VERSION_CODE: ${{ github.event.inputs.version_code || '' }}
+          INPUT_REPO_URL: ${{ github.event.inputs.repo_url || '' }}
+          INPUT_CDN_URL: ${{ github.event.inputs.cdn_url || '' }}
+          INPUT_DOWNLOAD_URL: ${{ github.event.inputs.download_url || '' }}
+          DEFAULT_CDN_VAR: ${{ vars.CDN1_PUBLIC_BASE_URL || 'https://cdn1.afmarbre.com/app-updates/android' }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import os, re, sys
@@ -81,14 +105,27 @@ jobs:
           final_code = in_code or default_code
 
           if not re.fullmatch(r"\d+", final_code) or int(final_code) <= 0:
-              sys.stderr.write(f"ERROR: version_code '{final_code}' must be a positive integer (e.g. 108).\n")
+              sys.stderr.write(f"ERROR: version_code '{final_code}' must be a positive integer (e.g. 109).\n")
               sys.exit(1)
           if not re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[A-Za-z0-9._-]+)?", final_name):
               sys.stderr.write(f"ERROR: version_name '{final_name}' must look like 1.0.8 or 1.0.9.\n")
               sys.exit(1)
 
+          gh_repo = os.environ.get("GITHUB_REPOSITORY", "Etherealmber/atlas-commerce-android").strip()
+          default_repo = f"https://github.com/{gh_repo}"
+          default_cdn = os.environ.get("DEFAULT_CDN_VAR", "https://cdn1.afmarbre.com/app-updates/android").strip().rstrip("/")
+
+          repo_url = (os.environ.get("INPUT_REPO_URL", "").strip().rstrip("/")) or default_repo
+          cdn_url = (os.environ.get("INPUT_CDN_URL", "").strip().rstrip("/")) or default_cdn
+          custom_dl = os.environ.get("INPUT_DOWNLOAD_URL", "").strip()
+          download_url = custom_dl or f"{repo_url}/releases/latest/download/atlas-commerce.apk"
+
           print(f"version_code={final_code}")
           print(f"version_name={final_name}")
+          print(f"repo_url={repo_url}")
+          print(f"cdn_url={cdn_url}")
+          print(f"download_url={download_url}")
+          print(f"custom_download_url={custom_dl}")
           PY
 
       - name: Set up JDK 17
@@ -181,11 +218,17 @@ jobs:
         env:
           VER_NAME: ${{ steps.meta.outputs.version_name }}
           VER_CODE: ${{ steps.meta.outputs.version_code }}
+          REPO_URL: ${{ steps.meta.outputs.repo_url }}
+          CDN_URL: ${{ steps.meta.outputs.cdn_url }}
+          DOWNLOAD_URL: ${{ steps.meta.outputs.download_url }}
         run: |
           set -o pipefail
           gradle :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:assembleRelease \
             "-PoverrideVersionName=${VER_NAME}" \
             "-PoverrideVersionCode=${VER_CODE}" \
+            "-PoverrideRepoUrl=${REPO_URL}" \
+            "-PoverrideCdnUrl=${CDN_URL}" \
+            "-PoverrideDownloadUrl=${DOWNLOAD_URL}" \
             --no-daemon --console=plain --stacktrace 2>&1 | tee "$RUNNER_TEMP/build.log"
 
       - name: Clean temporary signing files & prepare single release APK
@@ -519,7 +562,7 @@ jobs:
     needs: [build, lint, android14-smoke]
     if: >-
       needs.build.outputs.signed == 'true' &&
-      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+      (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -573,7 +616,7 @@ jobs:
               print(f"app/build.gradle.kts already matches versionName={v_name}, versionCode={v_code}")
           PY
 
-      - name: Auto-generate release notes, latest.json & SHA-256
+      - name: Auto-generate minimal release notes, latest.json & SHA-256
         id: manifest
         env:
           GH_TOKEN: ${{ github.token }}
@@ -581,7 +624,9 @@ jobs:
           VERSION_CODE: ${{ needs.build.outputs.version_code }}
           CUSTOM_NOTES: ${{ github.event.inputs.release_notes || '' }}
           MANDATORY_INPUT: ${{ github.event.inputs.mandatory || 'false' }}
-          CDN1_BASE: ${{ vars.CDN1_PUBLIC_BASE_URL || 'https://cdn1.afmarbre.com/app-updates/android' }}
+          REPO_BASE_URL: ${{ needs.build.outputs.repo_url }}
+          CDN1_BASE: ${{ needs.build.outputs.cdn_url }}
+          CUSTOM_DOWNLOAD_URL: ${{ needs.build.outputs.custom_download_url }}
         run: |
           APK_FILE="signed-apk/atlas-commerce.apk"
           SHA256="$(sha256sum "$APK_FILE" | awk '{print $1}')"
@@ -590,23 +635,26 @@ jobs:
           MANDATORY="${MANDATORY_INPUT:-false}"
           PUBLISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           CDN1_VERSIONED_URL="${CDN1_BASE%/}/atlas-commerce-${TAG}.apk"
-          GITHUB_VERSIONED_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/atlas-commerce.apk"
+          GITHUB_VERSIONED_URL="${REPO_BASE_URL%/}/releases/download/${TAG}/atlas-commerce.apk"
+          PRIMARY_APK_URL="${CUSTOM_DOWNLOAD_URL:-$CDN1_VERSIONED_URL}"
 
           SHA256="$SHA256" SIZE_BYTES="$SIZE_BYTES" MANDATORY="$MANDATORY" \
           CDN1_VERSIONED_URL="$CDN1_VERSIONED_URL" GITHUB_VERSIONED_URL="$GITHUB_VERSIONED_URL" \
-          PUBLISHED_AT="$PUBLISHED_AT" python3 - <<'PYEOF'
+          PRIMARY_APK_URL="$PRIMARY_APK_URL" PUBLISHED_AT="$PUBLISHED_AT" python3 - <<'PYEOF'
           import base64, json, os, re, subprocess
 
           version_name = os.environ["VERSION_NAME"].strip()
           version_code = int(os.environ["VERSION_CODE"])
           tag = f"v{version_name}"
           repo = os.environ["GITHUB_REPOSITORY"]
+          repo_base_url = os.environ.get("REPO_BASE_URL", f"https://github.com/{repo}").strip().rstrip("/")
           sha256 = os.environ["SHA256"].strip()
           size_bytes = int(os.environ["SIZE_BYTES"])
           size_mb = size_bytes / (1024 * 1024)
           mandatory = os.environ.get("MANDATORY", "false").lower() == "true"
           cdn1_url = os.environ["CDN1_VERSIONED_URL"].strip()
           github_url = os.environ["GITHUB_VERSIONED_URL"].strip()
+          primary_url = os.environ["PRIMARY_APK_URL"].strip() or cdn1_url
           published_at = os.environ["PUBLISHED_AT"].strip()
           custom_raw = os.environ.get("CUSTOM_NOTES", "").strip()
 
@@ -638,10 +686,10 @@ jobs:
                       prev_tag = t
                       break
 
-          rev_range = f"{prev_tag}..HEAD" if prev_tag else "HEAD~12..HEAD"
+          rev_range = f"{prev_tag}..HEAD" if prev_tag else "HEAD~8..HEAD"
           raw_log = sh("git", "log", rev_range, "--no-merges", "--format=%H%x1f%s%x1f%b%x1e")
           if not raw_log:
-              raw_log = sh("git", "log", "-n", "8", "--no-merges", "--format=%H%x1f%s%x1f%b%x1e")
+              raw_log = sh("git", "log", "-n", "5", "--no-merges", "--format=%H%x1f%s%x1f%b%x1e")
 
           NOISE_RES = [
               r"^ci:\s*build log",
@@ -650,12 +698,9 @@ jobs:
               r"^update readme\.md$",
               r"^merge (branch|pull request)",
               r"^co-authored-by:",
-              r"^(new features?|bug fixes?|summary|test plan|verification|changelog|nouveaut[ée]s|corrections)$",
           ]
 
-          pr_bullets = []
           commit_items = []
-          pr_numbers = []
           seen = set()
 
           def clean_line(text):
@@ -666,7 +711,7 @@ jobs:
 
           def accept_item(target_list, text):
               t = clean_line(text)
-              if not t or len(t) < 8 or is_bare_version(t) or t.endswith(":"):
+              if not t or len(t) < 6 or is_bare_version(t) or t.endswith(":"):
                   return
               for pat in NOISE_RES:
                   if re.search(pat, t, re.IGNORECASE):
@@ -683,10 +728,6 @@ jobs:
                   continue
               _, subj, _ = (entry.split("\x1f") + ["", ""])[:3]
               subj = subj.strip()
-              for m in re.finditer(r"\(#(\d+)\)", subj):
-                  pnum = m.group(1)
-                  if pnum not in pr_numbers:
-                      pr_numbers.append(pnum)
               cleaned_subj = re.sub(
                   r"^(feat|fix|perf|refactor|chore|ci|ui|ux|security|docs)(\([^)]+\))?:\s*",
                   "",
@@ -698,66 +739,39 @@ jobs:
                   cleaned_subj = cleaned_subj[0].upper() + cleaned_subj[1:]
               accept_item(commit_items, cleaned_subj)
 
-          for pnum in pr_numbers[:6]:
-              raw_pr = sh("gh", "api", f"repos/{repo}/pulls/{pnum}")
-              if not raw_pr:
-                  continue
-              try:
-                  pr_json = json.loads(raw_pr)
-                  pr_body = pr_json.get("body") or ""
-                  for line in pr_body.splitlines():
-                      m = re.match(r"^\s*[-*]\s+(.+)$", line)
-                      if m:
-                          accept_item(pr_bullets, m.group(1))
-              except Exception:
-                  pass
+          if not commit_items:
+              commit_items = [f"Mise à jour {tag} — améliorations et correctifs."]
 
-          combined_highlights = (commit_items + pr_bullets)[:10]
-          if not combined_highlights:
-              combined_highlights = [
-                  f"Mise à niveau complète vers Atlas Commerce {tag} (build {version_code}).",
-                  "Améliorations de stabilité, de rapidité et de sécurité des échanges.",
-                  "Distribution redondante haute vitesse sur CDN 1 (Cloudflare R2) et GitHub Releases.",
-              ]
-
-          in_app_lines = []
+          # Keep `latest.json` notes concise & minimal
           if custom_raw:
-              in_app_lines.append(custom_raw)
-          for item in combined_highlights[:6]:
-              in_app_lines.append(f"• {item}")
-          in_app_lines.append(f"• Paquet signé {tag} ({size_mb:.1f} Mo · build {version_code}) — miroirs CDN 1 & GitHub.")
-          in_app_notes = "\n".join(in_app_lines).strip()
-          while len(in_app_notes.encode("utf-8")) > 2200 and len(in_app_lines) > 2:
-              in_app_lines.pop(-2)
-              in_app_notes = "\n".join(in_app_lines).strip()
+              in_app_notes = custom_raw
+          else:
+              short_lines = []
+              for item in commit_items[:3]:
+                  trimmed = item if len(item) <= 78 else (item[:75].rstrip() + "…")
+                  short_lines.append(f"• {trimmed}")
+              in_app_notes = "\n".join(short_lines).strip()
 
           gh_lines = [
-              f"## ✨ Nouveautés — Atlas Commerce `{tag}` (build `{version_code}`)",
+              f"## ✨ Atlas Commerce `{tag}` (build `{version_code}`)",
               "",
           ]
           if custom_raw:
-              gh_lines += [f"> {custom_raw}", ""]
-          for item in combined_highlights:
-              gh_lines.append(f"- {item}")
-          if pr_numbers:
-              refs = ", ".join(f"#{n}" for n in pr_numbers)
-              gh_lines += ["", f"**Pull Requests incluses :** {refs}"]
+              gh_lines += [f"{custom_raw}", ""]
+          else:
+              for item in commit_items[:5]:
+                  gh_lines.append(f"- {item}")
+              gh_lines.append("")
           gh_lines += [
-              "",
-              "### 📦 Détails du paquet signé (`APK`)",
-              "| Propriété | Valeur |",
-              "| :--- | :--- |",
-              f"| **Version** | `{tag}` (`versionCode = {version_code}`) |",
-              f"| **Taille** | `{size_mb:.2f} Mo` (`{size_bytes:,}` octets) |",
-              f"| **SHA-256** | `{sha256}` |",
-              f"| **Miroir principal (CDN 1 R2)** | [atlas-commerce-{tag}.apk]({cdn1_url}) |",
-              f"| **Miroir secondaire (GitHub)** | [atlas-commerce.apk]({github_url}) |",
+              "### 📦 Paquet signé (`APK`)",
+              f"- **Version :** `{tag}` (`versionCode = {version_code}`)",
+              f"- **Taille :** `{size_mb:.2f} Mo`",
+              f"- **SHA-256 :** `{sha256}`",
+              f"- **Téléchargement :** [atlas-commerce-{tag}.apk]({primary_url})",
+              f"- **Miroir GitHub :** [atlas-commerce.apk]({github_url})",
           ]
           if prev_tag:
-              gh_lines += [
-                  "",
-                  f"**Comparatif complet :** https://github.com/{repo}/compare/{prev_tag}...{tag}",
-              ]
+              gh_lines += ["", f"**Comparatif :** {repo_base_url}/compare/{prev_tag}...{tag}"]
           gh_markdown = "\n".join(gh_lines).strip() + "\n"
 
           with open("signed-apk/GITHUB_RELEASE_NOTES.md", "w", encoding="utf-8") as f:
@@ -772,7 +786,7 @@ jobs:
               "mandatory": mandatory,
               "sha256": sha256,
               "sizeBytes": size_bytes,
-              "apkUrl": cdn1_url,
+              "apkUrl": primary_url,
               "cdn1Url": cdn1_url,
               "githubUrl": github_url,
               "notes": in_app_notes,
@@ -992,14 +1006,16 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-          CDN_SYNCED="$CDN_SYNCED" CDN_METHOD="$CDN_METHOD" CF_WAF_BLOCKED="$CF_WAF_BLOCKED" CF_API_DETAIL="$CF_API_DETAIL" \
+          CDN_SYNCED="$CDN_SYNCED" CDN_METHOD="$CDN_METHOD" CF_WAF_BLOCKED="$CF_WAF_BLOCKED" \
+          CF_API_DETAIL="$CF_API_DETAIL" CDN1_BASE_URL="${{ needs.build.outputs.cdn_url }}" \
           python3 - <<'PY'
           import json, os, urllib.request
 
           live_cdn = None
+          cdn_base = os.environ.get("CDN1_BASE_URL", "https://cdn1.afmarbre.com/app-updates/android").rstrip("/")
           try:
               req = urllib.request.Request(
-                  "https://cdn1.afmarbre.com/app-updates/android/latest.json",
+                  f"{cdn_base}/latest.json",
                   headers={"User-Agent": "Mozilla/5.0 AtlasVerify/1.0", "Cache-Control": "no-cache"},
               )
               with urllib.request.urlopen(req, timeout=10) as r:

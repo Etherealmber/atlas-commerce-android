@@ -35,8 +35,8 @@
    - Launch **Atlas Commerce** on your phone, complete the quick welcome tour, and enter your **exact HTTPS server address** (e.g. `https://erp.your-company.com`).
    - Tap **« Tester la connexion »** (`Test connection`) to verify `/api/health`, database (`D1`), and storage (`R2`) status before signing in.
    - Optionally toggle **« Enregistrer ce serveur »** and give it a label (e.g. *Main Store*, *North Warehouse*) if you manage multiple servers.
-4. **Step 4 — Sign In or Pair PC via QR Code**:
-   - Enter your **Atlas Commerce** username & password (and 6-digit email verification code on a brand-new device).
+4. **Step 4 — Sign In, Tap Your Email Link, or Pair PC via QR Code**:
+   - Enter your **Atlas Commerce** username & password — on a new device, either tap the **« VÉRIFIER & CONTINUER »** one-tap button directly inside the verification e-mail (opens the app and authenticates against your selected Worker automatically with no code typing!) or type the 6-digit OTP manually.
    - Optionally toggle **« Mémoriser ce compte »** to save encrypted credentials **strictly isolated to that specific server**.
 
 ---
@@ -94,16 +94,19 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## 🚀 Maintainer Guide — Publishing Releases & Automated Bug Hunting
 
-### 1. Publishing a New Release via GitHub Actions (Manual Version & Channel Control)
-Version numbers are **never** bumped automatically without your decision. When ready to publish:
+### 1. Publishing a New Release via GitHub Actions (100% Manual — Never Auto-Published on Push)
+Version numbers and releases are **never** bumped or published automatically on pushes or PR merges — releases publish **only** when you run **`workflow_dispatch`** manually (or push a `v*` tag):
 
 1. Open **[Actions → Android CI](https://github.com/Etherealmber/atlas-commerce-android/actions/workflows/android.yml)** and click **Run workflow** on branch **`main`**.
-2. Fill in the prompt fields manually:
-   - **`version_name`** *(required)* — e.g. `1.0.8` or `1.0.9`
-   - **`version_code`** *(required integer)* — e.g. `108` or `109`
+2. Fill in the prompt fields before building:
+   - **`version_name`** *(required)* — e.g. `1.0.9`
+   - **`version_code`** *(required integer)* — e.g. `109`
    - **`release_type`** *(required)* — choose **`release`** (official *Latest* release) or **`prerelease`**
    - **`mandatory`** — force mandatory update screen in app (`true` / `false`)
-   - **`release_notes`** — optional headline (detailed release notes are **auto-generated automatically** for both GitHub Releases and `CDN 1` `latest.json` when left empty)
+   - **`download_url`** *(optional)* — custom direct APK URL (uses automatic default if left blank)
+   - **`repo_url`** *(optional)* — custom GitHub repository URL (defaults to `https://github.com/Etherealmber/atlas-commerce-android` if left blank)
+   - **`cdn_url`** *(optional)* — custom CDN base URL (defaults to `https://cdn1.afmarbre.com/app-updates/android` if left blank)
+   - **`release_notes`** *(optional)* — custom short note (concise minimal notes are generated in `latest.json` automatically if left blank)
 3. The workflow compiles & signs **a single APK (`atlas-commerce.apk`)**, verifies launch & upgrade on an **Android 14 (API 34)** emulator, syncs `app/build.gradle.kts`, publishes the GitHub Release, and syncs `CDN 1`.
 
 ### 2. Fixing Cloudflare `403 Just a moment...` on `CDN 1` Upload (30-Second Setup)

@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.core.update
 
+import ma.etherealmber.atlascommerce.BuildConfig
 import java.io.File
 import java.text.NumberFormat
 import java.util.Locale
@@ -17,10 +18,12 @@ enum class UpdateDownloadSource(val key: String, val label: String) {
 }
 
 object UpdateDefaults {
-    const val CDN1_LATEST_JSON_URL = "https://cdn1.afmarbre.com/app-updates/android/latest.json"
-    const val CDN1_LATEST_APK_URL = "https://cdn1.afmarbre.com/app-updates/android/latest.apk"
-    const val GITHUB_LATEST_APK_URL =
-        "https://github.com/Etherealmber/atlas-commerce-android/releases/latest/download/atlas-commerce.apk"
+    val CDN1_LATEST_JSON_URL: String =
+        "${BuildConfig.CDN1_BASE_URL.trimEnd('/')}/latest.json"
+    val CDN1_LATEST_APK_URL: String =
+        "${BuildConfig.CDN1_BASE_URL.trimEnd('/')}/latest.apk"
+    val GITHUB_LATEST_APK_URL: String =
+        BuildConfig.DEFAULT_DOWNLOAD_URL
 }
 
 data class MirrorPingResult(
@@ -116,6 +119,7 @@ sealed interface UpdateState {
         val bytesRead: Long,
         val totalBytes: Long,
         val activeSourceLabel: String? = null,
+        val hiddenInForeground: Boolean = false,
     ) : UpdateState {
         val progressFraction: Float?
             get() = if (totalBytes > 0L) {
@@ -134,7 +138,7 @@ sealed interface UpdateState {
             }
 
         val statusMessage: String
-            get() = "Téléchargement en cours — veuillez patienter sans fermer l'application."
+            get() = "Téléchargement en arrière-plan — vous pouvez masquer cet encart et suivre la progression dans Paramètres ou dans vos Notifications."
 
         val progressSummary: String
             get() = UpdateFormatter.progressSummary(bytesRead, totalBytes)

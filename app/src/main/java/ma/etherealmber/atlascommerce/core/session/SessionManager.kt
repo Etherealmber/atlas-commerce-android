@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.TokenHolder
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
@@ -66,6 +67,7 @@ sealed interface LoginOutcome {
 class SessionManager @Inject constructor(
     private val preferences: AtlasPreferences,
     private val serverConfig: ServerConfig,
+    private val apiProvider: ApiProvider,
     private val authRepository: AuthRepository,
     private val tokenHolder: TokenHolder,
     private val cryptoStore: CryptoStore,
@@ -180,6 +182,47 @@ class SessionManager @Inject constructor(
         ) {
             is ApiResult.Failure -> result
             is ApiResult.Success -> completeLogin(result.data, normalizedUser, rememberAccount)
+        }
+    }
+
+    /**
+     * Verifies a signed single-use e-mail deep link (`POST /api/auth/verify-link`)
+     * directly against the Worker server selected by the user.
+     */
+    suspend fun signInViaEmailLink(
+        username: String,
+        otp: String,
+        sig: String,
+        exp: Long,
+        fallbackServerOrigin: String? = null,
+    ): ApiResult<LoginOutcome> {
+        val normalizedUser = username.trim().lowercase(Locale.ROOT)
+        val code = otp.filter { it.isDigit() }
+        val cleanSig = sig.trim()
+        if (normalizedUser.isBlank() || code.length < 4 || cleanSig.isBlank() || exp <= 0L) {
+            return ApiResult.Failure("LINK_MALFORMED", "Lien de vérification incomplet ou invalide.")
+        }
+
+        // Wait for saved server preference on cold deep-link launch and honor the user's chosen Worker.
+        serverConfig.loaded.filter { it }.first()
+        if (serverConfig.normalizedSelection() == null) {
+            val initialServer = fallbackServerOrigin?.takeIf { it.isNotBlank() }
+                ?: AppDetails.DEFAULT_API_BASE
+            serverConfig.select(initialServer, rememberServer = true)
+            apiProvider.invalidate()
+        }
+
+        return when (
+            val result = authRepository.verifyLink(
+                username = normalizedUser,
+                otp = code,
+                sig = cleanSig,
+                exp = exp,
+                fingerprint = deviceIdentity.fingerprint,
+            )
+        ) {
+            is ApiResult.Failure -> result
+            is ApiResult.Success -> completeLogin(result.data, normalizedUser, rememberAccount = true)
         }
     }
 
@@ -317,6 +360,7 @@ class SessionManager @Inject constructor(
         offlineCache.bindScope(serverUrl, username)
         tokenHolder.set(token)
         runCatching {
+            preferences.markOnboardingDone()
             preferences.writeSession(
                 serverUrl = serverUrl,
                 tokenCipher = cipher,

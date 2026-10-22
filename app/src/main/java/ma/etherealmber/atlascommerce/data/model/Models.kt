@@ -86,6 +86,16 @@ data class OtpRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class VerifyLinkRequest(
+    val username: String,
+    val otp: String,
+    val sig: String,
+    val exp: Long,
+    val fingerprint: String,
+    val client: String = "android",
+)
+
+@JsonClass(generateAdapter = true)
 data class LoginResponse(
     override val success: Boolean = false,
     @Json(name = "needs_otp") val needsOtp: Boolean = false,

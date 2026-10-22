@@ -5,6 +5,8 @@ import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.runBlocking
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
+import ma.etherealmber.atlascommerce.core.net.VerifyLink
+import ma.etherealmber.atlascommerce.core.net.VerifyLinkParser
 import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.data.model.AgentThreadDetailDto
@@ -14,6 +16,7 @@ import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.QrSessionStatusDto
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
+import ma.etherealmber.atlascommerce.data.model.VerifyLinkRequest
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentViewModel
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrTokenParser
 import org.junit.Assert.assertEquals
@@ -50,6 +53,82 @@ class QrDevicesAndModelsTest {
         assertTrue(QrTokenParser.looksLikeProductBarcode("6111035000214"))
         assertNull(QrTokenParser.extractQrToken("6111035000214"))
         assertNull(QrTokenParser.extractQrToken("012345678905"))
+    }
+
+    @Test
+    fun verifyLinkParserAcceptsSignedEmailLinksAndRejectsEverythingElse() {
+        val webLink =
+            "https://stock.afmarbre.com/verify?user=Alice&code=482910&sig=9f86d081884c7d659a2feaa0&exp=1761200000000"
+        val customWorkerWebLink =
+            "https://erp.moncommerce.ma/verify?user=Admin%40Shop&code=930412&sig=abcdef1234567890&exp=1761200500000"
+        val intentLink =
+            "atlascommerce://verify?user=Amine&code=739201&sig=deadbeefcafe1234&exp=1761200999000"
+
+        assertEquals(
+            VerifyLink(
+                username = "alice",
+                otp = "482910",
+                sig = "9f86d081884c7d659a2feaa0",
+                exp = 1761200000000L,
+            ),
+            VerifyLinkParser.parse(webLink),
+        )
+        assertEquals("https://stock.afmarbre.com", VerifyLinkParser.extractServerOrigin(webLink))
+
+        assertEquals(
+            VerifyLink(
+                username = "admin@shop",
+                otp = "930412",
+                sig = "abcdef1234567890",
+                exp = 1761200500000L,
+            ),
+            VerifyLinkParser.parse(customWorkerWebLink),
+        )
+        assertEquals("https://erp.moncommerce.ma", VerifyLinkParser.extractServerOrigin(customWorkerWebLink))
+
+        assertEquals(
+            VerifyLink(
+                username = "amine",
+                otp = "739201",
+                sig = "deadbeefcafe1234",
+                exp = 1761200999000L,
+            ),
+            VerifyLinkParser.parse(intentLink),
+        )
+        assertNull(VerifyLinkParser.extractServerOrigin(intentLink))
+
+        // Zero cross-talk with QR pairing parser
+        assertNull(QrTokenParser.extractQrToken(webLink))
+        assertNull(QrTokenParser.extractQrToken(customWorkerWebLink))
+        assertNull(QrTokenParser.extractQrToken(intentLink))
+
+        // Reject QR links, unsigned/incomplete links, short codes, null & EAN barcodes
+        assertNull(VerifyLinkParser.parse("atlascommerce://qr?token=abc123XYZ_-9876543210"))
+        assertNull(VerifyLinkParser.parse("https://stock.afmarbre.com/login-qr?t=qr_tok_98ab76cd54ef321098ab"))
+        assertNull(VerifyLinkParser.parse("https://stock.afmarbre.com/qr?token=qr_tok_98ab76cd54ef321098ab"))
+        assertNull(VerifyLinkParser.parse("https://stock.afmarbre.com/verify?user=alice&code=482910&exp=1761200000000"))
+        assertNull(VerifyLinkParser.parse("https://stock.afmarbre.com/verify?user=alice&code=123&sig=deadbeef&exp=1761200000000"))
+        assertNull(VerifyLinkParser.parse("https://stock.afmarbre.com/verify?user=alice&code=482910&sig=deadbeef&exp=0"))
+        assertNull(VerifyLinkParser.parse("https://stock.afmarbre.com/verify?code=482910&sig=deadbeef&exp=1761200000000"))
+        assertNull(VerifyLinkParser.parse("http://stock.afmarbre.com/verify?user=alice&code=482910&sig=deadbeef&exp=1761200000000"))
+        assertNull(VerifyLinkParser.parse(null))
+        assertNull(VerifyLinkParser.parse(""))
+        assertNull(VerifyLinkParser.parse("6111035000214"))
+
+        // VerifyLinkRequest JSON contract matches POST /api/auth/verify-link
+        val reqAdapter = moshi.adapter(VerifyLinkRequest::class.java)
+        val encoded = reqAdapter.toJson(
+            VerifyLinkRequest(
+                username = "alice",
+                otp = "482910",
+                sig = "9f86d081884c7d659a2feaa0",
+                exp = 1761200000000L,
+                fingerprint = "fp_sha256_abc",
+            ),
+        )
+        val decoded = reqAdapter.fromJson(encoded)
+        assertEquals("android", decoded?.client)
+        assertEquals("482910", decoded?.otp)
     }
 
     @Test

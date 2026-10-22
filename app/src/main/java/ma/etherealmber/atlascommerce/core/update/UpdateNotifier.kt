@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce.core.update
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -22,7 +23,7 @@ import javax.inject.Singleton
 
 /**
  * Abstraction over system download notifications so [AppUpdateManager] keeps full
- * pure-JVM unit test coverage while driving real Android 8–15 notifications in
+ * pure-JVM unit test coverage while driving visible Android 8–15 notifications in
  * production.
  */
 interface UpdateNotifier {
@@ -47,13 +48,19 @@ class AndroidUpdateNotifier @Inject constructor(
             NotificationCompat.Builder(context, AtlasApp.UPDATE_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_update)
                 .setContentTitle("Mise à jour Atlas Commerce ${info.displayVersion}")
-                .setContentText("Préparation du téléchargement…")
-                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setContentText("Téléchargement démarré — suivez l'avancement ici ou dans Paramètres.")
+                .setStyle(
+                    NotificationCompat.BigTextStyle().bigText(
+                        "Téléchargement démarré en arrière-plan. Appuyez pour voir la progression dans Paramètres.",
+                    ),
+                )
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCategory(NotificationCompat.CATEGORY_PROGRESS)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setProgress(100, 0, true)
-                .setContentIntent(openAppPendingIntent()),
+                .setContentIntent(openSettingsPendingIntent()),
         )
     }
 
@@ -77,14 +84,15 @@ class AndroidUpdateNotifier @Inject constructor(
             NotificationCompat.Builder(context, AtlasApp.UPDATE_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_update)
                 .setContentTitle("Téléchargement ${info.displayVersion}")
-                .setContentText(summary)
+                .setContentText("$summary · Ouvrir Paramètres")
                 .setSubText(if (!indeterminate) "$percent %" else null)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCategory(NotificationCompat.CATEGORY_PROGRESS)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setProgress(100, percent, indeterminate)
-                .setContentIntent(openAppPendingIntent()),
+                .setContentIntent(openSettingsPendingIntent()),
         )
     }
 
@@ -96,12 +104,14 @@ class AndroidUpdateNotifier @Inject constructor(
                 .setSmallIcon(R.drawable.ic_stat_update)
                 .setContentTitle("Mise à jour ${info.displayVersion} téléchargée")
                 .setContentText("Paquet prêt ($sizeLabel) — appuyez pour installer.")
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCategory(NotificationCompat.CATEGORY_STATUS)
                 .setOngoing(false)
+                .setOnlyAlertOnce(false)
                 .setAutoCancel(true)
                 .setProgress(0, 0, false)
-                .setContentIntent(openAppPendingIntent()),
+                .setContentIntent(openSettingsPendingIntent()),
         )
     }
 
@@ -114,11 +124,13 @@ class AndroidUpdateNotifier @Inject constructor(
                 .setContentTitle("Échec du téléchargement$suffix")
                 .setContentText(message)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCategory(NotificationCompat.CATEGORY_ERROR)
                 .setOngoing(false)
+                .setOnlyAlertOnce(false)
                 .setAutoCancel(true)
                 .setProgress(0, 0, false)
-                .setContentIntent(openAppPendingIntent()),
+                .setContentIntent(openSettingsPendingIntent()),
         )
     }
 
@@ -153,19 +165,22 @@ class AndroidUpdateNotifier @Inject constructor(
             nm.createNotificationChannel(
                 NotificationChannel(
                     AtlasApp.UPDATE_CHANNEL_ID,
-                    "Mises à jour de l'application",
-                    NotificationManager.IMPORTANCE_LOW,
+                    "Téléchargements & mises à jour",
+                    NotificationManager.IMPORTANCE_DEFAULT,
                 ).apply {
-                    description = "Progression du téléchargement et installation des mises à jour Atlas Commerce"
-                    setShowBadge(false)
+                    description = "Progression visible des téléchargements et installation des mises à jour Atlas Commerce"
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                    setShowBadge(true)
+                    enableVibration(false)
                 },
             )
         }
     }
 
-    private fun openAppPendingIntent(): PendingIntent {
+    private fun openSettingsPendingIntent(): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(AtlasApp.EXTRA_OPEN_SETTINGS, true)
         }
         return PendingIntent.getActivity(
             context,
@@ -233,9 +248,8 @@ class RoleNotificationDispatcher @Inject constructor(
                 .setContentText(body)
                 .setSubText(roleBadge)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-                .setPriority(
-                    if (urgent) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT,
-                )
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setAutoCancel(true)
                 .setContentIntent(openNotificationsPendingIntent(notifId))
@@ -262,9 +276,10 @@ class RoleNotificationDispatcher @Inject constructor(
                 NotificationChannel(
                     AtlasApp.ALERTS_CHANNEL_ID,
                     "Notifications & alertes métier",
-                    NotificationManager.IMPORTANCE_DEFAULT,
+                    NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
                     description = "Demandes produits Admin, alertes de stock et notifications ciblées par rôle"
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     setShowBadge(true)
                 },
             )

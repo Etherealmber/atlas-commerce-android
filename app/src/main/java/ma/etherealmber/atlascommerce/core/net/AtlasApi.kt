@@ -42,6 +42,7 @@ import ma.etherealmber.atlascommerce.data.model.RevokeDeviceRequest
 import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
 import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
+import ma.etherealmber.atlascommerce.data.model.VerifyLinkRequest
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -82,6 +83,9 @@ interface AtlasApi {
 
     @POST("api/auth/verify-otp")
     suspend fun verifyOtp(@Body body: OtpRequest): LoginResponse
+
+    @POST("api/auth/verify-link")
+    suspend fun verifyLink(@Body body: VerifyLinkRequest): LoginResponse
 
     @GET("api/auth/devices")
     suspend fun devices(): ApiEnvelope<List<TrustedDeviceDto>>

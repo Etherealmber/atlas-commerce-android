@@ -3,6 +3,26 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
 [SemVer](https://semver.org/lang/fr/).
 
+## [Non publié]
+
+### Ajouté
+
+- **Connexion vérifiée en un tap par lien e-mail signé (`VerifyLinkParser` & `POST /api/auth/verify-link`)** :
+  prise en charge des liens profonds `https://<serveur>/verify?user=…&code=…&sig=…&exp=…` et du
+  relais natif `atlascommerce://verify?…` depuis le bouton **VÉRIFIER & CONTINUER**, sans saisie
+  de code ni de mot de passe, directement sur le Worker correspondant au serveur choisi par
+  l'utilisateur et avec isolation stricte de session par compte.
+- **Paramètres optionnels avant compilation dans GitHub Actions (`workflow_dispatch`)** : demande
+  optionnelle du lien de téléchargement APK (`download_url`), du dépôt GitHub (`repo_url`) et de
+  l'URL CDN 1 (`cdn_url`) avant le build, avec repli automatique sur les valeurs par défaut si
+  laissés vides et notes concises dans `latest.json`.
+
+### Modifié
+
+- **Téléchargement de mise à jour masquable & notifications système visibles** : possibilité de
+  masquer l'encart de téléchargement tout en poursuivant le transfert en arrière-plan, avec rappel
+  d'accès via **Paramètres** ou le volet de **Notifications** Android (canaux haute visibilité).
+
 ## [1.0.7] — 2026-10-22
 
 ### Ajouté
