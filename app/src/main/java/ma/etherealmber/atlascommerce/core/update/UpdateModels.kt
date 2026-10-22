@@ -4,18 +4,81 @@ import java.io.File
 import java.text.NumberFormat
 import java.util.Locale
 
+enum class UpdateDownloadSource(val key: String, val label: String) {
+    AUTO("auto", "Auto"),
+    CDN1("cdn1", "CDN 1"),
+    GITHUB("github", "GitHub"),
+    ;
+
+    companion object {
+        fun fromKey(raw: String?): UpdateDownloadSource =
+            entries.firstOrNull { it.key.equals(raw?.trim(), ignoreCase = true) } ?: AUTO
+    }
+}
+
+object UpdateDefaults {
+    const val CDN1_LATEST_JSON_URL = "https://cdn1.afmarbre.com/app-updates/android/latest.json"
+    const val CDN1_LATEST_APK_URL = "https://cdn1.afmarbre.com/app-updates/android/latest.apk"
+    const val GITHUB_LATEST_APK_URL =
+        "https://github.com/Etherealmber/atlas-commerce-android/releases/latest/download/atlas-commerce.apk"
+}
+
+data class MirrorPingResult(
+    val testing: Boolean = false,
+    val cdn1Ms: Long? = null,
+    val cdn1Online: Boolean? = null,
+    val githubMs: Long? = null,
+    val githubOnline: Boolean? = null,
+) {
+    val fastestLabel: String?
+        get() = when {
+            cdn1Online == true && githubOnline == true && cdn1Ms != null && githubMs != null ->
+                if (cdn1Ms <= githubMs) "CDN 1 recommandé (${cdn1Ms} ms)" else "GitHub recommandé (${githubMs} ms)"
+            cdn1Online == true && cdn1Ms != null -> "CDN 1 actif (${cdn1Ms} ms)"
+            githubOnline == true && githubMs != null -> "GitHub actif (${githubMs} ms)"
+            else -> null
+        }
+}
+
 data class UpdateInfo(
     val versionCode: Int,
     val versionName: String,
     val apkUrl: String,
     val mandatory: Boolean,
     val notes: String? = null,
+    val cdn1Url: String? = null,
+    val githubUrl: String? = null,
+    val sha256: String? = null,
 ) {
     val displayVersion: String
         get() {
             val cleaned = versionName.trim().removePrefix("v").removePrefix("V")
             return if (cleaned.isNotEmpty()) "v$cleaned" else "build $versionCode"
         }
+
+    /** Returns ordered download URLs honoring user preference and automatic mirror failover. */
+    fun orderedDownloadUrls(
+        preferred: UpdateDownloadSource,
+        ping: MirrorPingResult = MirrorPingResult(),
+    ): List<String> {
+        val cdn = cdn1Url?.takeIf { it.isNotBlank() }
+        val gh = githubUrl?.takeIf { it.isNotBlank() }
+        val rawOrder = when (preferred) {
+            UpdateDownloadSource.CDN1 -> listOfNotNull(cdn, apkUrl, gh)
+            UpdateDownloadSource.GITHUB -> listOfNotNull(gh, cdn, apkUrl)
+            UpdateDownloadSource.AUTO -> {
+                val ghFaster = ping.githubOnline == true &&
+                    ping.githubMs != null &&
+                    (ping.cdn1Online != true || ping.cdn1Ms == null || ping.githubMs < ping.cdn1Ms)
+                if (ghFaster) {
+                    listOfNotNull(gh, cdn, apkUrl)
+                } else {
+                    listOfNotNull(cdn, apkUrl, gh)
+                }
+            }
+        }
+        return rawOrder.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+    }
 }
 
 sealed interface UpdateState {
@@ -34,6 +97,7 @@ sealed interface UpdateState {
         val info: UpdateInfo,
         val bytesRead: Long,
         val totalBytes: Long,
+        val activeSourceLabel: String? = null,
     ) : UpdateState {
         val progressFraction: Float?
             get() = if (totalBytes > 0L) {
@@ -46,7 +110,10 @@ sealed interface UpdateState {
             get() = progressFraction?.let { (it * 100f).toInt().coerceIn(0, 100) }
 
         val statusTitle: String
-            get() = "Téléchargement de la mise à jour ${info.displayVersion}…"
+            get() {
+                val via = activeSourceLabel?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+                return "Téléchargement de la mise à jour$via en cours…"
+            }
 
         val statusMessage: String
             get() = "Téléchargement en cours — veuillez patienter sans fermer l'application."
@@ -80,7 +147,7 @@ object UpdateFormatter {
             }
             return "${fmt.format(kb)} Ko"
         }
-        val mb = safe / 1_048_576.0
+        val mb = safe / 1_048_576L.toDouble()
         val fmt = NumberFormat.getNumberInstance(Locale.FRANCE).apply {
             minimumFractionDigits = 1
             maximumFractionDigits = 1

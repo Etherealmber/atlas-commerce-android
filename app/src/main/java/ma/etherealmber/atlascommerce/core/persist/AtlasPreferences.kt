@@ -51,6 +51,7 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         val DEFAULT_CLIENT_NAME = stringPreferencesKey("default_client_name")
         val CONFIRM_BEFORE_SALE = booleanPreferencesKey("confirm_before_sale")
         val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
+        val UPDATE_SOURCE = stringPreferencesKey("update_download_source")
         val ROLE_NOTIFICATIONS_ENABLED = booleanPreferencesKey("role_notifications_enabled")
         val SESSION_TOKEN = stringPreferencesKey("session_token")
         val SESSION_USERNAME = stringPreferencesKey("session_username")
@@ -141,6 +142,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         .map { it.safeBoolean(Keys.AUTO_CHECK_UPDATES.name) ?: true }
         .distinctUntilChanged()
 
+    val updateDownloadSource: Flow<String> = safeData
+        .map { it.safeString(Keys.UPDATE_SOURCE.name)?.takeIf { s -> s.isNotBlank() } ?: "auto" }
+        .distinctUntilChanged()
+
     val roleNotificationsEnabled: Flow<Boolean> = safeData
         .map { it.safeBoolean(Keys.ROLE_NOTIFICATIONS_ENABLED.name) ?: true }
         .distinctUntilChanged()
@@ -198,6 +203,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
 
     suspend fun setAutoCheckUpdates(enabled: Boolean) {
         safeEdit { prefs -> prefs.putClean(Keys.AUTO_CHECK_UPDATES, enabled) }
+    }
+
+    suspend fun setUpdateDownloadSource(sourceKey: String) {
+        safeEdit { prefs -> prefs.putClean(Keys.UPDATE_SOURCE, sourceKey.trim().lowercase()) }
     }
 
     suspend fun setRoleNotificationsEnabled(enabled: Boolean) {

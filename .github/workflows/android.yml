@@ -7,6 +7,16 @@ on:
   pull_request:
     branches: ['main']
   workflow_dispatch:
+    inputs:
+      release_notes:
+        description: 'Notes de version affichées dans l’application (optionnel)'
+        required: false
+        default: ''
+      mandatory:
+        description: 'Mise à jour obligatoire ?'
+        required: false
+        default: false
+        type: boolean
 
 # Read-only by default; only jobs that publish diagnostics or releases carry write permission.
 permissions:
@@ -468,13 +478,13 @@ jobs:
           exit 1
 
   publish-release:
-    name: Publish signed APK to GitHub Releases
+    name: Publish signed APK to GitHub Releases & CDN 1
     needs: [build, lint, android14-smoke]
     if: >-
       needs.build.outputs.signed == 'true' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
@@ -486,23 +496,134 @@ jobs:
           name: atlas-commerce-release-apk
           path: signed-apk
 
+      - name: Generate latest.json manifest & SHA-256
+        id: manifest
+        env:
+          VERSION_NAME: ${{ needs.build.outputs.version_name }}
+          VERSION_CODE: ${{ needs.build.outputs.version_code }}
+          CUSTOM_NOTES: ${{ inputs.release_notes }}
+          MANDATORY_INPUT: ${{ inputs.mandatory }}
+          CDN1_BASE: ${{ vars.CDN1_PUBLIC_BASE_URL || 'https://cdn1.afmarbre.com/app-updates/android' }}
+        run: |
+          APK_FILE="signed-apk/atlas-commerce.apk"
+          SHA256="$(sha256sum "$APK_FILE" | awk '{print $1}')"
+          SIZE_BYTES="$(stat -c%s "$APK_FILE")"
+          TAG="v${VERSION_NAME}"
+          NOTES="${CUSTOM_NOTES:-Atlas Commerce Android ${TAG} (build ${VERSION_CODE}) — mise à jour signée disponible sur CDN 1 et GitHub.}"
+          MANDATORY="${MANDATORY_INPUT:-false}"
+          PUBLISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          CDN1_VERSIONED_URL="${CDN1_BASE%/}/atlas-commerce-${TAG}.apk"
+          GITHUB_VERSIONED_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/atlas-commerce-${TAG}.apk"
+
+          NOTES_B64="$(printf '%s' "$NOTES" | base64 -w 0)"
+          SHA256="$SHA256" SIZE_BYTES="$SIZE_BYTES" MANDATORY="$MANDATORY" \
+          CDN1_VERSIONED_URL="$CDN1_VERSIONED_URL" GITHUB_VERSIONED_URL="$GITHUB_VERSIONED_URL" \
+          NOTES="$NOTES" PUBLISHED_AT="$PUBLISHED_AT" python3 - <<'PYEOF'
+          import json, os
+
+          manifest = {
+              "success": True,
+              "ok": True,
+              "updateAvailable": True,
+              "versionCode": int(os.environ["VERSION_CODE"]),
+              "versionName": os.environ["VERSION_NAME"],
+              "mandatory": os.environ.get("MANDATORY", "false").lower() == "true",
+              "sha256": os.environ["SHA256"],
+              "sizeBytes": int(os.environ["SIZE_BYTES"]),
+              "apkUrl": os.environ["CDN1_VERSIONED_URL"],
+              "cdn1Url": os.environ["CDN1_VERSIONED_URL"],
+              "githubUrl": os.environ["GITHUB_VERSIONED_URL"],
+              "notes": os.environ["NOTES"],
+              "publishedAt": os.environ["PUBLISHED_AT"],
+          }
+          with open("signed-apk/latest.json", "w", encoding="utf-8") as f:
+              json.dump(manifest, f, ensure_ascii=False, indent=2)
+          PYEOF
+
+          {
+            echo "sha256=${SHA256}"
+            echo "size_bytes=${SIZE_BYTES}"
+            echo "github_url=${GITHUB_VERSIONED_URL}"
+            echo "mandatory=${MANDATORY}"
+            echo "notes_b64=${NOTES_B64}"
+            echo "notes<<ATLAS_NOTES_EOF"
+            printf '%s\n' "$NOTES"
+            echo "ATLAS_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Publish or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION_NAME: ${{ needs.build.outputs.version_name }}
-          VERSION_CODE: ${{ needs.build.outputs.version_code }}
+          NOTES: ${{ steps.manifest.outputs.notes }}
         run: |
           TAG="v${VERSION_NAME}"
-          NOTES="Atlas Commerce Android ${TAG} (build ${VERSION_CODE}) — APK signé prêt à installer."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" \
               signed-apk/atlas-commerce.apk \
               "signed-apk/atlas-commerce-v${VERSION_NAME}.apk" \
+              signed-apk/latest.json \
               --clobber
           else
             gh release create "$TAG" \
               signed-apk/atlas-commerce.apk \
               "signed-apk/atlas-commerce-v${VERSION_NAME}.apk" \
+              signed-apk/latest.json \
               --title "Atlas Commerce ${TAG}" \
               --notes "$NOTES"
           fi
+
+      - name: Upload signed APK & latest.json to CDN 1 via Atlas Worker API
+        env:
+          UPLOAD_TOKEN: ${{ secrets.ATLAS_RELEASE_UPLOAD_TOKEN }}
+          UPLOAD_URL: ${{ vars.ATLAS_RELEASE_API_URL || 'https://stock.afmarbre.com/api/admin/android-release' }}
+          VERSION_NAME: ${{ needs.build.outputs.version_name }}
+          VERSION_CODE: ${{ needs.build.outputs.version_code }}
+          SHA256: ${{ steps.manifest.outputs.sha256 }}
+          GITHUB_URL: ${{ steps.manifest.outputs.github_url }}
+          MANDATORY: ${{ steps.manifest.outputs.mandatory }}
+          NOTES_B64: ${{ steps.manifest.outputs.notes_b64 }}
+        run: |
+          if [ -z "${UPLOAD_TOKEN:-}" ]; then
+            echo "ATLAS_RELEASE_UPLOAD_TOKEN not set yet — skipping Worker API upload."
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 3 \
+            -X POST "$UPLOAD_URL" \
+            -H "Authorization: Bearer ${UPLOAD_TOKEN}" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            -H "X-Release-Version-Code: ${VERSION_CODE}" \
+            -H "X-Release-Version-Name: ${VERSION_NAME}" \
+            -H "X-Release-Sha256: ${SHA256}" \
+            -H "X-Release-Github-Url: ${GITHUB_URL}" \
+            -H "X-Release-Mandatory: ${MANDATORY}" \
+            -H "X-Release-Notes-B64: ${NOTES_B64}" \
+            --data-binary "@signed-apk/atlas-commerce.apk"
+
+      - name: Direct R2 S3 sync to CDN 1 (optional fallback if R2 S3 keys configured)
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          VERSION_NAME: ${{ needs.build.outputs.version_name }}
+        run: |
+          if [ -z "${R2_ACCOUNT_ID:-}" ] || [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ] || [ -z "${R2_BUCKET_NAME:-}" ]; then
+            echo "Direct R2 S3 credentials not set — using Worker API / GitHub Release mirrors."
+            exit 0
+          fi
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          aws s3 cp signed-apk/atlas-commerce.apk \
+            "s3://${R2_BUCKET_NAME}/app-updates/android/atlas-commerce-v${VERSION_NAME}.apk" \
+            --endpoint-url "$ENDPOINT" --region auto \
+            --content-type "application/vnd.android.package-archive"
+          aws s3 cp signed-apk/atlas-commerce.apk \
+            "s3://${R2_BUCKET_NAME}/app-updates/android/latest.apk" \
+            --endpoint-url "$ENDPOINT" --region auto \
+            --content-type "application/vnd.android.package-archive" \
+            --cache-control "public, max-age=60"
+          aws s3 cp signed-apk/latest.json \
+            "s3://${R2_BUCKET_NAME}/app-updates/android/latest.json" \
+            --endpoint-url "$ENDPOINT" --region auto \
+            --content-type "application/json; charset=utf-8" \
+            --cache-control "no-cache, max-age=0, must-revalidate"

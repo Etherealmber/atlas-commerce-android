@@ -245,6 +245,76 @@ class AppUpdateManagerTest {
     }
 
     @Test
+    fun dualMirrorDownloadFailsOverFromCdn1ToGitHubAutomatically() {
+        val apkBytes = ByteArray(32 * 1024) { idx -> (idx % 251).toByte() }
+        val notifier = RecordingNotifier()
+
+        ServerSocket(0).use { cdnBroken ->
+            ServerSocket(0).use { githubMirror ->
+                val cdnPort = cdnBroken.localPort
+                val ghPort = githubMirror.localPort
+
+                Thread {
+                    val s = runCatching { cdnBroken.accept() }.getOrNull() ?: return@Thread
+                    s.use { sock ->
+                        val r = BufferedReader(InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8))
+                        while ((r.readLine() ?: "").isNotEmpty()) { /* drain */ }
+                        sock.getOutputStream().write(
+                            "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                                .toByteArray(StandardCharsets.UTF_8),
+                        )
+                    }
+                }.apply { isDaemon = true; start() }
+
+                Thread {
+                    val s = runCatching { githubMirror.accept() }.getOrNull() ?: return@Thread
+                    s.use { sock ->
+                        val r = BufferedReader(InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8))
+                        while ((r.readLine() ?: "").isNotEmpty()) { /* drain */ }
+                        val out = sock.getOutputStream()
+                        out.write(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/vnd.android.package-archive\r\nContent-Length: ${apkBytes.size}\r\nConnection: close\r\n\r\n"
+                                .toByteArray(StandardCharsets.UTF_8),
+                        )
+                        out.write(apkBytes)
+                        out.flush()
+                    }
+                }.apply { isDaemon = true; start() }
+
+                val manager = AppUpdateManager(
+                    updatesDirProvider = { tempDir },
+                    baseUrlProvider = { "http://127.0.0.1:$ghPort" },
+                    currentVersionCode = 107,
+                    currentVersionName = "1.0.7",
+                    probeClient = client,
+                    downloadClient = client,
+                    moshi = moshi,
+                    notifier = notifier,
+                    scope = scope,
+                    allowCleartext = true,
+                )
+
+                manager.startDownload(
+                    UpdateInfo(
+                        versionCode = 108,
+                        versionName = "1.0.8",
+                        apkUrl = "http://127.0.0.1:$cdnPort/cdn1/latest.apk",
+                        cdn1Url = "http://127.0.0.1:$cdnPort/cdn1/latest.apk",
+                        githubUrl = "http://127.0.0.1:$ghPort/github/latest.apk",
+                        mandatory = false,
+                        notes = "Dual mirror test",
+                    ),
+                )
+
+                awaitCondition { manager.state.value is UpdateState.ReadyToInstall }
+                val ready = manager.state.value as UpdateState.ReadyToInstall
+                assertArrayEquals(apkBytes, ready.apkFile.readBytes())
+                assertNull(notifier.errorMessage)
+            }
+        }
+    }
+
+    @Test
     fun progressFormatterProducesFrenchReadableOutput() {
         assertEquals("Connexion au serveur de mise à jour…", UpdateFormatter.progressSummary(0, -1))
         val summary = UpdateFormatter.progressSummary(14 * 1_048_576L, 28 * 1_048_576L)

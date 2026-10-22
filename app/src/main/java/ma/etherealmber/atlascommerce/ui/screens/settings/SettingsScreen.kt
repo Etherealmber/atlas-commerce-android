@@ -116,6 +116,8 @@ fun SettingsScreen(
     val roleNotificationsEnabled by appViewModel.roleNotificationsEnabled.collectAsStateWithLifecycle()
     val serverSelection by appViewModel.server.collectAsStateWithLifecycle()
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
+    val updateDownloadSource by appViewModel.updateDownloadSource.collectAsStateWithLifecycle()
+    val mirrorPing by appViewModel.mirrorPing.collectAsStateWithLifecycle()
     val devices by appViewModel.devices.collectAsStateWithLifecycle()
     val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
     val uploadingAvatar by appViewModel.uploadingAvatar.collectAsStateWithLifecycle()
@@ -502,6 +504,10 @@ fun SettingsScreen(
         item {
             SettingsUpdateCard(
                 state = updateState,
+                selectedSource = updateDownloadSource,
+                mirrorPing = mirrorPing,
+                onSelectSource = appViewModel::setUpdateDownloadSource,
+                onPingMirrors = appViewModel::pingUpdateMirrors,
                 onCheck = { appViewModel.checkForUpdate(manual = true) },
                 onDownload = onStartUpdateDownload,
                 onInstall = {
