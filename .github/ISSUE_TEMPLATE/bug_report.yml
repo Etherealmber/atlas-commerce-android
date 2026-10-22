@@ -1,0 +1,41 @@
+name: 🐛 Bug Report / Signaler un bug
+description: Report a crash, freeze, UI issue, or unexpected behavior in Atlas Commerce Android.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking a moment to report an issue! `@atlas-bot` will triage and reply automatically right after submission.
+
+  - type: input
+    id: app_version
+    attributes:
+      label: App Version / Version de l'application
+      placeholder: "e.g. v1.0.9 (build 109)"
+    validations:
+      required: false
+
+  - type: input
+    id: device_android
+    attributes:
+      label: Device & Android Version / Appareil & Android
+      placeholder: "e.g. Samsung S24 / Pixel 8 — Android 14 / 15"
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened? / Que s'est-il passé ?
+      description: Tell us clearly what went wrong and what screen you were on.
+      placeholder: "When I tap ... inside Settings, ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Screenshots or Logs (Optional)
+      description: Never paste passwords, tokens, or private keys here.
+    validations:
+      required: false

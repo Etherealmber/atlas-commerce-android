@@ -1,0 +1,406 @@
+name: Atlas Issue Assistant Bot
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+  issues: write
+  models: read
+
+concurrency:
+  group: issue-bot-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  respond:
+    name: Triage & Respond to Issue
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      !endsWith(github.actor, '[bot]') &&
+      (
+        github.event_name == 'issues' ||
+        (
+          github.event_name == 'issue_comment' &&
+          !github.event.issue.pull_request &&
+          (
+            contains(github.event.comment.body, '@atlas-bot') ||
+            startsWith(github.event.comment.body, '/help') ||
+            startsWith(github.event.comment.body, '/apk') ||
+            startsWith(github.event.comment.body, '/version') ||
+            startsWith(github.event.comment.body, '/close') ||
+            startsWith(github.event.comment.body, '/reopen') ||
+            startsWith(github.event.comment.body, '/label ')
+          )
+        )
+      )
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Run Atlas Issue Assistant (Triage, Labels, AI & Commands)
+        uses: actions/github-script@v9
+        env:
+          GH_MODELS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const actor = context.actor;
+            const isComment = context.eventName === 'issue_comment';
+            const comment = context.payload.comment;
+            const rawText = isComment ? (comment.body || '') : `${issue.title || ''}\n\n${issue.body || ''}`;
+            const trimmed = rawText.trim();
+
+            // Do not double-comment on automatic audit issues managed by bug-hunter.yml
+            if (!isComment && (issue.body || '').includes('<!-- atlas-audit-slug:')) {
+              core.info('Skipping automated audit issue.');
+              return;
+            }
+
+            // Acknowledge interaction immediately with eyes reaction
+            try {
+              if (isComment) {
+                await github.rest.reactions.createForIssueComment({
+                  owner,
+                  repo,
+                  comment_id: comment.id,
+                  content: 'eyes',
+                });
+              } else {
+                await github.rest.reactions.createForIssue({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  content: 'eyes',
+                });
+              }
+            } catch (_) {}
+
+            // Detect French vs English from issue text
+            const frWords = /\b(bonjour|merci|problème|erreur|mise à jour|téléchargement|connexion|serveur|application|écran|bouton|paramètres|réglages|impossible|quand|comment|pourquoi)\b/i;
+            const isFrench = frWords.test(rawText);
+
+            // Check maintainer authorization for administrative slash commands
+            const authorAssoc = isComment
+              ? (comment.author_association || '')
+              : (issue.author_association || '');
+            const isMaintainer = ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(authorAssoc);
+
+            // Fetch latest release info (if published)
+            let latestRelease = null;
+            try {
+              const { data } = await github.rest.repos.getLatestRelease({ owner, repo });
+              latestRelease = data;
+            } catch (_) {}
+
+            const releaseTag = latestRelease ? latestRelease.tag_name : 'v1.0.9';
+            const apkUrl = `https://github.com/${owner}/${repo}/releases/latest/download/atlas-commerce.apk`;
+
+            // Handle slash commands in comments
+            if (isComment) {
+              if (trimmed.startsWith('/close')) {
+                if (!isMaintainer && actor !== issue.user.login) {
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: issue.number,
+                    body: isFrench
+                      ? `Désolé @${actor}, seuls l'auteur du ticket ou un mainteneur peuvent fermer ce ticket.`
+                      : `Sorry @${actor}, only the issue author or a repository maintainer can close this issue.`,
+                  });
+                  return;
+                }
+                await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'closed' });
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  body: isFrench
+                    ? `Ticket fermé par @${actor}. N'hésitez pas à commenter \`/reopen\` si le problème réapparaît !`
+                    : `Closed by @${actor}. Feel free to comment \`/reopen\` anytime if this comes back!`,
+                });
+                return;
+              }
+
+              if (trimmed.startsWith('/reopen')) {
+                if (!isMaintainer && actor !== issue.user.login) return;
+                await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'open' });
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  body: isFrench
+                    ? `Ticket rouvert par @${actor}.`
+                    : `Issue reopened by @${actor}.`,
+                });
+                return;
+              }
+
+              if (trimmed.startsWith('/label ') && isMaintainer) {
+                const labels = trimmed.slice(7).split(',').map((s) => s.trim()).filter(Boolean);
+                if (labels.length > 0) {
+                  await github.rest.issues.addLabels({ owner, repo, issue_number: issue.number, labels });
+                  await github.rest.reactions.createForIssueComment({
+                    owner,
+                    repo,
+                    comment_id: comment.id,
+                    content: 'rocket',
+                  });
+                }
+                return;
+              }
+
+              if (trimmed.startsWith('/apk') || trimmed.startsWith('/version')) {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  body: isFrench
+                    ? `### Dernière version disponible : \`${releaseTag}\`\n- **Téléchargement direct APK :** [atlas-commerce.apk](${apkUrl})\n- **Dépôt Backend Web :** [Etherealmber/atlas-commerce](https://github.com/Etherealmber/atlas-commerce)`
+                    : `### Latest Available Version: \`${releaseTag}\`\n- **Direct APK Download:** [atlas-commerce.apk](${apkUrl})\n- **Web Backend Repo:** [Etherealmber/atlas-commerce](https://github.com/Etherealmber/atlas-commerce)`,
+                });
+                return;
+              }
+
+              if (trimmed.startsWith('/help')) {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  body: [
+                    `### 🤖 Atlas Issue Assistant — Commands`,
+                    `- \`@atlas-bot <question>\` — Ask anything about Atlas Commerce Android setup, troubleshooting, or architecture`,
+                    `- \`/version\` or \`/apk\` — Show the latest published release & direct \`atlas-commerce.apk\` link`,
+                    `- \`/close\` / \`/reopen\` — Close or reopen this issue (author or maintainer)`,
+                    `- \`/label <name>\` — Add labels to this issue (maintainers)`,
+                  ].join('\n'),
+                });
+                return;
+              }
+            }
+
+            // Classify topic & ensure clean color-coded repository labels exist
+            const LABEL_DEFS = {
+              'bug': { color: 'd73a4a', description: 'Crash, freeze, error, or unexpected behavior' },
+              'enhancement': { color: '0e8a16', description: 'New feature, UI polish, or improvement idea' },
+              'question': { color: '0075ca', description: 'Setup question or usage guidance' },
+              'update-cdn': { color: 'fbca04', description: 'In-app updater, APK download, or CDN 1 sync' },
+              'auth-server': { color: '5319e7', description: 'Server URL, login, e-mail verify link, or QR session' },
+              'camera-scan': { color: '1d76db', description: 'Barcode scanner, CameraX, or QR device pairing' },
+              'security': { color: 'b60205', description: 'Security, credentials, or session isolation' },
+            };
+
+            const lower = rawText.toLowerCase();
+            const detectedLabels = new Set();
+
+            if (/(crash|exception|freeze|frozen|stuck|bug|broken|fail|error|erreur|plant|bloqu|ne marche pas|wont launch|won't launch)/i.test(lower)) {
+              detectedLabels.add('bug');
+            } else if (/(feature|idea|add|improve|overhaul|option|dropdown|ui|ux|design|ajout|idée|amélior)/i.test(lower)) {
+              detectedLabels.add('enhancement');
+            } else {
+              detectedLabels.add('question');
+            }
+
+            if (/(update|apk|cdn|download|progress|install|r2|latest\.json|mise à jour|télécharg)/i.test(lower)) {
+              detectedLabels.add('update-cdn');
+            }
+            if (/(login|otp|email|verify|server|worker|token|account|serveur|connexion|compte)/i.test(lower)) {
+              detectedLabels.add('auth-server');
+            }
+            if (/(scan|camera|barcode|qr|device|caméra|code-barres|appareil)/i.test(lower)) {
+              detectedLabels.add('camera-scan');
+            }
+
+            const secretLeakPattern = /(ghp_[A-Za-z0-9]{25,}|github_pat_[A-Za-z0-9_]{25,}|Bearer\s+[A-Za-z0-9._-]{25,}|AKIA[0-9A-Z]{16})/;
+            const hasPotentialSecret = secretLeakPattern.test(rawText);
+            if (hasPotentialSecret) {
+              detectedLabels.add('security');
+            }
+
+            if (!isComment && detectedLabels.size > 0) {
+              for (const lbl of detectedLabels) {
+                const meta = LABEL_DEFS[lbl];
+                if (!meta) continue;
+                try {
+                  await github.rest.issues.createLabel({
+                    owner,
+                    repo,
+                    name: lbl,
+                    color: meta.color,
+                    description: meta.description,
+                  });
+                } catch (_) {}
+              }
+              try {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  labels: Array.from(detectedLabels),
+                });
+              } catch (_) {}
+            }
+
+            // Look for related existing issues in the repository
+            let relatedLines = [];
+            if (!isComment) {
+              try {
+                const words = (issue.title || '')
+                  .toLowerCase()
+                  .replace(/[^a-z0-9àâçéèêëîïôûùüÿñæœ\s]/gi, ' ')
+                  .split(/\s+/)
+                  .filter((w) => w.length >= 4);
+                if (words.length > 0) {
+                  const { data: recentIssues } = await github.rest.issues.listForRepo({
+                    owner,
+                    repo,
+                    state: 'all',
+                    per_page: 30,
+                  });
+                  const scored = recentIssues
+                    .filter((i) => !i.pull_request && i.number !== issue.number)
+                    .map((i) => {
+                      const hay = `${i.title} ${i.body || ''}`.toLowerCase();
+                      const hits = words.filter((w) => hay.includes(w)).length;
+                      return { item: i, hits };
+                    })
+                    .filter((x) => x.hits >= 2)
+                    .sort((a, b) => b.hits - a.hits)
+                    .slice(0, 3);
+                  relatedLines = scored.map(
+                    ({ item }) => `- #${item.number} — **${item.title}** (\`${item.state}\`)`,
+                  );
+                }
+              } catch (_) {}
+            }
+
+            // Optional GitHub Models AI response (uses built-in GITHUB_TOKEN with models: read — $0 free!)
+            let aiGuidance = '';
+            try {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 12000);
+              const systemPrompt = [
+                'You are @atlas-bot, the official maintainer assistant for Etherealmber/atlas-commerce-android (native Kotlin + Jetpack Compose Android client for Atlas Commerce).',
+                `Latest release tag: ${releaseTag}. Direct APK URL: ${apkUrl}.`,
+                'Key project facts you know accurately:',
+                '- Backend: Users connect the app on first launch to their own deployed Cloudflare Worker instance of Etherealmber/atlas-commerce (HTTPS URL). If unreachable, advise verifying exact URL spelling and HTTPS.',
+                '- Top Bar navigation: Profile avatar opens Mon profil (Account + Customizations) with top-right Settings button opening Paramètres; the small arrow dropdown right next to the Profile icon contains Notifications and Connecter un appareil (QR login on PC/other device).',
+                '- In-app updates: Dual-mirror auto-failover between CDN 1 (Cloudflare R2) and GitHub Releases with SHA-256 verification. During download, users can tap Masquer to shrink the bar into a live mini progress ball next to the Profile icon.',
+                '- Roles & Camera privacy: Camera never opens automatically until tapped and closes immediately on leaving Scan; roles strictly scope Sale/Admin actions.',
+                'Reply concisely (4-8 short bullet points max), warmly, and directly in the SAME language as the user (French if French, English if English). Do not invent file paths you did not verify.',
+              ].join('\n');
+
+              const resp = await fetch('https://models.github.ai/inference/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${process.env.GH_MODELS_TOKEN}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'openai/gpt-4o-mini',
+                  temperature: 0.25,
+                  max_tokens: 420,
+                  messages: [
+                    { role: 'system', content: systemPrompt },
+                    {
+                      role: 'user',
+                      content: `Issue #${issue.number}: ${issue.title}\n\n${isComment ? comment.body : (issue.body || '(no body)')}`,
+                    },
+                  ],
+                }),
+                signal: controller.signal,
+              });
+              clearTimeout(timer);
+              if (resp.ok) {
+                const data = await resp.json();
+                aiGuidance = (data.choices?.[0]?.message?.content || '').trim();
+              }
+            } catch (_) {}
+
+            // Deterministic smart guidance fallback if GitHub Models API is unavailable
+            if (!aiGuidance) {
+              const tips = [];
+              if (detectedLabels.has('auth-server')) {
+                tips.push(
+                  isFrench
+                    ? '- **Connexion & Serveur :** Vérifiez que votre instance Cloudflare Worker ([Etherealmber/atlas-commerce](https://github.com/Etherealmber/atlas-commerce)) est en ligne en `https://` et que l\'adresse saisie est orthographiée exactement.'
+                    : '- **Server & Login:** Make sure your [Etherealmber/atlas-commerce](https://github.com/Etherealmber/atlas-commerce) Cloudflare Worker URL uses `https://` and check that the domain is spelled accurately.',
+                );
+              }
+              if (detectedLabels.has('update-cdn')) {
+                tips.push(
+                  isFrench
+                    ? `- **Mises à jour & Téléchargement :** Vous pouvez tester les miroirs (\`CDN 1\` vs \`GitHub\`) dans **Mon profil → ⚙️ Paramètres → Mise à jour & Miroirs CDN**, ou télécharger directement l'APK [atlas-commerce.apk](${apkUrl}) (\`${releaseTag}\`).`
+                    : `- **Updates & APK Mirrors:** You can ping and switch between \`CDN 1\` and \`GitHub\` under **Profile → ⚙️ Settings → Updates & CDN Mirrors**, or grab the latest [atlas-commerce.apk](${apkUrl}) (\`${releaseTag}\`) directly.`,
+                );
+              }
+              if (detectedLabels.has('camera-scan')) {
+                tips.push(
+                  isFrench
+                    ? '- **Caméra & Connexion QR :** Vérifiez l\'autorisation Caméra Android pour Atlas Commerce. Pour connecter un poste PC par QR code, utilisez la petite flèche à côté de l\'icône Profil en haut à droite → **Connecter un appareil**.'
+                    : '- **Camera & QR Device Login:** Ensure Android Camera permission is granted. To pair another PC/device via QR, tap the small arrow next to your Top Bar Profile icon → **Connecter un appareil**.',
+                );
+              }
+              if (detectedLabels.has('bug')) {
+                tips.push(
+                  isFrench
+                    ? `- **Informations utiles pour le correctif :** Indiquez si possible votre version Android, la version installée de l'application (actuelle : \`${releaseTag}\`), et l'écran exact où le problème survient.`
+                    : `- **Helpful details for a fast fix:** If possible, share your Android OS version, installed app version (latest: \`${releaseTag}\`), and the exact screen/action before the issue happened.`,
+                );
+              }
+              if (tips.length === 0) {
+                tips.push(
+                  isFrench
+                    ? `- Merci pour votre retour ! L'équipe mainteneur a bien été notifiée (dernière version disponible : \`${releaseTag}\` — [atlas-commerce.apk](${apkUrl})).`
+                    : `- Thanks for reaching out! Maintainers have been notified (latest published build: \`${releaseTag}\` — [atlas-commerce.apk](${apkUrl})).`,
+                );
+              }
+              aiGuidance = tips.join('\n');
+            }
+
+            const lines = [];
+            lines.push(
+              isFrench
+                ? `Bonjour @${actor} 👋 Merci pour votre message !`
+                : `Hi @${actor} 👋 Thanks for opening this up!`,
+            );
+            lines.push('');
+
+            if (hasPotentialSecret) {
+              lines.push(
+                isFrench
+                  ? '> ⚠️ **Alerte Sécurité :** Votre message semble contenir un jeton ou secret d\'API. Par précaution, supprimez-le du commentaire et régénérez la clé concernée immédiatement.'
+                  : '> ⚠️ **Security Notice:** Your message looks like it may contain an API token or credential. Please edit your post to remove it and rotate that secret right away.',
+              );
+              lines.push('');
+            }
+
+            lines.push(aiGuidance);
+
+            if (relatedLines.length > 0) {
+              lines.push('');
+              lines.push(isFrench ? '#### 🔎 Tickets potentiellement liés' : '#### 🔎 Potentially Related Issues');
+              lines.push(...relatedLines);
+            }
+
+            lines.push('');
+            lines.push('---');
+            lines.push(
+              isFrench
+                ? `_🤖 **Atlas Issue Assistant** · Tapez \`@atlas-bot <question>\` pour poser une question ou \`/help\` pour voir les commandes._`
+                : `_🤖 **Atlas Issue Assistant** · Mention \`@atlas-bot <question>\` anytime for follow-up help or \`/help\` for commands._`,
+            );
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issue.number,
+              body: lines.join('\n'),
+            });

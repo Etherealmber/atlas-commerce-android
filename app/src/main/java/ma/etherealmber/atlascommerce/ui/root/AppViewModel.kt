@@ -226,6 +226,14 @@ class AppViewModel @Inject constructor(
         updateManager.hideDownloadBanner()
     }
 
+    fun showUpdateDownloadBanner() {
+        updateManager.showDownloadBanner()
+    }
+
+    fun toggleUpdateDownloadBanner() {
+        updateManager.toggleDownloadBanner()
+    }
+
     fun repostUpdateNotification() {
         updateManager.repostActiveNotification()
     }

@@ -55,17 +55,22 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.8.2'
+          cache-read-only: true
 
       - name: Run Gradle Unit Tests, Release KSP & Android Lint XML
         id: gradle_audit
         continue-on-error: true
         run: |
           set +e
+          : > "$RUNNER_TEMP/audit-gradle.log"
+          tail -f "$RUNNER_TEMP/audit-gradle.log" &
+          TAIL_PID=$!
           gradle :buildSrc:test :app:testDebugUnitTest :app:kspReleaseKotlin :app:lintDebug \
-            -Dkotlin.compiler.execution.strategy=in-process \
-            --no-daemon --console=plain --stacktrace > "$RUNNER_TEMP/audit-gradle.log" 2>&1
+            --build-cache --console=plain --stacktrace >> "$RUNNER_TEMP/audit-gradle.log" 2>&1
           RC=$?
-          tail -n 100 "$RUNNER_TEMP/audit-gradle.log"
+          sleep 1
+          kill "$TAIL_PID" 2>/dev/null || true
+          gradle --stop >/dev/null 2>&1 || true
           exit $RC
 
       - name: Analyze Codebase, Backend API Parity, Lint XML & Live Release Mirrors -> Sync GitHub Issues

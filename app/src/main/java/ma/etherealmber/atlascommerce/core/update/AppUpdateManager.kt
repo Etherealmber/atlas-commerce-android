@@ -475,6 +475,10 @@ class AppUpdateManager internal constructor(
             notifier.showProgress(info, 0L, totalBytes)
 
             var totalRead = 0L
+            var lastUiPct = -1
+            var lastNotifyPct = -1
+            var lastUiEmitNs = System.nanoTime()
+            var lastNotifyNs = lastUiEmitNs
             body.byteStream().use { input ->
                 FileOutputStream(partFile).use { output ->
                     val buffer = ByteArray(STREAM_BUFFER_BYTES)
@@ -483,14 +487,34 @@ class AppUpdateManager internal constructor(
                         if (count == -1) break
                         output.write(buffer, 0, count)
                         totalRead += count
-                        _state.value = UpdateState.Downloading(
-                            info = info,
-                            bytesRead = totalRead,
-                            totalBytes = totalBytes,
-                            activeSourceLabel = sourceLabel,
-                            hiddenInForeground = hideActiveDownloadInForeground,
-                        )
-                        notifier.showProgress(info, totalRead, totalBytes)
+
+                        val nowNs = System.nanoTime()
+                        val currentPct = if (totalBytes > 0L) {
+                            ((totalRead.toDouble() / totalBytes.toDouble()) * 100.0).toInt().coerceIn(0, 100)
+                        } else {
+                            -1
+                        }
+                        val isCompleteChunk = totalBytes > 0L && totalRead >= totalBytes
+
+                        if (isCompleteChunk || currentPct != lastUiPct || nowNs - lastUiEmitNs >= UI_PROGRESS_MIN_INTERVAL_NS) {
+                            lastUiPct = currentPct
+                            lastUiEmitNs = nowNs
+                            _state.value = UpdateState.Downloading(
+                                info = info,
+                                bytesRead = totalRead,
+                                totalBytes = totalBytes,
+                                activeSourceLabel = sourceLabel,
+                                hiddenInForeground = hideActiveDownloadInForeground,
+                            )
+                        }
+                        if (isCompleteChunk ||
+                            (currentPct != lastNotifyPct && (lastNotifyPct < 0 || nowNs - lastNotifyNs >= NOTIFY_PROGRESS_MIN_INTERVAL_NS)) ||
+                            (totalBytes <= 0L && nowNs - lastNotifyNs >= NOTIFY_PROGRESS_MIN_INTERVAL_NS)
+                        ) {
+                            lastNotifyPct = currentPct
+                            lastNotifyNs = nowNs
+                            notifier.showProgress(info, totalRead, totalBytes)
+                        }
                     }
                     output.flush()
                 }
@@ -534,8 +558,8 @@ class AppUpdateManager internal constructor(
     }
 
     /**
-     * Hides the in-app foreground download banner while keeping the background
-     * APK stream and live OS notification + Settings progress card active.
+     * Hides the in-app foreground download banner into the Top Bar mini progress ball
+     * while keeping the background APK stream, OS notification, and Settings card active.
      */
     fun hideDownloadBanner() {
         synchronized(lock) {
@@ -544,6 +568,30 @@ class AppUpdateManager internal constructor(
                 hideActiveDownloadInForeground = true
                 _state.value = current.copy(hiddenInForeground = true)
                 notifier.showProgress(current.info, current.bytesRead, current.totalBytes)
+            }
+        }
+    }
+
+    /**
+     * Re-expands the full download progress bar when tapping the Top Bar mini ball.
+     */
+    fun showDownloadBanner() {
+        synchronized(lock) {
+            val current = _state.value
+            if (current is UpdateState.Downloading && !current.info.mandatory) {
+                hideActiveDownloadInForeground = false
+                _state.value = current.copy(hiddenInForeground = false)
+            }
+        }
+    }
+
+    fun toggleDownloadBanner() {
+        synchronized(lock) {
+            val current = _state.value
+            if (current is UpdateState.Downloading && !current.info.mandatory) {
+                val nextHidden = !current.hiddenInForeground
+                hideActiveDownloadInForeground = nextHidden
+                _state.value = current.copy(hiddenInForeground = nextHidden)
             }
         }
     }
@@ -674,5 +722,7 @@ class AppUpdateManager internal constructor(
         const val STREAM_BUFFER_BYTES = 16 * 1024
         const val MIN_VALID_APK_BYTES = 1_024L
         const val RESUME_RECHECK_DEBOUNCE_MS = 5_000L
+        const val UI_PROGRESS_MIN_INTERVAL_NS = 80_000_000L
+        const val NOTIFY_PROGRESS_MIN_INTERVAL_NS = 200_000_000L
     }
 }

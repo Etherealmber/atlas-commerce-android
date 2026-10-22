@@ -44,11 +44,16 @@ class ServerConfig @Inject constructor(
 
     init {
         scope.launch {
-            val stored = runCatching { preferences.apiBaseUrl.first() }.getOrNull()
-            if (!stored.isNullOrBlank()) {
-                ServerUrl.normalize(stored)?.let { _selection.value = ServerSelection(it) }
+            try {
+                kotlinx.coroutines.withTimeoutOrNull(2_000L) {
+                    val stored = runCatching { preferences.apiBaseUrl.first() }.getOrNull()
+                    if (!stored.isNullOrBlank()) {
+                        ServerUrl.normalize(stored)?.let { _selection.value = ServerSelection(it) }
+                    }
+                }
+            } finally {
+                _loaded.value = true
             }
-            _loaded.value = true
         }
     }
 
