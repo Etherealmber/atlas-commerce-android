@@ -12,10 +12,15 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -33,6 +38,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -41,10 +48,13 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -52,8 +62,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material.icons.outlined.CloudOff
@@ -61,6 +74,9 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.RocketLaunch
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
@@ -116,6 +132,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.theme.AtlasPalette
 
@@ -196,15 +213,37 @@ fun AtlasCard(
     val border = BorderStroke(1.dp, Atlas.palette.cardBorder)
     val shape = MaterialTheme.shapes.large
     val color = MaterialTheme.colorScheme.surface
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val contentModifier = if (motionEnabled) {
+        Modifier
+            .padding(padding)
+            .animateContentSize(spring(dampingRatio = 0.88f, stiffness = 480f))
+    } else {
+        Modifier.padding(padding)
+    }
+
     if (onClick != null) {
+        val interactionSource = remember { MutableInteractionSource() }
+        val pressed by interactionSource.collectIsPressedAsState()
+        val scale by animateFloatAsState(
+            targetValue = if (pressed && motionEnabled) 0.984f else 1f,
+            animationSpec = spring(dampingRatio = 0.78f, stiffness = 620f),
+            label = "card_press_scale",
+        )
         Surface(
             onClick = onClick,
-            modifier = modifier.fillMaxWidth(),
+            interactionSource = interactionSource,
+            modifier = modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
             shape = shape,
             color = color,
             border = border,
         ) {
-            Column(Modifier.padding(padding), content = content)
+            Column(contentModifier, content = content)
         }
     } else {
         Surface(
@@ -213,7 +252,7 @@ fun AtlasCard(
             color = color,
             border = border,
         ) {
-            Column(Modifier.padding(padding), content = content)
+            Column(contentModifier, content = content)
         }
     }
 }
@@ -351,9 +390,23 @@ fun AtlasButton(
     loading: Boolean = false,
     icon: ImageVector? = null,
 ) {
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && motionEnabled && enabled && !loading) 0.975f else 1f,
+        animationSpec = spring(dampingRatio = 0.76f, stiffness = 650f),
+        label = "btn_press_scale",
+    )
     Button(
         onClick = onClick,
-        modifier = modifier.height(50.dp),
+        interactionSource = interactionSource,
+        modifier = modifier
+            .height(50.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
         enabled = enabled && !loading,
         shape = MaterialTheme.shapes.medium,
         colors = ButtonDefaults.buttonColors(
@@ -1667,3 +1720,392 @@ private fun CodeBlockCard(
         }
     }
 }
+
+/**
+ * Executive App Turn-On / Boot Splash Screen played smoothly on every app launch.
+ * Uses strictly finite animations so UI Automator & accessibility snapshots remain 100% idle-safe,
+ * while always rendering "Atlas Commerce" visibly from frame 1.
+ */
+@Composable
+fun AtlasBootSplashScreen(
+    onFinished: () -> Unit = {},
+    holdUntilReady: Boolean = false,
+) {
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val logoScale = remember { Animatable(if (motionEnabled) 0.72f else 1f) }
+    val ringSweep = remember { Animatable(if (motionEnabled) 0f else 1f) }
+    val barProgress = remember { Animatable(if (motionEnabled) 0.08f else 1f) }
+
+    LaunchedEffect(motionEnabled) {
+        if (motionEnabled) {
+            logoScale.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(dampingRatio = 0.68f, stiffness = 380f),
+            )
+        }
+    }
+    LaunchedEffect(motionEnabled, holdUntilReady) {
+        if (motionEnabled) {
+            ringSweep.animateTo(1f, tween(durationMillis = 720, easing = FastOutSlowInEasing))
+            barProgress.animateTo(1f, tween(durationMillis = 360, easing = FastOutSlowInEasing))
+            delay(90)
+        } else {
+            delay(150)
+        }
+        if (!holdUntilReady) {
+            onFinished()
+        }
+    }
+
+    val primary = MaterialTheme.colorScheme.primary
+    val border = Atlas.palette.cardBorder
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(132.dp)
+                    .graphicsLayer {
+                        scaleX = logoScale.value
+                        scaleY = logoScale.value
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Canvas(modifier = Modifier.matchParentSize()) {
+                    val strokePx = 2.5.dp.toPx()
+                    drawCircle(
+                        color = primary.copy(alpha = 0.09f),
+                        radius = this.size.minDimension * 0.46f,
+                    )
+                    drawArc(
+                        color = primary.copy(alpha = 0.45f),
+                        startAngle = -90f,
+                        sweepAngle = 360f * ringSweep.value,
+                        useCenter = false,
+                        style = Stroke(width = strokePx),
+                    )
+                }
+                AtlasMark(size = 78.dp)
+            }
+
+            Spacer(Modifier.height(22.dp))
+
+            Text(
+                text = AppDetails.NAME,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = AppDetails.TAGLINE,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+
+            Spacer(Modifier.height(28.dp))
+
+            Box(
+                modifier = Modifier
+                    .width(176.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(border),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(barProgress.value.coerceIn(0.05f, 1f))
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(primary),
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
+            AtlasChip(
+                text = "v${AppDetails.VERSION_NAME} · Initialisation sécurisée",
+                tone = AtlasTone.INFO,
+            )
+        }
+    }
+}
+
+private data class OnboardingSlideSpec(
+    val badge: String,
+    val title: String,
+    val subtitle: String,
+    val highlights: List<String>,
+    val icon: ImageVector,
+    val tone: AtlasTone,
+)
+
+private val AtlasOnboardingSlides = listOf(
+    OnboardingSlideSpec(
+        badge = "BIENVENUE",
+        title = "Bienvenue sur Atlas Commerce",
+        subtitle = "Pilotez vos ventes, votre catalogue, vos stocks et votre trésorerie mobile en synchronisation directe avec votre serveur Atlas.",
+        highlights = listOf(
+            "Synchronisation temps réel & cache hors ligne automatique",
+            "Interface fluide, rapide et pensée pour le terrain",
+            "Connexion rapide par identifiants ou QR code PC",
+        ),
+        icon = Icons.Outlined.RocketLaunch,
+        tone = AtlasTone.INFO,
+    ),
+    OnboardingSlideSpec(
+        badge = "GOUVERNANCE & RÔLES",
+        title = "Permissions intelligentes par rôle",
+        subtitle = "Chaque collaborateur dispose exactement des outils adaptés à sa mission : Administrateur, Secrétaire, Magasinier ou Opérateur.",
+        highlights = listOf(
+            "Seul un Administrateur crée un produit directement au stock",
+            "Tout autre rôle envoie automatiquement la fiche à l'Admin",
+            "Validation & création en 1 geste depuis l'espace Admin",
+        ),
+        icon = Icons.Outlined.AdminPanelSettings,
+        tone = AtlasTone.POSITIVE,
+    ),
+    OnboardingSlideSpec(
+        badge = "SCANNER DE PRÉCISION",
+        title = "Scan maîtrisé & annulation instantanée",
+        subtitle = "La caméra ne s'active qu'à votre demande explicite et se coupe dès que vous quittez l'écran.",
+        highlights = listOf(
+            "Recherche instantanée EAN / QR et ajustement rapide",
+            "Bouton « Annuler » immédiat si vous ne souhaitez plus enregistrer l'objet",
+            "Retour haptique et sonore paramétrable",
+        ),
+        icon = Icons.Outlined.QrCodeScanner,
+        tone = AtlasTone.WARNING,
+    ),
+    OnboardingSlideSpec(
+        badge = "INFO BOX & AGENT IA",
+        title = "Notifications ciblées & copilote IA",
+        subtitle = "Recevez et diffusez des alertes filtrées selon chaque rôle métier, et interrogez l'Agent IA avec tableaux Markdown.",
+        highlights = listOf(
+            "Info Box filtrée par rôle + envoi direct entre équipes",
+            "Notifications système Android pour les demandes urgentes",
+            "Agent IA commercial avec tableaux et analyses structurées",
+        ),
+        icon = Icons.Outlined.NotificationsActive,
+        tone = AtlasTone.INFO,
+    ),
+)
+
+/**
+ * First-Launch Welcome & Multi-Step Onboarding flow.
+ * Always displays "Atlas Commerce" in the header for clear branding & UI test visibility.
+ */
+@Composable
+fun AtlasWelcomeOnboardingScreen(
+    onComplete: () -> Unit,
+) {
+    var step by remember { mutableStateOf(0) }
+    val total = AtlasOnboardingSlides.size
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 22.dp, vertical = 14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AtlasMark(size = 34.dp)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = AppDetails.NAME,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Text(
+                        text = "Configuration de bienvenue · ${step + 1}/$total",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (step < total - 1) {
+                    TextButton(onClick = onComplete) {
+                        Text("Passer")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                repeat(total) { idx ->
+                    val active = idx == step
+                    val pillWidth by animateDpAsState(
+                        targetValue = if (active) 32.dp else 10.dp,
+                        animationSpec = spring(dampingRatio = 0.8f, stiffness = 480f),
+                        label = "step_width_$idx",
+                    )
+                    val pillColor by animateColorAsState(
+                        targetValue = when {
+                            active -> MaterialTheme.colorScheme.primary
+                            idx < step -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                            else -> Atlas.palette.cardBorder
+                        },
+                        animationSpec = tween(220),
+                        label = "step_color_$idx",
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(pillWidth)
+                            .height(6.dp)
+                            .clip(CircleShape)
+                            .background(pillColor),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            AtlasPageTransition(
+                targetState = step,
+                indexSelector = { it },
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                label = "onboarding_slide",
+            ) { activeIndex ->
+                val current = AtlasOnboardingSlides[activeIndex.coerceIn(0, total - 1)]
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    AtlasCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = toneBackground(current.tone),
+                                modifier = Modifier.size(58.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = current.icon,
+                                        contentDescription = null,
+                                        tint = toneForeground(current.tone),
+                                        modifier = Modifier.size(28.dp),
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            Column {
+                                AtlasChip(text = current.badge, tone = current.tone)
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "Étape ${activeIndex + 1} sur $total",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(18.dp))
+
+                        Text(
+                            text = current.title,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = current.subtitle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        Spacer(Modifier.height(18.dp))
+                        AtlasDivider()
+                        Spacer(Modifier.height(14.dp))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            current.highlights.forEach { point ->
+                                Row(verticalAlignment = Alignment.Top) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = toneBackground(current.tone),
+                                        modifier = Modifier
+                                            .padding(top = 3.dp)
+                                            .size(18.dp),
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.AutoAwesome,
+                                                contentDescription = null,
+                                                tint = toneForeground(current.tone),
+                                                modifier = Modifier.size(11.dp),
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        text = point,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (step > 0) {
+                    AtlasOutlinedButton(
+                        text = "Précédent",
+                        onClick = { step = (step - 1).coerceAtLeast(0) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                AtlasButton(
+                    text = if (step < total - 1) "Continuer" else "Commencer",
+                    onClick = {
+                        if (step < total - 1) {
+                            step += 1
+                        } else {
+                            onComplete()
+                        }
+                    },
+                    icon = if (step == total - 1) Icons.Outlined.RocketLaunch else null,
+                    modifier = Modifier.weight(if (step > 0) 1.4f else 1f),
+                )
+            }
+        }
+    }
+}
+

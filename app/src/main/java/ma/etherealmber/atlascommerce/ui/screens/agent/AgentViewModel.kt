@@ -10,9 +10,13 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.session.SessionManager
+import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.model.AssistNextActionItemDto
 import ma.etherealmber.atlascommerce.data.model.AssistProposalDto
 import ma.etherealmber.atlascommerce.data.model.AssistStatusDto
@@ -24,6 +28,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AgentViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
+    private val sessionManager: SessionManager,
 ) : ViewModel() {
 
     data class ChatMessage(
@@ -62,7 +67,18 @@ class AgentViewModel @Inject constructor(
     val notices: SharedFlow<String> = _notices.asSharedFlow()
 
     init {
-        refreshContext()
+        viewModelScope.launch {
+            sessionManager.state
+                .map { st -> (st as? SessionState.Active)?.user?.let { "${it.username}:${it.role}" } }
+                .distinctUntilChanged()
+                .collect { key ->
+                    threadId = "android-${UUID.randomUUID().toString().take(8)}"
+                    _state.value = UiState()
+                    if (key != null) {
+                        refreshContext()
+                    }
+                }
+        }
     }
 
     fun refreshContext() {

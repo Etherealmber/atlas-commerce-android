@@ -339,17 +339,58 @@ data class AlertItemDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class MobileActionMetaDto(
+    @Json(name = "target_role") val targetRole: String? = null,
+    @Json(name = "sender_role") val senderRole: String? = null,
+    val priority: String? = null,
+    val category: String? = null,
+    @Json(name = "proposed_stock") val proposedStock: Double? = null,
+    @Json(name = "create_product_body") val createProductBody: CreateProductRequest? = null,
+)
+
+@JsonClass(generateAdapter = true)
 data class MobileActionDto(
     val id: Long = 0,
     val type: String = "scan",
     val title: String = "",
     val detail: String? = null,
     val status: String = "pending",
+    val source: String? = null,
     val barcode: String? = null,
     @Json(name = "product_id") val productId: Long? = null,
     @Json(name = "created_by") val createdBy: String? = null,
+    @Json(name = "completed_by") val completedBy: String? = null,
+    @Json(name = "completed_at") val completedAt: String? = null,
+    @Json(name = "meta_json") val metaJson: String? = null,
     @Json(name = "created_at") val createdAt: String? = null,
-)
+) {
+    /** Extracts `target_role` from `meta_json` without reflection and without crashing on arbitrary JSON. */
+    val resolvedTargetRole: String?
+        get() {
+            val raw = metaJson ?: return null
+            val match = TARGET_ROLE_REGEX.find(raw) ?: return null
+            return match.groupValues[1].trim().lowercase().takeIf { it.isNotEmpty() }
+        }
+
+    val isUrgent: Boolean
+        get() = metaJson?.contains("\"priority\":\"urgent\"", ignoreCase = true) == true ||
+            title.contains("[URGENT]", ignoreCase = true)
+
+    val isRejectedOrCancelled: Boolean
+        get() = status.equals("cancelled", ignoreCase = true) ||
+            status.equals("rejected", ignoreCase = true)
+
+    val isCompleted: Boolean
+        get() = status.equals("done", ignoreCase = true) ||
+            status.equals("completed", ignoreCase = true)
+
+    val isPending: Boolean
+        get() = status.equals("pending", ignoreCase = true)
+
+    private companion object {
+        val TARGET_ROLE_REGEX = Regex("\"target_role\"\\s*:\\s*\"([^\"]+)\"")
+    }
+}
 
 @JsonClass(generateAdapter = true)
 data class MobileActionStatsDto(
@@ -366,11 +407,14 @@ data class CreateMobileActionRequest(
     @Json(name = "product_id") val productId: Long? = null,
     @Json(name = "created_by") val createdBy: String = "mobile",
     val source: String = "android",
+    val meta: MobileActionMetaDto? = null,
 )
 
 @JsonClass(generateAdapter = true)
 data class CompleteMobileActionRequest(
     @Json(name = "apply_stock") val applyStock: Boolean = true,
+    @Json(name = "completed_by") val completedBy: String? = null,
+    @Json(name = "product_id") val productId: Long? = null,
 )
 
 @JsonClass(generateAdapter = true)

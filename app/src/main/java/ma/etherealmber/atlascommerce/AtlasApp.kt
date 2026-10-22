@@ -28,10 +28,22 @@ class AtlasApp : Application() {
                     setShowBadge(false)
                 },
             )
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    ALERTS_CHANNEL_ID,
+                    "Notifications & alertes métier",
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    description = "Demandes produits Admin, alertes de stock et notifications ciblées par rôle"
+                    setShowBadge(true)
+                },
+            )
         }
     }
 
     companion object {
         const val UPDATE_CHANNEL_ID = "atlas_updates"
+        const val ALERTS_CHANNEL_ID = "atlas_role_alerts"
+        const val EXTRA_OPEN_NOTIFICATIONS = "atlas_open_notifications"
     }
 }

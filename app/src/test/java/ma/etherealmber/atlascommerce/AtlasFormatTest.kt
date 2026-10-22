@@ -1,6 +1,10 @@
 package ma.etherealmber.atlascommerce
 
+import ma.etherealmber.atlascommerce.core.RoleTarget
+import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.format.AtlasFormat
+import ma.etherealmber.atlascommerce.data.model.AlertItemDto
+import ma.etherealmber.atlascommerce.data.model.MobileActionDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdownParser
 import ma.etherealmber.atlascommerce.ui.components.MarkdownBlock
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrDeviceViewModel
@@ -141,8 +145,89 @@ class MarkdownParserTest {
             ScanViewModel.UiState().cameraEnabled,
         )
         assertFalse(
+            "ScanViewModel hasActiveScan must be false initially and true when scanned",
+            ScanViewModel.UiState().hasActiveScan,
+        )
+        assertTrue(
+            ScanViewModel.UiState(lastCode = "6111035000125", notFound = true).hasActiveScan,
+        )
+        assertFalse(
             "QrDeviceViewModel camera must stay closed by default",
             QrDeviceViewModel.UiState().cameraEnabled,
         )
+    }
+
+    @Test
+    fun strictRoleAccessProductCreationAndRoleNotificationsWorkEndToEnd() {
+        // 1. ONLY Owner & Admin can create products directly
+        assertTrue(Roles.canCreateProductDirectly("owner"))
+        assertTrue(Roles.canCreateProductDirectly("admin"))
+        assertFalse(Roles.canCreateProductDirectly("secretaire"))
+        assertFalse(Roles.canCreateProductDirectly("stock"))
+        assertFalse(Roles.canCreateProductDirectly("magasinier"))
+        assertFalse(Roles.canCreateProductDirectly("user"))
+
+        // 2. Bottom navigation bar adapts strictly by role
+        assertEquals(
+            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.SALE, MainTab.AGENT),
+            MainTab.bottomTabsForRole("admin"),
+        )
+        assertEquals(
+            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.SALE, MainTab.AGENT),
+            MainTab.bottomTabsForRole("secretaire"),
+        )
+        assertEquals(
+            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.AGENT),
+            MainTab.bottomTabsForRole("stock"),
+        )
+        assertEquals(
+            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.AGENT),
+            MainTab.bottomTabsForRole("user"),
+        )
+
+        // 3. Role-based notifications & Info Box filtering
+        val adminProductReq = MobileActionDto(
+            id = 10L,
+            type = "new_product",
+            title = "Nouveau produit à créer : Huile 5W30",
+            status = "pending",
+            createdBy = "karim",
+            metaJson = """{"target_role":"admin","sender_role":"stock"}""",
+        )
+        assertEquals("admin", adminProductReq.resolvedTargetRole)
+        // Admin sees it
+        assertTrue(Roles.isActionVisibleForUser("admin", "nadia", adminProductReq))
+        // Creator sees their own pending request
+        assertTrue(Roles.isActionVisibleForUser("stock", "karim", adminProductReq))
+        // Unrelated non-admin operator does NOT see another user's admin-targeted product request
+        assertFalse(Roles.isActionVisibleForUser("user", "youssef", adminProductReq))
+        assertFalse(Roles.isActionVisibleForUser("secretaire", "salma", adminProductReq))
+
+        // Role-targeted notification to stock only shows up for stock + admin + sender
+        val stockNotice = MobileActionDto(
+            id = 11L,
+            type = "stock_check",
+            title = "[URGENT] Inventaire rayon B",
+            status = "pending",
+            createdBy = "nadia",
+            metaJson = """{"target_role":"${RoleTarget.STOCK.key}","priority":"urgent"}""",
+        )
+        assertTrue(stockNotice.isUrgent)
+        assertTrue(Roles.isActionVisibleForUser("stock", "karim", stockNotice))
+        assertTrue(Roles.isActionVisibleForUser("admin", "owner1", stockNotice))
+        assertFalse(Roles.isActionVisibleForUser("user", "youssef", stockNotice))
+
+        // Server rejection status `cancelled` is recognized cleanly
+        val rejected = adminProductReq.copy(status = "cancelled")
+        assertTrue(rejected.isRejectedOrCancelled)
+
+        // 4. Role-based Alert filtering hides financial alerts from non-financial roles
+        val mixedAlerts = listOf(
+            AlertItemDto(kind = "overdue_invoice", label = "3 factures impayées"),
+            AlertItemDto(kind = "low_stock", label = "5 articles en rupture"),
+        )
+        assertEquals(2, Roles.filterAlertsForRole("admin", mixedAlerts).size)
+        assertEquals(1, Roles.filterAlertsForRole("stock", mixedAlerts).size)
+        assertEquals("low_stock", Roles.filterAlertsForRole("stock", mixedAlerts).single().kind)
     }
 }

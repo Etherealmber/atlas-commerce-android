@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
@@ -27,6 +28,7 @@ import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
+import ma.etherealmber.atlascommerce.data.repo.ProductSubmissionOutcome
 import javax.inject.Inject
 
 @HiltViewModel
@@ -82,11 +84,11 @@ class ProductsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             sessionManager.state
-                .map { (it as? SessionState.Active)?.user?.username }
+                .map { (it as? SessionState.Active)?.user?.let { u -> "${u.username}:${u.role}" } }
                 .distinctUntilChanged()
-                .collect { username ->
+                .collect { key ->
                     _state.value = UiState()
-                    if (username != null) {
+                    if (key != null) {
                         loadCurrency()
                         fetchState(query = "", initial = true)
                     }
@@ -122,30 +124,58 @@ class ProductsViewModel @Inject constructor(
     }
 
     fun addToCart(product: ProductDto, quantity: Double = 1.0) {
+        val role = (sessionManager.state.value as? SessionState.Active)?.user?.role
+        if (!Roles.canCreateDocuments(role)) {
+            _messages.tryEmit("Votre rôle ne permet pas d'ajouter au panier de vente.")
+            return
+        }
         if (quantity <= 0.0) return
         cartStore.add(product, quantity)
         _messages.tryEmit("${product.name} · ajouté au panier")
     }
 
+    /**
+     * Strict RBAC gate:
+     * - Admin (`owner` / `admin`): creates product directly in stock (`POST /api/products`)
+     *   and closes [fulfillingRequestId] if fulfilling a pending staff request.
+     * - Non-Admin: immediately notifies Admin (`POST /api/mobile-actions` + `product-requests`).
+     */
     fun createProduct(request: CreateProductRequest, fulfillingRequestId: Long? = null) {
         viewModelScope.launch {
+            val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
             _state.update { it.copy(submitting = true) }
-            when (val res = commerceRepository.createProduct(request)) {
+            when (
+                val res = commerceRepository.submitProductForRole(
+                    request = request,
+                    role = activeUser?.role,
+                    username = activeUser?.username,
+                    note = request.description,
+                )
+            ) {
                 is ApiResult.Failure -> {
                     _state.update { it.copy(submitting = false) }
                     _messages.tryEmit(res.message)
                 }
 
                 is ApiResult.Success -> {
-                    if (fulfillingRequestId != null) {
-                        commerceRepository.closeProductRequest(
-                            id = fulfillingRequestId,
-                            status = "done",
-                            productId = res.data.id,
-                        )
+                    when (val outcome = res.data) {
+                        is ProductSubmissionOutcome.CreatedDirectly -> {
+                            if (fulfillingRequestId != null) {
+                                commerceRepository.closeProductRequest(
+                                    id = fulfillingRequestId,
+                                    status = "done",
+                                    productId = outcome.product.id,
+                                )
+                            }
+                            _state.update { it.copy(submitting = false) }
+                            _messages.tryEmit("Produit « ${outcome.product.name} » créé au catalogue.")
+                        }
+
+                        is ProductSubmissionOutcome.SentToAdmin -> {
+                            _state.update { it.copy(submitting = false) }
+                            _messages.tryEmit(outcome.summary)
+                        }
                     }
-                    _state.update { it.copy(submitting = false) }
-                    _messages.tryEmit("Produit « ${res.data.name} » créé.")
                     fetchState(query = _state.value.query, initial = false)
                 }
             }
@@ -161,6 +191,22 @@ class ProductsViewModel @Inject constructor(
         category: String?,
         note: String?,
     ) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+        if (!Roles.canCreateProductDirectly(activeUser?.role)) {
+            createProduct(
+                CreateProductRequest(
+                    name = name,
+                    sku = sku ?: "SKU-${code.takeLast(6)}",
+                    barcode = code,
+                    category = category,
+                    unit = unit,
+                    price = 0.0,
+                    stockQuantity = quantity,
+                    description = note,
+                ),
+            )
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(submitting = true) }
             when (
@@ -191,6 +237,11 @@ class ProductsViewModel @Inject constructor(
     }
 
     fun dismissProductRequest(requestId: Long) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+        if (!Roles.isAdmin(activeUser?.role)) {
+            _messages.tryEmit("Seul un Administrateur peut écarter une demande produit.")
+            return
+        }
         viewModelScope.launch {
             commerceRepository.closeProductRequest(id = requestId, status = "dismissed")
             fetchState(query = _state.value.query, initial = false)
@@ -198,6 +249,11 @@ class ProductsViewModel @Inject constructor(
     }
 
     fun adjustStock(product: ProductDto, quantity: Double, out: Boolean, reason: String) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+        if (!Roles.canAdjustStock(activeUser?.role)) {
+            _messages.tryEmit("Votre rôle ne permet pas d'ajuster le stock.")
+            return
+        }
         if (quantity <= 0.0) {
             _messages.tryEmit("Indiquez une quantité supérieure à zéro.")
             return
@@ -233,7 +289,16 @@ class ProductsViewModel @Inject constructor(
             }
             val result = commerceRepository.products(query = query, limit = 300)
             val reqResult = commerceRepository.productRequests("open")
-            val openReqs = (reqResult as? ApiResult.Success)?.data ?: _state.value.openRequests
+            val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+            val allOpenReqs = (reqResult as? ApiResult.Success)?.data ?: _state.value.openRequests
+            val visibleReqs = if (Roles.isAdmin(activeUser?.role)) {
+                allOpenReqs
+            } else {
+                val uname = activeUser?.username
+                allOpenReqs.filter { req ->
+                    req.createdBy == null || req.createdBy.equals(uname, ignoreCase = true)
+                }
+            }
 
             when (result) {
                 is ApiResult.Failure -> {
@@ -248,7 +313,7 @@ class ProductsViewModel @Inject constructor(
                             loading = false,
                             refreshing = false,
                             offline = offline,
-                            openRequests = openReqs,
+                            openRequests = visibleReqs,
                             products = if (offline) cached else it.products,
                             error = if (offline) null else result.message,
                         )
@@ -262,7 +327,7 @@ class ProductsViewModel @Inject constructor(
                         refreshing = false,
                         offline = false,
                         error = null,
-                        openRequests = openReqs,
+                        openRequests = visibleReqs,
                         products = result.data,
                     )
                 }

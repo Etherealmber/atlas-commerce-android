@@ -84,6 +84,12 @@ class AppViewModel @Inject constructor(
     val autoCheckUpdates: StateFlow<Boolean> = preferences.autoCheckUpdates
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val roleNotificationsEnabled: StateFlow<Boolean> = preferences.roleNotificationsEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val onboardingDone: StateFlow<Boolean> = preferences.onboardingDone
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     val server: StateFlow<ServerSelection?> = serverConfig.selection
     val serverLoaded: StateFlow<Boolean> = serverConfig.loaded
     val session: StateFlow<SessionState> = sessionManager.state
@@ -331,6 +337,18 @@ class AppViewModel @Inject constructor(
 
     fun setAutoCheckUpdates(enabled: Boolean) {
         viewModelScope.launch { preferences.setAutoCheckUpdates(enabled) }
+    }
+
+    fun setRoleNotificationsEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setRoleNotificationsEnabled(enabled) }
+    }
+
+    fun completeOnboarding() {
+        viewModelScope.launch { preferences.markOnboardingDone() }
+    }
+
+    fun replayOnboarding() {
+        viewModelScope.launch { preferences.setOnboardingDone(false) }
     }
 
     fun signOut() {

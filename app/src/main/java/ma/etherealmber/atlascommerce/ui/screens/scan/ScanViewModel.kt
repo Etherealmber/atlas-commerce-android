@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.session.SessionManager
@@ -28,6 +29,7 @@ import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
+import ma.etherealmber.atlascommerce.data.repo.ProductSubmissionOutcome
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrTokenParser
 import javax.inject.Inject
 
@@ -56,7 +58,15 @@ class ScanViewModel @Inject constructor(
         val error: String? = null,
         val neededItems: List<ProductDto> = emptyList(),
         val openRequests: List<ProductCreationRequestDto> = emptyList(),
-    )
+    ) {
+        val hasActiveScan: Boolean
+            get() = lookingUp ||
+                product != null ||
+                notFound ||
+                detectedPcQrToken != null ||
+                error != null ||
+                lastCode != null
+    }
 
     val autoOpenCamera: StateFlow<Boolean> = preferences.autoOpenCamera
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -88,15 +98,17 @@ class ScanViewModel @Inject constructor(
     private var lastHandledCode: String? = null
     private var lastHandledAt: Long = 0L
     private var lookupJob: Job? = null
+    private var currentScanProductId: Long? = null
+    private var currentScanAddedQty: Double = 0.0
 
     init {
         viewModelScope.launch {
             sessionManager.state
-                .map { (it as? SessionState.Active)?.user?.username }
+                .map { (it as? SessionState.Active)?.user?.let { u -> "${u.username}:${u.role}" } }
                 .distinctUntilChanged()
-                .collect { username ->
+                .collect { key ->
                     reset()
-                    if (username != null) loadNeededContext()
+                    if (key != null) loadNeededContext()
                 }
         }
     }
@@ -127,6 +139,8 @@ class ScanViewModel @Inject constructor(
         if (code == lastHandledCode && now - lastHandledAt < THROTTLE_MS) return
         lastHandledCode = code
         lastHandledAt = now
+        currentScanProductId = null
+        currentScanAddedQty = 0.0
         _scanFeedbackEvents.tryEmit(Unit)
 
         // Guard against scanning a PC QR security link inside Stock Scan:
@@ -142,6 +156,7 @@ class ScanViewModel @Inject constructor(
                     product = null,
                     notFound = false,
                     pendingApproval = false,
+                    added = false,
                     error = null,
                 )
             }
@@ -186,9 +201,13 @@ class ScanViewModel @Inject constructor(
                     val product = result.data.displayName?.takeIf { it.isNotBlank() }
                         ?.let { merged -> result.data.copy(name = merged) }
                         ?: result.data
-                    val autoAdded = autoAddCartOnScan.value
+                    val activeRole = (sessionManager.state.value as? SessionState.Active)?.user?.role
+                    val canSell = Roles.canCreateDocuments(activeRole)
+                    val autoAdded = canSell && autoAddCartOnScan.value
+                    currentScanProductId = product.id
                     if (autoAdded) {
                         cartStore.add(product, 1.0)
+                        currentScanAddedQty = 1.0
                         _messages.tryEmit("${product.name} · ajouté automatiquement au panier")
                     }
                     _state.update {
@@ -207,31 +226,105 @@ class ScanViewModel @Inject constructor(
     }
 
     fun addToCart(quantity: Double = 1.0) {
+        val activeRole = (sessionManager.state.value as? SessionState.Active)?.user?.role
+        if (!Roles.canCreateDocuments(activeRole)) {
+            _messages.tryEmit("Votre rôle ne permet pas d'ajouter au panier de vente.")
+            return
+        }
         val product = _state.value.product ?: return
         cartStore.add(product, quantity)
+        currentScanProductId = product.id
+        currentScanAddedQty += quantity
         _state.update { it.copy(added = true) }
         _messages.tryEmit("${product.name} · ajouté au panier")
     }
 
+    /**
+     * Immediately cancels and clears the currently scanned object without saving it,
+     * rolling back any cart unit added from this scan session if the user changed their mind.
+     */
+    fun cancelCurrentScan(silent: Boolean = false) {
+        lookupJob?.cancel()
+        lookupJob = null
+        val addedId = currentScanProductId
+        val addedQty = currentScanAddedQty
+        if (addedId != null && addedQty > 0.0) {
+            cartStore.decrement(addedId, addedQty)
+        }
+        currentScanProductId = null
+        currentScanAddedQty = 0.0
+        lastHandledCode = null
+        lastHandledAt = 0L
+        _state.update {
+            it.copy(
+                lookingUp = false,
+                creating = false,
+                lastCode = null,
+                detectedPcQrToken = null,
+                product = null,
+                notFound = false,
+                pendingApproval = false,
+                added = false,
+                error = null,
+            )
+        }
+        if (!silent) {
+            _messages.tryEmit(
+                if (addedQty > 0.0) {
+                    "Objet scanné annulé et retiré du panier."
+                } else {
+                    "Scan annulé — rien n'a été enregistré."
+                },
+            )
+        }
+    }
+
+    /**
+     * Strict role-gated submission from Scanner:
+     * - Admin (`owner` / `admin`): creates product immediately in stock (`POST /api/products`).
+     * - Non-Admin: immediately forwards full product fiche to Admin (`POST /api/mobile-actions` + `product-requests`).
+     */
     fun createProductFromScan(request: CreateProductRequest) {
         viewModelScope.launch {
+            val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
             _state.update { it.copy(creating = true) }
-            when (val res = commerceRepository.createProduct(request)) {
+            when (
+                val res = commerceRepository.submitProductForRole(
+                    request = request,
+                    role = activeUser?.role,
+                    username = activeUser?.username,
+                    note = request.description,
+                )
+            ) {
                 is ApiResult.Failure -> {
                     _state.update { it.copy(creating = false) }
                     _messages.tryEmit(res.message)
                 }
 
                 is ApiResult.Success -> {
-                    _state.update {
-                        it.copy(
-                            creating = false,
-                            product = res.data,
-                            notFound = false,
-                            pendingApproval = false,
-                        )
+                    when (val outcome = res.data) {
+                        is ProductSubmissionOutcome.CreatedDirectly -> {
+                            _state.update {
+                                it.copy(
+                                    creating = false,
+                                    product = outcome.product,
+                                    notFound = false,
+                                    pendingApproval = false,
+                                )
+                            }
+                            _messages.tryEmit("Produit « ${outcome.product.name} » créé au catalogue.")
+                        }
+
+                        is ProductSubmissionOutcome.SentToAdmin -> {
+                            _state.update {
+                                it.copy(
+                                    creating = false,
+                                    pendingApproval = true,
+                                )
+                            }
+                            _messages.tryEmit(outcome.summary)
+                        }
                     }
-                    _messages.tryEmit("Produit « ${res.data.name} » ajouté au catalogue.")
                     loadNeededContext()
                 }
             }
@@ -247,6 +340,22 @@ class ScanViewModel @Inject constructor(
         category: String?,
         note: String?,
     ) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+        if (!Roles.canCreateProductDirectly(activeUser?.role)) {
+            createProductFromScan(
+                CreateProductRequest(
+                    name = name,
+                    sku = sku ?: "SKU-${code.takeLast(6)}",
+                    barcode = code,
+                    category = category,
+                    unit = unit,
+                    price = 0.0,
+                    stockQuantity = quantity,
+                    description = note,
+                ),
+            )
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(creating = true) }
             when (
@@ -274,7 +383,7 @@ class ScanViewModel @Inject constructor(
                             pendingApproval = true,
                         )
                     }
-                    _messages.tryEmit("Demande envoyée au bureau pour validation.")
+                    _messages.tryEmit("Demande produit enregistrée.")
                     loadNeededContext()
                 }
             }
@@ -292,6 +401,10 @@ class ScanViewModel @Inject constructor(
     }
 
     fun reset() {
+        lookupJob?.cancel()
+        lookupJob = null
+        currentScanProductId = null
+        currentScanAddedQty = 0.0
         lastHandledCode = null
         _state.value = UiState()
     }

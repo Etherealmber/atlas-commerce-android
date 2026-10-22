@@ -1,5 +1,8 @@
 package ma.etherealmber.atlascommerce.data.repo
 
+import com.squareup.moshi.Moshi
+import ma.etherealmber.atlascommerce.core.RoleTarget
+import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
@@ -21,6 +24,7 @@ import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionDto
+import ma.etherealmber.atlascommerce.data.model.MobileActionMetaDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionStatsDto
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
@@ -31,11 +35,18 @@ import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Outcome of submitting a product: Admins create immediately; all other roles notify Admin immediately. */
+sealed interface ProductSubmissionOutcome {
+    data class CreatedDirectly(val product: ProductDto) : ProductSubmissionOutcome
+    data class SentToAdmin(val summary: String) : ProductSubmissionOutcome
+}
+
 @Singleton
 class CommerceRepository @Inject constructor(
     private val apiProvider: ApiProvider,
     private val runner: ApiRunner,
     private val offlineCache: OfflineCache,
+    private val moshi: Moshi,
 ) {
 
     suspend fun dashboard(): ApiResult<DashboardDto> =
@@ -62,6 +73,166 @@ class CommerceRepository @Inject constructor(
 
     suspend fun createProduct(request: CreateProductRequest): ApiResult<ProductDto> =
         runner.envelope { apiProvider.api().createProduct(request) }
+
+    /**
+     * Authoritative role-gated product submission:
+     * - **Admin / Owner (`Roles.canCreateProductDirectly(role)`)**: Creates immediately (`POST /api/products`).
+     * - **Non-Admin (`secretaire`, `stock`, `user`)**: NEVER mutates catalogue directly; immediately
+     *   dispatches a full Admin notification (`POST /api/mobile-actions` targeted to `admin` with full
+     *   `CreateProductRequest` payload) AND registers the stock product request (`POST /api/stock/product-requests`).
+     */
+    suspend fun submitProductForRole(
+        request: CreateProductRequest,
+        role: String?,
+        username: String?,
+        note: String? = null,
+    ): ApiResult<ProductSubmissionOutcome> {
+        if (Roles.canCreateProductDirectly(role)) {
+            return when (val created = createProduct(request)) {
+                is ApiResult.Success -> ApiResult.Success(ProductSubmissionOutcome.CreatedDirectly(created.data))
+                is ApiResult.Failure -> created
+            }
+        }
+
+        val sender = username?.takeIf { it.isNotBlank() } ?: "opérateur"
+        val roleLabel = Roles.label(role)
+        val code = request.barcode?.takeIf { it.isNotBlank() }
+            ?: request.sku.ifBlank { "AUTO-${System.currentTimeMillis() % 100_000}" }
+        val detailParts = buildList {
+            add("Demandé par $sender ($roleLabel)")
+            if (request.sku.isNotBlank()) add("Réf: ${request.sku}")
+            if (!request.barcode.isNullOrBlank()) add("Code: ${request.barcode}")
+            add("Prix vente: ${request.price} DH")
+            if (request.stockQuantity > 0.0) add("Qté initiale: ${request.stockQuantity} ${request.unit}")
+            if (!note.isNullOrBlank()) add("Note: ${note.trim()}")
+        }
+        val detailText = detailParts.joinToString(" · ")
+
+        val actionRes = createMobileAction(
+            CreateMobileActionRequest(
+                type = "new_product",
+                title = "Nouveau produit à créer : ${request.name}",
+                detail = detailText,
+                barcode = request.barcode?.takeIf { it.isNotBlank() } ?: code,
+                createdBy = sender,
+                meta = MobileActionMetaDto(
+                    targetRole = RoleTarget.ADMIN.key,
+                    senderRole = Roles.normalize(role),
+                    priority = "high",
+                    category = "product_creation_request",
+                    proposedStock = request.stockQuantity,
+                    createProductBody = request,
+                ),
+            ),
+        )
+
+        val stockReqRes = submitProductRequest(
+            SubmitProductRequestBody(
+                code = code,
+                sku = request.sku.takeIf { it.isNotBlank() },
+                name = request.name,
+                category = request.category,
+                unit = request.unit.ifBlank { "unité" },
+                quantity = if (request.stockQuantity > 0.0) request.stockQuantity else 1.0,
+                note = detailText,
+            ),
+        )
+
+        return if (actionRes is ApiResult.Success || stockReqRes is ApiResult.Success) {
+            ApiResult.Success(
+                ProductSubmissionOutcome.SentToAdmin(
+                    "Demande envoyée immédiatement à l'Administrateur pour « ${request.name} ».",
+                ),
+            )
+        } else {
+            (actionRes as? ApiResult.Failure) ?: (stockReqRes as ApiResult.Failure)
+        }
+    }
+
+    /** Sends a real cross-device notification targeted to a specific role group. */
+    suspend fun sendRoleNotification(
+        senderUsername: String,
+        senderRole: String?,
+        target: RoleTarget,
+        title: String,
+        message: String,
+        urgent: Boolean = false,
+        barcode: String? = null,
+    ): ApiResult<Unit> {
+        // Worker RBAC permits 'scan', 'stock_check', and 'new_product' for every authenticated role;
+        // 'invoice' is restricted to sales roles, so we always pick a role-safe channel type.
+        val wireType = when (target) {
+            RoleTarget.ADMIN -> "new_product"
+            RoleTarget.STOCK -> "stock_check"
+            RoleTarget.SECRETARY, RoleTarget.ALL -> "scan"
+        }
+        val cleanTitle = if (urgent && !title.startsWith("[URGENT]", ignoreCase = true)) {
+            "[URGENT] ${title.trim()}"
+        } else {
+            title.trim()
+        }
+        val senderLabel = Roles.label(senderRole)
+        val fullDetail = buildString {
+            append("De $senderUsername ($senderLabel) → ${target.label}")
+            if (message.isNotBlank()) {
+                append("\n")
+                append(message.trim())
+            }
+        }
+        return createMobileAction(
+            CreateMobileActionRequest(
+                type = wireType,
+                title = cleanTitle,
+                detail = fullDetail,
+                barcode = barcode?.takeIf { it.isNotBlank() },
+                createdBy = senderUsername.ifBlank { "mobile" },
+                meta = MobileActionMetaDto(
+                    targetRole = target.key,
+                    senderRole = Roles.normalize(senderRole),
+                    priority = if (urgent) "urgent" else "normal",
+                    category = "role_notification",
+                ),
+            ),
+        )
+    }
+
+    /** Parses structured `MobileActionMetaDto` stored in `meta_json`, if present. */
+    fun parseActionMeta(action: MobileActionDto): MobileActionMetaDto? {
+        val raw = action.metaJson?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching {
+            moshi.adapter(MobileActionMetaDto::class.java).fromJson(raw)
+        }.getOrNull()
+    }
+
+    /**
+     * Admin 1-tap approval on a staff product request inside `MobileActionDto`:
+     * creates the real product if `createProductBody` is present, then marks the action completed.
+     */
+    suspend fun approveActionAsAdmin(
+        action: MobileActionDto,
+        adminUsername: String,
+    ): ApiResult<ProductDto?> {
+        val meta = parseActionMeta(action)
+        val pendingProduct = meta?.createProductBody
+        var createdProduct: ProductDto? = null
+        if (pendingProduct != null && action.productId == null) {
+            when (val prodRes = createProduct(pendingProduct)) {
+                is ApiResult.Success -> createdProduct = prodRes.data
+                is ApiResult.Failure -> return prodRes
+            }
+        }
+        return when (
+            val completeRes = completeMobileAction(
+                id = action.id,
+                applyStock = true,
+                completedBy = adminUsername,
+                productId = createdProduct?.id ?: action.productId,
+            )
+        ) {
+            is ApiResult.Success -> ApiResult.Success(createdProduct)
+            is ApiResult.Failure -> completeRes
+        }
+    }
 
     suspend fun productRequests(status: String = "open"): ApiResult<List<ProductCreationRequestDto>> =
         runner.envelope { apiProvider.api().productRequests(status) }
@@ -120,9 +291,21 @@ class CommerceRepository @Inject constructor(
         }
     }
 
-    suspend fun completeMobileAction(id: Long, applyStock: Boolean = true): ApiResult<Unit> {
+    suspend fun completeMobileAction(
+        id: Long,
+        applyStock: Boolean = true,
+        completedBy: String? = null,
+        productId: Long? = null,
+    ): ApiResult<Unit> {
         val res = runner.status {
-            apiProvider.api().completeMobileAction(id, CompleteMobileActionRequest(applyStock))
+            apiProvider.api().completeMobileAction(
+                id,
+                CompleteMobileActionRequest(
+                    applyStock = applyStock,
+                    completedBy = completedBy?.takeIf { it.isNotBlank() },
+                    productId = productId,
+                ),
+            )
         }
         return when (res) {
             is ApiResult.Failure -> res
