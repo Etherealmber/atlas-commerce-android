@@ -8,6 +8,14 @@ on:
     branches: ['main']
   workflow_dispatch:
     inputs:
+      version_name:
+        description: 'Version name (ex: 1.0.8 ou 1.0.9) — saisi manuellement'
+        required: true
+        type: string
+      version_code:
+        description: 'Version code entier (ex: 108 ou 109) — saisi manuellement'
+        required: true
+        type: string
       release_type:
         description: 'Type de publication GitHub (Release officielle ou Pre-release)'
         required: true
@@ -26,6 +34,9 @@ on:
         required: false
         default: ''
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # Read-only by default; only jobs that publish diagnostics or releases carry write permission.
 permissions:
   contents: read
@@ -37,7 +48,7 @@ concurrency:
 jobs:
   build:
     name: Assemble debug + release + unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: write
@@ -48,22 +59,40 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Extract app version metadata
+      - name: Resolve app version metadata (manual inputs or app/build.gradle.kts)
         id: meta
+        env:
+          INPUT_VERSION_NAME: ${{ github.event.inputs.version_name || '' }}
+          INPUT_VERSION_CODE: ${{ github.event.inputs.version_code || '' }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import re
+          import os, re, sys
+
           text = open("app/build.gradle.kts", encoding="utf-8").read()
-          code = re.search(r'versionCode\s*=\s*(\d+)', text).group(1)
-          name = re.search(r'versionName\s*=\s*"([^"]+)"', text).group(1)
-          print(f"version_code={code}")
-          print(f"version_name={name}")
+          default_code = re.search(r'versionCode\s*=\s*(?:overrideVersionCode\s*\?:\s*)?(\d+)', text).group(1)
+          default_name = re.search(r'versionName\s*=\s*(?:overrideVersionName\s*\?:\s*)?"([^"]+)"', text).group(1)
+
+          in_name = os.environ.get("INPUT_VERSION_NAME", "").strip().lstrip("vV")
+          in_code = os.environ.get("INPUT_VERSION_CODE", "").strip()
+
+          final_name = in_name or default_name
+          final_code = in_code or default_code
+
+          if not re.fullmatch(r"\d+", final_code) or int(final_code) <= 0:
+              sys.stderr.write(f"ERROR: version_code '{final_code}' must be a positive integer (e.g. 108).\n")
+              sys.exit(1)
+          if not re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[A-Za-z0-9._-]+)?", final_name):
+              sys.stderr.write(f"ERROR: version_name '{final_name}' must look like 1.0.8 or 1.0.9.\n")
+              sys.exit(1)
+
+          print(f"version_code={final_code}")
+          print(f"version_name={final_name}")
           PY
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -72,7 +101,6 @@ jobs:
         run: |
           SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           echo "Android SDK: $SDK_ROOT"
-          ls "$SDK_ROOT" || true
           SDKM="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ -x "$SDKM" ]; then
             yes | "$SDKM" --licenses > /dev/null 2>&1 || true
@@ -82,7 +110,7 @@ jobs:
           fi
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.9'
 
@@ -104,7 +132,6 @@ jobs:
           key_alias = os.environ.get("KEY_ALIAS", "").strip()
           key_pass = os.environ.get("KEY_PASSWORD", "").strip()
 
-          # Parse fields from full keystore.properties secret if provided
           parsed = {}
           if raw_props:
               for line in raw_props.splitlines():
@@ -126,7 +153,6 @@ jobs:
                   fh.write("signed=false\n")
               raise SystemExit(0)
 
-          # Support both PowerShell raw Base64 AND Windows `certutil -encode` PEM headers
           cleaned_lines = [
               ln.strip() for ln in b64.splitlines()
               if ln.strip() and not ln.strip().startswith("-----")
@@ -152,19 +178,23 @@ jobs:
       - name: Build, test, and assemble release (R8)
         id: build
         continue-on-error: true
+        env:
+          VER_NAME: ${{ steps.meta.outputs.version_name }}
+          VER_CODE: ${{ steps.meta.outputs.version_code }}
         run: |
           set -o pipefail
           gradle :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:assembleRelease \
+            "-PoverrideVersionName=${VER_NAME}" \
+            "-PoverrideVersionCode=${VER_CODE}" \
             --no-daemon --console=plain --stacktrace 2>&1 | tee "$RUNNER_TEMP/build.log"
 
-      - name: Clean temporary signing files & prepare named APKs
+      - name: Clean temporary signing files & prepare single release APK
         if: always()
         run: |
           rm -f release-keystore.jks keystore.properties
           if [ "${{ steps.build.outcome }}" = "success" ]; then
             SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
             APKSIGNER="$SDK_ROOT/build-tools/35.0.0/apksigner"
-            VER="${{ steps.meta.outputs.version_name }}"
             if [ "${{ steps.signing.outputs.signed }}" = "true" ] && [ -f app/build/outputs/apk/release/app-release.apk ]; then
               "$APKSIGNER" verify -v app/build/outputs/apk/release/app-release.apk
               mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/atlas-commerce.apk
@@ -185,7 +215,7 @@ jobs:
 
       - name: Upload build log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-log
           path: ${{ runner.temp }}/build.log
@@ -193,7 +223,7 @@ jobs:
 
       - name: Upload debug APK
         if: steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: atlas-commerce-debug-apk
           path: app/build/outputs/apk/debug/*.apk
@@ -201,7 +231,7 @@ jobs:
 
       - name: Upload release APK
         if: steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: atlas-commerce-release-apk
           path: app/build/outputs/apk/release/*.apk
@@ -215,11 +245,11 @@ jobs:
 
   lint:
     name: Static checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
@@ -233,7 +263,7 @@ jobs:
           else
             echo "sdkmanager not found - relying on AGP SDK auto-download"
           fi
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.9'
       - name: Verify legacy 1.0.4 source quarantine, KSP release & Android Lint
@@ -273,7 +303,7 @@ jobs:
           test -f .atlas-1.0.4-quarantine/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt
       - name: Upload lint report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lint-report
           path: app/build/reports/lint-results-debug.html
@@ -282,20 +312,20 @@ jobs:
   android14-smoke:
     name: Android 14 release APK launch & upgrade check
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Download release APK artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: atlas-commerce-release-apk
           path: release-apk
@@ -468,7 +498,7 @@ jobs:
 
       - name: Upload Android 14 logcat & UI dumps
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android14-smoke-diagnostics
           path: |
@@ -490,20 +520,58 @@ jobs:
     if: >-
       needs.build.outputs.signed == 'true' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download signed release APK
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: atlas-commerce-release-apk
           path: signed-apk
+
+      - name: Sync manual version_name & version_code back to app/build.gradle.kts (if updated manually)
+        if: github.ref == 'refs/heads/main'
+        env:
+          VERSION_NAME: ${{ needs.build.outputs.version_name }}
+          VERSION_CODE: ${{ needs.build.outputs.version_code }}
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess
+
+          v_name = os.environ["VERSION_NAME"].strip()
+          v_code = os.environ["VERSION_CODE"].strip()
+          path = "app/build.gradle.kts"
+          txt = open(path, encoding="utf-8").read()
+          updated = re.sub(
+              r'(versionCode\s*=\s*overrideVersionCode\s*\?:\s*)\d+',
+              rf'\g<1>{v_code}',
+              txt,
+          )
+          updated = re.sub(
+              r'(versionName\s*=\s*overrideVersionName\s*\?:\s*)"[^"]+"',
+              rf'\g<1>"{v_name}"',
+              updated,
+          )
+          if updated != txt:
+              open(path, "w", encoding="utf-8").write(updated)
+              subprocess.run(["git", "config", "user.name", "atlas-ci"], check=True)
+              subprocess.run(["git", "config", "user.email", "ci@users.noreply.github.com"], check=True)
+              subprocess.run(["git", "add", path], check=True)
+              subprocess.run(
+                  ["git", "commit", "-m", f"chore(release): set version {v_name} ({v_code}) [skip ci]"],
+                  check=False,
+              )
+              subprocess.run(["git", "push", "origin", "HEAD:main"], check=False)
+              print(f"Synced app/build.gradle.kts -> versionName={v_name}, versionCode={v_code}")
+          else:
+              print(f"app/build.gradle.kts already matches versionName={v_name}, versionCode={v_code}")
+          PY
 
       - name: Auto-generate release notes, latest.json & SHA-256
         id: manifest
@@ -578,6 +646,7 @@ jobs:
           NOISE_RES = [
               r"^ci:\s*build log",
               r"^ci:\s*android 14 smoke log",
+              r"^chore\(release\):\s*set version",
               r"^update readme\.md$",
               r"^merge (branch|pull request)",
               r"^co-authored-by:",
@@ -643,7 +712,6 @@ jobs:
               except Exception:
                   pass
 
-          # Lead with concise headline per merged PR/commit, then detailed PR summary bullets
           combined_highlights = (commit_items + pr_bullets)[:10]
           if not combined_highlights:
               combined_highlights = [
@@ -652,7 +720,6 @@ jobs:
                   "Distribution redondante haute vitesse sur CDN 1 (Cloudflare R2) et GitHub Releases.",
               ]
 
-          # 1. Build crisp In-App Release Notes (UTF-8 safe, <= 2200 bytes for HTTP header safety)
           in_app_lines = []
           if custom_raw:
               in_app_lines.append(custom_raw)
@@ -664,7 +731,6 @@ jobs:
               in_app_lines.pop(-2)
               in_app_notes = "\n".join(in_app_lines).strip()
 
-          # 2. Build rich Markdown Release Notes for GitHub Releases
           gh_lines = [
               f"## ✨ Nouveautés — Atlas Commerce `{tag}` (build `{version_code}`)",
               "",
@@ -724,7 +790,7 @@ jobs:
               out.write(f"notes_b64={notes_b64}\n")
           PYEOF
 
-      - name: Publish or update GitHub Release
+      - name: Publish or update GitHub Release (single APK asset)
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION_NAME: ${{ needs.build.outputs.version_name }}
@@ -738,7 +804,6 @@ jobs:
           fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            # Ensure ONLY ONE release APK version (`atlas-commerce.apk`) exists on the release
             gh release delete-asset "$TAG" "atlas-commerce-v${VERSION_NAME}.apk" --yes >/dev/null 2>&1 || true
             gh release delete-asset "$TAG" "app-release.apk" --yes >/dev/null 2>&1 || true
             gh release upload "$TAG" \
@@ -766,10 +831,19 @@ jobs:
               $PRERELEASE_FLAG
           fi
 
-      - name: Upload signed APK & latest.json to CDN 1 via Atlas Worker API
+      - name: Sync signed APK & latest.json to CDN 1 (Cloudflare R2 S3 -> Wrangler API -> Worker HTTPS)
         env:
           UPLOAD_TOKEN: ${{ secrets.ATLAS_RELEASE_UPLOAD_TOKEN }}
           UPLOAD_URL: ${{ vars.ATLAS_RELEASE_API_URL || 'https://stock.afmarbre.com/api/admin/android-release' }}
+          WORKER_DIRECT_URL: ${{ secrets.ATLAS_WORKER_DIRECT_URL || vars.ATLAS_WORKER_DIRECT_URL || '' }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID || '' }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || '' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || secrets.R2_ACCOUNT_ID || '' }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || '' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || '' }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || '' }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME || 'company-stock-images' }}
           VERSION_NAME: ${{ needs.build.outputs.version_name }}
           VERSION_CODE: ${{ needs.build.outputs.version_code }}
           SHA256: ${{ steps.manifest.outputs.sha256 }}
@@ -777,46 +851,104 @@ jobs:
           MANDATORY: ${{ steps.manifest.outputs.mandatory }}
           NOTES_B64: ${{ steps.manifest.outputs.notes_b64 }}
         run: |
-          if [ -z "${UPLOAD_TOKEN:-}" ]; then
-            echo "ATLAS_RELEASE_UPLOAD_TOKEN not set yet — skipping Worker API upload."
-            exit 0
-          fi
-          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 3 \
-            -X POST "$UPLOAD_URL" \
-            -H "Authorization: Bearer ${UPLOAD_TOKEN}" \
-            -H "Content-Type: application/vnd.android.package-archive" \
-            -H "X-Release-Version-Code: ${VERSION_CODE}" \
-            -H "X-Release-Version-Name: ${VERSION_NAME}" \
-            -H "X-Release-Sha256: ${SHA256}" \
-            -H "X-Release-Github-Url: ${GITHUB_URL}" \
-            -H "X-Release-Mandatory: ${MANDATORY}" \
-            -H "X-Release-Notes-B64: ${NOTES_B64}" \
-            --data-binary "@signed-apk/atlas-commerce.apk"
+          CDN_SYNCED="false"
+          CDN_METHOD=""
+          CF_WAF_BLOCKED="false"
 
-      - name: Direct R2 S3 sync to CDN 1 (optional fallback if R2 S3 keys configured)
-        env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-          VERSION_NAME: ${{ needs.build.outputs.version_name }}
-        run: |
-          if [ -z "${R2_ACCOUNT_ID:-}" ] || [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ] || [ -z "${R2_BUCKET_NAME:-}" ]; then
-            echo "Direct R2 S3 credentials not set — using Worker API / GitHub Release mirrors."
-            exit 0
+          # Channel 1: Direct R2 S3 upload (completely immune to Cloudflare Zone Bot Fight Mode / WAF!)
+          if [ -n "${R2_ACCOUNT_ID}" ] && [ -n "${AWS_ACCESS_KEY_ID}" ] && [ -n "${AWS_SECRET_ACCESS_KEY}" ]; then
+            echo "Uploading directly to Cloudflare R2 bucket '${R2_BUCKET_NAME}' via S3 API..."
+            ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+            if aws s3 cp signed-apk/atlas-commerce.apk \
+                "s3://${R2_BUCKET_NAME}/app-updates/android/atlas-commerce-v${VERSION_NAME}.apk" \
+                --endpoint-url "$ENDPOINT" --region auto \
+                --content-type "application/vnd.android.package-archive" && \
+               aws s3 cp signed-apk/atlas-commerce.apk \
+                "s3://${R2_BUCKET_NAME}/app-updates/android/latest.apk" \
+                --endpoint-url "$ENDPOINT" --region auto \
+                --content-type "application/vnd.android.package-archive" \
+                --cache-control "public, max-age=60" && \
+               aws s3 cp signed-apk/latest.json \
+                "s3://${R2_BUCKET_NAME}/app-updates/android/latest.json" \
+                --endpoint-url "$ENDPOINT" --region auto \
+                --content-type "application/json; charset=utf-8" \
+                --cache-control "no-cache, max-age=0, must-revalidate"; then
+              CDN_SYNCED="true"
+              CDN_METHOD="Cloudflare R2 Direct S3 API (${R2_BUCKET_NAME})"
+            fi
           fi
-          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          aws s3 cp signed-apk/atlas-commerce.apk \
-            "s3://${R2_BUCKET_NAME}/app-updates/android/atlas-commerce-v${VERSION_NAME}.apk" \
-            --endpoint-url "$ENDPOINT" --region auto \
-            --content-type "application/vnd.android.package-archive"
-          aws s3 cp signed-apk/atlas-commerce.apk \
-            "s3://${R2_BUCKET_NAME}/app-updates/android/latest.apk" \
-            --endpoint-url "$ENDPOINT" --region auto \
-            --content-type "application/vnd.android.package-archive" \
-            --cache-control "public, max-age=60"
-          aws s3 cp signed-apk/latest.json \
-            "s3://${R2_BUCKET_NAME}/app-updates/android/latest.json" \
-            --endpoint-url "$ENDPOINT" --region auto \
-            --content-type "application/json; charset=utf-8" \
-            --cache-control "no-cache, max-age=0, must-revalidate"
+
+          # Channel 2: Official Cloudflare API via Wrangler R2 (immune to Zone Bot Fight Mode / WAF!)
+          if [ "$CDN_SYNCED" != "true" ] && [ -n "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "Uploading directly to Cloudflare R2 bucket '${R2_BUCKET_NAME}' via Wrangler API..."
+            if npx --yes wrangler@4 r2 object put "${R2_BUCKET_NAME}/app-updates/android/atlas-commerce-v${VERSION_NAME}.apk" \
+                --file signed-apk/atlas-commerce.apk \
+                --content-type "application/vnd.android.package-archive" --remote && \
+               npx --yes wrangler@4 r2 object put "${R2_BUCKET_NAME}/app-updates/android/latest.apk" \
+                --file signed-apk/atlas-commerce.apk \
+                --content-type "application/vnd.android.package-archive" \
+                --cache-control "public, max-age=60" --remote && \
+               npx --yes wrangler@4 r2 object put "${R2_BUCKET_NAME}/app-updates/android/latest.json" \
+                --file signed-apk/latest.json \
+                --content-type "application/json; charset=utf-8" \
+                --cache-control "no-cache, max-age=0, must-revalidate" --remote; then
+              CDN_SYNCED="true"
+              CDN_METHOD="Cloudflare Wrangler R2 API (${R2_BUCKET_NAME})"
+            fi
+          fi
+
+          # Channel 3: Atlas Worker HTTPS upload endpoint (`workers.dev` first if set, then `UPLOAD_URL`)
+          if [ "$CDN_SYNCED" != "true" ] && [ -n "${UPLOAD_TOKEN}" ]; then
+            for TARGET_URL in "${WORKER_DIRECT_URL}" "${UPLOAD_URL}"; do
+              [ -z "$TARGET_URL" ] && continue
+              echo "Posting signed APK & release notes to Worker endpoint: $TARGET_URL"
+              EXTRA_HEADERS=()
+              if [ -n "${CF_ACCESS_CLIENT_ID}" ] && [ -n "${CF_ACCESS_CLIENT_SECRET}" ]; then
+                EXTRA_HEADERS+=(-H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET}")
+              fi
+              HTTP_CODE=$(curl --silent --show-error --output "$RUNNER_TEMP/worker-upload-resp.txt" \
+                --write-out "%{http_code}" --retry 2 --retry-delay 2 \
+                -X POST "$TARGET_URL" \
+                -A "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 AtlasReleaseSync/1.0" \
+                -H "Accept: application/json" \
+                -H "X-Atlas-Client: android" \
+                -H "Authorization: Bearer ${UPLOAD_TOKEN}" \
+                -H "Content-Type: application/vnd.android.package-archive" \
+                -H "X-Release-Version-Code: ${VERSION_CODE}" \
+                -H "X-Release-Version-Name: ${VERSION_NAME}" \
+                -H "X-Release-Sha256: ${SHA256}" \
+                -H "X-Release-Github-Url: ${GITHUB_URL}" \
+                -H "X-Release-Mandatory: ${MANDATORY}" \
+                -H "X-Release-Notes-B64: ${NOTES_B64}" \
+                "${EXTRA_HEADERS[@]}" \
+                --data-binary "@signed-apk/atlas-commerce.apk" || echo "000")
+
+              if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+                CDN_SYNCED="true"
+                CDN_METHOD="Worker HTTPS API ($TARGET_URL)"
+                echo "Worker upload succeeded ($HTTP_CODE): $(cat "$RUNNER_TEMP/worker-upload-resp.txt")"
+                break
+              elif grep -Fq "__cf_chl_opt" "$RUNNER_TEMP/worker-upload-resp.txt" 2>/dev/null || grep -Fiq "Just a moment" "$RUNNER_TEMP/worker-upload-resp.txt" 2>/dev/null; then
+                CF_WAF_BLOCKED="true"
+                echo "Cloudflare Managed Challenge (HTTP $HTTP_CODE) intercepted $TARGET_URL — GitHub Release remains live and apps fall back automatically to GitHub Releases."
+              else
+                echo "Worker endpoint $TARGET_URL returned HTTP $HTTP_CODE: $(head -c 300 "$RUNNER_TEMP/worker-upload-resp.txt" 2>/dev/null || true)"
+              fi
+            done
+          fi
+
+          # Publish clean, actionable summary table without failing the completed GitHub Release
+          {
+            echo "## 🚀 Atlas Commerce Android \`v${VERSION_NAME}\` (build \`${VERSION_CODE}\`) — Publication Summary"
+            echo ""
+            echo "| Distribution Channel | Status | Details |"
+            echo "| :--- | :--- | :--- |"
+            echo "| **GitHub Releases** | ✅ Published | Single asset \`atlas-commerce.apk\` + \`latest.json\` (\`SHA-256: ${SHA256}\`) |"
+            if [ "$CDN_SYNCED" = "true" ]; then
+              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ✅ Synced | Uploaded via **${CDN_METHOD}** |"
+            elif [ "$CF_WAF_BLOCKED" = "true" ]; then
+              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ⚠️ Blocked by Cloudflare Bot Fight / WAF | In Cloudflare Dashboard → **Security → WAF → Custom rules**, add rule \`(http.request.uri.path eq \"/api/admin/android-release\")\` → Action: **Skip** (All remaining custom rules + Super Bot Fight Mode), **OR** add secret \`CLOUDFLARE_API_TOKEN\` with R2 Write permission to upload directly to \`company-stock-images\` bypassing WAF completely. |"
+            else
+              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ℹ️ Skipped / Not configured | Add \`CLOUDFLARE_API_TOKEN\` (recommended) or WAF skip rule for \`/api/admin/android-release\`. |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

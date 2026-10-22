@@ -5,6 +5,8 @@ import com.squareup.moshi.JsonEncodingException
 import com.squareup.moshi.Moshi
 import retrofit2.HttpException
 import java.io.IOException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import kotlin.coroutines.cancellation.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -13,7 +15,8 @@ import javax.inject.Singleton
  * Runs a network call and converts every outcome into an [ApiResult].
  *
  * Server messages are already written in French by the worker, so they are
- * passed through untouched; only transport problems get generic wording.
+ * passed through untouched; transport or domain issues explicitly remind users
+ * to verify what they typed and check that their Atlas Commerce Web instance is online.
  */
 @Singleton
 class ApiRunner @Inject constructor(private val moshi: Moshi) {
@@ -80,19 +83,34 @@ class ApiRunner @Inject constructor(private val moshi: Moshi) {
         is HttpException -> httpFailure(t)
         is JsonEncodingException -> notAtlas()
         is JsonDataException -> notAtlas()
+        is UnknownHostException -> ApiResult.Failure(
+            CODE_NETWORK,
+            "Site introuvable — vérifiez attentivement que l'adresse du serveur saisie est bien écrite et que votre connexion est active.",
+        )
+        is SocketTimeoutException -> ApiResult.Failure(
+            CODE_NETWORK,
+            "Le serveur ne répond pas — vérifiez que l'adresse saisie est correcte et que votre site Atlas Commerce Web est en ligne.",
+        )
         is IOException -> ApiResult.Failure(
             CODE_NETWORK,
-            "Impossible de joindre le serveur. Vérifiez l'adresse du serveur et votre connexion.",
+            "Serveur ou site indisponible. Vérifiez que ce que vous avez tapé est correct et que votre instance Atlas Commerce Web est accessible.",
         )
         else -> ApiResult.Failure(
             CODE_UNKNOWN,
-            t.message?.takeIf { it.isNotBlank() } ?: "Erreur inattendue.",
+            t.message?.takeIf { it.isNotBlank() } ?: "Erreur inattendue — vérifiez votre saisie et réessayez.",
         )
     }
 
     private fun httpFailure(exception: HttpException): ApiResult.Failure {
         val status = exception.code()
         val raw = runCatching { exception.response()?.errorBody()?.string() }.getOrNull()
+        if (raw != null && (raw.contains("__cf_chl_opt") || raw.contains("Just a moment", ignoreCase = true))) {
+            return ApiResult.Failure(
+                code = "CF_CHALLENGE_$status",
+                message = "Requête bloquée par la vérification anti-bot Cloudflare ($status). Vérifiez l'adresse du serveur ou autorisez /api/*.",
+                httpStatus = status,
+            )
+        }
         val payload = raw
             ?.takeIf { it.isNotBlank() }
             ?.let { body -> runCatching { errorAdapter.fromJson(body) }.getOrNull() }
@@ -108,17 +126,17 @@ class ApiRunner @Inject constructor(private val moshi: Moshi) {
 
     private fun notAtlas(): ApiResult.Failure = ApiResult.Failure(
         CODE_NOT_ATLAS,
-        "Ce serveur ne répond pas comme une API Atlas. Vérifiez l'adresse (elle doit pointer vers votre worker Atlas).",
+        "Ce site ne répond pas comme une API Atlas Commerce. Vérifiez que l'URL saisie est exacte et qu'Atlas Commerce Web y est installé.",
     )
 
     private fun defaultMessage(status: Int): String = when (status) {
-        400 -> "Requête invalide."
-        401 -> "Identifiant ou mot de passe incorrect."
-        403 -> "Accès refusé."
-        404 -> "Serveur introuvable — vérifiez l'adresse."
-        429 -> "Trop de tentatives — réessayez dans une minute."
-        in 500..599 -> "Erreur serveur ($status). Réessayez plus tard."
-        else -> "Erreur réseau ($status)."
+        400 -> "Saisie invalide — vérifiez que les informations tapées sont exactes."
+        401 -> "Identifiant ou mot de passe incorrect — vérifiez attentivement votre saisie."
+        403 -> "Accès non autorisé pour ce rôle ou cet appareil."
+        404 -> "Élément ou service introuvable (404) — vérifiez que ce que vous avez tapé est correct et que votre serveur Atlas Commerce est à jour."
+        429 -> "Limite temporaire atteinte — veuillez patienter quelques instants."
+        in 500..599 -> "Service temporairement indisponible ($status) — vérifiez l'état de votre serveur Atlas Commerce Web."
+        else -> "Erreur réseau ($status) — vérifiez votre saisie et votre connexion."
     }
 
     companion object {

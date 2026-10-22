@@ -43,16 +43,21 @@ android {
         applicationId = "ma.etherealmber.atlascommerce"
         minSdk = 28
         targetSdk = 35
-        versionCode = 108
-        versionName = "1.0.8"
+        val overrideVersionCode = (findProperty("overrideVersionCode") as? String)
+            ?.trim()
+            ?.toIntOrNull()
+        val overrideVersionName = (findProperty("overrideVersionName") as? String)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+        versionCode = overrideVersionCode ?: 108
+        versionName = overrideVersionName ?: "1.0.8"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // The server is chosen by the user on first launch (see ServerSetupScreen).
-        // These values are only defaults / fallbacks.
         buildConfigField("String", "DEFAULT_API_BASE", "\"https://stock.afmarbre.com\"")
         buildConfigField("String", "PROJECT_REPO", "\"https://github.com/Etherealmber/atlas-commerce-android\"")
         buildConfigField("String", "WEB_REPO", "\"https://github.com/Etherealmber/atlas-commerce\"")
-        buildConfigField("String", "ISSUES_URL", "\"https://github.com/Etherealmber/atlas-commerce/issues/new\"")
+        buildConfigField("String", "ISSUES_URL", "\"https://github.com/Etherealmber/atlas-commerce-android/issues/new\"")
         buildConfigField("String", "SECURITY_EMAIL", "\"security@afmarbre.com\"")
     }
 
