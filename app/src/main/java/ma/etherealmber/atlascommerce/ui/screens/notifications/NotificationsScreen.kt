@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.NotificationsActive
@@ -69,11 +68,7 @@ fun NotificationsScreen(
             AtlasTopBar(
                 title = "Notifications & activité",
                 subtitle = "${state.alerts.size} alerte(s) · ${state.pendingCount} action(s) en attente",
-                navigation = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Retour")
-                    }
-                },
+                onBack = onBack,
                 actions = {
                     IconButton(onClick = viewModel::refresh) {
                         Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser")

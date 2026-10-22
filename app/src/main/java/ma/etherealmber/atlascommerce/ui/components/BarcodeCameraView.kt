@@ -64,6 +64,7 @@ enum class CameraVisualStyle {
  * calls `cameraProvider.unbindAll()`, closes ML Kit's native `BarcodeScanner`, and shuts down
  * the analyzer executor so the Android green camera privacy indicator extinguishes at once.
  */
+@androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
 @SuppressLint("UnsafeOptInUsageError")
 @Composable
 fun BarcodeCameraView(
