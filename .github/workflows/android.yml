@@ -208,11 +208,14 @@ jobs:
               kill -9 "$EMU_PID" >/dev/null 2>&1 || true
             fi
             "$ADB" kill-server </dev/null >/dev/null 2>&1 || true
-            cat "$RUNNER_TEMP/smoke-step.log" || true
           }
           trap cleanup EXIT
 
           {
+            export ANDROID_USER_HOME="$HOME/.android"
+            export ANDROID_AVD_HOME="$HOME/.android/avd"
+            mkdir -p "$ANDROID_AVD_HOME"
+
             if [ -e /dev/kvm ]; then
               sudo chmod 666 /dev/kvm
             fi
@@ -242,6 +245,8 @@ jobs:
               --force \
               --name atlas_api34 \
               --package "system-images;android-34;google_apis;x86_64"
+
+            "$SDK_ROOT/emulator/emulator" -list-avds
 
             "$SDK_ROOT/emulator/emulator" \
               -avd atlas_api34 \
