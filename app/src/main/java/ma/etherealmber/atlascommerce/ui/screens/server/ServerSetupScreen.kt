@@ -43,9 +43,11 @@ import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
+import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
 import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
+import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.toneBackground
@@ -83,20 +85,28 @@ fun ServerSetupScreen(
             Spacer(Modifier.height(24.dp))
         }
 
-        AtlasMark(size = 64.dp)
+        AtlasEntrance(delayMillis = 0) {
+            AtlasPulseHalo {
+                AtlasMark(size = 64.dp)
+            }
+        }
         Spacer(Modifier.height(18.dp))
-        Text(
-            text = "Choisissez votre serveur",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "Atlas Commerce se connecte à votre propre serveur Atlas. " +
-                "Sélectionnez-le avant de vous connecter — vous pourrez en changer à tout moment.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        AtlasEntrance(delayMillis = 55) {
+            Column {
+                Text(
+                    text = "Choisissez votre serveur",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Atlas Commerce se connecte à votre propre serveur Atlas. " +
+                        "Sélectionnez-le avant de vous connecter — vous pourrez en changer à tout moment.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Spacer(Modifier.height(density.sectionGap))
 
         Text(

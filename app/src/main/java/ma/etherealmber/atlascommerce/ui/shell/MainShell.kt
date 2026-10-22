@@ -42,6 +42,7 @@ import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
+import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
 import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentScreen
 import ma.etherealmber.atlascommerce.ui.screens.home.HomeScreen
@@ -57,12 +58,22 @@ enum class MainTab(val label: String, val icon: ImageVector) {
     SALE("Vente", Icons.Outlined.ShoppingCart),
     AGENT("Agent", Icons.Outlined.AutoAwesome),
     SETTINGS("Réglages", Icons.Outlined.Settings),
+    ;
+
+    companion object {
+        /**
+         * Settings (`SETTINGS`) is intentionally EXCLUDED from the Bottom Navigation Bar:
+         * access Settings cleanly by tapping the user's Profile Avatar in the Top Bar.
+         */
+        val BottomBarTabs = listOf(HOME, PRODUCTS, SCAN, SALE, AGENT)
+    }
 }
 
 @Composable
 fun MainShell(
     user: SessionUser,
     snackbarHostState: SnackbarHostState,
+    defaultStartTab: String = MainTab.HOME.name,
     externalTabRequest: String? = null,
     onExternalTabHandled: () -> Unit = {},
     onChangeServer: () -> Unit,
@@ -78,13 +89,22 @@ fun MainShell(
     val cartCount by shellViewModel.cartCount.collectAsStateWithLifecycle()
     val notificationCount by shellViewModel.notificationCount.collectAsStateWithLifecycle()
     val serverBaseUrl by shellViewModel.serverBaseUrl.collectAsStateWithLifecycle()
-    var tabName by rememberSaveable { mutableStateOf(MainTab.HOME.name) }
+
+    val resolvedInitial = MainTab.BottomBarTabs
+        .firstOrNull { it.name == defaultStartTab }
+        ?.name ?: MainTab.HOME.name
+
+    var tabName by rememberSaveable { mutableStateOf(resolvedInitial) }
+    var lastBottomTabName by rememberSaveable { mutableStateOf(resolvedInitial) }
     val tab = MainTab.entries.firstOrNull { it.name == tabName } ?: MainTab.HOME
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(externalTabRequest) {
         if (!externalTabRequest.isNullOrBlank()) {
             tabName = externalTabRequest
+            if (externalTabRequest != MainTab.SETTINGS.name) {
+                lastBottomTabName = externalTabRequest
+            }
             onExternalTabHandled()
         }
     }
@@ -96,9 +116,20 @@ fun MainShell(
     val onToast: (String) -> Unit = { message ->
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
-    val switchTab: (MainTab) -> Unit = { target -> tabName = target.name }
+    val switchTab: (MainTab) -> Unit = { target ->
+        if (target != MainTab.SETTINGS) {
+            lastBottomTabName = target.name
+        }
+        tabName = target.name
+    }
 
-    BackHandler(enabled = tab != MainTab.HOME) { switchTab(MainTab.HOME) }
+    BackHandler(enabled = tab != MainTab.HOME) {
+        if (tab == MainTab.SETTINGS) {
+            tabName = lastBottomTabName
+        } else {
+            switchTab(MainTab.HOME)
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -106,6 +137,11 @@ fun MainShell(
             AtlasTopBar(
                 title = tab.label,
                 subtitle = "${user.displayName} · ${Roles.label(user.role)}",
+                onBack = if (tab == MainTab.SETTINGS) {
+                    { tabName = lastBottomTabName }
+                } else {
+                    null
+                },
                 actions = {
                     IconButton(onClick = { onOpenQrDevice(null) }) {
                         Icon(
@@ -138,9 +174,20 @@ fun MainShell(
                     AtlasAvatar(
                         avatarUrl = user.avatarUrl,
                         label = user.displayName,
-                        size = 32.dp,
+                        size = 34.dp,
                         serverBaseUrl = serverBaseUrl,
-                        onClick = { switchTab(MainTab.SETTINGS) },
+                        borderColor = if (tab == MainTab.SETTINGS) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.outlineVariant
+                        },
+                        onClick = {
+                            if (tab == MainTab.SETTINGS) {
+                                tabName = lastBottomTabName
+                            } else {
+                                switchTab(MainTab.SETTINGS)
+                            }
+                        },
                     )
                     Spacer(Modifier.width(10.dp))
                 },
@@ -151,7 +198,7 @@ fun MainShell(
                 containerColor = MaterialTheme.colorScheme.surface,
                 tonalElevation = 2.dp,
             ) {
-                MainTab.entries.forEach { item ->
+                MainTab.BottomBarTabs.forEach { item ->
                     NavigationBarItem(
                         selected = tab == item,
                         onClick = { switchTab(item) },
@@ -178,57 +225,60 @@ fun MainShell(
             }
         },
     ) { padding ->
-        Box(
+        AtlasPageTransition(
+            targetState = tab,
+            indexSelector = { it.ordinal },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-        ) {
-            when (tab) {
-                MainTab.HOME -> HomeScreen(
-                    user = user,
-                    serverBaseUrl = serverBaseUrl,
-                    onOpenProducts = { switchTab(MainTab.PRODUCTS) },
-                    onOpenSale = { switchTab(MainTab.SALE) },
-                    onToast = onToast,
-                )
+        ) { currentTab ->
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (currentTab) {
+                    MainTab.HOME -> HomeScreen(
+                        user = user,
+                        onOpenProducts = { switchTab(MainTab.PRODUCTS) },
+                        onOpenSale = { switchTab(MainTab.SALE) },
+                        onToast = onToast,
+                    )
 
-                MainTab.PRODUCTS -> ProductsScreen(
-                    user = user,
-                    onOpenScan = { switchTab(MainTab.SCAN) },
-                    onOpenSale = { switchTab(MainTab.SALE) },
-                    onToast = onToast,
-                )
+                    MainTab.PRODUCTS -> ProductsScreen(
+                        user = user,
+                        onOpenScan = { switchTab(MainTab.SCAN) },
+                        onOpenSale = { switchTab(MainTab.SALE) },
+                        onToast = onToast,
+                    )
 
-                MainTab.SCAN -> ScanScreen(
-                    user = user,
-                    isActive = tab == MainTab.SCAN,
-                    onOpenSale = { switchTab(MainTab.SALE) },
-                    onOpenProducts = { switchTab(MainTab.PRODUCTS) },
-                    onOpenQrDevice = onOpenQrDevice,
-                    onToast = onToast,
-                )
+                    MainTab.SCAN -> ScanScreen(
+                        user = user,
+                        isActive = tab == MainTab.SCAN && currentTab == MainTab.SCAN,
+                        onOpenSale = { switchTab(MainTab.SALE) },
+                        onOpenProducts = { switchTab(MainTab.PRODUCTS) },
+                        onOpenQrDevice = onOpenQrDevice,
+                        onToast = onToast,
+                    )
 
-                MainTab.SALE -> SaleScreen(
-                    user = user,
-                    onOpenProducts = { switchTab(MainTab.PRODUCTS) },
-                    onToast = onToast,
-                )
+                    MainTab.SALE -> SaleScreen(
+                        user = user,
+                        onOpenProducts = { switchTab(MainTab.PRODUCTS) },
+                        onToast = onToast,
+                    )
 
-                MainTab.AGENT -> AgentScreen(
-                    onToast = onToast,
-                )
+                    MainTab.AGENT -> AgentScreen(
+                        onToast = onToast,
+                    )
 
-                MainTab.SETTINGS -> SettingsScreen(
-                    user = user,
-                    onChangeServer = onChangeServer,
-                    onOpenQrDevice = { onOpenQrDevice(null) },
-                    onOpenLicense = onOpenLicense,
-                    onOpenSecurity = onOpenSecurity,
-                    onOpenAbout = onOpenAbout,
-                    onSignOut = onSignOut,
-                    onStartUpdateDownload = onStartUpdateDownload,
-                    onToast = onToast,
-                )
+                    MainTab.SETTINGS -> SettingsScreen(
+                        user = user,
+                        onChangeServer = onChangeServer,
+                        onOpenQrDevice = { onOpenQrDevice(null) },
+                        onOpenLicense = onOpenLicense,
+                        onOpenSecurity = onOpenSecurity,
+                        onOpenAbout = onOpenAbout,
+                        onSignOut = onSignOut,
+                        onStartUpdateDownload = onStartUpdateDownload,
+                        onToast = onToast,
+                    )
+                }
             }
         }
     }

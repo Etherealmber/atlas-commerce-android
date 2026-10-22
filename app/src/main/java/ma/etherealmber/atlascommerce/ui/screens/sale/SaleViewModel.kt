@@ -7,14 +7,17 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.CartLine
@@ -32,6 +35,7 @@ class SaleViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
     private val cartStore: CartStore,
     private val sessionManager: SessionManager,
+    preferences: AtlasPreferences,
 ) : ViewModel() {
 
     data class UiState(
@@ -47,6 +51,12 @@ class SaleViewModel @Inject constructor(
     }
 
     val lines: StateFlow<List<CartLine>> = cartStore.lines
+
+    val confirmBeforeSale: StateFlow<Boolean> = preferences.confirmBeforeSale
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val defaultClientName: StateFlow<String> = preferences.defaultClientName
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
     /**
      * One key per basket: if the same submission is retried (network hiccup,
@@ -70,9 +80,19 @@ class SaleViewModel @Inject constructor(
                 .map { (it as? SessionState.Active)?.user?.username }
                 .distinctUntilChanged()
                 .collect { username ->
-                    _state.value = UiState(currency = _state.value.currency)
+                    _state.value = UiState(
+                        clientName = defaultClientName.value,
+                        currency = _state.value.currency,
+                    )
                     if (username != null) loadCurrency()
                 }
+        }
+        viewModelScope.launch {
+            defaultClientName.collect { saved ->
+                if (saved.isNotBlank() && _state.value.clientName.isBlank()) {
+                    _state.update { it.copy(clientName = saved) }
+                }
+            }
         }
     }
 
@@ -158,14 +178,14 @@ class SaleViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             submitting = false,
-                            error = null,
-                            created = result.data,
-                            clientName = "",
+                            clientName = defaultClientName.value,
                             clientPhone = "",
                             note = "",
+                            created = result.data,
+                            error = null,
                         )
                     }
-                    _messages.tryEmit("Ticket créé — à encaisser depuis le web.")
+                    _messages.tryEmit("Ticket ${result.data.number ?: "#${result.data.id}"} enregistré.")
                 }
             }
         }

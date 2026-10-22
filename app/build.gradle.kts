@@ -43,8 +43,8 @@ android {
         applicationId = "ma.etherealmber.atlascommerce"
         minSdk = 28
         targetSdk = 35
-        versionCode = 106
-        versionName = "1.0.6"
+        versionCode = 107
+        versionName = "1.0.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // The server is chosen by the user on first launch (see ServerSetupScreen).

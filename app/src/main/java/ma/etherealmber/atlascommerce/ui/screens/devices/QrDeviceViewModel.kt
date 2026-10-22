@@ -9,13 +9,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
@@ -29,6 +32,7 @@ class QrDeviceViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val sessionManager: SessionManager,
     private val serverConfig: ServerConfig,
+    preferences: AtlasPreferences,
 ) : ViewModel() {
 
     enum class Step {
@@ -49,8 +53,26 @@ class QrDeviceViewModel @Inject constructor(
         val devices: List<TrustedDeviceDto> = emptyList(),
         val devicesLoading: Boolean = false,
         val revokingId: String? = null,
-        val cameraEnabled: Boolean = true,
+        /**
+         * Camera is OFF (`false`) on entering Scan Device unless the user starts it explicitly.
+         */
+        val cameraEnabled: Boolean = false,
     )
+
+    val autoOpenCamera: StateFlow<Boolean> = preferences.autoOpenCamera
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val scanHapticEnabled: StateFlow<Boolean> = preferences.scanHapticEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val scanSoundEnabled: StateFlow<Boolean> = preferences.scanSoundEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    private val _scanFeedbackEvents = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 4,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val scanFeedbackEvents: SharedFlow<Unit> = _scanFeedbackEvents.asSharedFlow()
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -114,6 +136,9 @@ class QrDeviceViewModel @Inject constructor(
             }
             return
         }
+
+        _scanFeedbackEvents.tryEmit(Unit)
+        _state.update { it.copy(cameraEnabled = false) }
 
         val signedIn = sessionManager.state.value is SessionState.Active
         if (signedIn) {

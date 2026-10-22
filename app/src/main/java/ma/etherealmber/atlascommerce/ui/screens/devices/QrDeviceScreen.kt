@@ -50,6 +50,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,7 +62,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -71,8 +74,10 @@ import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
+import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.BarcodeCameraView
 import ma.etherealmber.atlascommerce.ui.components.CameraVisualStyle
+import ma.etherealmber.atlascommerce.ui.components.ScanFeedback
 
 private val SecurityBgTop = Color(0xFF070B19)
 private val SecurityBgBottom = Color(0xFF0F172A)
@@ -98,7 +103,11 @@ fun QrDeviceScreen(
     viewModel: QrDeviceViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val autoOpenCamera by viewModel.autoOpenCamera.collectAsStateWithLifecycle()
+    val scanHaptic by viewModel.scanHapticEnabled.collectAsStateWithLifecycle()
+    val scanSound by viewModel.scanSoundEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val view = LocalView.current
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -111,12 +120,31 @@ fun QrDeviceScreen(
         contract = ActivityResultContracts.RequestPermission(),
     ) { allowed ->
         hasCameraPermission = allowed
+        viewModel.setCameraEnabled(allowed)
         if (!allowed) onToast("Caméra refusée — collez le lien ou code QR ci-dessous.")
     }
 
-    LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
+    val startQrCameraExplicitly: () -> Unit = {
+        val allowed = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        hasCameraPermission = allowed
+        if (allowed) {
+            viewModel.setCameraEnabled(true)
+        } else {
             permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    // NEVER auto-open camera on screen entry unless user turned ON autoOpenCamera!
+    LaunchedEffect(autoOpenCamera) {
+        if (autoOpenCamera && hasCameraPermission) {
+            viewModel.setCameraEnabled(true)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.setCameraEnabled(false)
         }
     }
 
@@ -126,6 +154,12 @@ fun QrDeviceScreen(
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg -> onToast(msg) }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.scanFeedbackEvents.collect {
+            ScanFeedback.trigger(view = view, haptic = scanHaptic, sound = scanSound)
+        }
     }
 
     // Auto-close after pre-login QR authentication succeeds
@@ -189,7 +223,15 @@ fun QrDeviceScreen(
                     color = SecurityCyan,
                 )
             }
-            IconButton(onClick = { viewModel.setCameraEnabled(!state.cameraEnabled) }) {
+            IconButton(
+                onClick = {
+                    if (state.cameraEnabled) {
+                        viewModel.setCameraEnabled(false)
+                    } else {
+                        startQrCameraExplicitly()
+                    }
+                },
+            ) {
                 Icon(
                     imageVector = if (state.cameraEnabled) Icons.Outlined.Videocam else Icons.Outlined.VideocamOff,
                     contentDescription = if (state.cameraEnabled) "Couper la caméra" else "Activer la caméra",
@@ -280,9 +322,9 @@ fun QrDeviceScreen(
                                 .aspectRatio(1f)
                                 .align(Alignment.CenterHorizontally),
                         ) {
-                            if (hasCameraPermission) {
+                            if (shouldRunCamera) {
                                 BarcodeCameraView(
-                                    active = shouldRunCamera,
+                                    active = true,
                                     style = CameraVisualStyle.QR_DEVICE_SECURITY,
                                     onDetected = viewModel::handleRawScan,
                                     modifier = Modifier.fillMaxSize(),
@@ -298,24 +340,50 @@ fun QrDeviceScreen(
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.QrCode2,
-                                            contentDescription = null,
-                                            tint = SecurityCyan,
-                                            modifier = Modifier.size(44.dp),
-                                        )
-                                        Spacer(Modifier.height(10.dp))
-                                        Text(
-                                            text = "Autorisez la caméra pour scanner le QR code PC",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = Color.White,
-                                        )
+                                        AtlasPulseHalo {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(56.dp)
+                                                    .clip(CircleShape)
+                                                    .background(SecurityCyan.copy(alpha = 0.16f)),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.QrCode2,
+                                                    contentDescription = null,
+                                                    tint = SecurityCyan,
+                                                    modifier = Modifier.size(30.dp),
+                                                )
+                                            }
+                                        }
                                         Spacer(Modifier.height(12.dp))
+                                        Text(
+                                            text = "Lecteur QR en veille",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color.White,
+                                            textAlign = TextAlign.Center,
+                                        )
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(
+                                            text = "Appuyez ci-dessous pour démarrer la caméra QR, ou collez directement le lien ci-dessous.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = SecurityMuted,
+                                            textAlign = TextAlign.Center,
+                                        )
+                                        Spacer(Modifier.height(14.dp))
                                         Button(
-                                            onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                                            onClick = startQrCameraExplicitly,
                                             colors = ButtonDefaults.buttonColors(containerColor = SecurityCyan),
                                         ) {
-                                            Text("Activer la caméra", color = SecurityBgTop)
+                                            Icon(
+                                                imageVector = Icons.Outlined.Videocam,
+                                                contentDescription = null,
+                                                tint = SecurityBgTop,
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Démarrer la caméra QR", color = SecurityBgTop)
                                         }
                                     }
                                 }

@@ -26,14 +26,15 @@ import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
 import ma.etherealmber.atlascommerce.core.update.UpdateState
+import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
 import ma.etherealmber.atlascommerce.ui.components.AvatarBitmapCache
 import javax.inject.Inject
 
 /**
- * Root view model: appearance, server choice, session state, profile photo,
- * connected devices, self-updates and app-wide notices.
+ * Root view model: appearance, motion & user preferences, server choice, session state,
+ * profile photo & details, connected devices, offline cache, self-updates and notices.
  */
 @HiltViewModel
 class AppViewModel @Inject constructor(
@@ -44,6 +45,7 @@ class AppViewModel @Inject constructor(
     private val sessionEvents: SessionEvents,
     private val apiProvider: ApiProvider,
     private val updateManager: AppUpdateManager,
+    private val offlineCache: OfflineCache,
 ) : ViewModel() {
 
     val themeMode: StateFlow<ThemeMode> = preferences.themeMode
@@ -54,6 +56,33 @@ class AppViewModel @Inject constructor(
 
     val appearanceLoaded: StateFlow<Boolean> = preferences.appearanceLoaded
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val animationsEnabled: StateFlow<Boolean> = preferences.animationsEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val autoOpenCamera: StateFlow<Boolean> = preferences.autoOpenCamera
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val scanHapticEnabled: StateFlow<Boolean> = preferences.scanHapticEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val scanSoundEnabled: StateFlow<Boolean> = preferences.scanSoundEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val autoAddCartOnScan: StateFlow<Boolean> = preferences.autoAddCartOnScan
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val defaultStartTab: StateFlow<String> = preferences.defaultStartTab
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "HOME")
+
+    val defaultClientName: StateFlow<String> = preferences.defaultClientName
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "")
+
+    val confirmBeforeSale: StateFlow<Boolean> = preferences.confirmBeforeSale
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val autoCheckUpdates: StateFlow<Boolean> = preferences.autoCheckUpdates
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     val server: StateFlow<ServerSelection?> = serverConfig.selection
     val serverLoaded: StateFlow<Boolean> = serverConfig.loaded
@@ -69,6 +98,12 @@ class AppViewModel @Inject constructor(
 
     private val _uploadingAvatar = MutableStateFlow(false)
     val uploadingAvatar: StateFlow<Boolean> = _uploadingAvatar.asStateFlow()
+
+    private val _savingProfile = MutableStateFlow(false)
+    val savingProfile: StateFlow<Boolean> = _savingProfile.asStateFlow()
+
+    private val _cachedProductCount = MutableStateFlow(0)
+    val cachedProductCount: StateFlow<Int> = _cachedProductCount.asStateFlow()
 
     init {
         observeSessionExpiry()
@@ -93,8 +128,10 @@ class AppViewModel @Inject constructor(
                 if (previous != null && next != null && previous != next) {
                     apiProvider.invalidate()
                     sessionManager.signOut("Serveur modifié — veuillez vous reconnecter.")
-                    updateManager.checkForUpdate(manual = false)
-                } else if (previous == null && next != null) {
+                    if (autoCheckUpdates.value) {
+                        updateManager.checkForUpdate(manual = false)
+                    }
+                } else if (previous == null && next != null && autoCheckUpdates.value) {
                     updateManager.checkForUpdate(manual = false)
                 }
                 previous = next
@@ -107,8 +144,10 @@ class AppViewModel @Inject constructor(
             sessionManager.state.collect { st ->
                 if (st is SessionState.Active) {
                     loadDevices()
+                    refreshCachedProductCount()
                 } else {
                     _devices.value = emptyList()
+                    _cachedProductCount.value = 0
                 }
             }
         }
@@ -117,7 +156,7 @@ class AppViewModel @Inject constructor(
     private fun checkUpdatesOnceServerReady() {
         viewModelScope.launch {
             serverConfig.loaded.filter { it }.first()
-            if (serverConfig.selection.value != null) {
+            if (serverConfig.selection.value != null && autoCheckUpdates.value) {
                 updateManager.checkForUpdate(manual = false)
             }
         }
@@ -139,7 +178,9 @@ class AppViewModel @Inject constructor(
         updateManager.installApk(context)
 
     fun onAppResumed(context: Context) {
-        updateManager.onAppResumed(context)
+        if (autoCheckUpdates.value) {
+            updateManager.onAppResumed(context)
+        }
         if (sessionManager.state.value is SessionState.Active) {
             viewModelScope.launch { sessionManager.refreshProfile() }
         }
@@ -159,6 +200,20 @@ class AppViewModel @Inject constructor(
                     _devicesLoading.value = false
                 }
             }
+        }
+    }
+
+    fun refreshCachedProductCount() {
+        viewModelScope.launch {
+            _cachedProductCount.value = offlineCache.readProducts().size
+        }
+    }
+
+    fun clearOfflineCache(onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            offlineCache.clear()
+            _cachedProductCount.value = 0
+            onDone("Cache catalogue hors ligne vidé.")
         }
     }
 
@@ -203,12 +258,79 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun updateProfileDetails(
+        displayName: String,
+        email: String,
+        onDone: (String) -> Unit,
+    ) {
+        val cleanName = displayName.trim()
+        if (cleanName.isEmpty()) {
+            onDone("Le nom affiché ne peut pas être vide.")
+            return
+        }
+        viewModelScope.launch {
+            _savingProfile.value = true
+            when (
+                val res = sessionManager.updateProfile(
+                    displayName = cleanName,
+                    email = email.trim(),
+                )
+            ) {
+                is ApiResult.Failure -> {
+                    _savingProfile.value = false
+                    onDone(res.message)
+                }
+
+                is ApiResult.Success -> {
+                    _savingProfile.value = false
+                    onDone("Profil mis à jour.")
+                }
+            }
+        }
+    }
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { preferences.setThemeMode(mode) }
     }
 
     fun setDensityMode(mode: DensityMode) {
         viewModelScope.launch { preferences.setDensityMode(mode) }
+    }
+
+    fun setAnimationsEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setAnimationsEnabled(enabled) }
+    }
+
+    fun setAutoOpenCamera(enabled: Boolean) {
+        viewModelScope.launch { preferences.setAutoOpenCamera(enabled) }
+    }
+
+    fun setScanHapticEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setScanHapticEnabled(enabled) }
+    }
+
+    fun setScanSoundEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setScanSoundEnabled(enabled) }
+    }
+
+    fun setAutoAddCartOnScan(enabled: Boolean) {
+        viewModelScope.launch { preferences.setAutoAddCartOnScan(enabled) }
+    }
+
+    fun setDefaultStartTab(tabName: String) {
+        viewModelScope.launch { preferences.setDefaultStartTab(tabName) }
+    }
+
+    fun setDefaultClientName(clientName: String) {
+        viewModelScope.launch { preferences.setDefaultClientName(clientName) }
+    }
+
+    fun setConfirmBeforeSale(enabled: Boolean) {
+        viewModelScope.launch { preferences.setConfirmBeforeSale(enabled) }
+    }
+
+    fun setAutoCheckUpdates(enabled: Boolean) {
+        viewModelScope.launch { preferences.setAutoCheckUpdates(enabled) }
     }
 
     fun signOut() {
