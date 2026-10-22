@@ -15,8 +15,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.PointOfSale
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.TrendingUp
@@ -28,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,8 +46,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.LaunchedEffect
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
@@ -69,6 +73,8 @@ fun HomeScreen(
     user: SessionUser,
     onOpenProducts: () -> Unit,
     onOpenSale: () -> Unit,
+    onOpenScan: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
     onToast: (String) -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -82,11 +88,13 @@ fun HomeScreen(
     when {
         state.loading && dashboard == null -> AtlasLoading(message = "Chargement du tableau de bord…")
         dashboard == null -> HomeErrorContent(
+            user = user,
             message = state.error ?: "Vérifiez l'adresse du serveur et votre connexion.",
             offline = state.offline,
             onRetry = viewModel::refresh,
             onOpenProducts = onOpenProducts,
             onOpenSale = onOpenSale,
+            onOpenScan = onOpenScan,
         )
 
         else -> HomeContent(
@@ -96,19 +104,24 @@ fun HomeScreen(
             onRefresh = viewModel::refresh,
             onOpenProducts = onOpenProducts,
             onOpenSale = onOpenSale,
+            onOpenScan = onOpenScan,
+            onOpenNotifications = onOpenNotifications,
         )
     }
 }
 
 @Composable
 private fun HomeErrorContent(
+    user: SessionUser,
     message: String,
     offline: Boolean,
     onRetry: () -> Unit,
     onOpenProducts: () -> Unit,
     onOpenSale: () -> Unit,
+    onOpenScan: () -> Unit,
 ) {
     val density = Atlas.density
+    val canSell = Roles.canCreateDocuments(user.role)
     LazyColumn(
         contentPadding = PaddingValues(
             start = density.screenPadding,
@@ -133,8 +146,7 @@ private fun HomeErrorContent(
                 Text("Que faire maintenant ?", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Vous pouvez continuer à préparer une vente ou consulter le catalogue " +
-                        "en attendant que la connexion revienne.",
+                    text = "Vous pouvez consulter le catalogue hors ligne ou scanner un article en attendant le retour de la connexion.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -145,11 +157,19 @@ private fun HomeErrorContent(
                         onClick = onOpenProducts,
                         icon = Icons.Outlined.Inventory2,
                     )
-                    AtlasOutlinedButton(
-                        text = "Vente",
-                        onClick = onOpenSale,
-                        icon = Icons.Outlined.PointOfSale,
-                    )
+                    if (canSell) {
+                        AtlasOutlinedButton(
+                            text = "Vente",
+                            onClick = onOpenSale,
+                            icon = Icons.Outlined.PointOfSale,
+                        )
+                    } else {
+                        AtlasOutlinedButton(
+                            text = "Scanner",
+                            onClick = onOpenScan,
+                            icon = Icons.Outlined.QrCodeScanner,
+                        )
+                    }
                 }
             }
         }
@@ -158,14 +178,19 @@ private fun HomeErrorContent(
 
 @Composable
 private fun HomeContent(
-    @Suppress("UNUSED_PARAMETER") user: SessionUser,
+    user: SessionUser,
     state: HomeViewModel.UiState,
     dashboard: DashboardDto,
     onRefresh: () -> Unit,
     onOpenProducts: () -> Unit,
     onOpenSale: () -> Unit,
+    onOpenScan: () -> Unit,
+    onOpenNotifications: () -> Unit,
 ) {
     val density = Atlas.density
+    val canViewFinancials = Roles.canViewFinancials(user.role)
+    val canSell = Roles.canCreateDocuments(user.role)
+    val isAdmin = Roles.isAdmin(user.role)
     val invoices = dashboard.recentInvoices.take(5)
 
     LazyColumn(
@@ -188,8 +213,8 @@ private fun HomeContent(
             ) {
                 Text(
                     text = state.settings?.companyName?.takeIf { it.isNotBlank() }
-                        ?.let { "Vue d'ensemble · $it" }
-                        ?: "Vue d'ensemble en direct",
+                        ?.let { "Espace ${Roles.label(user.role)} · $it" }
+                        ?: "Espace ${Roles.label(user.role)}",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -210,26 +235,45 @@ private fun HomeContent(
             }
         }
 
+        // Hero adapted strictly to role: Treasury for Admin/Secretary, Inventory Operations for Stock/User!
         item {
             AtlasEntrance(delayMillis = 0) {
-                BalanceHero(
-                    balance = dashboard.currentBalance,
-                    stockValue = dashboard.stockValue,
-                    receivable = dashboard.unpaidSales.total,
-                    currency = state.currency,
-                )
+                if (canViewFinancials) {
+                    BalanceHero(
+                        balance = dashboard.currentBalance,
+                        stockValue = dashboard.stockValue,
+                        receivable = dashboard.unpaidSales.total,
+                        currency = state.currency,
+                    )
+                } else {
+                    OperationsHero(
+                        roleLabel = Roles.label(user.role),
+                        productCount = dashboard.productCount,
+                        lowStockCount = dashboard.lowStockCount,
+                    )
+                }
             }
         }
 
+        // Primary role-gated action bar
         item {
             AtlasEntrance(delayMillis = 45) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    AtlasButton(
-                        text = "Nouvelle vente",
-                        onClick = onOpenSale,
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Outlined.PointOfSale,
-                    )
+                    if (canSell) {
+                        AtlasButton(
+                            text = "Nouvelle vente",
+                            onClick = onOpenSale,
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.PointOfSale,
+                        )
+                    } else {
+                        AtlasButton(
+                            text = "Scanner un article",
+                            onClick = onOpenScan,
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.QrCodeScanner,
+                        )
+                    }
                     AtlasOutlinedButton(
                         text = "Produits",
                         onClick = onOpenProducts,
@@ -240,8 +284,49 @@ private fun HomeContent(
             }
         }
 
+        // Role Info Box quick card
         item {
-            AtlasEntrance(delayMillis = 90) {
+            AtlasEntrance(delayMillis = 75) {
+                AtlasCard(onClick = onOpenNotifications, padding = 12.dp) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isAdmin) {
+                                Icons.Outlined.AdminPanelSettings
+                            } else {
+                                Icons.Outlined.NotificationsActive
+                            },
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = if (isAdmin) {
+                                    "Info Box Admin · Demandes & notifications"
+                                } else {
+                                    "Info Box · Notifications ${Roles.label(user.role)}"
+                                },
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = Roles.scopeSummary(user.role),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        AtlasChip(
+                            text = "Ouvrir",
+                            tone = AtlasTone.INFO,
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            AtlasEntrance(delayMillis = 105) {
                 Row(horizontalArrangement = Arrangement.spacedBy(density.itemGap)) {
                     AtlasStatTile(
                         label = "Produits",
@@ -249,35 +334,48 @@ private fun HomeContent(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.Inventory2,
                     )
-                    AtlasStatTile(
-                        label = "Valeur du stock",
-                        value = AtlasFormat.moneyCompact(dashboard.stockValue, state.currency),
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Outlined.TrendingUp,
-                    )
+                    if (canViewFinancials) {
+                        AtlasStatTile(
+                            label = "Valeur du stock",
+                            value = AtlasFormat.moneyCompact(dashboard.stockValue, state.currency),
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.TrendingUp,
+                        )
+                    } else {
+                        AtlasStatTile(
+                            label = "Stock faible",
+                            value = AtlasFormat.integer(dashboard.lowStockCount.toDouble()),
+                            modifier = Modifier.weight(1f),
+                            hint = if (dashboard.lowStockCount > 0) "À vérifier" else "Optimal",
+                            tone = if (dashboard.lowStockCount > 0) AtlasTone.WARNING else AtlasTone.POSITIVE,
+                            icon = Icons.Outlined.Warning,
+                        )
+                    }
                 }
             }
         }
 
-        item {
-            AtlasEntrance(delayMillis = 135) {
-                Row(horizontalArrangement = Arrangement.spacedBy(density.itemGap)) {
-                    AtlasStatTile(
-                        label = "Stock faible",
-                        value = AtlasFormat.integer(dashboard.lowStockCount.toDouble()),
-                        modifier = Modifier.weight(1f),
-                        hint = if (dashboard.lowStockCount > 0) "À réapprovisionner" else "Tout est bon",
-                        tone = if (dashboard.lowStockCount > 0) AtlasTone.WARNING else AtlasTone.POSITIVE,
-                        icon = Icons.Outlined.Warning,
-                    )
-                    AtlasStatTile(
-                        label = "Créances clients",
-                        value = AtlasFormat.moneyCompact(dashboard.unpaidSales.total, state.currency),
-                        modifier = Modifier.weight(1f),
-                        hint = "${dashboard.unpaidSales.count} facture(s)",
-                        tone = if (dashboard.unpaidSales.overdue > 0) AtlasTone.DANGER else AtlasTone.INFO,
-                        icon = Icons.Outlined.ReceiptLong,
-                    )
+        if (canViewFinancials) {
+            item {
+                AtlasEntrance(delayMillis = 135) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(density.itemGap)) {
+                        AtlasStatTile(
+                            label = "Stock faible",
+                            value = AtlasFormat.integer(dashboard.lowStockCount.toDouble()),
+                            modifier = Modifier.weight(1f),
+                            hint = if (dashboard.lowStockCount > 0) "À réapprovisionner" else "Tout est bon",
+                            tone = if (dashboard.lowStockCount > 0) AtlasTone.WARNING else AtlasTone.POSITIVE,
+                            icon = Icons.Outlined.Warning,
+                        )
+                        AtlasStatTile(
+                            label = "Créances clients",
+                            value = AtlasFormat.moneyCompact(dashboard.unpaidSales.total, state.currency),
+                            modifier = Modifier.weight(1f),
+                            hint = "${dashboard.unpaidSales.count} facture(s)",
+                            tone = if (dashboard.unpaidSales.overdue > 0) AtlasTone.DANGER else AtlasTone.INFO,
+                            icon = Icons.Outlined.ReceiptLong,
+                        )
+                    }
                 }
             }
         }
@@ -300,7 +398,7 @@ private fun HomeContent(
             }
         }
 
-        if (dashboard.monthlySeries.size >= 2) {
+        if (canViewFinancials && dashboard.monthlySeries.size >= 2) {
             item {
                 AtlasCard {
                     AtlasSectionHeader(
@@ -313,27 +411,29 @@ private fun HomeContent(
             }
         }
 
-        item {
-            AtlasCard {
-                AtlasSectionHeader(
-                    title = "Derniers documents",
-                    subtitle = if (invoices.isEmpty()) null else "${invoices.size} récent(s)",
-                )
-                Spacer(Modifier.height(6.dp))
-                if (invoices.isEmpty()) {
-                    AtlasEmptyState(
-                        title = "Aucun document",
-                        message = "Les ventes et factures apparaîtront ici.",
-                        icon = Icons.Outlined.ReceiptLong,
-                        actionLabel = "Créer une vente",
-                        onAction = onOpenSale,
+        if (canViewFinancials) {
+            item {
+                AtlasCard {
+                    AtlasSectionHeader(
+                        title = "Derniers documents",
+                        subtitle = if (invoices.isEmpty()) null else "${invoices.size} récent(s)",
                     )
-                } else {
-                    invoices.forEach { invoice ->
-                        InvoiceRow(invoice = invoice, currency = state.currency)
+                    Spacer(Modifier.height(6.dp))
+                    if (invoices.isEmpty()) {
+                        AtlasEmptyState(
+                            title = "Aucun document",
+                            message = "Les ventes et factures apparaîtront ici.",
+                            icon = Icons.Outlined.ReceiptLong,
+                            actionLabel = "Créer une vente",
+                            onAction = onOpenSale,
+                        )
+                    } else {
+                        invoices.forEach { invoice ->
+                            InvoiceRow(invoice = invoice, currency = state.currency)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        TextButton(onClick = onOpenProducts) { Text("Voir le catalogue") }
                     }
-                    Spacer(Modifier.height(4.dp))
-                    TextButton(onClick = onOpenProducts) { Text("Voir le catalogue") }
                 }
             }
         }
@@ -346,8 +446,7 @@ private fun HomeContent(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Les montants sont calculés par votre serveur Atlas, pas par l'application. " +
-                        "Un doute sur un chiffre ? Actualisez ou vérifiez sur le web.",
+                    text = "Affichage et permissions synchronisés dynamiquement avec votre rôle (${Roles.label(user.role)}).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -387,6 +486,46 @@ private fun BalanceHero(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HeroPill(text = "Stock ${AtlasFormat.moneyCompact(stockValue, currency)}")
             HeroPill(text = "Créances ${AtlasFormat.moneyCompact(receivable, currency)}")
+        }
+    }
+}
+
+@Composable
+private fun OperationsHero(
+    roleLabel: String,
+    productCount: Int,
+    lowStockCount: Int,
+) {
+    val palette = Atlas.palette
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Brush.linearGradient(listOf(palette.heroStart, palette.heroEnd)))
+            .padding(18.dp),
+    ) {
+        Text(
+            text = "PILOTAGE CATALOGUE & STOCK · ${roleLabel.uppercase()}",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.72f),
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "${AtlasFormat.integer(productCount.toDouble())} articles actifs",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+        )
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HeroPill(
+                text = if (lowStockCount > 0) {
+                    "$lowStockCount article(s) en alerte stock"
+                } else {
+                    "Aucune rupture critique"
+                },
+            )
+            HeroPill(text = "Demandes → Admin")
         }
     }
 }

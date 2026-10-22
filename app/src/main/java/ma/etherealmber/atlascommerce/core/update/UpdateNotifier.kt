@@ -182,3 +182,109 @@ class AndroidUpdateNotifier @Inject constructor(
         private const val MIN_NOTIFY_INTERVAL_MS = 250L
     }
 }
+
+/**
+ * Delivers native Android OS system notifications strictly scoped to the signed-in
+ * user's role (Admin product-creation requests, targeted role messages, request approvals,
+ * and critical role-filtered stock/sales alerts).
+ */
+@Singleton
+class RoleNotificationDispatcher @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+    private val deliveredKeys = LinkedHashSet<String>()
+    private var activeUserKey: String = ""
+
+    fun onSessionChanged(username: String, role: String) {
+        val key = "${username.lowercase()}:${role.lowercase()}"
+        if (key != activeUserKey) {
+            synchronized(deliveredKeys) {
+                deliveredKeys.clear()
+                activeUserKey = key
+            }
+        }
+    }
+
+    fun dispatchIfNew(
+        dedupKey: String,
+        title: String,
+        body: String,
+        roleBadge: String,
+        urgent: Boolean = false,
+    ) {
+        if (!canPostNotifications()) return
+        val fullKey = "$activeUserKey|$dedupKey"
+        val isNew = synchronized(deliveredKeys) {
+            if (deliveredKeys.size > 400) {
+                val trimCount = 150
+                val iter = deliveredKeys.iterator()
+                repeat(trimCount) { if (iter.hasNext()) { iter.next(); iter.remove() } }
+            }
+            deliveredKeys.add(fullKey)
+        }
+        if (!isNew) return
+
+        runCatching {
+            ensureRoleChannel()
+            val notifId = ROLE_NOTIFICATION_BASE_ID + (fullKey.hashCode() and 0x0FFF)
+            val notification = NotificationCompat.Builder(context, AtlasApp.ALERTS_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_update)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setSubText(roleBadge)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setPriority(
+                    if (urgent) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT,
+                )
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setAutoCancel(true)
+                .setContentIntent(openNotificationsPendingIntent(notifId))
+                .build()
+            NotificationManagerCompat.from(context).notify(notifId, notification)
+        }
+    }
+
+    private fun canPostNotifications(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+        return true
+    }
+
+    private fun ensureRoleChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = context.getSystemService(NotificationManager::class.java) ?: return
+        if (nm.getNotificationChannel(AtlasApp.ALERTS_CHANNEL_ID) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    AtlasApp.ALERTS_CHANNEL_ID,
+                    "Notifications & alertes métier",
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    description = "Demandes produits Admin, alertes de stock et notifications ciblées par rôle"
+                    setShowBadge(true)
+                },
+            )
+        }
+    }
+
+    private fun openNotificationsPendingIntent(requestCode: Int): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(AtlasApp.EXTRA_OPEN_NOTIFICATIONS, true)
+        }
+        return PendingIntent.getActivity(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    companion object {
+        private const val ROLE_NOTIFICATION_BASE_ID = 5200
+    }
+}

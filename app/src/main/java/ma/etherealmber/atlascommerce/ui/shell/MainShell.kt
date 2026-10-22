@@ -66,6 +66,14 @@ enum class MainTab(val label: String, val icon: ImageVector) {
          * access Settings cleanly by tapping the user's Profile Avatar in the Top Bar.
          */
         val BottomBarTabs = listOf(HOME, PRODUCTS, SCAN, SALE, AGENT)
+
+        /** Filters bottom navigation items strictly according to the signed-in user's role. */
+        fun bottomTabsForRole(role: String?): List<MainTab> =
+            if (Roles.canCreateDocuments(role)) {
+                BottomBarTabs
+            } else {
+                listOf(HOME, PRODUCTS, SCAN, AGENT)
+            }
     }
 }
 
@@ -90,20 +98,28 @@ fun MainShell(
     val notificationCount by shellViewModel.notificationCount.collectAsStateWithLifecycle()
     val serverBaseUrl by shellViewModel.serverBaseUrl.collectAsStateWithLifecycle()
 
-    val resolvedInitial = MainTab.BottomBarTabs
+    val roleTabs = MainTab.bottomTabsForRole(user.role)
+    val resolvedInitial = roleTabs
         .firstOrNull { it.name == defaultStartTab }
         ?.name ?: MainTab.HOME.name
 
-    var tabName by rememberSaveable { mutableStateOf(resolvedInitial) }
-    var lastBottomTabName by rememberSaveable { mutableStateOf(resolvedInitial) }
-    val tab = MainTab.entries.firstOrNull { it.name == tabName } ?: MainTab.HOME
+    var tabName by rememberSaveable(user.username, user.role) { mutableStateOf(resolvedInitial) }
+    var lastBottomTabName by rememberSaveable(user.username, user.role) { mutableStateOf(resolvedInitial) }
+    val rawTab = MainTab.entries.firstOrNull { it.name == tabName } ?: MainTab.HOME
+    val tab = if (rawTab == MainTab.SALE && !Roles.canCreateDocuments(user.role)) {
+        MainTab.HOME
+    } else {
+        rawTab
+    }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(externalTabRequest) {
         if (!externalTabRequest.isNullOrBlank()) {
-            tabName = externalTabRequest
-            if (externalTabRequest != MainTab.SETTINGS.name) {
-                lastBottomTabName = externalTabRequest
+            val targetAllowed = externalTabRequest != MainTab.SALE.name || Roles.canCreateDocuments(user.role)
+            val resolved = if (targetAllowed) externalTabRequest else MainTab.PRODUCTS.name
+            tabName = resolved
+            if (resolved != MainTab.SETTINGS.name) {
+                lastBottomTabName = resolved
             }
             onExternalTabHandled()
         }
@@ -117,10 +133,14 @@ fun MainShell(
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
     val switchTab: (MainTab) -> Unit = { target ->
-        if (target != MainTab.SETTINGS) {
-            lastBottomTabName = target.name
+        if (target == MainTab.SALE && !Roles.canCreateDocuments(user.role)) {
+            onToast("Accès Vente réservé aux rôles Administrateur et Secrétaire.")
+        } else {
+            if (target != MainTab.SETTINGS) {
+                lastBottomTabName = target.name
+            }
+            tabName = target.name
         }
-        tabName = target.name
     }
 
     BackHandler(enabled = tab != MainTab.HOME) {
@@ -143,11 +163,13 @@ fun MainShell(
                     null
                 },
                 actions = {
-                    IconButton(onClick = { onOpenQrDevice(null) }) {
-                        Icon(
-                            imageVector = Icons.Outlined.Devices,
-                            contentDescription = "Scanner un poste PC (QR)",
-                        )
+                    if (Roles.isAdmin(user.role) || Roles.canCreateDocuments(user.role)) {
+                        IconButton(onClick = { onOpenQrDevice(null) }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Devices,
+                                contentDescription = "Scanner un poste PC (QR)",
+                            )
+                        }
                     }
                     IconButton(onClick = onOpenNotifications) {
                         if (notificationCount > 0) {
@@ -160,13 +182,13 @@ fun MainShell(
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.Notifications,
-                                    contentDescription = "Notifications",
+                                    contentDescription = "Info Box & Notifications",
                                 )
                             }
                         } else {
                             Icon(
                                 imageVector = Icons.Outlined.Notifications,
-                                contentDescription = "Notifications",
+                                contentDescription = "Info Box & Notifications",
                             )
                         }
                     }
@@ -198,7 +220,7 @@ fun MainShell(
                 containerColor = MaterialTheme.colorScheme.surface,
                 tonalElevation = 2.dp,
             ) {
-                MainTab.BottomBarTabs.forEach { item ->
+                roleTabs.forEach { item ->
                     NavigationBarItem(
                         selected = tab == item,
                         onClick = { switchTab(item) },
@@ -238,6 +260,8 @@ fun MainShell(
                         user = user,
                         onOpenProducts = { switchTab(MainTab.PRODUCTS) },
                         onOpenSale = { switchTab(MainTab.SALE) },
+                        onOpenScan = { switchTab(MainTab.SCAN) },
+                        onOpenNotifications = onOpenNotifications,
                         onToast = onToast,
                     )
 

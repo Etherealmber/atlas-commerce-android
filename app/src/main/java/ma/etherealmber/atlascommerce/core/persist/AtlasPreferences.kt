@@ -51,6 +51,7 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         val DEFAULT_CLIENT_NAME = stringPreferencesKey("default_client_name")
         val CONFIRM_BEFORE_SALE = booleanPreferencesKey("confirm_before_sale")
         val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
+        val ROLE_NOTIFICATIONS_ENABLED = booleanPreferencesKey("role_notifications_enabled")
         val SESSION_TOKEN = stringPreferencesKey("session_token")
         val SESSION_USERNAME = stringPreferencesKey("session_username")
         val SESSION_ROLE = stringPreferencesKey("session_role")
@@ -140,6 +141,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         .map { it.safeBoolean(Keys.AUTO_CHECK_UPDATES.name) ?: true }
         .distinctUntilChanged()
 
+    val roleNotificationsEnabled: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.ROLE_NOTIFICATIONS_ENABLED.name) ?: true }
+        .distinctUntilChanged()
+
     val onboardingDone: Flow<Boolean> = safeData
         .map { it.safeBoolean(Keys.ONBOARDING_DONE.name) ?: false }
         .distinctUntilChanged()
@@ -195,8 +200,16 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         safeEdit { prefs -> prefs.putClean(Keys.AUTO_CHECK_UPDATES, enabled) }
     }
 
+    suspend fun setRoleNotificationsEnabled(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.ROLE_NOTIFICATIONS_ENABLED, enabled) }
+    }
+
     suspend fun markOnboardingDone() {
         safeEdit { prefs -> prefs.putClean(Keys.ONBOARDING_DONE, true) }
+    }
+
+    suspend fun setOnboardingDone(done: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.ONBOARDING_DONE, done) }
     }
 
     suspend fun readSession(): StoredSession? {

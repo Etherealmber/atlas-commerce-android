@@ -2,6 +2,8 @@ package ma.etherealmber.atlascommerce.ui.screens.notifications
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,33 +16,45 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ma.etherealmber.atlascommerce.core.RoleTarget
 import ma.etherealmber.atlascommerce.data.model.AlertItemDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionDto
+import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
+import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
@@ -57,6 +71,7 @@ fun NotificationsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val density = Atlas.density
+    var showComposeDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg -> onToast(msg) }
@@ -66,10 +81,13 @@ fun NotificationsScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AtlasTopBar(
-                title = "Notifications & activité",
-                subtitle = "${state.alerts.size} alerte(s) · ${state.pendingCount} action(s) en attente",
+                title = "Info Box & Notifications",
+                subtitle = "${state.roleLabel} · ${state.alerts.size} alerte(s) · ${state.pendingCount} en attente",
                 onBack = onBack,
                 actions = {
+                    IconButton(onClick = { showComposeDialog = true }) {
+                        Icon(Icons.Outlined.Send, contentDescription = "Envoyer une notification")
+                    }
                     IconButton(onClick = viewModel::refresh) {
                         Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser")
                     }
@@ -77,76 +95,254 @@ fun NotificationsScreen(
             )
         },
     ) { padding ->
-        when {
-            state.loading && state.alerts.isEmpty() && state.actions.isEmpty() ->
-                AtlasLoading(message = "Chargement des notifications…", modifier = Modifier.padding(padding))
-
-            !state.error.isNullOrBlank() && state.alerts.isEmpty() && state.actions.isEmpty() ->
-                Column(Modifier.padding(padding).padding(density.screenPadding)) {
-                    AtlasErrorCard(message = state.error.orEmpty(), onRetry = viewModel::refresh)
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(
+                start = density.screenPadding,
+                end = density.screenPadding,
+                top = density.cardMargin,
+                bottom = 28.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(density.itemGap),
+        ) {
+            // Role-Based Info Box Banner + Send Role Notification CTA
+            item {
+                AtlasEntrance {
+                    AtlasCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Outlined.AdminPanelSettings,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = "Info Box · ${state.roleLabel}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = state.roleScopeSummary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            AtlasChip(
+                                text = if (state.isAdmin) "Admin" else "Filtré rôle",
+                                tone = if (state.isAdmin) AtlasTone.POSITIVE else AtlasTone.INFO,
+                            )
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        AtlasButton(
+                            text = "Envoyer une notification par rôle",
+                            onClick = { showComposeDialog = true },
+                            icon = Icons.Outlined.Send,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
+            }
 
-            state.alerts.isEmpty() && state.actions.isEmpty() ->
-                AtlasEmptyState(
-                    title = "Aucune alerte active",
-                    message = "Tout votre stock, vos ventes et vos actions PC ↔ mobile sont à jour.",
-                    icon = Icons.Outlined.NotificationsNone,
-                    actionLabel = "Actualiser",
-                    onAction = viewModel::refresh,
-                    modifier = Modifier.padding(padding),
-                )
-
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(
-                    start = density.screenPadding,
-                    end = density.screenPadding,
-                    top = density.cardMargin,
-                    bottom = 28.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(density.itemGap),
-            ) {
-                if (state.alerts.isNotEmpty()) {
+            when {
+                state.loading && state.alerts.isEmpty() && state.actions.isEmpty() -> {
                     item {
-                        AtlasSectionHeader(title = "Alertes prioritaires (${state.alerts.size})")
+                        AtlasLoading(message = "Chargement de l'Info Box…")
                     }
-                    items(state.alerts) { alert ->
-                        AlertRow(
-                            alert = alert,
-                            onClick = { onNavigateHref(alert.href) },
+                }
+
+                !state.error.isNullOrBlank() && state.alerts.isEmpty() && state.actions.isEmpty() -> {
+                    item {
+                        AtlasErrorCard(message = state.error.orEmpty(), onRetry = viewModel::refresh)
+                    }
+                }
+
+                state.alerts.isEmpty() && state.actions.isEmpty() -> {
+                    item {
+                        AtlasEmptyState(
+                            title = "Aucune notification pour votre rôle",
+                            message = "Votre flux ${state.roleLabel} est à jour. Vous pouvez envoyer un message ciblé à une équipe ci-dessus.",
+                            icon = Icons.Outlined.NotificationsNone,
+                            actionLabel = "Actualiser",
+                            onAction = viewModel::refresh,
                         )
                     }
                 }
 
-                item {
-                    Spacer(Modifier.height(4.dp))
-                    AtlasSectionHeader(title = "Flux terrain PC ↔ Mobile")
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = !state.pendingOnly,
-                            onClick = { viewModel.togglePendingOnly(false) },
-                            label = { Text("Toutes (${state.actions.size})") },
+                else -> {
+                    if (state.alerts.isNotEmpty()) {
+                        item {
+                            AtlasSectionHeader(
+                                title = "Alertes ${state.roleLabel} (${state.alerts.size})",
+                                subtitle = "Filtrées automatiquement selon vos permissions",
+                            )
+                        }
+                        items(state.alerts) { alert ->
+                            AlertRow(
+                                alert = alert,
+                                onClick = { onNavigateHref(alert.href) },
+                            )
+                        }
+                    }
+
+                    item {
+                        Spacer(Modifier.height(4.dp))
+                        AtlasSectionHeader(
+                            title = "Demandes & notifications par rôle",
+                            subtitle = if (state.isAdmin) {
+                                "Validez en 1 clic les demandes produits envoyées par l'équipe"
+                            } else {
+                                "Notifications reçues pour votre rôle et suivi de vos envois Admin"
+                            },
                         )
-                        FilterChip(
-                            selected = state.pendingOnly,
-                            onClick = { viewModel.togglePendingOnly(true) },
-                            label = { Text("En attente (${state.pendingCount})") },
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = !state.pendingOnly,
+                                onClick = { viewModel.togglePendingOnly(false) },
+                                label = { Text("Toutes (${state.actions.size})") },
+                            )
+                            FilterChip(
+                                selected = state.pendingOnly,
+                                onClick = { viewModel.togglePendingOnly(true) },
+                                label = { Text("En attente (${state.pendingCount})") },
+                            )
+                        }
+                    }
+
+                    items(state.visibleActions, key = { it.id }) { action ->
+                        MobileActionRow(
+                            action = action,
+                            isAdmin = state.isAdmin,
+                            currentUsername = state.username,
+                            busy = state.busyId == action.id,
+                            onComplete = { viewModel.completeAction(action) },
+                            onReject = { viewModel.rejectAction(action) },
                         )
                     }
-                }
-
-                items(state.visibleActions, key = { it.id }) { action ->
-                    MobileActionRow(
-                        action = action,
-                        busy = state.busyId == action.id,
-                        onComplete = { viewModel.completeAction(action) },
-                        onReject = { viewModel.rejectAction(action) },
-                    )
                 }
             }
         }
     }
+
+    if (showComposeDialog) {
+        SendRoleNotificationDialog(
+            availableTargets = state.availableTargets,
+            sending = state.sendingNotification,
+            onDismiss = { showComposeDialog = false },
+            onSend = { target, title, message, urgent ->
+                viewModel.sendNotificationToRole(
+                    target = target,
+                    title = title,
+                    message = message,
+                    urgent = urgent,
+                    onSent = { showComposeDialog = false },
+                )
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SendRoleNotificationDialog(
+    availableTargets: List<RoleTarget>,
+    sending: Boolean,
+    onDismiss: () -> Unit,
+    onSend: (target: RoleTarget, title: String, message: String, urgent: Boolean) -> Unit,
+) {
+    var selectedTarget by remember(availableTargets) {
+        mutableStateOf(availableTargets.firstOrNull() ?: RoleTarget.ADMIN)
+    }
+    var title by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf("") }
+    var urgent by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!sending) onDismiss() },
+        title = {
+            Text(
+                text = "Envoyer une notification par rôle",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Destinataires (rôle cible)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    availableTargets.forEach { target ->
+                        FilterChip(
+                            selected = selectedTarget == target,
+                            onClick = { selectedTarget = target },
+                            label = { Text(target.label) },
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Objet de la notification *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                OutlinedTextField(
+                    value = message,
+                    onValueChange = { message = it },
+                    label = { Text("Détails / Instructions") },
+                    minLines = 2,
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "Priorité urgente",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            text = "Déclenche une alerte haute priorité sur les appareils du rôle",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = urgent, onCheckedChange = { urgent = it })
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = title.trim().isNotEmpty() && !sending,
+                onClick = { onSend(selectedTarget, title, message, urgent) },
+            ) {
+                Icon(Icons.Outlined.Send, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                Text("Envoyer")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss, enabled = !sending) {
+                Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                Text("Annuler")
+            }
+        },
+    )
 }
 
 @Composable
@@ -187,65 +383,92 @@ private fun AlertRow(
 @Composable
 private fun MobileActionRow(
     action: MobileActionDto,
+    isAdmin: Boolean,
+    currentUsername: String,
     busy: Boolean,
     onComplete: () -> Unit,
     onReject: () -> Unit,
 ) {
-    val isPending = action.status.equals("pending", ignoreCase = true)
+    val isProductRequest = action.type.equals("new_product", ignoreCase = true)
+    val isOwnSubmission = !currentUsername.isBlank() &&
+        action.createdBy.equals(currentUsername, ignoreCase = true)
+
+    val (statusLabel, statusTone) = when {
+        action.isCompleted -> "Validée ✓" to AtlasTone.POSITIVE
+        action.isRejectedOrCancelled -> "Refusée" to AtlasTone.DANGER
+        isProductRequest && !isAdmin -> "Transmis à l'Admin" to AtlasTone.INFO
+        action.isUrgent -> "Urgent" to AtlasTone.DANGER
+        else -> "En attente" to AtlasTone.WARNING
+    }
+
+    val targetBadge = action.resolvedTargetRole?.let { RoleTarget.fromKey(it).label }
+
     AtlasCard(padding = 12.dp) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AtlasChip(text = statusLabel, tone = statusTone)
+                    if (targetBadge != null) {
+                        AtlasChip(text = "→ $targetBadge", tone = AtlasTone.NEUTRAL)
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
                 Text(
-                    text = action.title,
+                    text = action.title.ifBlank { "Notification #${action.id}" },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 if (!action.detail.isNullOrBlank()) {
+                    Spacer(Modifier.height(2.dp))
                     Text(
                         text = action.detail,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                val meta = listOfNotNull(
-                    action.barcode?.takeIf { it.isNotBlank() }?.let { "Code $it" },
-                    action.createdBy?.takeIf { it.isNotBlank() }?.let { "par $it" },
+                val footerMeta = listOfNotNull(
+                    action.barcode?.takeIf { it.isNotBlank() }?.let { "Code : $it" },
+                    action.createdBy?.takeIf { it.isNotBlank() }?.let { "Par $it" },
+                    action.completedBy?.takeIf { it.isNotBlank() }?.let { "Validé par $it" },
                 ).joinToString(" · ")
-                if (meta.isNotBlank()) {
-                    Spacer(Modifier.height(2.dp))
+                if (footerMeta.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        text = meta,
+                        text = footerMeta,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            AtlasChip(
-                text = when (action.status.lowercase()) {
-                    "pending" -> "En attente"
-                    "completed", "done" -> "Validée"
-                    "rejected" -> "Refusée"
-                    else -> action.status
-                },
-                tone = when (action.status.lowercase()) {
-                    "pending" -> AtlasTone.WARNING
-                    "completed", "done" -> AtlasTone.POSITIVE
-                    else -> AtlasTone.NEUTRAL
-                },
-            )
         }
-        if (isPending) {
+
+        // Action controls strictly adapted to role:
+        // - `new_product`: ONLY Admins can create & approve (or reject).
+        // - Standard role notifications: recipients (or Admins) can mark handled / dismiss.
+        val canAct = action.isPending && (isAdmin || (!isProductRequest && !isOwnSubmission))
+        if (canAct) {
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onComplete, enabled = !busy) {
                     Icon(Icons.Outlined.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Appliquer")
+                    Text(
+                        if (isAdmin && isProductRequest) {
+                            "Créer & Valider"
+                        } else {
+                            "Marquer traité"
+                        },
+                    )
                 }
-                TextButton(onClick = onReject, enabled = !busy) {
-                    Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Refuser")
+                if (isAdmin) {
+                    TextButton(onClick = onReject, enabled = !busy) {
+                        Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Refuser")
+                    }
                 }
             }
         }

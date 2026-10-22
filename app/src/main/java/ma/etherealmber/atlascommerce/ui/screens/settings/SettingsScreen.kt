@@ -113,6 +113,7 @@ fun SettingsScreen(
     val savedClientName by appViewModel.defaultClientName.collectAsStateWithLifecycle()
     val confirmBeforeSale by appViewModel.confirmBeforeSale.collectAsStateWithLifecycle()
     val autoCheckUpdates by appViewModel.autoCheckUpdates.collectAsStateWithLifecycle()
+    val roleNotificationsEnabled by appViewModel.roleNotificationsEnabled.collectAsStateWithLifecycle()
     val serverSelection by appViewModel.server.collectAsStateWithLifecycle()
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val devices by appViewModel.devices.collectAsStateWithLifecycle()
@@ -284,6 +285,20 @@ fun SettingsScreen(
                         checked = animationsEnabled,
                         onCheckedChange = appViewModel::setAnimationsEnabled,
                     )
+                    AtlasDivider(Modifier.padding(vertical = 8.dp))
+                    SettingsToggleRow(
+                        title = "Notifications système par rôle",
+                        subtitle = "Affiche les notifications Android filtrées selon votre rôle (${Roles.label(user.role)}).",
+                        checked = roleNotificationsEnabled,
+                        onCheckedChange = appViewModel::setRoleNotificationsEnabled,
+                    )
+                    AtlasDivider(Modifier.padding(vertical = 8.dp))
+                    SettingsRow(
+                        icon = Icons.Outlined.AutoAwesomeMotion,
+                        title = "Revoir l'écran de bienvenue",
+                        subtitle = "Relancer la présentation animée d'Atlas Commerce",
+                        onClick = { appViewModel.replayOnboarding() },
+                    )
                 }
             }
         }
@@ -338,55 +353,57 @@ fun SettingsScreen(
             }
         }
 
-        // 4. Vente rapide (Caisse)
-        item {
-            AtlasEntrance(delayMillis = 105) {
-                AtlasCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.PointOfSale,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Vente rapide & caisse",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
+        // 4. Vente rapide (Caisse) — visible uniquement aux rôles habilités Ventes/Facturation
+        if (Roles.canCreateDocuments(user.role)) {
+            item {
+                AtlasEntrance(delayMillis = 105) {
+                    AtlasCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Outlined.PointOfSale,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "Vente rapide & caisse",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AtlasTextField(
+                                value = draftClientName,
+                                onValueChange = { draftClientName = it },
+                                label = "Client pré-rempli par défaut",
+                                placeholder = "Ex. Client comptoir",
+                                leadingIcon = Icons.Outlined.Person,
+                                imeAction = ImeAction.Done,
+                                onDone = {
+                                    appViewModel.setDefaultClientName(draftClientName)
+                                    onToast("Client par défaut enregistré.")
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            AtlasOutlinedButton(
+                                text = "OK",
+                                onClick = {
+                                    appViewModel.setDefaultClientName(draftClientName)
+                                    onToast("Client par défaut enregistré.")
+                                },
+                            )
+                        }
+                        AtlasDivider(Modifier.padding(vertical = 8.dp))
+                        SettingsToggleRow(
+                            title = "Confirmer avant création du ticket",
+                            subtitle = "Affiche un récapitulatif du montant avant d'envoyer la vente au serveur.",
+                            checked = confirmBeforeSale,
+                            onCheckedChange = appViewModel::setConfirmBeforeSale,
                         )
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        AtlasTextField(
-                            value = draftClientName,
-                            onValueChange = { draftClientName = it },
-                            label = "Client pré-rempli par défaut",
-                            placeholder = "Ex. Client comptoir",
-                            leadingIcon = Icons.Outlined.Person,
-                            imeAction = ImeAction.Done,
-                            onDone = {
-                                appViewModel.setDefaultClientName(draftClientName)
-                                onToast("Client par défaut enregistré.")
-                            },
-                            modifier = Modifier.weight(1f),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        AtlasOutlinedButton(
-                            text = "OK",
-                            onClick = {
-                                appViewModel.setDefaultClientName(draftClientName)
-                                onToast("Client par défaut enregistré.")
-                            },
-                        )
-                    }
-                    AtlasDivider(Modifier.padding(vertical = 8.dp))
-                    SettingsToggleRow(
-                        title = "Confirmer avant création du ticket",
-                        subtitle = "Affiche un récapitulatif du montant avant d'envoyer la vente au serveur.",
-                        checked = confirmBeforeSale,
-                        onCheckedChange = appViewModel::setConfirmBeforeSale,
-                    )
                 }
             }
         }

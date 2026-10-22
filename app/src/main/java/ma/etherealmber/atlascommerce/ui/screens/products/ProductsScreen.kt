@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -75,6 +76,10 @@ fun ProductsScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     var pendingFulfillRequest by remember { mutableStateOf<ProductCreationRequestDto?>(null) }
 
+    val isAdmin = Roles.canCreateProductDirectly(user.role)
+    val canSell = Roles.canCreateDocuments(user.role)
+    val canAdjustStock = Roles.canAdjustStock(user.role)
+
     LaunchedEffect(Unit) {
         viewModel.messages.collect { message -> onToast(message) }
     }
@@ -97,7 +102,10 @@ fun ProductsScreen(
                 )
                 Spacer(Modifier.width(4.dp))
                 IconButton(onClick = { showCreateDialog = true }) {
-                    Icon(Icons.Outlined.Add, contentDescription = "Nouveau produit")
+                    Icon(
+                        imageVector = if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send,
+                        contentDescription = if (isAdmin) "Créer un produit" else "Demander un produit à l'Admin",
+                    )
                 }
                 IconButton(onClick = onOpenScan) {
                     Icon(Icons.Outlined.QrCodeScanner, contentDescription = "Scanner un code-barres")
@@ -124,7 +132,15 @@ fun ProductsScreen(
                 FilterChip(
                     selected = state.filter == ProductsViewModel.FilterMode.REQUESTS,
                     onClick = { viewModel.setFilter(ProductsViewModel.FilterMode.REQUESTS) },
-                    label = { Text("Demandes (${state.openRequests.size})") },
+                    label = {
+                        Text(
+                            if (isAdmin) {
+                                "À valider (${state.openRequests.size})"
+                            } else {
+                                "Mes demandes (${state.openRequests.size})"
+                            },
+                        )
+                    },
                 )
             }
         }
@@ -147,9 +163,13 @@ fun ProductsScreen(
                 if (state.openRequests.isEmpty()) {
                     AtlasEmptyState(
                         title = "Aucune demande en attente",
-                        message = "Les codes inconnus scannés sur le terrain apparaissent ici avec les champs requis.",
+                        message = if (isAdmin) {
+                            "Les demandes d'ajout envoyées par l'équipe apparaissent ici pour création immédiate."
+                        } else {
+                            "Vos fiches produits transmises à l'Administrateur apparaissent ici."
+                        },
                         icon = Icons.Outlined.Inventory2,
-                        actionLabel = "Nouveau produit",
+                        actionLabel = if (isAdmin) "Créer un produit" else "Demander à l'Admin",
                         onAction = { showCreateDialog = true },
                     )
                 } else {
@@ -165,7 +185,7 @@ fun ProductsScreen(
                         items(state.openRequests, key = { it.id }) { req ->
                             ProductRequestRow(
                                 request = req,
-                                canCreate = Roles.canMutateStock(user.role),
+                                isAdmin = isAdmin,
                                 onFulfill = { pendingFulfillRequest = req },
                                 onDismiss = { viewModel.dismissProductRequest(req.id) },
                             )
@@ -177,17 +197,20 @@ fun ProductsScreen(
             state.visibleProducts.isEmpty() -> AtlasEmptyState(
                 title = if (state.query.isBlank()) "Aucun produit" else "Aucun résultat",
                 message = if (state.query.isBlank()) {
-                    "Ajoutez un produit directement avec le bouton + ou scannez son code-barres."
+                    if (isAdmin) {
+                        "Créez un produit directement avec le bouton + ou scannez son code-barres."
+                    } else {
+                        "Envoyez une demande de création à l'Administrateur avec le bouton d'envoi."
+                    }
                 } else {
                     "Essayez un autre nom, SKU ou code-barres."
                 },
                 icon = Icons.Outlined.Inventory2,
-                actionLabel = "Nouveau produit",
+                actionLabel = if (isAdmin) "Créer un produit" else "Demander à l'Admin",
                 onAction = { showCreateDialog = true },
             )
 
             else -> {
-                val canSell = Roles.canCreateDocuments(user.role)
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
@@ -197,15 +220,21 @@ fun ProductsScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(density.itemGap),
                 ) {
-                    if (!canSell) {
+                    if (!isAdmin) {
                         item {
                             AtlasCard {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    AtlasChip(text = Roles.label(user.role), tone = AtlasTone.INFO)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = "Nouveaux produits soumis à validation Admin",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                                Spacer(Modifier.height(4.dp))
                                 Text(
-                                    text = "Consultation & gestion stock",
-                                    style = MaterialTheme.typography.titleSmall,
-                                )
-                                Text(
-                                    text = "Votre rôle permet de gérer le stock et les ajouts, pas d'émettre de facture.",
+                                    text = Roles.scopeSummary(user.role),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -216,12 +245,11 @@ fun ProductsScreen(
                         ProductRow(
                             product = product,
                             currency = state.currency,
+                            canSell = canSell,
                             onOpen = { selected = product },
                             onAdd = {
                                 if (canSell) {
                                     viewModel.addToCart(product)
-                                } else {
-                                    onToast("Votre rôle ne permet pas de créer une vente.")
                                 }
                             },
                         )
@@ -233,7 +261,7 @@ fun ProductsScreen(
 
     if (showCreateDialog) {
         ProductCreateDialog(
-            canCreateDirectly = Roles.canMutateStock(user.role),
+            canCreateDirectly = isAdmin,
             initialBarcode = state.query.trim().takeIf { it.all(Char::isDigit) && it.length >= 6 }.orEmpty(),
             submitting = state.submitting,
             onDismiss = { showCreateDialog = false },
@@ -249,9 +277,9 @@ fun ProductsScreen(
     }
 
     val fulfill = pendingFulfillRequest
-    if (fulfill != null) {
+    if (fulfill != null && isAdmin) {
         ProductCreateDialog(
-            canCreateDirectly = Roles.canMutateStock(user.role),
+            canCreateDirectly = true,
             initialBarcode = fulfill.code,
             initialName = fulfill.name.orEmpty(),
             initialSku = fulfill.sku.orEmpty(),
@@ -276,7 +304,8 @@ fun ProductsScreen(
         ProductDetailDialog(
             product = product,
             currency = state.currency,
-            canSell = Roles.canCreateDocuments(user.role),
+            canSell = canSell,
+            canAdjustStock = canAdjustStock,
             onDismiss = { selected = null },
             onAdd = { quantity ->
                 viewModel.addToCart(product, quantity)
@@ -294,7 +323,7 @@ fun ProductsScreen(
     }
 
     val target = adjustTarget
-    if (target != null) {
+    if (target != null && canAdjustStock) {
         StockAdjustDialog(
             product = target,
             onDismiss = { adjustTarget = null },
@@ -309,7 +338,7 @@ fun ProductsScreen(
 @Composable
 private fun ProductRequestRow(
     request: ProductCreationRequestDto,
-    canCreate: Boolean,
+    isAdmin: Boolean,
     onFulfill: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -338,14 +367,17 @@ private fun ProductRequestRow(
                     )
                 }
             }
-            AtlasChip(text = "En attente", tone = AtlasTone.WARNING)
+            AtlasChip(
+                text = if (isAdmin) "À valider" else "Chez l'Admin",
+                tone = AtlasTone.WARNING,
+            )
         }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (canCreate) {
+        if (isAdmin) {
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onFulfill) { Text("Créer au stock") }
+                TextButton(onClick = onDismiss) { Text("Refuser") }
             }
-            TextButton(onClick = onDismiss) { Text("Écarter") }
         }
     }
 }
@@ -354,6 +386,7 @@ private fun ProductRequestRow(
 private fun ProductRow(
     product: ProductDto,
     currency: String,
+    canSell: Boolean,
     onOpen: () -> Unit,
     onAdd: () -> Unit,
 ) {
@@ -394,13 +427,15 @@ private fun ProductRow(
                     AtlasChip(text = AtlasFormat.money(product.price, currency))
                 }
             }
-            Spacer(Modifier.width(8.dp))
-            IconButton(onClick = onAdd) {
-                Icon(
-                    imageVector = Icons.Outlined.AddShoppingCart,
-                    contentDescription = "Ajouter au panier",
-                    tint = MaterialTheme.colorScheme.primary,
-                )
+            if (canSell) {
+                Spacer(Modifier.width(8.dp))
+                IconButton(onClick = onAdd) {
+                    Icon(
+                        imageVector = Icons.Outlined.AddShoppingCart,
+                        contentDescription = "Ajouter au panier",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         }
     }
@@ -411,13 +446,13 @@ private fun ProductDetailDialog(
     product: ProductDto,
     currency: String,
     canSell: Boolean,
+    canAdjustStock: Boolean,
     onDismiss: () -> Unit,
     onAdd: (Double) -> Unit,
     onOpenSale: () -> Unit,
     onAdjustStock: () -> Unit,
 ) {
     var quantity by remember(product.id) { mutableStateOf(1.0) }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -444,51 +479,47 @@ private fun ProductDetailDialog(
                         tone = if (product.isLowStock) AtlasTone.WARNING else AtlasTone.POSITIVE,
                     )
                 }
-                Spacer(Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Quantité", style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.weight(1f))
-                    IconButton(
-                        onClick = { if (quantity > 1.0) quantity -= 1.0 },
-                        enabled = quantity > 1.0,
-                    ) {
-                        Icon(Icons.Outlined.Remove, contentDescription = "Réduire")
+                if (canSell) {
+                    Spacer(Modifier.height(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Quantité", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.weight(1f))
+                        IconButton(
+                            onClick = { if (quantity > 1.0) quantity -= 1.0 },
+                            enabled = quantity > 1.0,
+                        ) {
+                            Icon(Icons.Outlined.Remove, contentDescription = "Réduire")
+                        }
+                        Text(
+                            text = AtlasFormat.quantity(quantity),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.width(44.dp),
+                        )
+                        IconButton(onClick = { quantity += 1.0 }) {
+                            Icon(Icons.Outlined.AddShoppingCart, contentDescription = "Augmenter")
+                        }
                     }
+                    Spacer(Modifier.height(6.dp))
                     Text(
-                        text = AtlasFormat.quantity(quantity),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.width(44.dp),
-                    )
-                    IconButton(onClick = { quantity += 1.0 }) {
-                        Icon(Icons.Outlined.AddShoppingCart, contentDescription = "Augmenter")
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Total ${AtlasFormat.money(product.price * quantity, currency)} · sans TVA (ticket VR)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (!canSell) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "Votre rôle ne permet pas de créer une vente.",
+                        text = "Total ${AtlasFormat.money(product.price * quantity, currency)} · sans TVA (ticket VR)",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onAdd(quantity) }, enabled = canSell) {
-                Text("Ajouter au panier")
+            if (canSell) {
+                TextButton(onClick = { onAdd(quantity) }) {
+                    Text("Ajouter au panier")
+                }
             }
         },
         dismissButton = {
             Row {
-                if (product.trackInventory) {
-                    TextButton(onClick = onAdjustStock) { Text("Stock") }
+                if (product.trackInventory && canAdjustStock) {
+                    TextButton(onClick = onAdjustStock) { Text("Ajuster stock") }
                 }
                 if (canSell) {
                     TextButton(onClick = onOpenSale) { Text("Voir le panier") }
@@ -556,6 +587,7 @@ private fun StockAdjustDialog(
                     onValueChange = { reason = it },
                     label = { Text("Motif (facultatif)") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

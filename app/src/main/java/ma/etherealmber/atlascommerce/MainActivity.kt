@@ -16,15 +16,19 @@ import ma.etherealmber.atlascommerce.ui.screens.devices.QrTokenParser
 class MainActivity : ComponentActivity() {
 
     private var deepLinkQrToken by mutableStateOf<String?>(null)
+    private var openNotificationsIntent by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         deepLinkQrToken = extractQrFromIntent(intent)
+        openNotificationsIntent = intent?.getBooleanExtra(AtlasApp.EXTRA_OPEN_NOTIFICATIONS, false) == true
         enableEdgeToEdge()
         setContent {
             AtlasRoot(
                 deepLinkQrToken = deepLinkQrToken,
                 onDeepLinkConsumed = { deepLinkQrToken = null },
+                openNotificationsRequested = openNotificationsIntent,
+                onOpenNotificationsConsumed = { openNotificationsIntent = false },
             )
         }
     }
@@ -34,6 +38,9 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         extractQrFromIntent(intent)?.let { token ->
             deepLinkQrToken = token
+        }
+        if (intent.getBooleanExtra(AtlasApp.EXTRA_OPEN_NOTIFICATIONS, false)) {
+            openNotificationsIntent = true
         }
     }
 

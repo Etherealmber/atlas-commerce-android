@@ -6,18 +6,13 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -42,15 +37,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
-import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AppUpdateBanner
-import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
-import ma.etherealmber.atlascommerce.ui.components.AtlasMark
+import ma.etherealmber.atlascommerce.ui.components.AtlasBootSplashScreen
 import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
-import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
-import ma.etherealmber.atlascommerce.ui.components.AtlasTypingDots
+import ma.etherealmber.atlascommerce.ui.components.AtlasWelcomeOnboardingScreen
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.MandatoryUpdateScreen
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrDeviceScreen
@@ -77,16 +69,17 @@ private object Overlay {
 
 private enum class RootStage(val rank: Int) {
     SPLASH(0),
-    SERVER_SETUP(1),
-    MANDATORY_UPDATE(2),
-    LOGIN(3),
-    SHELL(4),
-    OVERLAY_SERVER(5),
-    OVERLAY_QR_DEVICE(6),
-    OVERLAY_NOTIFICATIONS(7),
-    OVERLAY_LICENSE(8),
-    OVERLAY_SECURITY(9),
-    OVERLAY_ABOUT(10),
+    ONBOARDING(1),
+    SERVER_SETUP(2),
+    MANDATORY_UPDATE(3),
+    LOGIN(4),
+    SHELL(5),
+    OVERLAY_SERVER(105),
+    OVERLAY_QR_DEVICE(106),
+    OVERLAY_NOTIFICATIONS(107),
+    OVERLAY_LICENSE(108),
+    OVERLAY_SECURITY(109),
+    OVERLAY_ABOUT(110),
 }
 
 /**
@@ -96,6 +89,8 @@ private enum class RootStage(val rank: Int) {
 fun AtlasRoot(
     deepLinkQrToken: String? = null,
     onDeepLinkConsumed: () -> Unit = {},
+    openNotificationsRequested: Boolean = false,
+    onOpenNotificationsConsumed: () -> Unit = {},
     viewModel: AppViewModel = hiltViewModel(),
 ) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -116,11 +111,13 @@ fun AtlasRoot(
                 }
             }
             if (!appearanceLoaded) {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
+                AtlasBootSplashScreen(holdUntilReady = true)
             } else {
                 AtlasGate(
                     deepLinkQrToken = deepLinkQrToken,
                     onDeepLinkConsumed = onDeepLinkConsumed,
+                    openNotificationsRequested = openNotificationsRequested,
+                    onOpenNotificationsConsumed = onOpenNotificationsConsumed,
                     viewModel = viewModel,
                 )
             }
@@ -132,6 +129,8 @@ fun AtlasRoot(
 private fun AtlasGate(
     deepLinkQrToken: String?,
     onDeepLinkConsumed: () -> Unit,
+    openNotificationsRequested: Boolean,
+    onOpenNotificationsConsumed: () -> Unit,
     viewModel: AppViewModel,
 ) {
     val context = LocalContext.current
@@ -139,11 +138,13 @@ private fun AtlasGate(
     val session by viewModel.session.collectAsStateWithLifecycle()
     val server by viewModel.server.collectAsStateWithLifecycle()
     val serverLoaded by viewModel.serverLoaded.collectAsStateWithLifecycle()
+    val onboardingDone by viewModel.onboardingDone.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val defaultStartTab by viewModel.defaultStartTab.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var bootSplashFinished by rememberSaveable { mutableStateOf(false) }
     var overlay by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingQrToken by rememberSaveable { mutableStateOf<String?>(null) }
     var requestedTab by rememberSaveable { mutableStateOf<String?>(null) }
@@ -152,7 +153,7 @@ private fun AtlasGate(
         contract = ActivityResultContracts.RequestPermission(),
     ) { _ -> }
 
-    val startDownloadWithNotificationPermission: () -> Unit = {
+    val requestNotificationPermissionIfNeeded: () -> Unit = {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(
                 context,
@@ -163,6 +164,10 @@ private fun AtlasGate(
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
+    }
+
+    val startDownloadWithNotificationPermission: () -> Unit = {
+        requestNotificationPermissionIfNeeded()
         viewModel.startUpdateDownload()
     }
 
@@ -187,6 +192,13 @@ private fun AtlasGate(
             pendingQrToken = deepLinkQrToken
             overlay = Overlay.QR_DEVICE
             onDeepLinkConsumed()
+        }
+    }
+
+    LaunchedEffect(openNotificationsRequested, session) {
+        if (openNotificationsRequested && session is SessionState.Active) {
+            overlay = Overlay.NOTIFICATIONS
+            onOpenNotificationsConsumed()
         }
     }
 
@@ -216,9 +228,11 @@ private fun AtlasGate(
         pendingQrToken = null
     }
 
+    val loadingBackend = !serverLoaded || session is SessionState.Loading
     val activeUser = (session as? SessionState.Active)?.user
     val stage = when {
-        !serverLoaded || session is SessionState.Loading -> RootStage.SPLASH
+        !bootSplashFinished || loadingBackend -> RootStage.SPLASH
+        !onboardingDone -> RootStage.ONBOARDING
         overlay == Overlay.SERVER -> RootStage.OVERLAY_SERVER
         overlay == Overlay.QR_DEVICE -> RootStage.OVERLAY_QR_DEVICE
         overlay == Overlay.NOTIFICATIONS -> RootStage.OVERLAY_NOTIFICATIONS
@@ -240,7 +254,17 @@ private fun AtlasGate(
                 indexSelector = { it.rank },
             ) { currentStage ->
                 when (currentStage) {
-                    RootStage.SPLASH -> SplashPane()
+                    RootStage.SPLASH -> AtlasBootSplashScreen(
+                        onFinished = { bootSplashFinished = true },
+                        holdUntilReady = loadingBackend,
+                    )
+
+                    RootStage.ONBOARDING -> AtlasWelcomeOnboardingScreen(
+                        onComplete = {
+                            requestNotificationPermissionIfNeeded()
+                            viewModel.completeOnboarding()
+                        },
+                    )
 
                     RootStage.OVERLAY_SERVER ->
                         ServerSetupScreen(onClose = { overlay = null })
@@ -315,7 +339,10 @@ private fun AtlasGate(
                                     pendingQrToken = token
                                     overlay = Overlay.QR_DEVICE
                                 },
-                                onOpenNotifications = { overlay = Overlay.NOTIFICATIONS },
+                                onOpenNotifications = {
+                                    requestNotificationPermissionIfNeeded()
+                                    overlay = Overlay.NOTIFICATIONS
+                                },
                                 onOpenLicense = { overlay = Overlay.LICENSE },
                                 onOpenSecurity = { overlay = Overlay.SECURITY },
                                 onOpenAbout = { overlay = Overlay.ABOUT },
@@ -323,13 +350,13 @@ private fun AtlasGate(
                                 onStartUpdateDownload = startDownloadWithNotificationPermission,
                             )
                         } else {
-                            SplashPane()
+                            AtlasBootSplashScreen(holdUntilReady = true)
                         }
                     }
                 }
             }
 
-            if (serverLoaded && !mandatoryBlocking) {
+            if (bootSplashFinished && onboardingDone && serverLoaded && !mandatoryBlocking) {
                 AppUpdateBanner(
                     state = updateState,
                     onDownload = startDownloadWithNotificationPermission,
@@ -346,36 +373,5 @@ private fun AtlasGate(
                     .padding(bottom = 88.dp),
             )
         }
-    }
-}
-
-@Composable
-private fun SplashPane() {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        AtlasPulseHalo {
-            AtlasMark(size = 76.dp)
-        }
-        Spacer(Modifier.height(18.dp))
-        AtlasEntrance(delayMillis = 40) {
-            Text(
-                text = AppDetails.NAME,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        AtlasEntrance(delayMillis = 100) {
-            Text(
-                text = AppDetails.TAGLINE,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.height(22.dp))
-        AtlasTypingDots()
     }
 }
