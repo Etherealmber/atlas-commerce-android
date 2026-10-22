@@ -183,6 +183,7 @@ Choix techniques :
 | Méthode | Chemin | Usage |
 | --- | --- | --- |
 | `GET` | `/api/health` | Test du serveur avant connexion (public) |
+| `GET` | `/api/app/android-update` | Vérification des mises à jour APK (public, optionnelles ou obligatoires, progression temps réel dans l'app et en notification) |
 | `POST` | `/api/auth/login` | Mot de passe (+ OTP si nouvel appareil) |
 | `POST` | `/api/auth/verify-otp` | Validation du code e-mail |
 | `GET` | `/api/auth/me` | Profil / rôle / rafraîchissement de session |

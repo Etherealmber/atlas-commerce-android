@@ -57,6 +57,7 @@ fun LoginScreen(
     onChangeServer: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenLicense: () -> Unit,
+    onCheckUpdates: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -145,6 +146,7 @@ fun LoginScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TextButton(onClick = onOpenSecurity) { Text("Sécurité") }
             TextButton(onClick = onOpenLicense) { Text("Licence") }
+            TextButton(onClick = onCheckUpdates) { Text("Mises à jour") }
         }
         Spacer(Modifier.height(24.dp))
     }

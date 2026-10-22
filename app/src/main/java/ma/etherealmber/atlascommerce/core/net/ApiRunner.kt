@@ -16,9 +16,9 @@ import javax.inject.Singleton
  * passed through untouched; only transport problems get generic wording.
  */
 @Singleton
-class ApiRunner @Inject constructor(moshi: Moshi) {
+class ApiRunner @Inject constructor(private val moshi: Moshi) {
 
-    private val errorAdapter = moshi.adapter(ApiErrorPayload::class.java)
+    private val errorAdapter by lazy { moshi.adapter(ApiErrorPayload::class.java) }
 
     suspend fun <T> envelope(block: suspend () -> ApiEnvelope<T>): ApiResult<T> {
         return try {

@@ -6,3 +6,8 @@ import javax.inject.Qualifier
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class ApplicationScope
+
+/** Streaming HTTP client for large APK update downloads without short wall-clock callTimeout. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class UpdateClient

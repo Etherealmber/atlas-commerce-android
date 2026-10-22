@@ -1,12 +1,14 @@
 package ma.etherealmber.atlascommerce.data.model
 
 import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
 import ma.etherealmber.atlascommerce.core.net.ApiStatus
 
 // ---------------------------------------------------------------------------
-// Health / server discovery
+// Health / server discovery / self-update
 // ---------------------------------------------------------------------------
 
+@JsonClass(generateAdapter = true)
 data class HealthDto(
     val ok: Boolean = false,
     val d1: Boolean = false,
@@ -17,10 +19,26 @@ data class HealthDto(
     val time: String? = null,
 )
 
+@JsonClass(generateAdapter = true)
+data class AndroidUpdateDto(
+    override val success: Boolean = false,
+    val ok: Boolean = false,
+    val updateAvailable: Boolean = false,
+    val versionCode: Int = 0,
+    val versionName: String? = null,
+    val apkUrl: String? = null,
+    val mandatory: Boolean = false,
+    val notes: String? = null,
+    val message: String? = null,
+    override val error: String? = null,
+    override val code: String? = null,
+) : ApiStatus
+
 // ---------------------------------------------------------------------------
 // Authentication
 // ---------------------------------------------------------------------------
 
+@JsonClass(generateAdapter = true)
 data class LoginRequest(
     val username: String,
     val password: String,
@@ -28,6 +46,7 @@ data class LoginRequest(
     val client: String = "android",
 )
 
+@JsonClass(generateAdapter = true)
 data class OtpRequest(
     val username: String,
     val password: String,
@@ -36,6 +55,7 @@ data class OtpRequest(
     val client: String = "android",
 )
 
+@JsonClass(generateAdapter = true)
 data class LoginResponse(
     override val success: Boolean = false,
     @Json(name = "needs_otp") val needsOtp: Boolean = false,
@@ -49,6 +69,7 @@ data class LoginResponse(
     override val code: String? = null,
 ) : ApiStatus
 
+@JsonClass(generateAdapter = true)
 data class MeDto(
     val ok: Boolean = false,
     val username: String? = null,
@@ -65,6 +86,7 @@ data class MeDto(
 // Company / settings
 // ---------------------------------------------------------------------------
 
+@JsonClass(generateAdapter = true)
 data class CompanySettingsDto(
     @Json(name = "company_name") val companyName: String? = null,
     val currency: String? = null,
@@ -80,6 +102,7 @@ data class CompanySettingsDto(
 // Dashboard
 // ---------------------------------------------------------------------------
 
+@JsonClass(generateAdapter = true)
 data class UnpaidDto(
     val count: Int = 0,
     val total: Double = 0.0,
@@ -87,6 +110,7 @@ data class UnpaidDto(
     val overdue: Double = 0.0,
 )
 
+@JsonClass(generateAdapter = true)
 data class MonthlyPointDto(
     val key: String = "",
     val label: String = "",
@@ -95,6 +119,7 @@ data class MonthlyPointDto(
     val profit: Double = 0.0,
 )
 
+@JsonClass(generateAdapter = true)
 data class DashboardDto(
     val currency: String? = null,
     @Json(name = "currentBalance") val currentBalance: Double = 0.0,
@@ -119,6 +144,7 @@ data class DashboardDto(
 // Products
 // ---------------------------------------------------------------------------
 
+@JsonClass(generateAdapter = true)
 data class ProductDto(
     val id: Long = 0,
     val name: String = "",
@@ -152,6 +178,7 @@ data class ProductDto(
         ).joinToString(" · ")
 }
 
+@JsonClass(generateAdapter = true)
 data class StockAdjustRequest(
     val quantity: Double,
     /** "in" (entrée), "out" (sortie) or "adjustment". */
@@ -163,6 +190,7 @@ data class StockAdjustRequest(
 // Clients
 // ---------------------------------------------------------------------------
 
+@JsonClass(generateAdapter = true)
 data class ClientDto(
     val id: Long = 0,
     val name: String = "",
@@ -176,6 +204,7 @@ data class ClientDto(
 // Invoices / quick sales
 // ---------------------------------------------------------------------------
 
+@JsonClass(generateAdapter = true)
 data class InvoiceDto(
     val id: Long = 0,
     val number: String? = null,
@@ -194,6 +223,7 @@ data class InvoiceDto(
         get() = docKind == "quick_sale" || docKind == "ticket" || number?.startsWith("VR") == true
 }
 
+@JsonClass(generateAdapter = true)
 data class QuickSaleItemDto(
     @Json(name = "product_id") val productId: Long,
     @Json(name = "product_name") val productName: String,
@@ -203,6 +233,7 @@ data class QuickSaleItemDto(
     @Json(name = "tax_rate") val taxRate: Double = 0.0,
 )
 
+@JsonClass(generateAdapter = true)
 data class QuickSaleRequest(
     @Json(name = "client_name") val clientName: String,
     @Json(name = "client_phone") val clientPhone: String? = null,
@@ -215,6 +246,7 @@ data class QuickSaleRequest(
     val items: List<QuickSaleItemDto>,
 )
 
+@JsonClass(generateAdapter = true)
 data class CreatedInvoiceDto(
     val id: Long = 0,
     val number: String? = null,

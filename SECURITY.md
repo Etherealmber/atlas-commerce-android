@@ -68,6 +68,8 @@ No financial documents, no invoices, no customer databases and no images are sto
 | --- | --- |
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Talk to your Atlas server |
 | `CAMERA` | Decode barcodes on-device with ML Kit (no frame is uploaded or saved) |
+| `POST_NOTIFICATIONS` | Display live progress notifications while downloading an APK update |
+| `REQUEST_INSTALL_PACKAGES` | Hand downloaded `.apk` updates to Android's system package installer via `FileProvider` |
 
 No location, contacts, microphone, storage or advertising permissions are requested.
 

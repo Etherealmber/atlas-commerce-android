@@ -7,7 +7,7 @@ on:
     branches: ['main']
   workflow_dispatch:
 
-# Read-only by default; only the build job may publish a failure log back to the branch.
+# Read-only by default; only jobs that publish diagnostics carry write permission.
 permissions:
   contents: read
 
@@ -17,10 +17,9 @@ concurrency:
 
 jobs:
   build:
-    name: Assemble debug + unit tests
+    name: Assemble debug + release + unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # Scoped to this job only: the failure log is committed back to the branch.
     permissions:
       contents: write
 
@@ -34,8 +33,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # ubuntu-latest ships the Android SDK; install the exact platform we compile
-      # against when cmdline-tools are available, otherwise let AGP auto-download.
       - name: Prepare Android SDK
         run: |
           SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
@@ -54,8 +51,6 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      # Builds debug, runs JUnit tests, and builds the R8 + resource-shrinking
-      # release variant in one log so any debug or release KSP/R8 failure is captured.
       - name: Build, test, and assemble release (R8)
         id: build
         continue-on-error: true
@@ -64,12 +59,7 @@ jobs:
           gradle :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:assembleRelease \
             --no-daemon --console=plain --stacktrace 2>&1 | tee "$RUNNER_TEMP/build.log"
 
-      # Compiler output is the only way to debug without an Android SDK locally,
-      # so on failure the tail of the log is committed to the branch.
       - name: Publish failure log
-        # Push events only: on pull_request the ref is a detached `<n>/merge`, and
-        # fork PRs have a read-only token. A failed publish must never mask the
-        # real build error, hence continue-on-error.
         if: steps.build.outcome == 'failure' && github.event_name == 'push' && github.ref_name != 'main'
         continue-on-error: true
         run: |
@@ -108,7 +98,7 @@ jobs:
       - name: Report build result
         if: steps.build.outcome == 'failure'
         run: |
-          echo "::error::Gradle build failed — see ci-logs/build.log on the branch (published by the previous step)."
+          echo "::error::Gradle build failed — see ci-logs/build.log on the branch."
           exit 1
 
   lint:
@@ -117,7 +107,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      # Exercise JDK 21 too (matches Android Studio Ladybug+ bundled JBR on Windows/macOS).
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -136,9 +125,6 @@ jobs:
         with:
           gradle-version: '8.9'
       - name: Verify legacy 1.0.4 source quarantine, KSP release & Android Lint
-        # Simulates a dirty local 1.0.4 working tree after `git pull` (leftover
-        # push/AtlasFirebaseMessagingService.kt + stale Hilt module), verifies
-        # automatic quarantine, and runs kspReleaseKotlin + lintDebug under JDK 21.
         run: |
           mkdir -p app/src/main/java/ma/etherealmber/atlascommerce/push
           cat > app/src/main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt <<'EOF'
@@ -165,7 +151,6 @@ jobs:
           touch -d '2026-10-21T20:08:04Z' app/src/main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt
           touch -d '2026-10-21T20:08:04Z' app/src/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt
 
-          # Also hide .git so we exercise the exact "Download ZIP extracted over old 1.0.4 folder" path.
           mv .git "$RUNNER_TEMP/hidden-git"
           gradle :app:kspReleaseKotlin :app:lintDebug --no-daemon --console=plain
           mv "$RUNNER_TEMP/hidden-git" .git
@@ -181,3 +166,169 @@ jobs:
           name: lint-report
           path: app/build/reports/lint-results-debug.html
           if-no-files-found: ignore
+
+  android14-smoke:
+    name: Android 14 release APK launch & upgrade check
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download release APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: atlas-commerce-release-apk
+          path: release-apk
+
+      - name: Sign release APK & launch on Android 14 (API 34) emulator
+        id: smoke
+        continue-on-error: true
+        run: |
+          set -euxo pipefail
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          SDKM="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          AVDM="$SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
+          ADB="$SDK_ROOT/platform-tools/adb"
+          ZIPALIGN="$SDK_ROOT/build-tools/35.0.0/zipalign"
+          APKSIGNER="$SDK_ROOT/build-tools/35.0.0/apksigner"
+
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+          fi
+
+          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+          "$SDKM" "platform-tools" "emulator" "build-tools;35.0.0" "platforms;android-34" "system-images;android-34;default;x86_64"
+
+          RAW_APK=$(ls release-apk/*.apk | head -n 1)
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/smoke.jks" \
+            -alias smoke \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Atlas Release Smoke,O=Atlas,C=MA"
+          "$ZIPALIGN" -f -p 4 "$RAW_APK" "$RUNNER_TEMP/aligned.apk"
+          "$APKSIGNER" sign \
+            --ks "$RUNNER_TEMP/smoke.jks" \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$RUNNER_TEMP/app-release-signed.apk" \
+            "$RUNNER_TEMP/aligned.apk"
+          "$APKSIGNER" verify -v "$RUNNER_TEMP/app-release-signed.apk"
+
+          echo "no" | "$AVDM" create avd \
+            --force \
+            --name atlas_api34 \
+            --package "system-images;android-34;default;x86_64" \
+            --abi x86_64
+
+          nohup "$SDK_ROOT/emulator/emulator" \
+            -avd atlas_api34 \
+            -no-window \
+            -gpu swiftshader_indirect \
+            -no-snapshot \
+            -noaudio \
+            -no-boot-anim \
+            -memory 3072 > "$RUNNER_TEMP/emulator.log" 2>&1 &
+
+          "$ADB" wait-for-device
+          for i in $(seq 1 90); do
+            BOOT=$("$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$BOOT" = "1" ]; then
+              break
+            fi
+            sleep 2
+          done
+          "$ADB" shell input keyevent 82 || true
+          sleep 3
+
+          # 1. Clean install & cold launch of R8-minified release APK on Android 14
+          "$ADB" logcat -c
+          "$ADB" install -r "$RUNNER_TEMP/app-release-signed.apk"
+          "$ADB" shell am start -W -n ma.etherealmber.atlascommerce/.MainActivity
+          sleep 8
+
+          "$ADB" logcat -d > "$RUNNER_TEMP/smoke-logcat.txt"
+          PID1=$("$ADB" shell pidof ma.etherealmber.atlascommerce | tr -d '\r' || true)
+          echo "Android 14 cold launch PID: $PID1"
+
+          if grep -Fq "AndroidRuntime: FATAL EXCEPTION" "$RUNNER_TEMP/smoke-logcat.txt"; then
+            grep -A 50 -F "AndroidRuntime: FATAL EXCEPTION" "$RUNNER_TEMP/smoke-logcat.txt" > "$RUNNER_TEMP/smoke-failure.log"
+            cat "$RUNNER_TEMP/smoke-failure.log"
+            exit 1
+          fi
+          test -n "$PID1"
+
+          "$ADB" shell uiautomator dump /sdcard/ui1.xml
+          "$ADB" shell cat /sdcard/ui1.xml > "$RUNNER_TEMP/ui1.xml"
+          grep -Fq "Atlas Commerce" "$RUNNER_TEMP/ui1.xml"
+
+          # 2. Simulate upgrading over corrupted/legacy 1.0.4 DataStore on Android 14
+          "$ADB" root || true
+          sleep 2
+          "$ADB" shell am force-stop ma.etherealmber.atlascommerce
+          "$ADB" shell "mkdir -p /data/data/ma.etherealmber.atlascommerce/files/datastore && printf 'corrupt-legacy-1.0.4-datastore-bytes\xff\x00\xfe' > /data/data/ma.etherealmber.atlascommerce/files/datastore/atlas_prefs.preferences_pb" || true
+          APP_UID=$("$ADB" shell stat -c '%u:%g' /data/data/ma.etherealmber.atlascommerce | tr -d '\r' || true)
+          if [ -n "$APP_UID" ]; then
+            "$ADB" shell "chown -R $APP_UID /data/data/ma.etherealmber.atlascommerce/files" || true
+          fi
+
+          "$ADB" logcat -c
+          "$ADB" install -r "$RUNNER_TEMP/app-release-signed.apk"
+          "$ADB" shell am start -W -n ma.etherealmber.atlascommerce/.MainActivity
+          sleep 8
+
+          "$ADB" logcat -d >> "$RUNNER_TEMP/smoke-logcat.txt"
+          PID2=$("$ADB" shell pidof ma.etherealmber.atlascommerce | tr -d '\r' || true)
+          echo "Android 14 post-upgrade launch PID: $PID2"
+
+          if grep -Fq "AndroidRuntime: FATAL EXCEPTION" "$RUNNER_TEMP/smoke-logcat.txt"; then
+            grep -A 50 -F "AndroidRuntime: FATAL EXCEPTION" "$RUNNER_TEMP/smoke-logcat.txt" > "$RUNNER_TEMP/smoke-failure.log"
+            cat "$RUNNER_TEMP/smoke-failure.log"
+            exit 1
+          fi
+          test -n "$PID2"
+
+          "$ADB" shell uiautomator dump /sdcard/ui2.xml
+          "$ADB" shell cat /sdcard/ui2.xml > "$RUNNER_TEMP/ui2.xml"
+          grep -Fq "Atlas Commerce" "$RUNNER_TEMP/ui2.xml"
+
+          "$ADB" emu kill || true
+
+      - name: Publish smoke failure log
+        if: steps.smoke.outcome == 'failure' && github.event_name == 'push' && github.ref_name != 'main'
+        continue-on-error: true
+        run: |
+          mkdir -p ci-logs
+          tail -n 500 "$RUNNER_TEMP/smoke-logcat.txt" > ci-logs/android14-logcat.log || true
+          tail -n 120 "$RUNNER_TEMP/emulator.log" > ci-logs/emulator.log || true
+          git config user.name "atlas-ci"
+          git config user.email "ci@users.noreply.github.com"
+          git add -f ci-logs/
+          git commit -m "ci: android 14 smoke log [skip ci]" || exit 0
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Upload Android 14 logcat & UI dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android14-smoke-diagnostics
+          path: |
+            ${{ runner.temp }}/smoke-logcat.txt
+            ${{ runner.temp }}/ui1.xml
+            ${{ runner.temp }}/ui2.xml
+            ${{ runner.temp }}/emulator.log
+          if-no-files-found: ignore
+
+      - name: Report Android 14 smoke result
+        if: steps.smoke.outcome == 'failure'
+        run: |
+          echo "::error::Android 14 release launch smoke test failed — see ci-logs/ on branch."
+          exit 1
