@@ -72,10 +72,6 @@ jobs:
       signed: ${{ steps.signing.outputs.signed }}
       version_name: ${{ steps.meta.outputs.version_name }}
       version_code: ${{ steps.meta.outputs.version_code }}
-      repo_url: ${{ steps.meta.outputs.repo_url }}
-      cdn_url: ${{ steps.meta.outputs.cdn_url }}
-      download_url: ${{ steps.meta.outputs.download_url }}
-      custom_download_url: ${{ steps.meta.outputs.custom_download_url }}
 
     steps:
       - name: Checkout
@@ -91,8 +87,8 @@ jobs:
           INPUT_DOWNLOAD_URL: ${{ github.event.inputs.download_url || '' }}
           DEFAULT_CDN_VAR: ${{ vars.CDN1_PUBLIC_BASE_URL || 'https://cdn1.afmarbre.com/app-updates/android' }}
         run: |
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import os, re, sys
+          python3 - <<'PY'
+          import json, os, re, sys
 
           text = open("app/build.gradle.kts", encoding="utf-8").read()
           default_code = re.search(r'versionCode\s*=\s*(?:overrideVersionCode\s*\?:\s*)?(\d+)', text).group(1)
@@ -120,12 +116,16 @@ jobs:
           custom_dl = os.environ.get("INPUT_DOWNLOAD_URL", "").strip()
           download_url = custom_dl or f"{repo_url}/releases/latest/download/atlas-commerce.apk"
 
-          print(f"version_code={final_code}")
-          print(f"version_name={final_name}")
-          print(f"repo_url={repo_url}")
-          print(f"cdn_url={cdn_url}")
-          print(f"download_url={download_url}")
-          print(f"custom_download_url={custom_dl}")
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "resolved-urls.json"), "w", encoding="utf-8") as uf:
+              json.dump({
+                  "repo_url": repo_url,
+                  "cdn_url": cdn_url,
+                  "download_url": download_url,
+              }, uf)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"version_code={final_code}\n")
+              out.write(f"version_name={final_name}\n")
           PY
 
       - name: Set up JDK 17
@@ -218,17 +218,13 @@ jobs:
         env:
           VER_NAME: ${{ steps.meta.outputs.version_name }}
           VER_CODE: ${{ steps.meta.outputs.version_code }}
-          REPO_URL: ${{ steps.meta.outputs.repo_url }}
-          CDN_URL: ${{ steps.meta.outputs.cdn_url }}
-          DOWNLOAD_URL: ${{ steps.meta.outputs.download_url }}
         run: |
           set -o pipefail
+          readarray -t URL_ARGS < <(python3 -c 'import json,os; d=json.load(open(os.path.join(os.environ["RUNNER_TEMP"],"resolved-urls.json"))); print("-PoverrideRepoUrl=" + d["repo_url"]); print("-PoverrideCdnUrl=" + d["cdn_url"]); print("-PoverrideDownloadUrl=" + d["download_url"])')
           gradle :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:assembleRelease \
             "-PoverrideVersionName=${VER_NAME}" \
             "-PoverrideVersionCode=${VER_CODE}" \
-            "-PoverrideRepoUrl=${REPO_URL}" \
-            "-PoverrideCdnUrl=${CDN_URL}" \
-            "-PoverrideDownloadUrl=${DOWNLOAD_URL}" \
+            "${URL_ARGS[@]}" \
             --no-daemon --console=plain --stacktrace 2>&1 | tee "$RUNNER_TEMP/build.log"
 
       - name: Clean temporary signing files & prepare single release APK
@@ -624,9 +620,10 @@ jobs:
           VERSION_CODE: ${{ needs.build.outputs.version_code }}
           CUSTOM_NOTES: ${{ github.event.inputs.release_notes || '' }}
           MANDATORY_INPUT: ${{ github.event.inputs.mandatory || 'false' }}
-          REPO_BASE_URL: ${{ needs.build.outputs.repo_url }}
-          CDN1_BASE: ${{ needs.build.outputs.cdn_url }}
-          CUSTOM_DOWNLOAD_URL: ${{ needs.build.outputs.custom_download_url }}
+          INPUT_REPO_URL: ${{ github.event.inputs.repo_url || '' }}
+          INPUT_CDN_URL: ${{ github.event.inputs.cdn_url || '' }}
+          INPUT_DOWNLOAD_URL: ${{ github.event.inputs.download_url || '' }}
+          DEFAULT_CDN_VAR: ${{ vars.CDN1_PUBLIC_BASE_URL || 'https://cdn1.afmarbre.com/app-updates/android' }}
         run: |
           APK_FILE="signed-apk/atlas-commerce.apk"
           SHA256="$(sha256sum "$APK_FILE" | awk '{print $1}')"
@@ -634,11 +631,16 @@ jobs:
           TAG="v${VERSION_NAME}"
           MANDATORY="${MANDATORY_INPUT:-false}"
           PUBLISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          REPO_BASE_URL="${INPUT_REPO_URL%/}"
+          [ -z "$REPO_BASE_URL" ] && REPO_BASE_URL="https://github.com/${GITHUB_REPOSITORY}"
+          CDN1_BASE="${INPUT_CDN_URL%/}"
+          [ -z "$CDN1_BASE" ] && CDN1_BASE="${DEFAULT_CDN_VAR%/}"
           CDN1_VERSIONED_URL="${CDN1_BASE%/}/atlas-commerce-${TAG}.apk"
           GITHUB_VERSIONED_URL="${REPO_BASE_URL%/}/releases/download/${TAG}/atlas-commerce.apk"
-          PRIMARY_APK_URL="${CUSTOM_DOWNLOAD_URL:-$CDN1_VERSIONED_URL}"
+          PRIMARY_APK_URL="${INPUT_DOWNLOAD_URL:-$CDN1_VERSIONED_URL}"
 
           SHA256="$SHA256" SIZE_BYTES="$SIZE_BYTES" MANDATORY="$MANDATORY" \
+          REPO_BASE_URL="$REPO_BASE_URL" \
           CDN1_VERSIONED_URL="$CDN1_VERSIONED_URL" GITHUB_VERSIONED_URL="$GITHUB_VERSIONED_URL" \
           PRIMARY_APK_URL="$PRIMARY_APK_URL" PUBLISHED_AT="$PUBLISHED_AT" python3 - <<'PYEOF'
           import base64, json, os, re, subprocess
@@ -1007,12 +1009,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           CDN_SYNCED="$CDN_SYNCED" CDN_METHOD="$CDN_METHOD" CF_WAF_BLOCKED="$CF_WAF_BLOCKED" \
-          CF_API_DETAIL="$CF_API_DETAIL" CDN1_BASE_URL="${{ needs.build.outputs.cdn_url }}" \
+          CF_API_DETAIL="$CF_API_DETAIL" INPUT_CDN_URL="${{ github.event.inputs.cdn_url || '' }}" \
+          DEFAULT_CDN_VAR="${{ vars.CDN1_PUBLIC_BASE_URL || 'https://cdn1.afmarbre.com/app-updates/android' }}" \
           python3 - <<'PY'
           import json, os, urllib.request
 
           live_cdn = None
-          cdn_base = os.environ.get("CDN1_BASE_URL", "https://cdn1.afmarbre.com/app-updates/android").rstrip("/")
+          cdn_base = (os.environ.get("INPUT_CDN_URL", "").strip() or os.environ.get("DEFAULT_CDN_VAR", "https://cdn1.afmarbre.com/app-updates/android")).rstrip("/")
           try:
               req = urllib.request.Request(
                   f"{cdn_base}/latest.json",
