@@ -2,8 +2,15 @@ package ma.etherealmber.atlascommerce.ui.components
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,16 +23,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SystemUpdateAlt
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -35,11 +43,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
@@ -49,12 +59,88 @@ import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 /**
+ * Compact circular mini progress ball displayed directly next to the Profile icon
+ * in the Top Bar whenever an update download is hidden in the foreground.
+ * Tapping the mini ball re-expands the full download progress bar while keeping
+ * all Top Bar controls 100% accessible.
+ */
+@Composable
+fun UpdateMiniProgressBall(
+    state: UpdateState,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val downloading = state as? UpdateState.Downloading
+    val visible = downloading != null && downloading.hiddenInForeground && !downloading.info.mandatory
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = scaleIn() + fadeIn(),
+        exit = scaleOut() + fadeOut(),
+        modifier = modifier,
+    ) {
+        val current = downloading
+        val targetFraction = current?.progressFraction ?: 0f
+        val animatedProgress by animateFloatAsState(
+            targetValue = targetFraction,
+            label = "miniUpdateProgress",
+        )
+        Surface(
+            onClick = onClick,
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+            modifier = Modifier.size(34.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                if (current?.progressFraction != null) {
+                    CircularProgressIndicator(
+                        progress = { animatedProgress },
+                        modifier = Modifier.size(32.dp),
+                        strokeWidth = 2.6.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                    )
+                } else {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        strokeWidth = 2.4.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+
+                val pct = current?.percent
+                if (pct != null) {
+                    Text(
+                        text = "$pct%",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 10.sp,
+                        ),
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.SystemUpdateAlt,
+                        contentDescription = "Progression du téléchargement",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
  * Global in-app banner shown across screens whenever an optional update is
  * available, actively downloading, ready to install, or failed mid-download.
  *
- * Active downloads can be hidden (`Masquer`) while continuing in the background;
- * users can always follow live progress in Settings (`Paramètres`) or in Android
- * Notifications, and the banner automatically reappears once ready to install.
+ * Sits cleanly below the Top Bar when [belowTopBar] is `true` so Top Bar controls
+ * remain 100% usable, and collapses smoothly into [UpdateMiniProgressBall] next to
+ * the Profile icon when hidden (`Masquer`).
  */
 @Composable
 fun AppUpdateBanner(
@@ -64,6 +150,7 @@ fun AppUpdateBanner(
     onDismiss: () -> Unit,
     onHideDownload: () -> Unit = {},
     onOpenSettings: (() -> Unit)? = null,
+    belowTopBar: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val shouldShow = when (state) {
@@ -79,7 +166,12 @@ fun AppUpdateBanner(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(
+                start = 12.dp,
+                end = 12.dp,
+                top = if (belowTopBar) 62.dp else 8.dp,
+                bottom = 8.dp,
+            ),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 6.dp,
@@ -155,9 +247,9 @@ fun AppUpdateBanner(
                         }
                         TextButton(onClick = onHideDownload) {
                             Icon(
-                                imageVector = Icons.Outlined.VisibilityOff,
+                                imageVector = Icons.Outlined.KeyboardArrowUp,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(18.dp),
                             )
                             Spacer(Modifier.width(4.dp))
                             Text("Masquer")

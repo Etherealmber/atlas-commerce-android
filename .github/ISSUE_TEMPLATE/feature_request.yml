@@ -1,0 +1,19 @@
+name: ✨ Feature or UI Idea / Idée d'amélioration
+description: Suggest a new feature, workflow improvement, or UI polish for Atlas Commerce Android.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Your Idea / Votre idée
+      description: Describe how you want it to work and look.
+      placeholder: "In the Top Bar, add a compact menu..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context / Détails supplémentaires (Optionnel)
+    validations:
+      required: false

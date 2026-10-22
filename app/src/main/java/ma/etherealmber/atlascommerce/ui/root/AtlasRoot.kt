@@ -6,9 +6,15 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -46,6 +52,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
 import ma.etherealmber.atlascommerce.ui.components.AtlasWelcomeOnboardingScreen
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.MandatoryUpdateScreen
+import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrDeviceScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.AboutScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.LicenseScreen
@@ -75,12 +82,6 @@ private enum class RootStage(val rank: Int) {
     MANDATORY_UPDATE(3),
     LOGIN(4),
     SHELL(5),
-    OVERLAY_SERVER(105),
-    OVERLAY_QR_DEVICE(106),
-    OVERLAY_NOTIFICATIONS(107),
-    OVERLAY_LICENSE(108),
-    OVERLAY_SECURITY(109),
-    OVERLAY_ABOUT(110),
 }
 
 /**
@@ -103,6 +104,14 @@ fun AtlasRoot(
     val densityMode by viewModel.densityMode.collectAsStateWithLifecycle()
     val appearanceLoaded by viewModel.appearanceLoaded.collectAsStateWithLifecycle()
     val animationsEnabled by viewModel.animationsEnabled.collectAsStateWithLifecycle()
+    var appearanceTimedOut by remember { mutableStateOf(false) }
+
+    LaunchedEffect(appearanceLoaded) {
+        if (!appearanceLoaded) {
+            kotlinx.coroutines.delay(2_000L)
+            appearanceTimedOut = true
+        }
+    }
 
     CompositionLocalProvider(LocalAtlasAnimationsEnabled provides animationsEnabled) {
         AtlasTheme(themeMode = themeMode, densityMode = densityMode) {
@@ -116,7 +125,7 @@ fun AtlasRoot(
                     isAppearanceLightNavigationBars = !dark
                 }
             }
-            if (!appearanceLoaded) {
+            if (!appearanceLoaded && !appearanceTimedOut) {
                 AtlasBootSplashScreen(holdUntilReady = true)
             } else {
                 AtlasGate(
@@ -262,22 +271,14 @@ private fun AtlasGate(
         else -> false
     }
 
-    BackHandler(enabled = overlay != null) {
-        overlay = null
-        pendingQrToken = null
-    }
-
     val loadingBackend = !serverLoaded || session is SessionState.Loading
     val activeUser = (session as? SessionState.Active)?.user
-    val stage = when {
+    var savedShellTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
+    var savedLastBottomTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
+
+    val baseStage = when {
         !bootSplashFinished || loadingBackend -> RootStage.SPLASH
         !onboardingDone -> RootStage.ONBOARDING
-        overlay == Overlay.SERVER -> RootStage.OVERLAY_SERVER
-        overlay == Overlay.QR_DEVICE -> RootStage.OVERLAY_QR_DEVICE
-        overlay == Overlay.NOTIFICATIONS -> RootStage.OVERLAY_NOTIFICATIONS
-        overlay == Overlay.LICENSE -> RootStage.OVERLAY_LICENSE
-        overlay == Overlay.SECURITY -> RootStage.OVERLAY_SECURITY
-        overlay == Overlay.ABOUT -> RootStage.OVERLAY_ABOUT
         server == null -> RootStage.SERVER_SETUP
         mandatoryBlocking -> RootStage.MANDATORY_UPDATE
         session is SessionState.SignedOut -> RootStage.LOGIN
@@ -288,7 +289,7 @@ private fun AtlasGate(
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(modifier = Modifier.fillMaxSize()) {
             AtlasPageTransition(
-                targetState = stage,
+                targetState = baseStage,
                 modifier = Modifier.fillMaxSize(),
                 indexSelector = { it.rank },
             ) { currentStage ->
@@ -304,43 +305,6 @@ private fun AtlasGate(
                             viewModel.completeOnboarding()
                         },
                     )
-
-                    RootStage.OVERLAY_SERVER ->
-                        ServerSetupScreen(onClose = { overlay = null })
-
-                    RootStage.OVERLAY_QR_DEVICE ->
-                        QrDeviceScreen(
-                            currentUser = activeUser,
-                            initialToken = pendingQrToken,
-                            onClose = {
-                                overlay = null
-                                pendingQrToken = null
-                            },
-                            onToast = showToast,
-                        )
-
-                    RootStage.OVERLAY_NOTIFICATIONS ->
-                        NotificationsScreen(
-                            onBack = { overlay = null },
-                            onNavigateHref = { href ->
-                                overlay = null
-                                val h = href.orEmpty().lowercase()
-                                requestedTab = when {
-                                    h.contains("product") || h.contains("stock") -> MainTab.PRODUCTS.name
-                                    h.contains("invoice") || h.contains("sale") -> MainTab.SALE.name
-                                    h.contains("scan") -> MainTab.SCAN.name
-                                    h.contains("assist") || h.contains("agent") -> MainTab.AGENT.name
-                                    else -> MainTab.HOME.name
-                                }
-                            },
-                            onToast = showToast,
-                        )
-
-                    RootStage.OVERLAY_LICENSE -> LicenseScreen(onBack = { overlay = null })
-
-                    RootStage.OVERLAY_SECURITY -> SecurityScreen(onBack = { overlay = null })
-
-                    RootStage.OVERLAY_ABOUT -> AboutScreen(onBack = { overlay = null })
 
                     RootStage.SERVER_SETUP -> ServerSetupScreen()
 
@@ -371,8 +335,15 @@ private fun AtlasGate(
                                 user = activeUser,
                                 snackbarHostState = snackbarHostState,
                                 defaultStartTab = defaultStartTab,
+                                activeTabOverride = savedShellTab,
+                                onActiveTabChange = { savedShellTab = it },
+                                lastBottomTabOverride = savedLastBottomTab,
+                                onLastBottomTabChange = { savedLastBottomTab = it },
+                                isForeground = overlay == null,
                                 externalTabRequest = requestedTab,
                                 onExternalTabHandled = { requestedTab = null },
+                                updateState = updateState,
+                                onShowUpdateProgress = viewModel::showUpdateDownloadBanner,
                                 onChangeServer = { overlay = Overlay.SERVER },
                                 onOpenQrDevice = { token ->
                                     pendingQrToken = token
@@ -395,7 +366,79 @@ private fun AtlasGate(
                 }
             }
 
+            // Full-screen overlay host layered above MainShell so opening License, Security,
+            // About, Devices (QR), Server Setup, or Notifications NEVER destroys MainShell's
+            // active tab (e.g. Paramètres) or scroll position when tapping Retour / Back!
+            var lastOverlay by remember { mutableStateOf<String?>(null) }
+            if (overlay != null) {
+                lastOverlay = overlay
+            }
+            AnimatedVisibility(
+                visible = bootSplashFinished && onboardingDone && !loadingBackend && overlay != null,
+                enter = slideInHorizontally(initialOffsetX = { it / 6 }) + fadeIn(),
+                exit = slideOutHorizontally(targetOffsetX = { it / 6 }) + fadeOut(),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    when (overlay ?: lastOverlay) {
+                        Overlay.SERVER -> ServerSetupScreen(onClose = { overlay = null })
+
+                        Overlay.QR_DEVICE -> QrDeviceScreen(
+                            currentUser = activeUser,
+                            initialToken = pendingQrToken,
+                            onClose = {
+                                overlay = null
+                                pendingQrToken = null
+                            },
+                            onToast = showToast,
+                        )
+
+                        Overlay.NOTIFICATIONS -> NotificationsScreen(
+                            onBack = { overlay = null },
+                            onNavigateHref = { href ->
+                                overlay = null
+                                val h = href.orEmpty().lowercase()
+                                requestedTab = when {
+                                    h.contains("product") || h.contains("stock") -> MainTab.PRODUCTS.name
+                                    h.contains("invoice") || h.contains("sale") -> MainTab.SALE.name
+                                    h.contains("scan") -> MainTab.SCAN.name
+                                    h.contains("assist") || h.contains("agent") -> MainTab.AGENT.name
+                                    else -> MainTab.HOME.name
+                                }
+                            },
+                            onToast = showToast,
+                        )
+
+                        Overlay.LICENSE -> LicenseScreen(onBack = { overlay = null })
+
+                        Overlay.SECURITY -> SecurityScreen(onBack = { overlay = null })
+
+                        Overlay.ABOUT -> AboutScreen(onBack = { overlay = null })
+                    }
+                }
+            }
+
+            // Registered AFTER MainShell so system Back always dismisses any open overlay first
+            // and returns directly to the exact underlying tab (such as Paramètres).
+            BackHandler(enabled = overlay != null) {
+                overlay = null
+                pendingQrToken = null
+            }
+
             if (bootSplashFinished && onboardingDone && serverLoaded && !mandatoryBlocking) {
+                if (baseStage != RootStage.SHELL || overlay != null) {
+                    UpdateMiniProgressBall(
+                        state = updateState,
+                        onClick = viewModel::showUpdateDownloadBanner,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(top = 12.dp, end = 14.dp),
+                    )
+                }
                 AppUpdateBanner(
                     state = updateState,
                     onDownload = startDownloadWithNotificationPermission,
@@ -405,7 +448,7 @@ private fun AtlasGate(
                         requestNotificationPermissionIfNeeded()
                         viewModel.hideUpdateDownloadBanner()
                         showToast(
-                            "Téléchargement poursuivi — allez dans Paramètres ou dans vos Notifications pour voir la progression.",
+                            "Barre réduite à côté du profil — progression aussi visible dans Paramètres et Notifications.",
                         )
                     },
                     onOpenSettings = if (activeUser != null) {
@@ -416,6 +459,7 @@ private fun AtlasGate(
                     } else {
                         null
                     },
+                    belowTopBar = baseStage == RootStage.SHELL || overlay != null,
                     modifier = Modifier.align(Alignment.TopCenter),
                 )
             }

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📦 Download Latest APK (GitHub Releases)
+    url: https://github.com/Etherealmber/atlas-commerce-android/releases/latest
+    about: Download the latest signed Atlas Commerce Android APK directly.
+  - name: 🌐 Atlas Commerce Web & Worker Backend
+    url: https://github.com/Etherealmber/atlas-commerce
+    about: Deploy or update your Cloudflare Worker server backend before connecting the Android app.

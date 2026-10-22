@@ -138,7 +138,7 @@ sealed interface UpdateState {
             }
 
         val statusMessage: String
-            get() = "Téléchargement en arrière-plan — vous pouvez masquer cet encart et suivre la progression dans Paramètres ou dans vos Notifications."
+            get() = "Appuyez sur Masquer pour réduire la barre en mini-bulle à côté du profil, ou suivez dans Paramètres / Notifications."
 
         val progressSummary: String
             get() = UpdateFormatter.progressSummary(bytesRead, totalBytes)

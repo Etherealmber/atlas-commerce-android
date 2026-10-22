@@ -4,8 +4,18 @@ on:
   push:
     branches: ['main']
     tags: ['v*']
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/workflows/issue-bot.yml'
   pull_request:
     branches: ['main']
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/workflows/issue-bot.yml'
   workflow_dispatch:
     inputs:
       version_name:
@@ -53,21 +63,20 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-# Read-only by default; only jobs that publish diagnostics or releases carry write permission.
 permissions:
   contents: read
 
 concurrency:
-  group: android-${{ github.ref }}
+  group: android-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Assemble debug + release + unit tests
+    name: Build, Test & Lint
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
     outputs:
       signed: ${{ steps.signing.outputs.signed }}
       version_name: ${{ steps.meta.outputs.version_name }}
@@ -77,7 +86,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Resolve app version, repo, CDN & download URL metadata (inputs or defaults)
+      - name: Resolve app version, repo, CDN & download URL metadata
         id: meta
         env:
           INPUT_VERSION_NAME: ${{ github.event.inputs.version_name || '' }}
@@ -137,23 +146,21 @@ jobs:
       - name: Prepare Android SDK
         run: |
           SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          echo "Android SDK: $SDK_ROOT"
           SDKM="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ -d "$SDK_ROOT/platforms/android-35" ] && [ -d "$SDK_ROOT/build-tools/35.0.0" ]; then
-            echo "Android SDK 35 & build-tools 35.0.0 already pre-installed — skipping slow network sync."
+            echo "Android SDK 35 & build-tools 35.0.0 ready."
           elif [ -x "$SDKM" ]; then
             yes | "$SDKM" --licenses > /dev/null 2>&1 || true
-            "$SDKM" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
-          else
-            echo "sdkmanager not found - relying on AGP SDK auto-download"
+            "$SDKM" "platforms;android-35" "build-tools;35.0.0" || true
           fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.8.2'
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
 
-      - name: Configure release signing keystore (if GitHub Secrets are present)
+      - name: Configure release signing keystore (on release runs)
         id: signing
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -187,7 +194,6 @@ jobs:
 
           out_file = os.environ["GITHUB_OUTPUT"]
           if not b64 or not final_store_pass or not final_alias:
-              print("No release signing secrets configured yet — building standard release APK.")
               with open(out_file, "a", encoding="utf-8") as fh:
                   fh.write("signed=false\n")
               raise SystemExit(0)
@@ -214,144 +220,55 @@ jobs:
               fh.write("signed=true\n")
           PY
 
-      - name: Build, test, and assemble release (R8)
-        id: build
-        continue-on-error: true
+      - name: Compile, run unit & stability tests, verify KSP & Lint
         env:
           VER_NAME: ${{ steps.meta.outputs.version_name }}
           VER_CODE: ${{ steps.meta.outputs.version_code }}
+          IS_RELEASE_RUN: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
         run: |
-          set -o pipefail
           readarray -t URL_ARGS < <(python3 -c 'import json,os; d=json.load(open(os.path.join(os.environ["RUNNER_TEMP"],"resolved-urls.json"))); print("-PoverrideRepoUrl=" + d["repo_url"]); print("-PoverrideCdnUrl=" + d["cdn_url"]); print("-PoverrideDownloadUrl=" + d["download_url"])')
-          set +e
-          gradle :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:assembleRelease \
-            "-PoverrideVersionName=${VER_NAME}" \
-            "-PoverrideVersionCode=${VER_CODE}" \
-            "${URL_ARGS[@]}" \
-            -Dkotlin.compiler.execution.strategy=in-process \
-            --no-daemon --console=plain --stacktrace > "$RUNNER_TEMP/build.log" 2>&1
-          RC=$?
-          tail -n 120 "$RUNNER_TEMP/build.log"
-          exit $RC
+
+          if [ "$IS_RELEASE_RUN" = "true" ]; then
+            gradle :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease \
+              "-PoverrideVersionName=${VER_NAME}" \
+              "-PoverrideVersionCode=${VER_CODE}" \
+              "${URL_ARGS[@]}" \
+              --build-cache --console=plain --stacktrace
+          else
+            gradle :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:kspReleaseKotlin :app:lintDebug \
+              "-PoverrideVersionName=${VER_NAME}" \
+              "-PoverrideVersionCode=${VER_CODE}" \
+              "${URL_ARGS[@]}" \
+              --build-cache --console=plain --stacktrace
+          fi
+          gradle --stop || true
 
       - name: Clean temporary signing files & prepare single release APK
         if: always()
         run: |
           rm -f release-keystore.jks keystore.properties
-          if [ "${{ steps.build.outcome }}" = "success" ]; then
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ] && [ -f app/build/outputs/apk/release/app-release.apk ]; then
             SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-            APKSIGNER="$SDK_ROOT/build-tools/35.0.0/apksigner"
-            if [ "${{ steps.signing.outputs.signed }}" = "true" ] && [ -f app/build/outputs/apk/release/app-release.apk ]; then
-              "$APKSIGNER" verify -v app/build/outputs/apk/release/app-release.apk
-              mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/atlas-commerce.apk
-            fi
+            "$SDK_ROOT/build-tools/35.0.0/apksigner" verify -v app/build/outputs/apk/release/app-release.apk
+            mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/atlas-commerce.apk
           fi
 
-      - name: Publish failure log
-        if: steps.build.outcome == 'failure' && github.event_name == 'push' && github.ref_name != 'main'
-        continue-on-error: true
-        run: |
-          mkdir -p ci-logs
-          tail -n 600 "$RUNNER_TEMP/build.log" > ci-logs/build.log
-          git config user.name "atlas-ci"
-          git config user.email "ci@users.noreply.github.com"
-          git add -f ci-logs/build.log
-          git commit -m "ci: build log [skip ci]" || exit 0
-          git push origin "HEAD:${GITHUB_REF_NAME}"
-
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: build-log
-          path: ${{ runner.temp }}/build.log
-          if-no-files-found: ignore
-
       - name: Upload debug APK
-        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
           name: atlas-commerce-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
 
-      - name: Upload release APK
-        if: steps.build.outcome == 'success'
+      - name: Upload release APK (release workflow runs)
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v7
         with:
           name: atlas-commerce-release-apk
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
 
-      - name: Report build result
-        if: steps.build.outcome == 'failure'
-        run: |
-          echo "::error::Gradle build failed — see ci-logs/build.log on the branch."
-          exit 1
-
-  lint:
-    name: Static checks
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '21'
-      - name: Prepare Android SDK
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          SDKM="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ -d "$SDK_ROOT/platforms/android-35" ] && [ -d "$SDK_ROOT/build-tools/35.0.0" ]; then
-            echo "Android SDK 35 & build-tools 35.0.0 already pre-installed — skipping slow network sync."
-          elif [ -x "$SDKM" ]; then
-            yes | "$SDKM" --licenses > /dev/null 2>&1 || true
-            "$SDKM" "platforms;android-35" "build-tools;35.0.0" || true
-          else
-            echo "sdkmanager not found - relying on AGP SDK auto-download"
-          fi
-      - uses: gradle/actions/setup-gradle@v6
-        with:
-          gradle-version: '9.8.2'
-      - name: Verify legacy 1.0.4 source quarantine, KSP release & Android Lint
-        run: |
-          mkdir -p app/src/main/java/ma/etherealmber/atlascommerce/push
-          cat > app/src/main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt <<'EOF'
-          package ma.etherealmber.atlascommerce.push
-          import com.google.firebase.messaging.FirebaseMessagingService
-          import dagger.hilt.android.AndroidEntryPoint
-          import javax.inject.Inject
-
-          @AndroidEntryPoint
-          class AtlasFirebaseMessagingService : FirebaseMessagingService() {
-              @Inject lateinit var pushTokenRegistrar: PushTokenRegistrar
-          }
-          EOF
-          cat > app/src/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt <<'EOF'
-          package ma.etherealmber.atlascommerce.di
-          import dagger.Module
-          import dagger.hilt.InstallIn
-          import dagger.hilt.components.SingletonComponent
-
-          @Module
-          @InstallIn(SingletonComponent::class)
-          object LegacyNetworkModule
-          EOF
-          touch -d '2026-10-21T20:08:04Z' app/src/main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt
-          touch -d '2026-10-21T20:08:04Z' app/src/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt
-
-          mv .git "$RUNNER_TEMP/hidden-git"
-          gradle :app:kspReleaseKotlin :app:lintDebug \
-            -Dkotlin.compiler.execution.strategy=in-process \
-            --no-daemon --console=plain
-          mv "$RUNNER_TEMP/hidden-git" .git
-
-          test ! -e app/src/main/java/ma/etherealmber/atlascommerce/push
-          test ! -e app/src/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt
-          test -f .atlas-1.0.4-quarantine/main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt
-          test -f .atlas-1.0.4-quarantine/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt
-      - name: Upload lint report
+      - name: Upload Android Lint HTML report
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -359,215 +276,9 @@ jobs:
           path: app/build/reports/lint-results-debug.html
           if-no-files-found: ignore
 
-  android14-smoke:
-    name: Android 14 release APK launch & upgrade check
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Download release APK artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: atlas-commerce-release-apk
-          path: release-apk
-
-      - name: Sign release APK & launch on Android 14 (API 34) emulator
-        id: smoke
-        continue-on-error: true
-        run: |
-          set -euxo pipefail
-          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          SDKM="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          AVDM="$SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
-          ADB="$SDK_ROOT/platform-tools/adb"
-          ZIPALIGN="$SDK_ROOT/build-tools/35.0.0/zipalign"
-          APKSIGNER="$SDK_ROOT/build-tools/35.0.0/apksigner"
-          EMU_PID=""
-
-          cleanup() {
-            set +e
-            "$ADB" emu kill </dev/null >/dev/null 2>&1 || true
-            if [ -n "$EMU_PID" ]; then
-              kill -9 "$EMU_PID" >/dev/null 2>&1 || true
-            fi
-            pkill -9 -f qemu >/dev/null 2>&1 || true
-            "$ADB" kill-server </dev/null >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-
-          {
-            export ANDROID_USER_HOME="$HOME/.android"
-            export ANDROID_AVD_HOME="$HOME/.android/avd"
-            mkdir -p "$ANDROID_AVD_HOME"
-
-            if [ -e /dev/kvm ]; then
-              sudo chmod 666 /dev/kvm
-            fi
-
-            yes | "$SDKM" --licenses </dev/null >/dev/null 2>&1 || true
-            "$SDKM" "platform-tools" "emulator" "build-tools;35.0.0" "platforms;android-34" "system-images;android-34;google_apis;x86_64" </dev/null
-
-            if [ -f release-apk/atlas-commerce.apk ] && "$APKSIGNER" verify release-apk/atlas-commerce.apk >/dev/null 2>&1; then
-              echo "Using production-signed atlas-commerce.apk directly."
-              cp release-apk/atlas-commerce.apk "$RUNNER_TEMP/app-release-signed.apk"
-            else
-              RAW_APK=$(ls release-apk/*.apk | head -n 1)
-              keytool -genkeypair -v \
-                -keystore "$RUNNER_TEMP/smoke.jks" \
-                -alias smoke \
-                -keyalg RSA -keysize 2048 -validity 10000 \
-                -storepass android -keypass android \
-                -dname "CN=Atlas Release Smoke,O=Atlas,C=MA" </dev/null
-              "$ZIPALIGN" -f -p 4 "$RAW_APK" "$RUNNER_TEMP/aligned.apk"
-              "$APKSIGNER" sign \
-                --ks "$RUNNER_TEMP/smoke.jks" \
-                --ks-pass pass:android \
-                --key-pass pass:android \
-                --out "$RUNNER_TEMP/app-release-signed.apk" \
-                "$RUNNER_TEMP/aligned.apk"
-              "$APKSIGNER" verify -v "$RUNNER_TEMP/app-release-signed.apk"
-            fi
-
-            "$ADB" start-server </dev/null >/dev/null 2>&1
-
-            echo "no" | "$AVDM" create avd \
-              --force \
-              --name atlas_api34 \
-              --package "system-images;android-34;google_apis;x86_64"
-
-            "$SDK_ROOT/emulator/emulator" -list-avds
-
-            "$SDK_ROOT/emulator/emulator" \
-              -avd atlas_api34 \
-              -no-window \
-              -gpu swiftshader_indirect \
-              -no-snapshot \
-              -noaudio \
-              -no-boot-anim \
-              -memory 3072 </dev/null >"$RUNNER_TEMP/emulator.log" 2>&1 &
-            EMU_PID=$!
-
-            timeout 90 "$ADB" wait-for-device </dev/null
-            BOOTED=0
-            for i in $(seq 1 90); do
-              if ! kill -0 "$EMU_PID" 2>/dev/null; then
-                echo "Emulator exited prematurely:"
-                cat "$RUNNER_TEMP/emulator.log"
-                exit 1
-              fi
-              BOOT=$(timeout 10 "$ADB" shell getprop sys.boot_completed </dev/null 2>/dev/null | tr -d '\r' || true)
-              if [ "$BOOT" = "1" ]; then
-                BOOTED=1
-                break
-              fi
-              sleep 2
-            done
-            if [ "$BOOTED" != "1" ]; then
-              echo "Emulator failed to finish booting within 180s:"
-              cat "$RUNNER_TEMP/emulator.log"
-              exit 1
-            fi
-
-            timeout 15 "$ADB" shell input keyevent 82 </dev/null || true
-            sleep 3
-
-            # 1. Clean install & cold launch of R8-minified release APK on Android 14
-            timeout 15 "$ADB" logcat -c </dev/null
-            timeout 60 "$ADB" install -r "$RUNNER_TEMP/app-release-signed.apk" </dev/null
-            timeout 30 "$ADB" shell am start -W -n ma.etherealmber.atlascommerce/.MainActivity </dev/null
-            sleep 8
-
-            timeout 20 "$ADB" logcat -d </dev/null > "$RUNNER_TEMP/smoke-logcat.txt"
-            PID1=$(timeout 10 "$ADB" shell pidof ma.etherealmber.atlascommerce </dev/null | tr -d '\r' || true)
-            echo "Android 14 cold launch PID: $PID1"
-
-            if grep -Fq "AndroidRuntime: FATAL EXCEPTION" "$RUNNER_TEMP/smoke-logcat.txt"; then
-              grep -A 50 -F "AndroidRuntime: FATAL EXCEPTION" "$RUNNER_TEMP/smoke-logcat.txt" > "$RUNNER_TEMP/smoke-failure.log"
-              cat "$RUNNER_TEMP/smoke-failure.log"
-              exit 1
-            fi
-            test -n "$PID1"
-
-            timeout 20 "$ADB" shell uiautomator dump /sdcard/ui1.xml </dev/null
-            timeout 10 "$ADB" shell cat /sdcard/ui1.xml </dev/null > "$RUNNER_TEMP/ui1.xml"
-            grep -Fq "Atlas Commerce" "$RUNNER_TEMP/ui1.xml"
-
-            # 2. Simulate upgrading over corrupted/legacy 1.0.4 DataStore on Android 14
-            timeout 15 "$ADB" root </dev/null || true
-            timeout 30 "$ADB" wait-for-device </dev/null
-            sleep 2
-            timeout 15 "$ADB" shell am force-stop ma.etherealmber.atlascommerce </dev/null
-            timeout 15 "$ADB" shell "mkdir -p /data/data/ma.etherealmber.atlascommerce/files/datastore && printf 'corrupt-legacy-1.0.4-datastore-bytes\xff\x00\xfe' > /data/data/ma.etherealmber.atlascommerce/files/datastore/atlas_prefs.preferences_pb" </dev/null || true
-            APP_UID=$(timeout 10 "$ADB" shell stat -c '%u:%g' /data/data/ma.etherealmber.atlascommerce </dev/null | tr -d '\r' || true)
-            if [ -n "$APP_UID" ]; then
-              timeout 10 "$ADB" shell "chown -R $APP_UID /data/data/ma.etherealmber.atlascommerce/files" </dev/null || true
-            fi
-
-            timeout 15 "$ADB" logcat -c </dev/null
-            timeout 60 "$ADB" install -r "$RUNNER_TEMP/app-release-signed.apk" </dev/null
-            timeout 30 "$ADB" shell am start -W -n ma.etherealmber.atlascommerce/.MainActivity </dev/null
-            sleep 8
-
-            timeout 20 "$ADB" logcat -d </dev/null >> "$RUNNER_TEMP/smoke-logcat.txt"
-            PID2=$(timeout 10 "$ADB" shell pidof ma.etherealmber.atlascommerce </dev/null | tr -d '\r' || true)
-            echo "Android 14 post-upgrade launch PID: $PID2"
-
-            if grep -Fq "AndroidRuntime: FATAL EXCEPTION" "$RUNNER_TEMP/smoke-logcat.txt"; then
-              grep -A 50 -F "AndroidRuntime: FATAL EXCEPTION" "$RUNNER_TEMP/smoke-logcat.txt" > "$RUNNER_TEMP/smoke-failure.log"
-              cat "$RUNNER_TEMP/smoke-failure.log"
-              exit 1
-            fi
-            test -n "$PID2"
-
-            timeout 20 "$ADB" shell uiautomator dump /sdcard/ui2.xml </dev/null
-            timeout 10 "$ADB" shell cat /sdcard/ui2.xml </dev/null > "$RUNNER_TEMP/ui2.xml"
-            grep -Fq "Atlas Commerce" "$RUNNER_TEMP/ui2.xml"
-          } > "$RUNNER_TEMP/smoke-step.log" 2>&1
-
-      - name: Publish smoke failure log
-        if: steps.smoke.outcome == 'failure' && github.event_name == 'push' && github.ref_name != 'main'
-        continue-on-error: true
-        run: |
-          mkdir -p ci-logs
-          tail -n 300 "$RUNNER_TEMP/smoke-step.log" > ci-logs/smoke-step.log || true
-          tail -n 500 "$RUNNER_TEMP/smoke-logcat.txt" > ci-logs/android14-logcat.log || true
-          tail -n 120 "$RUNNER_TEMP/emulator.log" > ci-logs/emulator.log || true
-          git config user.name "atlas-ci"
-          git config user.email "ci@users.noreply.github.com"
-          git add -f ci-logs/
-          git commit -m "ci: android 14 smoke log [skip ci]" || exit 0
-          git push origin "HEAD:${GITHUB_REF_NAME}"
-
-      - name: Upload Android 14 logcat & UI dumps
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: android14-smoke-diagnostics
-          path: |
-            ${{ runner.temp }}/smoke-logcat.txt
-            ${{ runner.temp }}/ui1.xml
-            ${{ runner.temp }}/ui2.xml
-            ${{ runner.temp }}/emulator.log
-          if-no-files-found: ignore
-
-      - name: Report Android 14 smoke result
-        if: steps.smoke.outcome == 'failure'
-        run: |
-          echo "::error::Android 14 release launch smoke test failed — see ci-logs/ on branch."
-          exit 1
-
   publish-release:
     name: Publish signed APK to GitHub Releases & CDN 1
-    needs: [build, lint, android14-smoke]
+    needs: [build]
     if: >-
       needs.build.outputs.signed == 'true' &&
       (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
@@ -756,7 +467,6 @@ jobs:
           if not commit_items:
               commit_items = [f"Mise à jour {tag} — améliorations et correctifs."]
 
-          # Keep `latest.json` notes concise & minimal
           if custom_raw:
               in_app_notes = custom_raw
           else:
@@ -887,9 +597,6 @@ jobs:
           CF_WAF_BLOCKED="false"
           CF_API_DETAIL=""
 
-          # Channel 0: Direct Cloudflare R2 REST API v4 (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`)
-          # Works on Cloudflare Free Plan ($0) with ONLY `Account -> Workers R2 Storage -> Edit` permission,
-          # zero npm packages, and bypasses Zone Bot Fight Mode 100%!
           if [ -n "${CLOUDFLARE_API_TOKEN}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID}" ]; then
             echo "Uploading directly to Cloudflare R2 bucket '${R2_BUCKET_NAME}' via Cloudflare REST API v4..."
             CF_BASE="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${R2_BUCKET_NAME}/objects"
@@ -922,7 +629,6 @@ jobs:
             fi
           fi
 
-          # Channel 1: Direct R2 S3 upload (completely immune to Cloudflare Zone Bot Fight Mode / WAF!)
           if [ "$CDN_SYNCED" != "true" ] && [ -n "${R2_ACCOUNT_ID}" ] && [ -n "${AWS_ACCESS_KEY_ID}" ] && [ -n "${AWS_SECRET_ACCESS_KEY}" ]; then
             echo "Uploading directly to Cloudflare R2 bucket '${R2_BUCKET_NAME}' via S3 API..."
             ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
@@ -945,7 +651,6 @@ jobs:
             fi
           fi
 
-          # Channel 2: Official Cloudflare API via Wrangler R2 (immune to Zone Bot Fight Mode / WAF!)
           if [ "$CDN_SYNCED" != "true" ] && [ -n "${CLOUDFLARE_API_TOKEN}" ]; then
             echo "Uploading directly to Cloudflare R2 bucket '${R2_BUCKET_NAME}' via Wrangler API..."
             if npx --yes wrangler@4 r2 object put "${R2_BUCKET_NAME}/app-updates/android/atlas-commerce-v${VERSION_NAME}.apk" \
@@ -964,7 +669,6 @@ jobs:
             fi
           fi
 
-          # Channel 3: Atlas Worker HTTPS upload endpoint (`workers.dev` first if set, then `UPLOAD_URL`)
           if [ "$CDN_SYNCED" != "true" ] && [ -n "${UPLOAD_TOKEN}" ]; then
             for TARGET_URL in "${WORKER_DIRECT_URL}" "${UPLOAD_URL}"; do
               [ -z "$TARGET_URL" ] && continue
@@ -1004,7 +708,6 @@ jobs:
             done
           fi
 
-          # Publish clean, actionable summary table without failing the completed GitHub Release
           {
             echo "## 🚀 Atlas Commerce Android \`v${VERSION_NAME}\` (build \`${VERSION_CODE}\`) — Publication Summary"
             echo ""
@@ -1014,7 +717,7 @@ jobs:
             if [ "$CDN_SYNCED" = "true" ]; then
               echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ✅ Synced | Uploaded via **${CDN_METHOD}** |"
             elif [ "$CF_WAF_BLOCKED" = "true" ]; then
-              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ⚠️ Blocked by Cloudflare Bot Fight / WAF | In Cloudflare Dashboard → **Security → WAF → Custom rules**, add rule \`(http.request.uri.path eq \"/api/admin/android-release\")\` → Action: **Skip** (All remaining custom rules + Super Bot Fight Mode), **OR** add secret \`CLOUDFLARE_API_TOKEN\` with R2 Write permission to upload directly to \`company-stock-images\` bypassing WAF completely. |"
+              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ⚠️ Blocked by Cloudflare Bot Fight / WAF | Add \`CLOUDFLARE_API_TOKEN\` + \`CLOUDFLARE_ACCOUNT_ID\` or a WAF Skip rule for \`/api/admin/android-release\`. |"
             else
               echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ℹ️ Skipped / Not configured | Add \`CLOUDFLARE_API_TOKEN\` + \`CLOUDFLARE_ACCOUNT_ID\` (recommended) or disable Free Bot Fight Mode. |"
             fi

@@ -173,11 +173,17 @@ class AppUpdateManagerTest {
             assertFalse(stillDownloading!!.hiddenInForeground)
             assertTrue(stillDownloading.statusTitle.contains("Téléchargement de la mise à jour"))
 
-            // Hiding the download banner hides foreground card while streaming continues uninterrupted
+            // Hiding the download banner collapses into Top Bar mini-ball while streaming continues uninterrupted
             manager.hideDownloadBanner()
             val hiddenDownloading = manager.state.value as? UpdateState.Downloading
             assertNotNull(hiddenDownloading)
             assertTrue(hiddenDownloading!!.hiddenInForeground)
+
+            // Tapping the Top Bar mini-ball re-expands the full banner cleanly and toggles reliably
+            manager.showDownloadBanner()
+            assertFalse((manager.state.value as UpdateState.Downloading).hiddenInForeground)
+            manager.toggleDownloadBanner()
+            assertTrue((manager.state.value as UpdateState.Downloading).hiddenInForeground)
 
             releaseSecondHalf.countDown()
             awaitCondition { manager.state.value is UpdateState.ReadyToInstall }
@@ -343,6 +349,63 @@ class AppUpdateManagerTest {
         val summary = UpdateFormatter.progressSummary(14 * 1_048_576L, 28 * 1_048_576L)
         assertTrue(summary.startsWith("50 % · "))
         assertTrue(summary.contains("Mo"))
+    }
+
+    @Test
+    fun appLaunchFreezeAndMoshiCodegenInvariantsHoldAcrossCodebase() {
+        val moduleDir = File("src/main").takeIf { it.isDirectory }
+            ?: File("app/src/main")
+        assertTrue("Expected app/src/main directory", moduleDir.isDirectory)
+
+        val manifest = File(moduleDir, "AndroidManifest.xml").readText()
+        assertTrue("MainActivity must remain exported launcher", manifest.contains(".MainActivity"))
+        assertTrue("Launcher category required", manifest.contains("android.intent.category.LAUNCHER"))
+        assertTrue("FileProvider required for APK updates", manifest.contains("androidx.core.content.FileProvider"))
+
+        val proguardFile = File("proguard-rules.pro").takeIf { it.isFile }
+            ?: File("app/proguard-rules.pro")
+        assertTrue("Proguard rules must keep generated Moshi JsonAdapters", proguardFile.readText().contains("**JsonAdapter"))
+
+        val pkgRegex = Regex("""^\s*package\s+([A-Za-z0-9_.]+)""", RegexOption.MULTILINE)
+        val jsonClassRegex = Regex("""@JsonClass\s*\(\s*generateAdapter\s*=\s*true\s*\)\s*(?:data\s+)?class\s+([A-Za-z0-9_]+)""")
+        var checkedAdapters = 0
+
+        moduleDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { ktFile ->
+                val text = ktFile.readText()
+                val pkg = pkgRegex.find(text)?.groupValues?.get(1).orEmpty()
+
+                jsonClassRegex.findAll(text).forEach { match ->
+                    val className = match.groupValues[1]
+                    val adapterFqcn = if (pkg.isEmpty()) "${className}JsonAdapter" else "$pkg.${className}JsonAdapter"
+                    val loaded = Class.forName(adapterFqcn)
+                    assertNotNull("Missing KSP adapter $adapterFqcn", loaded)
+                    checkedAdapters++
+                }
+
+                text.lineSequence().forEachIndexed { idx, rawLine ->
+                    val line = rawLine.trim()
+                    if (!line.startsWith("//") && !line.startsWith("*")) {
+                        assertFalse(
+                            "Unsafe !! in ${ktFile.name}:${idx + 1}: $line",
+                            line.contains("!!") && !line.contains("\"!!\""),
+                        )
+                        assertFalse(
+                            "GlobalScope leak in ${ktFile.name}:${idx + 1}",
+                            line.contains("GlobalScope."),
+                        )
+                        if (ktFile.path.contains("/ui/") || ktFile.name == "MainActivity.kt" || ktFile.name == "AtlasApp.kt") {
+                            assertFalse(
+                                "UI thread freeze risk (runBlocking) in ${ktFile.name}:${idx + 1}",
+                                Regex("""\brunBlocking\b""").containsMatchIn(line),
+                            )
+                        }
+                    }
+                }
+            }
+
+        assertTrue("Expected KSP-generated Moshi adapters to be verified", checkedAdapters >= 15)
     }
 
     private fun awaitCondition(timeoutMs: Long = 5_000L, predicate: () -> Boolean) {

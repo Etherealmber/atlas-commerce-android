@@ -98,43 +98,51 @@ class SessionManager @Inject constructor(
     }
 
     private suspend fun restore() {
-        serverConfig.loaded.filter { it }.first()
-        val currentServer = serverConfig.selection.value?.baseUrl.orEmpty()
-
-        val restored = runCatching {
-            val stored = preferences.readSession() ?: return@runCatching null
-            if (currentServer.isBlank()) return@runCatching null
-            if (stored.serverUrl.isNotBlank() && !stored.serverUrl.equals(currentServer, ignoreCase = true)) {
-                return@runCatching null
+        try {
+            kotlinx.coroutines.withTimeoutOrNull(2_500L) {
+                serverConfig.loaded.filter { it }.first()
             }
-            val token = cryptoStore.decrypt(stored.tokenCipher)
-            if (token.isNullOrBlank()) null else stored to token
-        }.getOrNull()
+            val currentServer = serverConfig.selection.value?.baseUrl.orEmpty()
 
-        if (restored == null) {
-            purgeInMemorySession()
-            runCatching { preferences.clearSession() }
-            _state.value = SessionState.SignedOut
-            return
+            val restored = runCatching {
+                val stored = preferences.readSession() ?: return@runCatching null
+                if (currentServer.isBlank()) return@runCatching null
+                if (stored.serverUrl.isNotBlank() && !stored.serverUrl.equals(currentServer, ignoreCase = true)) {
+                    return@runCatching null
+                }
+                val token = cryptoStore.decrypt(stored.tokenCipher)
+                if (token.isNullOrBlank()) null else stored to token
+            }.getOrNull()
+
+            if (restored == null) {
+                purgeInMemorySession()
+                runCatching { preferences.clearSession() }
+                _state.value = SessionState.SignedOut
+                return
+            }
+
+            val (stored, token) = restored
+            val username = stored.username.ifBlank { "utilisateur" }
+            val resolvedServer = stored.serverUrl.ifBlank { currentServer }
+            runCatching { preferences.bindActiveScope(resolvedServer, username) }
+            runCatching { offlineCache.bindScope(resolvedServer, username) }
+            tokenHolder.set(token)
+            _state.value = SessionState.Active(
+                SessionUser(
+                    username = username,
+                    role = stored.role.ifBlank { "user" },
+                    displayName = stored.displayName.ifBlank { username },
+                    email = stored.email,
+                    avatarUrl = stored.avatarUrl,
+                    serverUrl = resolvedServer,
+                ),
+            )
+            runCatching { refreshProfile() }
+        } finally {
+            if (_state.value is SessionState.Loading) {
+                _state.value = SessionState.SignedOut
+            }
         }
-
-        val (stored, token) = restored
-        val username = stored.username.ifBlank { "utilisateur" }
-        val resolvedServer = stored.serverUrl.ifBlank { currentServer }
-        preferences.bindActiveScope(resolvedServer, username)
-        offlineCache.bindScope(resolvedServer, username)
-        tokenHolder.set(token)
-        _state.value = SessionState.Active(
-            SessionUser(
-                username = username,
-                role = stored.role.ifBlank { "user" },
-                displayName = stored.displayName.ifBlank { username },
-                email = stored.email,
-                avatarUrl = stored.avatarUrl,
-                serverUrl = resolvedServer,
-            ),
-        )
-        runCatching { refreshProfile() }
     }
 
     suspend fun signIn(
