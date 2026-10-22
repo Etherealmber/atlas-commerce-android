@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.components
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,8 +21,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.NetworkCheck
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SystemUpdateAlt
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -32,8 +37,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
 import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
@@ -45,7 +52,9 @@ import ma.etherealmber.atlascommerce.ui.theme.Atlas
  * Global in-app banner shown across screens whenever an optional update is
  * available, actively downloading, ready to install, or failed mid-download.
  *
- * Cannot be dismissed while [UpdateState.Downloading] is active.
+ * Active downloads can be hidden (`Masquer`) while continuing in the background;
+ * users can always follow live progress in Settings (`Paramètres`) or in Android
+ * Notifications, and the banner automatically reappears once ready to install.
  */
 @Composable
 fun AppUpdateBanner(
@@ -53,11 +62,13 @@ fun AppUpdateBanner(
     onDownload: () -> Unit,
     onInstall: () -> Unit,
     onDismiss: () -> Unit,
+    onHideDownload: () -> Unit = {},
+    onOpenSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val shouldShow = when (state) {
         is UpdateState.Available -> !state.dismissedBanner && !state.info.mandatory
-        is UpdateState.Downloading -> !state.info.mandatory
+        is UpdateState.Downloading -> !state.info.mandatory && !state.hiddenInForeground
         is UpdateState.ReadyToInstall -> !state.info.mandatory
         is UpdateState.Error -> state.info != null && state.info.mandatory.not()
         else -> false
@@ -119,6 +130,39 @@ fun AppUpdateBanner(
 
                 is UpdateState.Downloading -> {
                     DownloadProgressBlock(state = state)
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (onOpenSettings != null) {
+                            TextButton(
+                                onClick = {
+                                    onHideDownload()
+                                    onOpenSettings()
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Settings,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text("Voir dans Paramètres")
+                            }
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        TextButton(onClick = onHideDownload) {
+                            Icon(
+                                imageVector = Icons.Outlined.VisibilityOff,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Masquer")
+                        }
+                    }
                 }
 
                 is UpdateState.ReadyToInstall -> {
@@ -341,6 +385,11 @@ fun SettingsUpdateCard(
     onDownload: () -> Unit,
     onInstall: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val notificationsEnabled = runCatching {
+        NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }.getOrDefault(true)
+
     AtlasCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
@@ -361,6 +410,48 @@ fun SettingsUpdateCard(
             )
         }
         Spacer(Modifier.height(8.dp))
+
+        if (!notificationsEnabled) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.NotificationsActive,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Activez les notifications Android pour voir les alertes et le téléchargement en direct.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = {
+                            runCatching {
+                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            }
+                        },
+                    ) {
+                        Text("Activer")
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
 
         // Source selector: Auto (Fastest + Failover) | CDN 1 | GitHub
         Text(

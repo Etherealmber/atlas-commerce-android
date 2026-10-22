@@ -170,7 +170,14 @@ class AppUpdateManagerTest {
             val stillDownloading = manager.state.value as? UpdateState.Downloading
             assertNotNull("Active download state must never be overridden", stillDownloading)
             assertEquals(50, stillDownloading?.percent)
-            assertTrue(stillDownloading!!.statusTitle.contains("Téléchargement de la mise à jour"))
+            assertFalse(stillDownloading!!.hiddenInForeground)
+            assertTrue(stillDownloading.statusTitle.contains("Téléchargement de la mise à jour"))
+
+            // Hiding the download banner hides foreground card while streaming continues uninterrupted
+            manager.hideDownloadBanner()
+            val hiddenDownloading = manager.state.value as? UpdateState.Downloading
+            assertNotNull(hiddenDownloading)
+            assertTrue(hiddenDownloading!!.hiddenInForeground)
 
             releaseSecondHalf.countDown()
             awaitCondition { manager.state.value is UpdateState.ReadyToInstall }

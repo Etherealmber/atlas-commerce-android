@@ -23,6 +23,7 @@ import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.SessionEvents
+import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
@@ -219,6 +220,35 @@ class AppViewModel @Inject constructor(
 
     fun dismissUpdateBanner() {
         updateManager.dismissBanner()
+    }
+
+    fun hideUpdateDownloadBanner() {
+        updateManager.hideDownloadBanner()
+    }
+
+    fun repostUpdateNotification() {
+        updateManager.repostActiveNotification()
+    }
+
+    fun verifyEmailLink(
+        link: VerifyLink,
+        fallbackServerOrigin: String? = null,
+        onDone: (String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            when (
+                val res = sessionManager.signInViaEmailLink(
+                    username = link.username,
+                    otp = link.otp,
+                    sig = link.sig,
+                    exp = link.exp,
+                    fallbackServerOrigin = fallbackServerOrigin,
+                )
+            ) {
+                is ApiResult.Success -> onDone("Connexion vérifiée par e-mail — bienvenue !")
+                is ApiResult.Failure -> onDone(res.message)
+            }
+        }
     }
 
     fun installDownloadedUpdate(context: Context): Boolean =

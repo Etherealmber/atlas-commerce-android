@@ -49,15 +49,32 @@ android {
         val overrideVersionName = (findProperty("overrideVersionName") as? String)
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
+        val effectiveRepoUrl = (findProperty("overrideRepoUrl") as? String)
+            ?.trim()
+            ?.trimEnd('/')
+            ?.takeIf { it.isNotEmpty() }
+            ?: "https://github.com/Etherealmber/atlas-commerce-android"
+        val effectiveCdnUrl = (findProperty("overrideCdnUrl") as? String)
+            ?.trim()
+            ?.trimEnd('/')
+            ?.takeIf { it.isNotEmpty() }
+            ?: "https://cdn1.afmarbre.com/app-updates/android"
+        val effectiveDownloadUrl = (findProperty("overrideDownloadUrl") as? String)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: "$effectiveRepoUrl/releases/latest/download/atlas-commerce.apk"
+
         versionCode = overrideVersionCode ?: 108
         versionName = overrideVersionName ?: "1.0.8"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // The server is chosen by the user on first launch (see ServerSetupScreen).
         buildConfigField("String", "DEFAULT_API_BASE", "\"https://stock.afmarbre.com\"")
-        buildConfigField("String", "PROJECT_REPO", "\"https://github.com/Etherealmber/atlas-commerce-android\"")
+        buildConfigField("String", "PROJECT_REPO", "\"$effectiveRepoUrl\"")
         buildConfigField("String", "WEB_REPO", "\"https://github.com/Etherealmber/atlas-commerce\"")
-        buildConfigField("String", "ISSUES_URL", "\"https://github.com/Etherealmber/atlas-commerce-android/issues/new\"")
+        buildConfigField("String", "ISSUES_URL", "\"$effectiveRepoUrl/issues/new\"")
+        buildConfigField("String", "CDN1_BASE_URL", "\"$effectiveCdnUrl\"")
+        buildConfigField("String", "DEFAULT_DOWNLOAD_URL", "\"$effectiveDownloadUrl\"")
         buildConfigField("String", "SECURITY_EMAIL", "\"security@afmarbre.com\"")
     }
 

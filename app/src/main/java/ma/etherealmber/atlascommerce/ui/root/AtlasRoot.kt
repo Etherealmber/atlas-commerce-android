@@ -37,6 +37,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AppUpdateBanner
@@ -89,8 +90,13 @@ private enum class RootStage(val rank: Int) {
 fun AtlasRoot(
     deepLinkQrToken: String? = null,
     onDeepLinkConsumed: () -> Unit = {},
+    deepLinkVerify: VerifyLink? = null,
+    onVerifyLinkConsumed: () -> Unit = {},
+    deepLinkServerOrigin: String? = null,
     openNotificationsRequested: Boolean = false,
     onOpenNotificationsConsumed: () -> Unit = {},
+    openSettingsRequested: Boolean = false,
+    onOpenSettingsConsumed: () -> Unit = {},
     viewModel: AppViewModel = hiltViewModel(),
 ) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -116,8 +122,13 @@ fun AtlasRoot(
                 AtlasGate(
                     deepLinkQrToken = deepLinkQrToken,
                     onDeepLinkConsumed = onDeepLinkConsumed,
+                    deepLinkVerify = deepLinkVerify,
+                    onVerifyLinkConsumed = onVerifyLinkConsumed,
+                    deepLinkServerOrigin = deepLinkServerOrigin,
                     openNotificationsRequested = openNotificationsRequested,
                     onOpenNotificationsConsumed = onOpenNotificationsConsumed,
+                    openSettingsRequested = openSettingsRequested,
+                    onOpenSettingsConsumed = onOpenSettingsConsumed,
                     viewModel = viewModel,
                 )
             }
@@ -129,8 +140,13 @@ fun AtlasRoot(
 private fun AtlasGate(
     deepLinkQrToken: String?,
     onDeepLinkConsumed: () -> Unit,
+    deepLinkVerify: VerifyLink?,
+    onVerifyLinkConsumed: () -> Unit,
+    deepLinkServerOrigin: String?,
     openNotificationsRequested: Boolean,
     onOpenNotificationsConsumed: () -> Unit,
+    openSettingsRequested: Boolean,
+    onOpenSettingsConsumed: () -> Unit,
     viewModel: AppViewModel,
 ) {
     val context = LocalContext.current
@@ -151,7 +167,11 @@ private fun AtlasGate(
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
-    ) { _ -> }
+    ) { granted ->
+        if (granted) {
+            viewModel.repostUpdateNotification()
+        }
+    }
 
     val requestNotificationPermissionIfNeeded: () -> Unit = {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -202,14 +222,33 @@ private fun AtlasGate(
         }
     }
 
+    LaunchedEffect(openSettingsRequested, session) {
+        if (openSettingsRequested && session is SessionState.Active) {
+            overlay = null
+            requestedTab = MainTab.SETTINGS.name
+            onOpenSettingsConsumed()
+        }
+    }
+
     val showToast: (String) -> Unit = { message ->
         scope.launch { snackbarHostState.showSnackbar(message) }
+    }
+
+    LaunchedEffect(deepLinkVerify) {
+        deepLinkVerify?.let { link ->
+            val originHint = deepLinkServerOrigin
+            onVerifyLinkConsumed()
+            viewModel.verifyEmailLink(link, originHint) { msg -> showToast(msg) }
+        }
     }
 
     LaunchedEffect(viewModel) {
         viewModel.notices.collect { message -> showToast(message) }
     }
     LaunchedEffect(session) {
+        if (session is SessionState.Active) {
+            requestNotificationPermissionIfNeeded()
+        }
         if (session is SessionState.SignedOut && overlay == Overlay.NOTIFICATIONS) {
             overlay = null
         }
@@ -362,6 +401,21 @@ private fun AtlasGate(
                     onDownload = startDownloadWithNotificationPermission,
                     onInstall = triggerInstall,
                     onDismiss = viewModel::dismissUpdateBanner,
+                    onHideDownload = {
+                        requestNotificationPermissionIfNeeded()
+                        viewModel.hideUpdateDownloadBanner()
+                        showToast(
+                            "Téléchargement poursuivi — allez dans Paramètres ou dans vos Notifications pour voir la progression.",
+                        )
+                    },
+                    onOpenSettings = if (activeUser != null) {
+                        {
+                            overlay = null
+                            requestedTab = MainTab.SETTINGS.name
+                        }
+                    } else {
+                        null
+                    },
                     modifier = Modifier.align(Alignment.TopCenter),
                 )
             }

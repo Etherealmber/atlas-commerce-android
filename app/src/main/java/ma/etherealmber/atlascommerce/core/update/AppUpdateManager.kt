@@ -114,6 +114,9 @@ class AppUpdateManager internal constructor(
     @Volatile
     private var lastAutoCheckMs: Long = 0L
 
+    @Volatile
+    private var hideActiveDownloadInForeground: Boolean = false
+
     private val updateAdapter by lazy { moshi.adapter(AndroidUpdateDto::class.java) }
 
     val isDownloading: Boolean
@@ -348,10 +351,12 @@ class AppUpdateManager internal constructor(
             } ?: return
 
             infoToDownload = candidate
+            hideActiveDownloadInForeground = false
             _state.value = UpdateState.Downloading(
                 info = infoToDownload,
                 bytesRead = 0L,
                 totalBytes = -1L,
+                hiddenInForeground = false,
             )
             notifier.showStarting(infoToDownload)
             downloadJob = scope.launch(ioDispatcher) {
@@ -465,6 +470,7 @@ class AppUpdateManager internal constructor(
                 bytesRead = 0L,
                 totalBytes = totalBytes,
                 activeSourceLabel = sourceLabel,
+                hiddenInForeground = hideActiveDownloadInForeground,
             )
             notifier.showProgress(info, 0L, totalBytes)
 
@@ -482,6 +488,7 @@ class AppUpdateManager internal constructor(
                             bytesRead = totalRead,
                             totalBytes = totalBytes,
                             activeSourceLabel = sourceLabel,
+                            hiddenInForeground = hideActiveDownloadInForeground,
                         )
                         notifier.showProgress(info, totalRead, totalBytes)
                     }
@@ -514,8 +521,8 @@ class AppUpdateManager internal constructor(
     }
 
     /**
-     * Hides the optional update banner for this session. Never dismisses an
-     * active download or a mandatory update.
+     * Hides the optional update banner for this session. Never cancels or overrides
+     * an active download.
      */
     fun dismissBanner() {
         synchronized(lock) {
@@ -523,6 +530,40 @@ class AppUpdateManager internal constructor(
             if (current is UpdateState.Available && !current.info.mandatory) {
                 _state.value = current.copy(dismissedBanner = true)
             }
+        }
+    }
+
+    /**
+     * Hides the in-app foreground download banner while keeping the background
+     * APK stream and live OS notification + Settings progress card active.
+     */
+    fun hideDownloadBanner() {
+        synchronized(lock) {
+            val current = _state.value
+            if (current is UpdateState.Downloading && !current.info.mandatory) {
+                hideActiveDownloadInForeground = true
+                _state.value = current.copy(hiddenInForeground = true)
+                notifier.showProgress(current.info, current.bytesRead, current.totalBytes)
+            }
+        }
+    }
+
+    /**
+     * Immediately pushes the active update notification as soon as Android
+     * notification permission is granted so the user sees it right away.
+     */
+    fun repostActiveNotification() {
+        when (val current = _state.value) {
+            is UpdateState.Downloading -> {
+                if (current.bytesRead <= 0L && current.totalBytes <= 0L) {
+                    notifier.showStarting(current.info)
+                } else {
+                    notifier.showProgress(current.info, current.bytesRead, current.totalBytes)
+                }
+            }
+            is UpdateState.ReadyToInstall -> notifier.showCompleted(current.info, current.apkFile)
+            is UpdateState.Error -> notifier.showError(current.info, current.message)
+            else -> Unit
         }
     }
 
