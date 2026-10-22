@@ -797,6 +797,9 @@ jobs:
           RELEASE_TYPE: ${{ github.event.inputs.release_type || 'release' }}
         run: |
           TAG="v${VERSION_NAME}"
+          git tag -f "$TAG" HEAD
+          git push -f origin "refs/tags/${TAG}"
+
           if [ "$RELEASE_TYPE" = "prerelease" ]; then
             PRERELEASE_FLAG="--prerelease"
           else
@@ -831,7 +834,7 @@ jobs:
               $PRERELEASE_FLAG
           fi
 
-      - name: Sync signed APK & latest.json to CDN 1 (Cloudflare R2 S3 -> Wrangler API -> Worker HTTPS)
+      - name: Sync signed APK & latest.json to CDN 1 (Cloudflare REST API v4 -> R2 S3 -> Wrangler -> Worker HTTPS)
         env:
           UPLOAD_TOKEN: ${{ secrets.ATLAS_RELEASE_UPLOAD_TOKEN }}
           UPLOAD_URL: ${{ vars.ATLAS_RELEASE_API_URL || 'https://stock.afmarbre.com/api/admin/android-release' }}
@@ -854,9 +857,45 @@ jobs:
           CDN_SYNCED="false"
           CDN_METHOD=""
           CF_WAF_BLOCKED="false"
+          CF_API_DETAIL=""
+
+          # Channel 0: Direct Cloudflare R2 REST API v4 (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`)
+          # Works on Cloudflare Free Plan ($0) with ONLY `Account -> Workers R2 Storage -> Edit` permission,
+          # zero npm packages, and bypasses Zone Bot Fight Mode 100%!
+          if [ -n "${CLOUDFLARE_API_TOKEN}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "Uploading directly to Cloudflare R2 bucket '${R2_BUCKET_NAME}' via Cloudflare REST API v4..."
+            CF_BASE="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${R2_BUCKET_NAME}/objects"
+
+            cf_put() {
+              local key="$1"
+              local file="$2"
+              local ctype="$3"
+              local cctrl="$4"
+              curl --silent --show-error --output "$RUNNER_TEMP/cf-r2-resp.json" \
+                --write-out "%{http_code}" --retry 3 --retry-delay 2 \
+                -X PUT "${CF_BASE}/${key}" \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                -H "Content-Type: ${ctype}" \
+                -H "Cache-Control: ${cctrl}" \
+                --data-binary "@${file}"
+            }
+
+            C1=$(cf_put "app-updates/android/atlas-commerce-v${VERSION_NAME}.apk" "signed-apk/atlas-commerce.apk" "application/vnd.android.package-archive" "public, max-age=31536000, immutable")
+            C2=$(cf_put "app-updates/android/latest.apk" "signed-apk/atlas-commerce.apk" "application/vnd.android.package-archive" "public, max-age=60")
+            C3=$(cf_put "app-updates/android/latest.json" "signed-apk/latest.json" "application/json; charset=utf-8" "no-cache, max-age=0, must-revalidate")
+            echo "Cloudflare REST API v4 HTTP status codes: versioned_apk=$C1 latest_apk=$C2 latest_json=$C3"
+
+            if [ "$C1" = "200" ] && [ "$C2" = "200" ] && [ "$C3" = "200" ]; then
+              CDN_SYNCED="true"
+              CDN_METHOD="Cloudflare REST API v4 Direct R2 (${R2_BUCKET_NAME})"
+            else
+              CF_API_DETAIL="REST API HTTP codes ($C1/$C2/$C3)"
+              echo "Cloudflare REST API detail: $(head -c 300 "$RUNNER_TEMP/cf-r2-resp.json" 2>/dev/null || true)"
+            fi
+          fi
 
           # Channel 1: Direct R2 S3 upload (completely immune to Cloudflare Zone Bot Fight Mode / WAF!)
-          if [ -n "${R2_ACCOUNT_ID}" ] && [ -n "${AWS_ACCESS_KEY_ID}" ] && [ -n "${AWS_SECRET_ACCESS_KEY}" ]; then
+          if [ "$CDN_SYNCED" != "true" ] && [ -n "${R2_ACCOUNT_ID}" ] && [ -n "${AWS_ACCESS_KEY_ID}" ] && [ -n "${AWS_SECRET_ACCESS_KEY}" ]; then
             echo "Uploading directly to Cloudflare R2 bucket '${R2_BUCKET_NAME}' via S3 API..."
             ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
             if aws s3 cp signed-apk/atlas-commerce.apk \
@@ -949,6 +988,39 @@ jobs:
             elif [ "$CF_WAF_BLOCKED" = "true" ]; then
               echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ⚠️ Blocked by Cloudflare Bot Fight / WAF | In Cloudflare Dashboard → **Security → WAF → Custom rules**, add rule \`(http.request.uri.path eq \"/api/admin/android-release\")\` → Action: **Skip** (All remaining custom rules + Super Bot Fight Mode), **OR** add secret \`CLOUDFLARE_API_TOKEN\` with R2 Write permission to upload directly to \`company-stock-images\` bypassing WAF completely. |"
             else
-              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ℹ️ Skipped / Not configured | Add \`CLOUDFLARE_API_TOKEN\` (recommended) or WAF skip rule for \`/api/admin/android-release\`. |"
+              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ℹ️ Skipped / Not configured | Add \`CLOUDFLARE_API_TOKEN\` + \`CLOUDFLARE_ACCOUNT_ID\` (recommended) or disable Free Bot Fight Mode. |"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+          CDN_SYNCED="$CDN_SYNCED" CDN_METHOD="$CDN_METHOD" CF_WAF_BLOCKED="$CF_WAF_BLOCKED" CF_API_DETAIL="$CF_API_DETAIL" \
+          python3 - <<'PY'
+          import json, os, urllib.request
+
+          live_cdn = None
+          try:
+              req = urllib.request.Request(
+                  "https://cdn1.afmarbre.com/app-updates/android/latest.json",
+                  headers={"User-Agent": "Mozilla/5.0 AtlasVerify/1.0", "Cache-Control": "no-cache"},
+              )
+              with urllib.request.urlopen(req, timeout=10) as r:
+                  live_cdn = json.loads(r.read().decode("utf-8"))
+          except Exception as e:
+              live_cdn = {"fetchError": str(e)}
+
+          with open("signed-apk/publish-status.json", "w", encoding="utf-8") as fh:
+              json.dump({
+                  "cdnSynced": os.environ.get("CDN_SYNCED") == "true",
+                  "cdnMethod": os.environ.get("CDN_METHOD", ""),
+                  "cfWafBlocked": os.environ.get("CF_WAF_BLOCKED") == "true",
+                  "cfApiDetail": os.environ.get("CF_API_DETAIL", ""),
+                  "liveCdnLatestJson": live_cdn,
+              }, fh, ensure_ascii=False, indent=2)
+          PY
+
+      - name: Upload publication verification summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: publish-verification
+          path: signed-apk/publish-status.json
+          if-no-files-found: ignore
