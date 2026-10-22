@@ -48,6 +48,9 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/core/security/DeviceIdentity.kt",
             "main/java/ma/etherealmber/atlascommerce/core/server/ServerConfig.kt",
             "main/java/ma/etherealmber/atlascommerce/core/session/SessionManager.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/update/AppUpdateManager.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/update/UpdateModels.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/update/UpdateNotifier.kt",
             "main/java/ma/etherealmber/atlascommerce/data/CartStore.kt",
             "main/java/ma/etherealmber/atlascommerce/data/OfflineCache.kt",
             "main/java/ma/etherealmber/atlascommerce/data/model/Models.kt",
@@ -56,6 +59,7 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/di/AppModule.kt",
             "main/java/ma/etherealmber/atlascommerce/di/ProbeClient.kt",
             "main/java/ma/etherealmber/atlascommerce/di/Qualifiers.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/components/AppUpdateUi.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/components/AtlasComponents.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/components/StatusUi.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/root/AppViewModel.kt",
@@ -81,11 +85,14 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/ui/util/Intents.kt",
             "main/res/drawable/ic_launcher_background.xml",
             "main/res/drawable/ic_launcher_foreground.xml",
+            "main/res/drawable/ic_stat_update.xml",
             "main/res/mipmap-anydpi-v26/ic_launcher.xml",
             "main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
             "main/res/values/colors.xml",
             "main/res/values/strings.xml",
             "main/res/values/themes.xml",
+            "main/res/xml/file_paths.xml",
+            "test/java/ma/etherealmber/atlascommerce/AppUpdateManagerTest.kt",
             "test/java/ma/etherealmber/atlascommerce/AtlasFormatTest.kt",
             "test/java/ma/etherealmber/atlascommerce/ServerUrlTest.kt"
         ))
@@ -136,7 +143,6 @@ public final class LegacySourceQuarantine {
                 removeOrNeutralizeOnWindowsLock(candidate);
                 moved.add(relPath);
             } catch (Exception ignored) {
-                // Best-effort neutralisation if copy failed.
                 neutralizeSourceInPlace(candidate);
             }
         }
@@ -188,8 +194,6 @@ public final class LegacySourceQuarantine {
             String gitBin = findGitExecutable();
             if (gitBin != null) {
                 Set<String> tracked = queryGitTrackedFiles(gitBin, rootDir, srcDir);
-                // Only union Git's index if it reflects 1.0.5+ (contains MainActivity.kt),
-                // preventing an old 1.0.4 .git folder overlaid with a ZIP from keeping 1.0.4 files.
                 if (tracked.contains(V105_SENTINEL)) {
                     allowed.addAll(tracked);
                 }

@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.core.net
 
+import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
 import ma.etherealmber.atlascommerce.data.model.ClientDto
 import ma.etherealmber.atlascommerce.data.model.CompanySettingsDto
 import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
@@ -30,6 +31,12 @@ interface AtlasApi {
 
     @GET("api/health")
     suspend fun health(): ApiEnvelope<HealthDto>
+
+    @GET("api/app/android-update")
+    suspend fun androidUpdate(
+        @Query("versionCode") versionCode: Int,
+        @Query("versionName") versionName: String,
+    ): AndroidUpdateDto
 
     @GET("api/auth/me")
     suspend fun me(): ApiEnvelope<MeDto>

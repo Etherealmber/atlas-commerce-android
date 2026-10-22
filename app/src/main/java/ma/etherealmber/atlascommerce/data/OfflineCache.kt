@@ -21,14 +21,16 @@ import javax.inject.Singleton
 @Singleton
 class OfflineCache @Inject constructor(
     @ApplicationContext context: Context,
-    moshi: Moshi,
+    private val moshi: Moshi,
 ) {
 
     private val directory = File(context.filesDir, "atlas-cache").apply { mkdirs() }
 
-    private val productAdapter = moshi.adapter<List<ProductDto>>(
-        Types.newParameterizedType(List::class.java, ProductDto::class.java),
-    )
+    private val productAdapter by lazy {
+        moshi.adapter<List<ProductDto>>(
+            Types.newParameterizedType(List::class.java, ProductDto::class.java),
+        )
+    }
 
     /** Disk I/O, so callers never block the main thread with a 300-product JSON. */
     suspend fun saveProducts(products: List<ProductDto>) = withContext(Dispatchers.IO) {

@@ -1,6 +1,11 @@
 package ma.etherealmber.atlascommerce.ui.root
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -15,8 +20,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,15 +33,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.session.SessionState
+import ma.etherealmber.atlascommerce.core.update.UpdateState
+import ma.etherealmber.atlascommerce.ui.components.AppUpdateBanner
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
-import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
+import ma.etherealmber.atlascommerce.ui.components.MandatoryUpdateScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.AboutScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.LicenseScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.SecurityScreen
@@ -43,6 +55,7 @@ import ma.etherealmber.atlascommerce.ui.screens.login.LoginScreen
 import ma.etherealmber.atlascommerce.ui.screens.server.ServerSetupScreen
 import ma.etherealmber.atlascommerce.ui.shell.MainShell
 import ma.etherealmber.atlascommerce.ui.theme.AtlasTheme
+import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 import ma.etherealmber.atlascommerce.ui.util.findActivity
 
 private object Overlay {
@@ -55,10 +68,10 @@ private object Overlay {
 /**
  * Composition root of the app.
  *
- * Resolves appearance first (so themes never flash), then gates on three things
- * in order: server chosen → signed in → main shell. Overlays (server picker,
- * legal pages) sit on top of any stage, which is why the server can be changed
- * from the login screen as well as from settings.
+ * Resolves appearance first (so themes never flash), then gates on:
+ * server chosen → mandatory update (if any) → signed in → main shell, with live
+ * non-overridable APK download progress surfaced across every screen and in the
+ * Android system notification bar.
  */
 @Composable
 fun AtlasRoot(viewModel: AppViewModel = hiltViewModel()) {
@@ -77,8 +90,6 @@ fun AtlasRoot(viewModel: AppViewModel = hiltViewModel()) {
                 isAppearanceLightNavigationBars = !dark
             }
         }
-        // Until the saved appearance is known, paint the themed window background
-        // only — this avoids a light flash for users who chose dark.
         if (!appearanceLoaded) {
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
         } else {
@@ -89,13 +100,50 @@ fun AtlasRoot(viewModel: AppViewModel = hiltViewModel()) {
 
 @Composable
 private fun AtlasGate(viewModel: AppViewModel) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val session by viewModel.session.collectAsStateWithLifecycle()
     val server by viewModel.server.collectAsStateWithLifecycle()
     val serverLoaded by viewModel.serverLoaded.collectAsStateWithLifecycle()
+    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var overlay by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { _ ->
+        // Download already starts immediately whether or not notification permission was granted.
+    }
+
+    val startDownloadWithNotificationPermission: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            runCatching {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        viewModel.startUpdateDownload()
+    }
+
+    val triggerInstall: () -> Unit = {
+        viewModel.installDownloadedUpdate(context)
+    }
+
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.onAppResumed(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val showToast: (String) -> Unit = { message ->
         scope.launch { snackbarHostState.showSnackbar(message) }
@@ -106,6 +154,14 @@ private fun AtlasGate(viewModel: AppViewModel) {
     }
     LaunchedEffect(session) {
         if (session is SessionState.SignedOut) overlay = null
+    }
+
+    val mandatoryBlocking = when (val u = updateState) {
+        is UpdateState.Available -> u.info.mandatory
+        is UpdateState.Downloading -> u.info.mandatory
+        is UpdateState.ReadyToInstall -> u.info.mandatory
+        is UpdateState.Error -> u.info?.mandatory == true
+        else -> false
     }
 
     BackHandler(enabled = overlay != null) { overlay = null }
@@ -126,10 +182,21 @@ private fun AtlasGate(viewModel: AppViewModel) {
 
                 server == null -> ServerSetupScreen()
 
+                mandatoryBlocking -> MandatoryUpdateScreen(
+                    state = updateState,
+                    onDownload = startDownloadWithNotificationPermission,
+                    onInstall = triggerInstall,
+                    onChangeServer = { overlay = Overlay.SERVER },
+                )
+
                 session is SessionState.SignedOut -> LoginScreen(
                     onChangeServer = { overlay = Overlay.SERVER },
                     onOpenSecurity = { overlay = Overlay.SECURITY },
                     onOpenLicense = { overlay = Overlay.LICENSE },
+                    onCheckUpdates = {
+                        viewModel.checkForUpdate(manual = true)
+                        showToast("Vérification des mises à jour…")
+                    },
                 )
 
                 session is SessionState.Active -> {
@@ -142,10 +209,21 @@ private fun AtlasGate(viewModel: AppViewModel) {
                         onOpenSecurity = { overlay = Overlay.SECURITY },
                         onOpenAbout = { overlay = Overlay.ABOUT },
                         onSignOut = viewModel::signOut,
+                        onStartUpdateDownload = startDownloadWithNotificationPermission,
                     )
                 }
 
                 else -> SplashPane()
+            }
+
+            if (serverLoaded && !mandatoryBlocking) {
+                AppUpdateBanner(
+                    state = updateState,
+                    onDownload = startDownloadWithNotificationPermission,
+                    onInstall = triggerInstall,
+                    onDismiss = viewModel::dismissUpdateBanner,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
             }
 
             SnackbarHost(

@@ -57,6 +57,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
 import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
+import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.util.openExternal
@@ -70,6 +71,7 @@ fun SettingsScreen(
     onOpenAbout: () -> Unit,
     onSignOut: () -> Unit,
     onToast: (String) -> Unit,
+    onStartUpdateDownload: () -> Unit = {},
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -78,6 +80,7 @@ fun SettingsScreen(
     val themeMode by appViewModel.themeMode.collectAsStateWithLifecycle()
     val densityMode by appViewModel.densityMode.collectAsStateWithLifecycle()
     val serverSelection by appViewModel.server.collectAsStateWithLifecycle()
+    val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     var confirmSignOut by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -166,6 +169,19 @@ fun SettingsScreen(
                     icon = Icons.Outlined.SwapHoriz,
                 )
             }
+        }
+
+        item {
+            SettingsUpdateCard(
+                state = updateState,
+                onCheck = { appViewModel.checkForUpdate(manual = true) },
+                onDownload = onStartUpdateDownload,
+                onInstall = {
+                    if (!appViewModel.installDownloadedUpdate(context)) {
+                        onToast("Impossible d'ouvrir l'installateur sur cet appareil.")
+                    }
+                },
+            )
         }
 
         item {

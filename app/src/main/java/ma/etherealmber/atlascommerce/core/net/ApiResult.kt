@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.core.net
 
+import com.squareup.moshi.JsonClass
+
 /** Result of every network operation — the UI never sees raw exceptions. */
 sealed interface ApiResult<out T> {
     data class Success<T>(val data: T) : ApiResult<T>
@@ -18,6 +20,7 @@ fun <T> ApiResult<T>.failureOrNull(): ApiResult.Failure? = this as? ApiResult.Fa
 fun <T> ApiResult<T>.dataOr(fallback: T): T = successOrNull() ?: fallback
 
 /** Envelope returned by the Atlas worker: `{ success, data, error, code, message }`. */
+@JsonClass(generateAdapter = true)
 data class ApiEnvelope<T>(
     val success: Boolean = false,
     val data: T? = null,
@@ -34,6 +37,7 @@ interface ApiStatus {
 }
 
 /** Error body used by [ApiRunner] to translate HTTP failures. */
+@JsonClass(generateAdapter = true)
 data class ApiErrorPayload(
     val success: Boolean = false,
     val error: String? = null,

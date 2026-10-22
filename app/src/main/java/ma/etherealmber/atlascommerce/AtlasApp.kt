@@ -1,13 +1,37 @@
 package ma.etherealmber.atlascommerce
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
 import dagger.hilt.android.HiltAndroidApp
 
-/**
- * Atlas Commerce application.
- *
- * No analytics, no crash reporter, no third-party SDK that phones home: the app
- * only talks to the server the user chose.
- */
 @HiltAndroidApp
-class AtlasApp : Application()
+class AtlasApp : Application() {
+
+    override fun onCreate() {
+        super.onCreate()
+        ensureNotificationChannels()
+    }
+
+    private fun ensureNotificationChannels() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        runCatching {
+            val nm = getSystemService(NotificationManager::class.java) ?: return
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    UPDATE_CHANNEL_ID,
+                    "Mises à jour de l'application",
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = "Progression du téléchargement et installation des mises à jour Atlas Commerce"
+                    setShowBadge(false)
+                },
+            )
+        }
+    }
+
+    companion object {
+        const val UPDATE_CHANNEL_ID = "atlas_updates"
+    }
+}

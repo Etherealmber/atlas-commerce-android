@@ -33,11 +33,13 @@ data class ProbeReport(
 @Singleton
 class ServerProbe @Inject constructor(
     @ProbeClient private val client: OkHttpClient,
-    moshi: Moshi,
+    private val moshi: Moshi,
 ) {
 
-    private val healthType = Types.newParameterizedType(ApiEnvelope::class.java, HealthDto::class.java)
-    private val healthAdapter = moshi.adapter<ApiEnvelope<HealthDto>>(healthType)
+    private val healthAdapter by lazy {
+        val healthType = Types.newParameterizedType(ApiEnvelope::class.java, HealthDto::class.java)
+        moshi.adapter<ApiEnvelope<HealthDto>>(healthType)
+    }
 
     suspend fun probe(rawUrl: String): ProbeReport = withContext(Dispatchers.IO) {
         probeBlocking(rawUrl)

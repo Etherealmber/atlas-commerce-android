@@ -61,6 +61,7 @@ fun MainShell(
     onOpenSecurity: () -> Unit,
     onOpenAbout: () -> Unit,
     onSignOut: () -> Unit,
+    onStartUpdateDownload: () -> Unit = {},
     shellViewModel: ShellViewModel = hiltViewModel(),
 ) {
     val cartCount by shellViewModel.cartCount.collectAsStateWithLifecycle()
@@ -162,6 +163,7 @@ fun MainShell(
                     onOpenSecurity = onOpenSecurity,
                     onOpenAbout = onOpenAbout,
                     onSignOut = onSignOut,
+                    onStartUpdateDownload = onStartUpdateDownload,
                     onToast = onToast,
                 )
             }
