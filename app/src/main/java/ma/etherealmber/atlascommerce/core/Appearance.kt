@@ -44,4 +44,8 @@ object Roles {
     /** Owner, admin and secretary can create documents (worker: requireBizMutator). */
     fun canCreateDocuments(role: String?): Boolean =
         role?.lowercase() in setOf(OWNER, ADMIN, SECRETARY)
+
+    /** Owner, admin and warehouse operators can create/update products directly. */
+    fun canMutateStock(role: String?): Boolean =
+        role?.lowercase() in setOf(OWNER, ADMIN, STOCK, STOREKEEPER)
 }

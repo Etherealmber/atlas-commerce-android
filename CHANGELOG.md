@@ -3,6 +3,31 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
 [SemVer](https://semver.org/lang/fr/).
 
+## [1.0.6] — 2026-10-22
+
+### Ajouté
+
+- **Confidentialité caméra stricte (`BarcodeCameraView`)** : libération immédiate de CameraX
+  (`unbindAll`, arrêt de l'analyseur ML Kit et de l'exécuteur) dès tout changement d'onglet,
+  ouverture d'un écran superposé / dialogue ou mise en arrière-plan.
+- **Vérification automatique des mises à jour à chaque ouverture / retour au premier plan**
+  (`onAppResumed` / `onAppStopped`), tout en garantissant qu'aucun téléchargement APK actif n'est
+  jamais interrompu ni écrasé.
+- **Scanner un poste PC (`QrDeviceScreen`) distinct du Scan Stock** : cockpit de sécurité
+  indigo/cyan à cadre carré `QR_CODE`, liens profonds `/qr` & `/login-qr` (`https` et
+  `atlascommerce://qr`), connexion mobile pré-authentification et validation/refus de poste PC.
+- **Appareils connectés** (`GET /api/auth/devices` & `POST /api/auth/devices/revoke` sur empreinte
+  SHA-256 complète `full`) depuis Réglages et l'écran d'appairage QR.
+- **Photo de profil (`avatar_url`) partout** : barre supérieure, Accueil, Réglages et validation QR,
+  avec décodage SVG worker, WebP/PNG Base64, chemins relatifs et HTTPS + envoi depuis la galerie
+  (`PATCH /api/auth/me`).
+- **Articles nécessaires & checklist dynamique des champs requis** lors de l'ajout produit ou du
+  scan d'un code inconnu (`POST /api/products` et `POST /api/stock/product-requests`).
+- **Centre de notifications** (cloche avec badge en barre supérieure : `/api/alerts` +
+  `/api/mobile-actions` compléter / refuser).
+- **Atlas Agent IA** natif en barre inférieure (`/api/assist/status`, `/api/assist/next-actions`,
+  `/api/assist/chat`, `/api/assist/approve`).
+
 ## [1.0.5] — 2026-10-21
 
 ### Ajouté

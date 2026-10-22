@@ -16,13 +16,16 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.format.AtlasFormat
+import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.CartStore
+import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
+import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import javax.inject.Inject
 
@@ -33,18 +36,32 @@ class ProductsViewModel @Inject constructor(
     private val sessionManager: SessionManager,
 ) : ViewModel() {
 
+    enum class FilterMode {
+        ALL,
+        NEEDED,
+        REQUESTS,
+    }
+
     data class UiState(
         val query: String = "",
         val products: List<ProductDto> = emptyList(),
+        val openRequests: List<ProductCreationRequestDto> = emptyList(),
+        val filter: FilterMode = FilterMode.ALL,
         val loading: Boolean = true,
         val refreshing: Boolean = false,
-        val lowStockOnly: Boolean = false,
+        val submitting: Boolean = false,
         val offline: Boolean = false,
         val error: String? = null,
         val currency: String = "MAD",
     ) {
         val visibleProducts: List<ProductDto>
-            get() = if (lowStockOnly) products.filter { it.isLowStock || it.isOutOfStock } else products
+            get() = when (filter) {
+                FilterMode.NEEDED -> products
+                    .filter { it.isLowStock || it.isOutOfStock }
+                    .sortedBy { it.stock }
+
+                FilterMode.ALL, FilterMode.REQUESTS -> products
+            }
 
         val lowStockCount: Int
             get() = products.count { it.isLowStock || it.isOutOfStock }
@@ -100,8 +117,8 @@ class ProductsViewModel @Inject constructor(
         fetchState(query = _state.value.query, initial = false)
     }
 
-    fun toggleLowStockOnly() {
-        _state.update { it.copy(lowStockOnly = !it.lowStockOnly) }
+    fun setFilter(mode: FilterMode) {
+        _state.update { it.copy(filter = mode) }
     }
 
     fun addToCart(product: ProductDto, quantity: Double = 1.0) {
@@ -110,10 +127,76 @@ class ProductsViewModel @Inject constructor(
         _messages.tryEmit("${product.name} · ajouté au panier")
     }
 
-    /**
-     * Records a manual stock movement (entrée / sortie) and refreshes the list.
-     * The worker keeps an audit trail, so a reason is always worth typing.
-     */
+    fun createProduct(request: CreateProductRequest, fulfillingRequestId: Long? = null) {
+        viewModelScope.launch {
+            _state.update { it.copy(submitting = true) }
+            when (val res = commerceRepository.createProduct(request)) {
+                is ApiResult.Failure -> {
+                    _state.update { it.copy(submitting = false) }
+                    _messages.tryEmit(res.message)
+                }
+
+                is ApiResult.Success -> {
+                    if (fulfillingRequestId != null) {
+                        commerceRepository.closeProductRequest(
+                            id = fulfillingRequestId,
+                            status = "done",
+                            productId = res.data.id,
+                        )
+                    }
+                    _state.update { it.copy(submitting = false) }
+                    _messages.tryEmit("Produit « ${res.data.name} » créé.")
+                    fetchState(query = _state.value.query, initial = false)
+                }
+            }
+        }
+    }
+
+    fun submitProductRequest(
+        code: String,
+        name: String,
+        sku: String?,
+        unit: String,
+        quantity: Double,
+        category: String?,
+        note: String?,
+    ) {
+        viewModelScope.launch {
+            _state.update { it.copy(submitting = true) }
+            when (
+                val res = commerceRepository.submitProductRequest(
+                    SubmitProductRequestBody(
+                        code = code,
+                        name = name,
+                        sku = sku,
+                        unit = unit,
+                        quantity = quantity,
+                        category = category,
+                        note = note,
+                    ),
+                )
+            ) {
+                is ApiResult.Failure -> {
+                    _state.update { it.copy(submitting = false) }
+                    _messages.tryEmit(res.message)
+                }
+
+                is ApiResult.Success -> {
+                    _state.update { it.copy(submitting = false) }
+                    _messages.tryEmit("Demande produit enregistrée.")
+                    fetchState(query = _state.value.query, initial = false)
+                }
+            }
+        }
+    }
+
+    fun dismissProductRequest(requestId: Long) {
+        viewModelScope.launch {
+            commerceRepository.closeProductRequest(id = requestId, status = "dismissed")
+            fetchState(query = _state.value.query, initial = false)
+        }
+    }
+
     fun adjustStock(product: ProductDto, quantity: Double, out: Boolean, reason: String) {
         if (quantity <= 0.0) {
             _messages.tryEmit("Indiquez une quantité supérieure à zéro.")
@@ -139,7 +222,6 @@ class ProductsViewModel @Inject constructor(
     }
 
     private fun fetchState(query: String, initial: Boolean) {
-        // A newer query must win: a slow response for "ab" may not overwrite "abc".
         fetchJob?.cancel()
         fetchJob = viewModelScope.launch {
             _state.update {
@@ -149,12 +231,13 @@ class ProductsViewModel @Inject constructor(
                     error = null,
                 )
             }
-            when (val result = commerceRepository.products(query = query, limit = 300)) {
+            val result = commerceRepository.products(query = query, limit = 300)
+            val reqResult = commerceRepository.productRequests("open")
+            val openReqs = (reqResult as? ApiResult.Success)?.data ?: _state.value.openRequests
+
+            when (result) {
                 is ApiResult.Failure -> {
                     val offline = result.code == ApiRunner.CODE_NETWORK
-                    // Offline: always serve the (filtered) disk catalogue, otherwise
-                    // typing a query after a first successful load silently shows
-                    // the stale online list.
                     val cached = if (offline) {
                         commerceRepository.cachedProducts().filter { matches(it, query) }
                     } else {
@@ -165,6 +248,7 @@ class ProductsViewModel @Inject constructor(
                             loading = false,
                             refreshing = false,
                             offline = offline,
+                            openRequests = openReqs,
                             products = if (offline) cached else it.products,
                             error = if (offline) null else result.message,
                         )
@@ -178,6 +262,7 @@ class ProductsViewModel @Inject constructor(
                         refreshing = false,
                         offline = false,
                         error = null,
+                        openRequests = openReqs,
                         products = result.data,
                     )
                 }

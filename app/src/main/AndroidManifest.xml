@@ -31,6 +31,27 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="stock.afmarbre.com"
+                    android:pathPrefix="/qr" />
+                <data
+                    android:scheme="https"
+                    android:host="stock.afmarbre.com"
+                    android:pathPrefix="/login-qr" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="atlascommerce"
+                    android:host="qr" />
+            </intent-filter>
         </activity>
 
         <provider

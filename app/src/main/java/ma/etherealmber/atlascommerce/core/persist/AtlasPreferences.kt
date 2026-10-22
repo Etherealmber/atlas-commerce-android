@@ -33,7 +33,7 @@ private val Context.atlasDataStore: DataStore<Preferences> by preferencesDataSto
  * with an Android Keystore key (see [ma.etherealmber.atlascommerce.core.security.CryptoStore]).
  *
  * All reads are guarded against corrupted protobuf files and type-mismatched keys
- * left behind by older installs (e.g. upgrading in-place from 1.0.4).
+ * left behind by older installs (e.g. upgrading in-place from 1.0.4 / 1.0.5).
  */
 @Singleton
 class AtlasPreferences @Inject constructor(@ApplicationContext context: Context) {
@@ -52,6 +52,7 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         val SESSION_ROLE = stringPreferencesKey("session_role")
         val SESSION_DISPLAY = stringPreferencesKey("session_display_name")
         val SESSION_EMAIL = stringPreferencesKey("session_email")
+        val SESSION_AVATAR = stringPreferencesKey("session_avatar_url")
         val ONBOARDING_DONE = booleanPreferencesKey("server_onboarding_done")
     }
 
@@ -61,13 +62,14 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         val role: String,
         val displayName: String,
         val email: String,
+        val avatarUrl: String = "",
     )
 
     val apiBaseUrl: Flow<String?> = safeData
         .map { it.safeString(Keys.API_BASE.name) }
         .distinctUntilChanged()
 
-    /** `null` until DataStore has emitted: the UI must not paint a default theme first. */
+    /** False in consumers until DataStore has emitted: the UI must not flash a default theme first. */
     val appearanceLoaded: Flow<Boolean> = safeData
         .map { true }
         .distinctUntilChanged()
@@ -136,6 +138,7 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
             role = prefs.safeString(Keys.SESSION_ROLE.name).orEmpty(),
             displayName = prefs.safeString(Keys.SESSION_DISPLAY.name).orEmpty(),
             email = prefs.safeString(Keys.SESSION_EMAIL.name).orEmpty(),
+            avatarUrl = prefs.safeString(Keys.SESSION_AVATAR.name).orEmpty(),
         )
     }
 
@@ -145,6 +148,7 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         role: String,
         displayName: String,
         email: String,
+        avatarUrl: String = "",
     ) {
         safeEdit { prefs ->
             prefs.putClean(Keys.SESSION_TOKEN, tokenCipher)
@@ -152,6 +156,7 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
             prefs.putClean(Keys.SESSION_ROLE, role)
             prefs.putClean(Keys.SESSION_DISPLAY, displayName)
             prefs.putClean(Keys.SESSION_EMAIL, email)
+            prefs.putClean(Keys.SESSION_AVATAR, avatarUrl)
         }
     }
 
@@ -162,6 +167,7 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
             prefs.removeByName(Keys.SESSION_ROLE.name)
             prefs.removeByName(Keys.SESSION_DISPLAY.name)
             prefs.removeByName(Keys.SESSION_EMAIL.name)
+            prefs.removeByName(Keys.SESSION_AVATAR.name)
         }
     }
 

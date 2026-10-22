@@ -2,13 +2,16 @@ package ma.etherealmber.atlascommerce.ui.shell
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ShoppingCart
@@ -23,6 +26,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,7 +41,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.session.SessionUser
+import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
+import ma.etherealmber.atlascommerce.ui.screens.agent.AgentScreen
 import ma.etherealmber.atlascommerce.ui.screens.home.HomeScreen
 import ma.etherealmber.atlascommerce.ui.screens.products.ProductsScreen
 import ma.etherealmber.atlascommerce.ui.screens.sale.SaleScreen
@@ -49,6 +55,7 @@ enum class MainTab(val label: String, val icon: ImageVector) {
     PRODUCTS("Produits", Icons.Outlined.Inventory2),
     SCAN("Scan", Icons.Outlined.QrCodeScanner),
     SALE("Vente", Icons.Outlined.ShoppingCart),
+    AGENT("Agent", Icons.Outlined.AutoAwesome),
     SETTINGS("Réglages", Icons.Outlined.Settings),
 }
 
@@ -56,7 +63,11 @@ enum class MainTab(val label: String, val icon: ImageVector) {
 fun MainShell(
     user: SessionUser,
     snackbarHostState: SnackbarHostState,
+    externalTabRequest: String? = null,
+    onExternalTabHandled: () -> Unit = {},
     onChangeServer: () -> Unit,
+    onOpenQrDevice: (String?) -> Unit,
+    onOpenNotifications: () -> Unit,
     onOpenLicense: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -65,16 +76,28 @@ fun MainShell(
     shellViewModel: ShellViewModel = hiltViewModel(),
 ) {
     val cartCount by shellViewModel.cartCount.collectAsStateWithLifecycle()
+    val notificationCount by shellViewModel.notificationCount.collectAsStateWithLifecycle()
+    val serverBaseUrl by shellViewModel.serverBaseUrl.collectAsStateWithLifecycle()
     var tabName by rememberSaveable { mutableStateOf(MainTab.HOME.name) }
     val tab = MainTab.entries.firstOrNull { it.name == tabName } ?: MainTab.HOME
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(externalTabRequest) {
+        if (!externalTabRequest.isNullOrBlank()) {
+            tabName = externalTabRequest
+            onExternalTabHandled()
+        }
+    }
+
+    LaunchedEffect(tab) {
+        shellViewModel.refreshNotificationsBadge()
+    }
 
     val onToast: (String) -> Unit = { message ->
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
     val switchTab: (MainTab) -> Unit = { target -> tabName = target.name }
 
-    // Back from a secondary tab returns to Accueil instead of closing the app.
     BackHandler(enabled = tab != MainTab.HOME) { switchTab(MainTab.HOME) }
 
     Scaffold(
@@ -84,12 +107,42 @@ fun MainShell(
                 title = tab.label,
                 subtitle = "${user.displayName} · ${Roles.label(user.role)}",
                 actions = {
-                    IconButton(onClick = onChangeServer) {
-                        Icon(Icons.Outlined.Dns, contentDescription = "Changer de serveur")
+                    IconButton(onClick = { onOpenQrDevice(null) }) {
+                        Icon(
+                            imageVector = Icons.Outlined.Devices,
+                            contentDescription = "Scanner un poste PC (QR)",
+                        )
                     }
-                    IconButton(onClick = { switchTab(MainTab.SETTINGS) }) {
-                        Icon(Icons.Outlined.Person, contentDescription = "Mon compte")
+                    IconButton(onClick = onOpenNotifications) {
+                        if (notificationCount > 0) {
+                            BadgedBox(
+                                badge = {
+                                    Badge {
+                                        Text(if (notificationCount > 99) "99+" else notificationCount.toString())
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Notifications,
+                                    contentDescription = "Notifications",
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Outlined.Notifications,
+                                contentDescription = "Notifications",
+                            )
+                        }
                     }
+                    Spacer(Modifier.width(4.dp))
+                    AtlasAvatar(
+                        avatarUrl = user.avatarUrl,
+                        label = user.displayName,
+                        size = 32.dp,
+                        serverBaseUrl = serverBaseUrl,
+                        onClick = { switchTab(MainTab.SETTINGS) },
+                    )
+                    Spacer(Modifier.width(10.dp))
                 },
             )
         },
@@ -116,6 +169,7 @@ fun MainShell(
                                 text = item.label,
                                 style = MaterialTheme.typography.labelSmall,
                                 maxLines = 1,
+                                softWrap = false,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         },
@@ -132,6 +186,7 @@ fun MainShell(
             when (tab) {
                 MainTab.HOME -> HomeScreen(
                     user = user,
+                    serverBaseUrl = serverBaseUrl,
                     onOpenProducts = { switchTab(MainTab.PRODUCTS) },
                     onOpenSale = { switchTab(MainTab.SALE) },
                     onToast = onToast,
@@ -145,8 +200,11 @@ fun MainShell(
                 )
 
                 MainTab.SCAN -> ScanScreen(
+                    user = user,
+                    isActive = tab == MainTab.SCAN,
                     onOpenSale = { switchTab(MainTab.SALE) },
                     onOpenProducts = { switchTab(MainTab.PRODUCTS) },
+                    onOpenQrDevice = onOpenQrDevice,
                     onToast = onToast,
                 )
 
@@ -156,9 +214,14 @@ fun MainShell(
                     onToast = onToast,
                 )
 
+                MainTab.AGENT -> AgentScreen(
+                    onToast = onToast,
+                )
+
                 MainTab.SETTINGS -> SettingsScreen(
                     user = user,
                     onChangeServer = onChangeServer,
+                    onOpenQrDevice = { onOpenQrDevice(null) },
                     onOpenLicense = onOpenLicense,
                     onOpenSecurity = onOpenSecurity,
                     onOpenAbout = onOpenAbout,

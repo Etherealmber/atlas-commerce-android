@@ -1,8 +1,8 @@
 package ma.etherealmber.atlascommerce.ui.screens.settings
 
-import androidx.compose.foundation.background
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,25 +14,31 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.QrCode2
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -51,6 +58,9 @@ import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.session.SessionUser
+import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
+import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
+import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
@@ -66,6 +76,7 @@ import ma.etherealmber.atlascommerce.ui.util.openExternal
 fun SettingsScreen(
     user: SessionUser,
     onChangeServer: () -> Unit,
+    onOpenQrDevice: () -> Unit = {},
     onOpenLicense: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -76,12 +87,26 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val density = Atlas.density
-    val palette = Atlas.palette
     val themeMode by appViewModel.themeMode.collectAsStateWithLifecycle()
     val densityMode by appViewModel.densityMode.collectAsStateWithLifecycle()
     val serverSelection by appViewModel.server.collectAsStateWithLifecycle()
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
+    val devices by appViewModel.devices.collectAsStateWithLifecycle()
+    val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
+    val uploadingAvatar by appViewModel.uploadingAvatar.collectAsStateWithLifecycle()
     var confirmSignOut by remember { mutableStateOf(false) }
+
+    val photoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) {
+            appViewModel.uploadAvatarFromUri(context, uri, onToast)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        appViewModel.loadDevices()
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -93,21 +118,17 @@ fun SettingsScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {
+        // Profile card with real PFP + Gallery Photo Upload
         item {
             AtlasCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(palette.markFace, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = user.displayName.take(1).uppercase(),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = palette.markInk,
-                        )
-                    }
+                    AtlasAvatar(
+                        avatarUrl = user.avatarUrl,
+                        label = user.displayName,
+                        size = 58.dp,
+                        serverBaseUrl = serverSelection?.baseUrl,
+                        onClick = { photoPicker.launch("image/*") },
+                    )
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -128,13 +149,69 @@ fun SettingsScreen(
                     Spacer(Modifier.height(8.dp))
                     AtlasInfoRow(label = "E-mail", value = user.email)
                 }
-                Spacer(Modifier.height(6.dp))
-                AtlasOutlinedButton(
-                    text = "Se déconnecter",
-                    onClick = { confirmSignOut = true },
-                    icon = Icons.Outlined.Logout,
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AtlasOutlinedButton(
+                        text = if (uploadingAvatar) "Envoi…" else "Changer la photo",
+                        onClick = { photoPicker.launch("image/*") },
+                        icon = Icons.Outlined.PhotoCamera,
+                        enabled = !uploadingAvatar,
+                        modifier = Modifier.weight(1f),
+                    )
+                    AtlasOutlinedButton(
+                        text = "Déconnexion",
+                        onClick = { confirmSignOut = true },
+                        icon = Icons.Outlined.Logout,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+
+        // Connected Devices & Scan Device (PC QR)
+        item {
+            AtlasCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Devices,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "Appareils connectés (${devices.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "Autorisez un ordinateur par QR ou révoquez une session.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = appViewModel::loadDevices, enabled = !devicesLoading) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les appareils")
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                AtlasButton(
+                    text = "Scanner un poste PC (QR)",
+                    onClick = onOpenQrDevice,
+                    icon = Icons.Outlined.QrCode2,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (devices.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    devices.forEachIndexed { idx, device ->
+                        if (idx > 0) AtlasDivider(Modifier.padding(vertical = 6.dp))
+                        ConnectedDeviceRow(
+                            device = device,
+                            onRevoke = { appViewModel.revokeDevice(device, onToast) },
+                        )
+                    }
+                }
             }
         }
 
@@ -322,6 +399,47 @@ fun SettingsScreen(
                 TextButton(onClick = { confirmSignOut = false }) { Text("Annuler") }
             },
         )
+    }
+}
+
+@Composable
+private fun ConnectedDeviceRow(
+    device: TrustedDeviceDto,
+    onRevoke: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = device.friendlyLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (device.current) {
+                    Spacer(Modifier.width(6.dp))
+                    AtlasChip(text = "Cet appareil", tone = AtlasTone.POSITIVE)
+                }
+            }
+            val meta = listOfNotNull(
+                device.lastIp?.takeIf { it.isNotBlank() }?.let { "IP $it" },
+                device.lastSeen?.takeIf { it.isNotBlank() },
+            ).joinToString(" · ")
+            if (meta.isNotBlank()) {
+                Text(
+                    text = meta,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        IconButton(onClick = onRevoke) {
+            Icon(
+                imageVector = Icons.Outlined.DeleteOutline,
+                contentDescription = "Révoquer cet appareil",
+                tint = MaterialTheme.colorScheme.error,
+            )
+        }
     }
 }
 

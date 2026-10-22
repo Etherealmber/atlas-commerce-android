@@ -48,18 +48,23 @@ import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AppUpdateBanner
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
 import ma.etherealmber.atlascommerce.ui.components.MandatoryUpdateScreen
+import ma.etherealmber.atlascommerce.ui.screens.devices.QrDeviceScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.AboutScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.LicenseScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.SecurityScreen
 import ma.etherealmber.atlascommerce.ui.screens.login.LoginScreen
+import ma.etherealmber.atlascommerce.ui.screens.notifications.NotificationsScreen
 import ma.etherealmber.atlascommerce.ui.screens.server.ServerSetupScreen
 import ma.etherealmber.atlascommerce.ui.shell.MainShell
+import ma.etherealmber.atlascommerce.ui.shell.MainTab
 import ma.etherealmber.atlascommerce.ui.theme.AtlasTheme
 import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 import ma.etherealmber.atlascommerce.ui.util.findActivity
 
 private object Overlay {
     const val SERVER = "server"
+    const val QR_DEVICE = "qr_device"
+    const val NOTIFICATIONS = "notifications"
     const val LICENSE = "license"
     const val SECURITY = "security"
     const val ABOUT = "about"
@@ -67,14 +72,13 @@ private object Overlay {
 
 /**
  * Composition root of the app.
- *
- * Resolves appearance first (so themes never flash), then gates on:
- * server chosen → mandatory update (if any) → signed in → main shell, with live
- * non-overridable APK download progress surfaced across every screen and in the
- * Android system notification bar.
  */
 @Composable
-fun AtlasRoot(viewModel: AppViewModel = hiltViewModel()) {
+fun AtlasRoot(
+    deepLinkQrToken: String? = null,
+    onDeepLinkConsumed: () -> Unit = {},
+    viewModel: AppViewModel = hiltViewModel(),
+) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val densityMode by viewModel.densityMode.collectAsStateWithLifecycle()
     val appearanceLoaded by viewModel.appearanceLoaded.collectAsStateWithLifecycle()
@@ -93,13 +97,21 @@ fun AtlasRoot(viewModel: AppViewModel = hiltViewModel()) {
         if (!appearanceLoaded) {
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
         } else {
-            AtlasGate(viewModel)
+            AtlasGate(
+                deepLinkQrToken = deepLinkQrToken,
+                onDeepLinkConsumed = onDeepLinkConsumed,
+                viewModel = viewModel,
+            )
         }
     }
 }
 
 @Composable
-private fun AtlasGate(viewModel: AppViewModel) {
+private fun AtlasGate(
+    deepLinkQrToken: String?,
+    onDeepLinkConsumed: () -> Unit,
+    viewModel: AppViewModel,
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val session by viewModel.session.collectAsStateWithLifecycle()
@@ -110,12 +122,12 @@ private fun AtlasGate(viewModel: AppViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var overlay by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingQrToken by rememberSaveable { mutableStateOf<String?>(null) }
+    var requestedTab by rememberSaveable { mutableStateOf<String?>(null) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
-    ) { _ ->
-        // Download already starts immediately whether or not notification permission was granted.
-    }
+    ) { _ -> }
 
     val startDownloadWithNotificationPermission: () -> Unit = {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -137,12 +149,22 @@ private fun AtlasGate(viewModel: AppViewModel) {
 
     DisposableEffect(lifecycleOwner, context) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.onAppResumed(context)
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> viewModel.onAppResumed(context)
+                Lifecycle.Event.ON_STOP -> viewModel.onAppStopped()
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(deepLinkQrToken) {
+        if (!deepLinkQrToken.isNullOrBlank()) {
+            pendingQrToken = deepLinkQrToken
+            overlay = Overlay.QR_DEVICE
+            onDeepLinkConsumed()
+        }
     }
 
     val showToast: (String) -> Unit = { message ->
@@ -153,7 +175,9 @@ private fun AtlasGate(viewModel: AppViewModel) {
         viewModel.notices.collect { message -> showToast(message) }
     }
     LaunchedEffect(session) {
-        if (session is SessionState.SignedOut) overlay = null
+        if (session is SessionState.SignedOut && overlay == Overlay.NOTIFICATIONS) {
+            overlay = null
+        }
     }
 
     val mandatoryBlocking = when (val u = updateState) {
@@ -164,7 +188,12 @@ private fun AtlasGate(viewModel: AppViewModel) {
         else -> false
     }
 
-    BackHandler(enabled = overlay != null) { overlay = null }
+    BackHandler(enabled = overlay != null) {
+        overlay = null
+        pendingQrToken = null
+    }
+
+    val activeUser = (session as? SessionState.Active)?.user
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -173,6 +202,34 @@ private fun AtlasGate(viewModel: AppViewModel) {
 
                 overlay == Overlay.SERVER ->
                     ServerSetupScreen(onClose = { overlay = null })
+
+                overlay == Overlay.QR_DEVICE ->
+                    QrDeviceScreen(
+                        currentUser = activeUser,
+                        initialToken = pendingQrToken,
+                        onClose = {
+                            overlay = null
+                            pendingQrToken = null
+                        },
+                        onToast = showToast,
+                    )
+
+                overlay == Overlay.NOTIFICATIONS ->
+                    NotificationsScreen(
+                        onBack = { overlay = null },
+                        onNavigateHref = { href ->
+                            overlay = null
+                            val h = href.orEmpty().lowercase()
+                            requestedTab = when {
+                                h.contains("product") || h.contains("stock") -> MainTab.PRODUCTS.name
+                                h.contains("invoice") || h.contains("sale") -> MainTab.SALE.name
+                                h.contains("scan") -> MainTab.SCAN.name
+                                h.contains("assist") || h.contains("agent") -> MainTab.AGENT.name
+                                else -> MainTab.HOME.name
+                            }
+                        },
+                        onToast = showToast,
+                    )
 
                 overlay == Overlay.LICENSE -> LicenseScreen(onBack = { overlay = null })
 
@@ -191,6 +248,10 @@ private fun AtlasGate(viewModel: AppViewModel) {
 
                 session is SessionState.SignedOut -> LoginScreen(
                     onChangeServer = { overlay = Overlay.SERVER },
+                    onOpenQrDevice = {
+                        pendingQrToken = null
+                        overlay = Overlay.QR_DEVICE
+                    },
                     onOpenSecurity = { overlay = Overlay.SECURITY },
                     onOpenLicense = { overlay = Overlay.LICENSE },
                     onCheckUpdates = {
@@ -199,12 +260,18 @@ private fun AtlasGate(viewModel: AppViewModel) {
                     },
                 )
 
-                session is SessionState.Active -> {
-                    val user = (session as SessionState.Active).user
+                activeUser != null -> {
                     MainShell(
-                        user = user,
+                        user = activeUser,
                         snackbarHostState = snackbarHostState,
+                        externalTabRequest = requestedTab,
+                        onExternalTabHandled = { requestedTab = null },
                         onChangeServer = { overlay = Overlay.SERVER },
+                        onOpenQrDevice = { token ->
+                            pendingQrToken = token
+                            overlay = Overlay.QR_DEVICE
+                        },
+                        onOpenNotifications = { overlay = Overlay.NOTIFICATIONS },
                         onOpenLicense = { overlay = Overlay.LICENSE },
                         onOpenSecurity = { overlay = Overlay.SECURITY },
                         onOpenAbout = { overlay = Overlay.ABOUT },

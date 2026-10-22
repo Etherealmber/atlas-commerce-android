@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddShoppingCart
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -46,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.session.SessionUser
+import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -55,6 +57,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
 import ma.etherealmber.atlascommerce.ui.components.AtlasOfflineBanner
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
+import ma.etherealmber.atlascommerce.ui.components.ProductCreateDialog
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 @Composable
@@ -69,6 +72,8 @@ fun ProductsScreen(
     val density = Atlas.density
     var selected by remember { mutableStateOf<ProductDto?>(null) }
     var adjustTarget by remember { mutableStateOf<ProductDto?>(null) }
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var pendingFulfillRequest by remember { mutableStateOf<ProductCreationRequestDto?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { message -> onToast(message) }
@@ -90,7 +95,10 @@ fun ProductsScreen(
                     imeAction = ImeAction.Search,
                     modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(4.dp))
+                IconButton(onClick = { showCreateDialog = true }) {
+                    Icon(Icons.Outlined.Add, contentDescription = "Nouveau produit")
+                }
                 IconButton(onClick = onOpenScan) {
                     Icon(Icons.Outlined.QrCodeScanner, contentDescription = "Scanner un code-barres")
                 }
@@ -104,23 +112,20 @@ fun ProductsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 FilterChip(
-                    selected = !state.lowStockOnly,
-                    onClick = { if (state.lowStockOnly) viewModel.toggleLowStockOnly() },
+                    selected = state.filter == ProductsViewModel.FilterMode.ALL,
+                    onClick = { viewModel.setFilter(ProductsViewModel.FilterMode.ALL) },
                     label = { Text("Tous") },
                 )
                 FilterChip(
-                    selected = state.lowStockOnly,
-                    onClick = { if (!state.lowStockOnly) viewModel.toggleLowStockOnly() },
-                    label = { Text("Stock faible (${state.lowStockCount})") },
+                    selected = state.filter == ProductsViewModel.FilterMode.NEEDED,
+                    onClick = { viewModel.setFilter(ProductsViewModel.FilterMode.NEEDED) },
+                    label = { Text("À réappro. (${state.lowStockCount})") },
                 )
-                Spacer(Modifier.weight(1f))
-                if (state.refreshing) {
-                    Text(
-                        text = "…",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                FilterChip(
+                    selected = state.filter == ProductsViewModel.FilterMode.REQUESTS,
+                    onClick = { viewModel.setFilter(ProductsViewModel.FilterMode.REQUESTS) },
+                    label = { Text("Demandes (${state.openRequests.size})") },
+                )
             }
         }
 
@@ -138,16 +143,47 @@ fun ProductsScreen(
                 }
             }
 
+            state.filter == ProductsViewModel.FilterMode.REQUESTS -> {
+                if (state.openRequests.isEmpty()) {
+                    AtlasEmptyState(
+                        title = "Aucune demande en attente",
+                        message = "Les codes inconnus scannés sur le terrain apparaissent ici avec les champs requis.",
+                        icon = Icons.Outlined.Inventory2,
+                        actionLabel = "Nouveau produit",
+                        onAction = { showCreateDialog = true },
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = density.screenPadding,
+                            end = density.screenPadding,
+                            bottom = 24.dp,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(density.itemGap),
+                    ) {
+                        items(state.openRequests, key = { it.id }) { req ->
+                            ProductRequestRow(
+                                request = req,
+                                canCreate = Roles.canMutateStock(user.role),
+                                onFulfill = { pendingFulfillRequest = req },
+                                onDismiss = { viewModel.dismissProductRequest(req.id) },
+                            )
+                        }
+                    }
+                }
+            }
+
             state.visibleProducts.isEmpty() -> AtlasEmptyState(
                 title = if (state.query.isBlank()) "Aucun produit" else "Aucun résultat",
                 message = if (state.query.isBlank()) {
-                    "Ajoutez vos produits depuis le web, puis actualisez."
+                    "Ajoutez un produit directement avec le bouton + ou scannez son code-barres."
                 } else {
                     "Essayez un autre nom, SKU ou code-barres."
                 },
                 icon = Icons.Outlined.Inventory2,
-                actionLabel = "Actualiser",
-                onAction = viewModel::refresh,
+                actionLabel = "Nouveau produit",
+                onAction = { showCreateDialog = true },
             )
 
             else -> {
@@ -165,11 +201,11 @@ fun ProductsScreen(
                         item {
                             AtlasCard {
                                 Text(
-                                    text = "Consultation seule",
+                                    text = "Consultation & gestion stock",
                                     style = MaterialTheme.typography.titleSmall,
                                 )
                                 Text(
-                                    text = "Votre rôle permet de consulter le stock, pas de créer des ventes.",
+                                    text = "Votre rôle permet de gérer le stock et les ajouts, pas d'émettre de facture.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -193,6 +229,46 @@ fun ProductsScreen(
                 }
             }
         }
+    }
+
+    if (showCreateDialog) {
+        ProductCreateDialog(
+            canCreateDirectly = Roles.canMutateStock(user.role),
+            initialBarcode = state.query.trim().takeIf { it.all(Char::isDigit) && it.length >= 6 }.orEmpty(),
+            submitting = state.submitting,
+            onDismiss = { showCreateDialog = false },
+            onSubmitDirect = { req ->
+                showCreateDialog = false
+                viewModel.createProduct(req)
+            },
+            onSubmitRequest = { code, name, sku, unit, qty, cat, note ->
+                showCreateDialog = false
+                viewModel.submitProductRequest(code, name, sku, unit, qty, cat, note)
+            },
+        )
+    }
+
+    val fulfill = pendingFulfillRequest
+    if (fulfill != null) {
+        ProductCreateDialog(
+            canCreateDirectly = Roles.canMutateStock(user.role),
+            initialBarcode = fulfill.code,
+            initialName = fulfill.name.orEmpty(),
+            initialSku = fulfill.sku.orEmpty(),
+            initialUnit = fulfill.unit ?: "unité",
+            initialQuantity = fulfill.quantity?.let { AtlasFormat.quantity(it) } ?: "1",
+            initialCategory = fulfill.category.orEmpty(),
+            submitting = state.submitting,
+            onDismiss = { pendingFulfillRequest = null },
+            onSubmitDirect = { req ->
+                pendingFulfillRequest = null
+                viewModel.createProduct(req, fulfillingRequestId = fulfill.id)
+            },
+            onSubmitRequest = { code, name, sku, unit, qty, cat, note ->
+                pendingFulfillRequest = null
+                viewModel.submitProductRequest(code, name, sku, unit, qty, cat, note)
+            },
+        )
     }
 
     val product = selected
@@ -231,6 +307,50 @@ fun ProductsScreen(
 }
 
 @Composable
+private fun ProductRequestRow(
+    request: ProductCreationRequestDto,
+    canCreate: Boolean,
+    onFulfill: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AtlasCard(padding = 12.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = request.name?.takeIf { it.isNotBlank() } ?: "Code ${request.code}",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = listOfNotNull(
+                        "Code ${request.code}",
+                        request.sku?.takeIf { it.isNotBlank() }?.let { "SKU $it" },
+                        request.quantity?.let { "${AtlasFormat.quantity(it)} ${request.unit ?: "unité"}" },
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!request.note.isNullOrBlank()) {
+                    Text(
+                        text = request.note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            AtlasChip(text = "En attente", tone = AtlasTone.WARNING)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (canCreate) {
+                TextButton(onClick = onFulfill) { Text("Créer au stock") }
+            }
+            TextButton(onClick = onDismiss) { Text("Écarter") }
+        }
+    }
+}
+
+@Composable
 private fun ProductRow(
     product: ProductDto,
     currency: String,
@@ -265,6 +385,12 @@ private fun ProductRow(
                             else -> AtlasTone.POSITIVE
                         },
                     )
+                    if (product.neededQuantity > 0.0) {
+                        AtlasChip(
+                            text = "Manque ${AtlasFormat.quantity(product.neededQuantity)}",
+                            tone = if (product.isOutOfStock) AtlasTone.DANGER else AtlasTone.WARNING,
+                        )
+                    }
                     AtlasChip(text = AtlasFormat.money(product.price, currency))
                 }
             }
@@ -373,10 +499,6 @@ private fun ProductDetailDialog(
     )
 }
 
-/**
- * Manual stock movement. Posts to `/api/products/:id/adjust-stock`, which keeps
- * an audit entry; the reason is optional but strongly recommended.
- */
 @Composable
 private fun StockAdjustDialog(
     product: ProductDto,
@@ -435,12 +557,6 @@ private fun StockAdjustDialog(
                     label = { Text("Motif (facultatif)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Le mouvement est enregistré dans le journal d'audit du serveur.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },

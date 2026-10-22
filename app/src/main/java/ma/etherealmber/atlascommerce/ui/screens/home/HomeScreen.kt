@@ -49,6 +49,7 @@ import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.data.model.MonthlyPointDto
+import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -66,6 +67,7 @@ import ma.etherealmber.atlascommerce.ui.theme.Atlas
 @Composable
 fun HomeScreen(
     user: SessionUser,
+    serverBaseUrl: String? = null,
     onOpenProducts: () -> Unit,
     onOpenSale: () -> Unit,
     onToast: (String) -> Unit,
@@ -90,6 +92,7 @@ fun HomeScreen(
 
         else -> HomeContent(
             user = user,
+            serverBaseUrl = serverBaseUrl,
             state = state,
             dashboard = dashboard,
             onRefresh = viewModel::refresh,
@@ -158,6 +161,7 @@ private fun HomeErrorContent(
 @Composable
 private fun HomeContent(
     user: SessionUser,
+    serverBaseUrl: String?,
     state: HomeViewModel.UiState,
     dashboard: DashboardDto,
     onRefresh: () -> Unit,
@@ -178,6 +182,13 @@ private fun HomeContent(
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                AtlasAvatar(
+                    avatarUrl = user.avatarUrl,
+                    label = user.displayName,
+                    size = 44.dp,
+                    serverBaseUrl = serverBaseUrl,
+                )
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = "Bonjour, ${user.displayName}",
