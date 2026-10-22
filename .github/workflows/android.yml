@@ -314,6 +314,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.8.2'
+          cache-read-only: true
       - name: Verify legacy 1.0.4 source quarantine, KSP release & Android Lint
         run: |
           mkdir -p app/src/main/java/ma/etherealmber/atlascommerce/push
