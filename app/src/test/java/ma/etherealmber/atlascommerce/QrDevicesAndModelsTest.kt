@@ -76,8 +76,11 @@ class QrDevicesAndModelsTest {
         assertEquals(0.0, healthy.neededQuantity, 0.001)
 
         assertTrue(Roles.canMutateStock("owner"))
-        assertTrue(Roles.canMutateStock("magasinier"))
+        assertTrue(Roles.canMutateStock("admin"))
+        assertFalse(Roles.canMutateStock("magasinier"))
+        assertTrue(Roles.canAdjustStock("magasinier"))
         assertFalse(Roles.canMutateStock("user"))
+        assertFalse(Roles.canAdjustStock("user"))
 
         val qr = moshi.adapter(QrSessionStatusDto::class.java)
             .fromJson("""{"status":"claimed","username":"amine","avatar_url":"data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="}""")
