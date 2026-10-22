@@ -165,7 +165,10 @@ jobs:
           touch -d '2026-10-21T20:08:04Z' app/src/main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt
           touch -d '2026-10-21T20:08:04Z' app/src/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt
 
+          # Also hide .git so we exercise the exact "Download ZIP extracted over old 1.0.4 folder" path.
+          mv .git "$RUNNER_TEMP/hidden-git"
           gradle :app:kspReleaseKotlin :app:lintDebug --no-daemon --console=plain
+          mv "$RUNNER_TEMP/hidden-git" .git
 
           test ! -e app/src/main/java/ma/etherealmber/atlascommerce/push
           test ! -e app/src/main/java/ma/etherealmber/atlascommerce/di/LegacyNetworkModule.kt

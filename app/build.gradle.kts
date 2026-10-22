@@ -21,8 +21,8 @@ if (findProperty("keepUntrackedSources") != "true") {
     if (movedLegacy.isNotEmpty()) {
         layout.buildDirectory.dir("kspCaches").get().asFile.deleteRecursively()
         layout.buildDirectory.dir("generated/ksp").get().asFile.deleteRecursively()
-        logger.warn(
-            "[AtlasCommerce] Quarantined ${movedLegacy.size} untracked file(s) from app/src/ " +
+        println(
+            "[AtlasCommerce] Quarantined ${movedLegacy.size} leftover file(s) from app/src/ " +
                 "to ${quarantineDir.path}: ${movedLegacy.joinToString()}",
         )
     }

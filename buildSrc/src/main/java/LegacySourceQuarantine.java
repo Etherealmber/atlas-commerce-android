@@ -6,46 +6,138 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Stream;
 
 public final class LegacySourceQuarantine {
 
+    /**
+     * Authoritative source manifest for {@code app/src/} in v1.0.5 (verified against disk on
+     * every CI run by {@code BuildSupportTest#manifestMatchesEveryFileUnderAppSrc}).
+     *
+     * <p>Having this pure-JVM baseline means orphan cleanup works identically even when the user
+     * updates an older local 1.0.4 folder by extracting GitHub's "Download ZIP" archive (no
+     * {@code .git} folder, stale {@code .git} index, {@code git} absent from daemon {@code PATH},
+     * or Windows {@code dubious ownership} exit 128).
+     */
+    public static final Set<String> EXPECTED_APP_SRC_FILES = Collections.unmodifiableSet(
+        new TreeSet<>(List.of(
+            "debug/AndroidManifest.xml",
+            "main/AndroidManifest.xml",
+            "main/assets/logo-dark.svg",
+            "main/assets/logo-light.svg",
+            "main/java/ma/etherealmber/atlascommerce/AtlasApp.kt",
+            "main/java/ma/etherealmber/atlascommerce/MainActivity.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/AppDetails.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/Appearance.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/format/AtlasFormat.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/net/ApiProvider.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/net/ApiResult.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/net/ApiRunner.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/net/AtlasApi.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/net/Interceptors.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/net/ServerProbe.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/net/ServerUrl.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/net/SessionEvents.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/net/TokenHolder.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/persist/AtlasPreferences.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/security/CryptoStore.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/security/DeviceIdentity.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/server/ServerConfig.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/session/SessionManager.kt",
+            "main/java/ma/etherealmber/atlascommerce/data/CartStore.kt",
+            "main/java/ma/etherealmber/atlascommerce/data/OfflineCache.kt",
+            "main/java/ma/etherealmber/atlascommerce/data/model/Models.kt",
+            "main/java/ma/etherealmber/atlascommerce/data/repo/AuthRepository.kt",
+            "main/java/ma/etherealmber/atlascommerce/data/repo/CommerceRepository.kt",
+            "main/java/ma/etherealmber/atlascommerce/di/AppModule.kt",
+            "main/java/ma/etherealmber/atlascommerce/di/ProbeClient.kt",
+            "main/java/ma/etherealmber/atlascommerce/di/Qualifiers.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/components/AtlasComponents.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/components/StatusUi.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/root/AppViewModel.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/root/AtlasRoot.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/home/HomeScreen.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/home/HomeViewModel.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/legal/LegalScreens.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/login/LoginScreen.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/login/LoginViewModel.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/products/ProductsScreen.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/products/ProductsViewModel.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/sale/SaleScreen.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/sale/SaleViewModel.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/scan/ScanScreen.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/scan/ScanViewModel.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/server/ServerSetupScreen.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/server/ServerSetupViewModel.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/settings/SettingsScreen.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/shell/MainShell.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/shell/ShellViewModel.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/theme/Theme.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/util/ActivityExt.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/util/Intents.kt",
+            "main/res/drawable/ic_launcher_background.xml",
+            "main/res/drawable/ic_launcher_foreground.xml",
+            "main/res/mipmap-anydpi-v26/ic_launcher.xml",
+            "main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
+            "main/res/values/colors.xml",
+            "main/res/values/strings.xml",
+            "main/res/values/themes.xml",
+            "test/java/ma/etherealmber/atlascommerce/AtlasFormatTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/ServerUrlTest.kt"
+        ))
+    );
+
+    private static final String V105_SENTINEL =
+        "main/java/ma/etherealmber/atlascommerce/MainActivity.kt";
+
     private LegacySourceQuarantine() {}
 
     /**
-     * Moves Git-untracked files inside {@code srcDir} (such as leftover 1.0.4 sources like
-     * {@code push/AtlasFirebaseMessagingService.kt} left behind after {@code git pull}) into a
-     * persistent backup folder outside {@code build/} ({@code .atlas-1.0.4-quarantine/}) so
-     * {@code :app:kspReleaseKotlin} never scans orphaned sources referencing removed SDKs.
+     * Quarantines stale/untracked files inside {@code srcDir} (such as leftover 1.0.4 files like
+     * {@code push/AtlasFirebaseMessagingService.kt}) into {@code quarantineDir} (outside
+     * {@code build/}) across both Git checkouts AND GitHub "Download ZIP" extractions without
+     * {@code .git}.
      */
     public static List<String> quarantineUntracked(File rootDir, File srcDir, File quarantineDir) {
-        if (!srcDir.isDirectory() || !new File(rootDir, ".git").exists()) {
-            return Collections.emptyList();
-        }
-        String gitBin = findGitExecutable();
-        if (gitBin == null) {
+        if (!srcDir.isDirectory()) {
             return Collections.emptyList();
         }
 
-        List<File> untracked = listUntrackedFiles(gitBin, rootDir, srcDir);
-        if (untracked.isEmpty()) {
+        Set<String> allowed = computeAllowedRelativePaths(rootDir, srcDir);
+        Path srcPath = srcDir.toPath();
+        List<Path> candidates = new ArrayList<>();
+
+        try (Stream<Path> walk = Files.walk(srcPath)) {
+            walk.filter(Files::isRegularFile).forEach(file -> {
+                String rel = srcPath.relativize(file).toString().replace('\\', '/');
+                if (!allowed.contains(rel)) {
+                    candidates.add(file);
+                }
+            });
+        } catch (Exception ignored) {
+            return Collections.emptyList();
+        }
+
+        if (candidates.isEmpty()) {
             return Collections.emptyList();
         }
 
         List<String> moved = new ArrayList<>();
-        Path srcPath = srcDir.toPath();
-        for (File candidate : untracked) {
-            if (!candidate.isFile()) continue;
-            String relPath = srcPath.relativize(candidate.toPath()).toString().replace('\\', '/');
+        for (Path candidate : candidates) {
+            String relPath = srcPath.relativize(candidate).toString().replace('\\', '/');
             Path target = quarantineDir.toPath().resolve(relPath);
             try {
                 Files.createDirectories(target.getParent());
-                Files.copy(candidate.toPath(), target, StandardCopyOption.REPLACE_EXISTING);
-                Files.delete(candidate.toPath());
+                Files.copy(candidate, target, StandardCopyOption.REPLACE_EXISTING);
+                removeOrNeutralizeOnWindowsLock(candidate);
                 moved.add(relPath);
             } catch (Exception ignored) {
-                // Leave file untouched if locked; KSP will surface any error explicitly.
+                // Best-effort neutralisation if copy failed.
+                neutralizeSourceInPlace(candidate);
             }
         }
 
@@ -55,32 +147,85 @@ public final class LegacySourceQuarantine {
         return moved;
     }
 
-    private static List<File> listUntrackedFiles(String gitBin, File rootDir, File srcDir) {
+    private static void removeOrNeutralizeOnWindowsLock(Path candidate) {
+        candidate.toFile().setWritable(true);
+        for (int attempt = 0; attempt < 5; attempt++) {
+            try {
+                Files.deleteIfExists(candidate);
+                return;
+            } catch (Exception e) {
+                if (attempt < 4) {
+                    try {
+                        Thread.sleep(40L);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        }
+        neutralizeSourceInPlace(candidate);
+    }
+
+    private static void neutralizeSourceInPlace(Path candidate) {
+        String name = candidate.getFileName().toString();
+        if (name.endsWith(".kt") || name.endsWith(".java")) {
+            try {
+                candidate.toFile().setWritable(true);
+                Files.writeString(
+                    candidate,
+                    "// Quarantined legacy 1.0.4 file (backup in .atlas-1.0.4-quarantine)\n",
+                    StandardCharsets.UTF_8
+                );
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static Set<String> computeAllowedRelativePaths(File rootDir, File srcDir) {
+        Set<String> allowed = new HashSet<>(EXPECTED_APP_SRC_FILES);
+        if (new File(rootDir, ".git").exists()) {
+            String gitBin = findGitExecutable();
+            if (gitBin != null) {
+                Set<String> tracked = queryGitTrackedFiles(gitBin, rootDir, srcDir);
+                // Only union Git's index if it reflects 1.0.5+ (contains MainActivity.kt),
+                // preventing an old 1.0.4 .git folder overlaid with a ZIP from keeping 1.0.4 files.
+                if (tracked.contains(V105_SENTINEL)) {
+                    allowed.addAll(tracked);
+                }
+            }
+        }
+        return allowed;
+    }
+
+    private static Set<String> queryGitTrackedFiles(String gitBin, File rootDir, File srcDir) {
         try {
             String srcRel = rootDir.toPath().relativize(srcDir.toPath()).toString().replace('\\', '/');
             Process proc = new ProcessBuilder(
-                gitBin, "ls-files", "--others", "--exclude-standard", "-z", "--", srcRel
+                gitBin, "-c", "safe.directory=*", "ls-files", "-z", "--", srcRel
             )
                 .directory(rootDir)
                 .redirectError(ProcessBuilder.Redirect.DISCARD)
                 .start();
             byte[] stdout = proc.getInputStream().readAllBytes();
             if (proc.waitFor() != 0) {
-                return Collections.emptyList();
+                return Collections.emptySet();
             }
             String decoded = new String(stdout, StandardCharsets.UTF_8);
             if (decoded.isEmpty()) {
-                return Collections.emptyList();
+                return Collections.emptySet();
             }
-            List<File> files = new ArrayList<>();
+            String prefix = srcRel + "/";
+            Set<String> tracked = new HashSet<>();
             for (String entry : decoded.split("\0")) {
-                if (!entry.isBlank()) {
-                    files.add(new File(rootDir, entry));
+                String normalized = entry.replace('\\', '/');
+                if (normalized.startsWith(prefix)) {
+                    tracked.add(normalized.substring(prefix.length()));
                 }
             }
-            return files;
+            return tracked;
         } catch (Exception e) {
-            return Collections.emptyList();
+            return Collections.emptySet();
         }
     }
 
