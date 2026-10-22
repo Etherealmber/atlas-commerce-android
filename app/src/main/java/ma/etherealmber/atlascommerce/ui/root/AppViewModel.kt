@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.DensityMode
@@ -25,6 +26,8 @@ import ma.etherealmber.atlascommerce.core.server.ServerSelection
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
+import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
+import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
@@ -95,6 +98,10 @@ class AppViewModel @Inject constructor(
     val session: StateFlow<SessionState> = sessionManager.state
     val notices: SharedFlow<String> = sessionManager.notices
     val updateState: StateFlow<UpdateState> = updateManager.state
+    val mirrorPing: StateFlow<MirrorPingResult> = updateManager.mirrorPing
+    val updateDownloadSource: StateFlow<UpdateDownloadSource> = preferences.updateDownloadSource
+        .map { UpdateDownloadSource.fromKey(it) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, UpdateDownloadSource.AUTO)
 
     private val _devices = MutableStateFlow<List<TrustedDeviceDto>>(emptyList())
     val devices: StateFlow<List<TrustedDeviceDto>> = _devices.asStateFlow()
@@ -174,6 +181,16 @@ class AppViewModel @Inject constructor(
 
     fun startUpdateDownload() {
         updateManager.startDownload()
+    }
+
+    fun setUpdateDownloadSource(source: UpdateDownloadSource) {
+        viewModelScope.launch {
+            preferences.setUpdateDownloadSource(source.key)
+        }
+    }
+
+    fun pingUpdateMirrors() {
+        updateManager.pingMirrors()
     }
 
     fun dismissUpdateBanner() {

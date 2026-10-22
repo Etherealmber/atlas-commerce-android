@@ -18,9 +18,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SystemUpdateAlt
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
+import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateFormatter
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
@@ -332,6 +336,10 @@ fun MandatoryUpdateScreen(
 @Composable
 fun SettingsUpdateCard(
     state: UpdateState,
+    selectedSource: UpdateDownloadSource = UpdateDownloadSource.AUTO,
+    mirrorPing: MirrorPingResult = MirrorPingResult(),
+    onSelectSource: (UpdateDownloadSource) -> Unit = {},
+    onPingMirrors: () -> Unit = {},
     onCheck: () -> Unit,
     onDownload: () -> Unit,
     onInstall: () -> Unit,
@@ -346,7 +354,7 @@ fun SettingsUpdateCard(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = "Mise à jour de l'application",
+                text = "Mise à jour & Miroirs CDN",
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.weight(1f),
             )
@@ -356,6 +364,78 @@ fun SettingsUpdateCard(
             )
         }
         Spacer(Modifier.height(8.dp))
+
+        // Source selector: Auto (Fastest + Failover) | CDN 1 | GitHub
+        Text(
+            text = "Serveur de téléchargement",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            UpdateDownloadSource.entries.forEach { src ->
+                FilterChip(
+                    selected = selectedSource == src,
+                    onClick = { onSelectSource(src) },
+                    label = { Text(src.label) },
+                )
+            }
+        }
+
+        // Live Ping tester (CDN 1 vs GitHub in ms)
+        Spacer(Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AtlasChip(
+                text = when {
+                    mirrorPing.testing -> "CDN 1 : test…"
+                    mirrorPing.cdn1Online == true -> "CDN 1 : ${mirrorPing.cdn1Ms} ms"
+                    mirrorPing.cdn1Online == false -> "CDN 1 : indisponible"
+                    else -> "CDN 1 : prêt"
+                },
+                tone = when (mirrorPing.cdn1Online) {
+                    true -> AtlasTone.POSITIVE
+                    false -> AtlasTone.WARNING
+                    null -> AtlasTone.NEUTRAL
+                },
+            )
+            AtlasChip(
+                text = when {
+                    mirrorPing.testing -> "GitHub : test…"
+                    mirrorPing.githubOnline == true -> "GitHub : ${mirrorPing.githubMs} ms"
+                    mirrorPing.githubOnline == false -> "GitHub : indisponible"
+                    else -> "GitHub : prêt"
+                },
+                tone = when (mirrorPing.githubOnline) {
+                    true -> AtlasTone.POSITIVE
+                    false -> AtlasTone.WARNING
+                    null -> AtlasTone.NEUTRAL
+                },
+            )
+            Spacer(Modifier.weight(1f))
+            TextButton(
+                onClick = onPingMirrors,
+                enabled = !mirrorPing.testing,
+            ) {
+                Icon(Icons.Outlined.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Ping")
+            }
+        }
+        mirrorPing.fastestLabel?.let { rec ->
+            Text(
+                text = rec,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        AtlasDivider(Modifier.padding(vertical = 8.dp))
 
         when (state) {
             UpdateState.Idle -> {

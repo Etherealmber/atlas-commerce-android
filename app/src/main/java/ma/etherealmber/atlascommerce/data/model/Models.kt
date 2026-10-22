@@ -35,12 +35,34 @@ data class AndroidUpdateDto(
     val versionCode: Int = 0,
     val versionName: String? = null,
     val apkUrl: String? = null,
+    @Json(name = "apk_url") val apkUrlSnake: String? = null,
+    val cdn1Url: String? = null,
+    @Json(name = "cdn1_url") val cdn1UrlSnake: String? = null,
+    val githubUrl: String? = null,
+    @Json(name = "github_url") val githubUrlSnake: String? = null,
+    val sha256: String? = null,
     val mandatory: Boolean = false,
     val notes: String? = null,
     val message: String? = null,
     override val error: String? = null,
     override val code: String? = null,
-) : ApiStatus
+) : ApiStatus {
+    val resolvedPrimaryUrl: String?
+        get() = apkUrl?.takeIf { it.isNotBlank() }
+            ?: apkUrlSnake?.takeIf { it.isNotBlank() }
+            ?: cdn1Url?.takeIf { it.isNotBlank() }
+            ?: cdn1UrlSnake?.takeIf { it.isNotBlank() }
+            ?: githubUrl?.takeIf { it.isNotBlank() }
+            ?: githubUrlSnake?.takeIf { it.isNotBlank() }
+
+    val resolvedCdn1Url: String?
+        get() = cdn1Url?.takeIf { it.isNotBlank() }
+            ?: cdn1UrlSnake?.takeIf { it.isNotBlank() }
+
+    val resolvedGithubUrl: String?
+        get() = githubUrl?.takeIf { it.isNotBlank() }
+            ?: githubUrlSnake?.takeIf { it.isNotBlank() }
+}
 
 // ---------------------------------------------------------------------------
 // Authentication, profile & QR / connected devices
