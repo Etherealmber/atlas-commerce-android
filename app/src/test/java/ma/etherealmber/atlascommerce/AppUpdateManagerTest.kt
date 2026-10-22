@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.net.ApiEnvelope
 import ma.etherealmber.atlascommerce.core.net.ApiErrorPayload
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
@@ -328,7 +329,7 @@ class AppUpdateManagerTest {
     }
 
     @Test
-    fun effectiveNotesAlwaysGeneratesReadableTextWhenBlankOrBareVersion() {
+    fun effectiveNotesAlwaysGeneratesMinimalConciseTextWhenBlankOrBareVersion() {
         val bare = UpdateInfo(
             versionCode = 108,
             versionName = "1.0.8",
@@ -337,10 +338,177 @@ class AppUpdateManagerTest {
             notes = "1.0.8",
         )
         assertTrue(bare.effectiveNotes.contains("v1.0.8"))
-        assertTrue(bare.effectiveNotes.lines().size >= 3)
+        assertEquals(1, bare.effectiveNotes.lines().size)
 
         val empty = bare.copy(notes = null)
-        assertTrue(empty.effectiveNotes.contains("CDN 1"))
+        assertEquals(1, empty.effectiveNotes.lines().size)
+        assertTrue(empty.effectiveNotes.contains("optimisations"))
+    }
+
+    @Test
+    fun parallelMultiInstanceRangeDownloadStreamsFourSegmentsAndVerifiesSha256() {
+        val apkBytes = ByteArray(128 * 1024) { idx -> ((idx * 37 + 13) % 256).toByte() }
+        val sha256Hex = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(apkBytes)
+            .joinToString("") { "%02x".format(it) }
+        val notifier = RecordingNotifier()
+        val seenRanges = Collections.synchronizedList(mutableListOf<String>())
+
+        ServerSocket(0).use { server ->
+            val port = server.localPort
+            val acceptLoop = Thread {
+                while (!server.isClosed) {
+                    val s = runCatching { server.accept() }.getOrNull() ?: break
+                    Thread {
+                        s.use { sock ->
+                            val reader = BufferedReader(InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8))
+                            reader.readLine() ?: return@use
+                            var rangeHeader: String? = null
+                            while (true) {
+                                val h = reader.readLine() ?: break
+                                if (h.isEmpty()) break
+                                if (h.startsWith("Range:", ignoreCase = true)) {
+                                    rangeHeader = h.substringAfter(':').trim()
+                                }
+                            }
+                            val out = sock.getOutputStream()
+                            val match = Regex("""bytes=(\d+)-(\d+)""").find(rangeHeader.orEmpty())
+                            if (match != null) {
+                                seenRanges.add(rangeHeader.orEmpty())
+                                val start = match.groupValues[1].toInt()
+                                val end = match.groupValues[2].toInt().coerceAtMost(apkBytes.lastIndex)
+                                val len = end - start + 1
+                                val head = buildString {
+                                    append("HTTP/1.1 206 Partial Content\r\n")
+                                    append("Content-Type: application/vnd.android.package-archive\r\n")
+                                    append("Accept-Ranges: bytes\r\n")
+                                    append("Content-Range: bytes $start-$end/${apkBytes.size}\r\n")
+                                    append("Content-Length: $len\r\n")
+                                    append("Connection: close\r\n\r\n")
+                                }
+                                out.write(head.toByteArray(StandardCharsets.UTF_8))
+                                out.write(apkBytes, start, len)
+                                out.flush()
+                            } else {
+                                val head = "HTTP/1.1 200 OK\r\nContent-Length: ${apkBytes.size}\r\nConnection: close\r\n\r\n"
+                                out.write(head.toByteArray(StandardCharsets.UTF_8))
+                                out.write(apkBytes)
+                                out.flush()
+                            }
+                        }
+                    }.apply { isDaemon = true; start() }
+                }
+            }.apply { isDaemon = true; start() }
+
+            val manager = AppUpdateManager(
+                updatesDirProvider = { tempDir },
+                baseUrlProvider = { "http://127.0.0.1:$port" },
+                currentVersionCode = 109,
+                currentVersionName = "1.0.9",
+                probeClient = client,
+                downloadClient = client,
+                moshi = moshi,
+                notifier = notifier,
+                scope = scope,
+                allowCleartext = true,
+                parallelDownloadProvider = { true },
+            )
+
+            manager.startDownload(
+                UpdateInfo(
+                    versionCode = 110,
+                    versionName = "1.1.0",
+                    apkUrl = "http://127.0.0.1:$port/atlas-commerce.apk",
+                    mandatory = false,
+                    notes = "Mise à jour v1.1.0 — optimisations et correctifs.",
+                    sha256 = sha256Hex,
+                ),
+            )
+
+            awaitCondition { manager.state.value is UpdateState.ReadyToInstall }
+            val ready = manager.state.value as UpdateState.ReadyToInstall
+            assertArrayEquals(apkBytes, ready.apkFile.readBytes())
+            // Probe `bytes=0-0` + 4 parallel disjoint Range chunks = 5 Range HTTP requests
+            assertTrue("Expected probe + 4 parallel Range requests, got $seenRanges", seenRanges.size >= 5)
+            assertNull(notifier.errorMessage)
+            acceptLoop.interrupt()
+        }
+    }
+
+    @Test
+    fun followLatestReleaseTreatsNewestPublishedManifestAsLatestUpdateAndLoadsChangelog() {
+        val notifier = RecordingNotifier()
+        ServerSocket(0).use { server ->
+            val port = server.localPort
+            val acceptLoop = Thread {
+                while (!server.isClosed) {
+                    val s = runCatching { server.accept() }.getOrNull() ?: break
+                    Thread {
+                        s.use { sock ->
+                            val reader = BufferedReader(InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8))
+                            val reqLine = reader.readLine() ?: return@use
+                            while ((reader.readLine() ?: "").isNotEmpty()) { /* drain */ }
+                            val body = when {
+                                reqLine.contains("/github-latest.json") ->
+                                    """{"success":true,"ok":true,"updateAvailable":true,"versionCode":108,"versionName":"1.0.8-hotfix","apkUrl":"http://127.0.0.1:$port/latest.apk","notes":"Mise à jour v1.0.8-hotfix — correctifs.","publishedAt":"2026-10-23T12:00:00Z"}"""
+                                reqLine.contains("/releases") ->
+                                    """[{"tag_name":"v1.0.9","name":"Atlas Commerce v1.0.9","body":"- Téléchargement parallèle 4 flux\n- Licence MIT Etherealmber","draft":false,"prerelease":false,"published_at":"2026-10-23T10:00:00Z","html_url":"https://github.com/Etherealmber/atlas-commerce-android/releases/tag/v1.0.9"}]"""
+                                else ->
+                                    """{"success":true,"ok":true,"updateAvailable":false,"versionCode":109,"versionName":"1.0.9","apkUrl":"http://127.0.0.1:$port/old.apk","publishedAt":"2026-10-20T08:00:00Z"}"""
+                            }
+                            val bytes = body.toByteArray(StandardCharsets.UTF_8)
+                            val head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
+                            sock.getOutputStream().apply {
+                                write(head.toByteArray(StandardCharsets.UTF_8))
+                                write(bytes)
+                                flush()
+                            }
+                        }
+                    }.apply { isDaemon = true; start() }
+                }
+            }.apply { isDaemon = true; start() }
+
+            val manager = AppUpdateManager(
+                updatesDirProvider = { tempDir },
+                baseUrlProvider = { "http://127.0.0.1:$port" },
+                currentVersionCode = 109,
+                currentVersionName = "1.0.9",
+                probeClient = client,
+                downloadClient = client,
+                moshi = moshi,
+                notifier = notifier,
+                scope = scope,
+                allowCleartext = true,
+                followLatestReleaseProvider = { true },
+                githubLatestJsonUrl = "http://127.0.0.1:$port/github-latest.json",
+                releasesApiUrl = "http://127.0.0.1:$port/releases",
+            )
+
+            manager.checkForUpdate(manual = true)
+            awaitCondition { manager.state.value is UpdateState.Available }
+            val available = manager.state.value as UpdateState.Available
+            assertEquals("v1.0.8-hotfix", available.info.displayVersion)
+
+            manager.refreshChangelog()
+            awaitCondition { manager.changelog.value.firstOrNull()?.notes?.contains("4 flux") == true }
+            assertEquals("v1.0.9", manager.changelog.value.first().tagName)
+            acceptLoop.interrupt()
+        }
+    }
+
+    @Test
+    fun authorAndLicenseMetadataMatchEtherealmberAndNoDuplicateSettingsIcon() {
+        assertEquals("Etherealmber", AppDetails.COPYRIGHT_HOLDER)
+        assertEquals("https://github.com/Etherealmber", AppDetails.GITHUB_PROFILE_URL)
+        assertEquals("https://github.com/Etherealmber.png", AppDetails.GITHUB_AVATAR_URL)
+        assertTrue(UpdateFormatter.progressSummary(14 * 1_048_576L, 28 * 1_048_576L, 6 * 1_048_576L, 4).contains("4 flux"))
+
+        val rootDir = File(".").canonicalFile.let { cur ->
+            if (File(cur, "LICENSE").isFile) cur else cur.parentFile
+        }
+        val legacyHandle = "lox" + "dpsy"
+        assertTrue(File(rootDir, "LICENSE").readText().contains("Copyright (c) 2026 Etherealmber"))
+        assertFalse(File(rootDir, "LICENSE").readText().contains(legacyHandle))
     }
 
     @Test

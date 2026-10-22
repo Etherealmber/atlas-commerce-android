@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.legal
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -8,33 +9,99 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasBullet
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
-import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
+import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.util.openExternal
+
+/**
+ * Reusable GitHub maintainer identity card displaying @Etherealmber's rounded
+ * circular profile picture (`CircleShape`), MIT copyright ownership, and direct
+ * one-tap link to https://github.com/Etherealmber.
+ */
+@Composable
+fun EtherealmberAuthorCard(
+    onToast: ((String) -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val openProfile = {
+        if (!openExternal(context, AppDetails.GITHUB_PROFILE_URL)) {
+            onToast?.invoke("Aucun navigateur disponible.")
+        }
+    }
+
+    AtlasCard(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = openProfile),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AtlasAvatar(
+                avatarUrl = AppDetails.GITHUB_AVATAR_URL,
+                label = AppDetails.GITHUB_HANDLE,
+                size = 48.dp,
+                onClick = openProfile,
+                modifier = Modifier.clip(CircleShape),
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = AppDetails.COPYRIGHT_HOLDER,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    AtlasChip(text = "MIT", tone = AtlasTone.POSITIVE)
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "github.com/${AppDetails.GITHUB_HANDLE} · © ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Icon(
+                imageVector = Icons.Outlined.OpenInNew,
+                contentDescription = "Ouvrir le profil GitHub Etherealmber",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
 
 @Composable
 private fun LegalPage(
@@ -62,7 +129,7 @@ private fun LegalPage(
 
 private const val MIT_TEXT = """MIT License
 
-Copyright (c) 2026 loxdpsy
+Copyright (c) 2026 Etherealmber
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -90,6 +157,8 @@ fun LicenseScreen(onBack: () -> Unit) {
         subtitle = "MIT · open source",
         onBack = onBack,
     ) {
+        EtherealmberAuthorCard()
+
         AtlasCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -108,6 +177,12 @@ fun LicenseScreen(onBack: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(10.dp))
+            AtlasButton(
+                text = "Profil GitHub @${AppDetails.GITHUB_HANDLE}",
+                onClick = { openExternal(context, AppDetails.GITHUB_PROFILE_URL) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
             AtlasButton(
                 text = "Voir le dépôt web",
                 onClick = { openExternal(context, AppDetails.WEB_REPO) },
@@ -147,7 +222,7 @@ fun LicenseScreen(onBack: () -> Unit) {
             ThirdParty("OkHttp, Retrofit, Moshi", "Apache License 2.0")
             ThirdParty("CameraX", "Apache License 2.0")
             ThirdParty("Google ML Kit — Barcode Scanning", "Google APIs Terms of Service (modèle embarqué)")
-            ThirdParty("Atlas Commerce worker", "MIT — © 2026 loxdpsy")
+            ThirdParty("Atlas Commerce worker & Android", "MIT — © ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}")
         }
 
         AtlasCard {
@@ -157,7 +232,7 @@ fun LicenseScreen(onBack: () -> Unit) {
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "« Atlas Commerce » et le logo Atlas appartiennent à leurs auteurs. " +
+                text = "« Atlas Commerce » et le logo Atlas appartiennent à ${AppDetails.COPYRIGHT_HOLDER}. " +
                     "Android et Google Play sont des marques de Google LLC. " +
                     "Cloudflare est une marque de Cloudflare, Inc.",
                 style = MaterialTheme.typography.bodySmall,
@@ -335,6 +410,8 @@ fun AboutScreen(onBack: () -> Unit) {
             }
         }
 
+        EtherealmberAuthorCard()
+
         AtlasCard {
             Text(
                 text = AppDetails.DESCRIPTION,
@@ -357,11 +434,17 @@ fun AboutScreen(onBack: () -> Unit) {
             AtlasBullet("Catalogue produits avec recherche, stock faible et mode hors ligne.")
             AtlasBullet("Scan de codes-barres pour ajouter un article au panier.")
             AtlasBullet("Vente rapide : ticket VR sans TVA, prêt à encaisser sur le web.")
-            AtlasBullet("Choix du serveur avant connexion, thème clair/sombre et densité.")
+            AtlasBullet("Mises à jour accélérées multi-connexions (4 flux HTTP Range) et journal intégré.")
         }
 
         AtlasCard {
             Text("Liens", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(8.dp))
+            AtlasButton(
+                text = "GitHub @${AppDetails.GITHUB_HANDLE}",
+                onClick = { openExternal(context, AppDetails.GITHUB_PROFILE_URL) },
+                modifier = Modifier.fillMaxWidth(),
+            )
             Spacer(Modifier.height(8.dp))
             AtlasButton(
                 text = "Projet Atlas Commerce (web)",

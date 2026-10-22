@@ -4,10 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,25 +28,33 @@ import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
+import ma.etherealmber.atlascommerce.data.model.GitHubReleaseDto
 import ma.etherealmber.atlascommerce.di.ApplicationScope
 import ma.etherealmber.atlascommerce.di.ProbeClient
 import ma.etherealmber.atlascommerce.di.UpdateClient
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Application-scoped manager for checking, pinging (`CDN 1` vs `GitHub`),
- * downloading (with automatic mirror failover & SHA-256 verification), and
- * installing native APK updates.
+ * downloading across parallel HTTP `Range` instances (with automatic single-stream
+ * fallback, mirror failover & SHA-256 verification), loading release changelogs,
+ * and installing native APK updates.
  */
 @Singleton
 class AppUpdateManager internal constructor(
@@ -61,7 +70,11 @@ class AppUpdateManager internal constructor(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val allowCleartext: Boolean = BuildConfig.ALLOW_CLEARTEXT,
     private val sourceProvider: suspend () -> UpdateDownloadSource = { UpdateDownloadSource.AUTO },
+    private val parallelDownloadProvider: suspend () -> Boolean = { true },
+    private val followLatestReleaseProvider: suspend () -> Boolean = { true },
     private val cdn1LatestJsonUrl: String? = null,
+    private val githubLatestJsonUrl: String? = null,
+    private val releasesApiUrl: String? = null,
 ) {
 
     @Inject
@@ -92,7 +105,23 @@ class AppUpdateManager internal constructor(
             }
             UpdateDownloadSource.fromKey(raw)
         },
+        parallelDownloadProvider = {
+            try {
+                preferences.parallelUpdateDownload.first()
+            } catch (_: Throwable) {
+                true
+            }
+        },
+        followLatestReleaseProvider = {
+            try {
+                preferences.followLatestRelease.first()
+            } catch (_: Throwable) {
+                true
+            }
+        },
         cdn1LatestJsonUrl = UpdateDefaults.CDN1_LATEST_JSON_URL,
+        githubLatestJsonUrl = UpdateDefaults.GITHUB_LATEST_JSON_URL,
+        releasesApiUrl = UpdateDefaults.GITHUB_RELEASES_API_URL,
     )
 
     private val lock = Any()
@@ -101,6 +130,12 @@ class AppUpdateManager internal constructor(
 
     private val _mirrorPing = MutableStateFlow(MirrorPingResult())
     val mirrorPing: StateFlow<MirrorPingResult> = _mirrorPing.asStateFlow()
+
+    private val _changelog = MutableStateFlow<List<ReleaseChangelogEntry>>(defaultOfflineChangelog())
+    val changelog: StateFlow<List<ReleaseChangelogEntry>> = _changelog.asStateFlow()
+
+    private val _changelogLoading = MutableStateFlow(false)
+    val changelogLoading: StateFlow<Boolean> = _changelogLoading.asStateFlow()
 
     @Volatile
     private var downloadJob: Job? = null
@@ -112,17 +147,116 @@ class AppUpdateManager internal constructor(
     private var pingJob: Job? = null
 
     @Volatile
+    private var changelogJob: Job? = null
+
+    @Volatile
     private var lastAutoCheckMs: Long = 0L
 
     @Volatile
     private var hideActiveDownloadInForeground: Boolean = false
 
     private val updateAdapter by lazy { moshi.adapter(AndroidUpdateDto::class.java) }
+    private val releasesListAdapter by lazy {
+        val type = Types.newParameterizedType(List::class.java, GitHubReleaseDto::class.java)
+        moshi.adapter<List<GitHubReleaseDto>>(type)
+    }
 
     val isDownloading: Boolean
         get() = synchronized(lock) {
             _state.value is UpdateState.Downloading || downloadJob?.isActive == true
         }
+
+    private fun defaultOfflineChangelog(): List<ReleaseChangelogEntry> = listOf(
+        ReleaseChangelogEntry(
+            tagName = "v$currentVersionName",
+            title = "Atlas Commerce v$currentVersionName (build $currentVersionCode)",
+            isLatest = true,
+            notes = buildString {
+                appendLine("• Téléchargement accéléré multi-connexions (4 flux HTTP Range parallèles).")
+                appendLine("• Suivi direct de la dernière version publiée sur GitHub Releases & CDN 1.")
+                appendLine("• Journal complet des versions intégré dans Paramètres et notes JSON allégées.")
+                append("• Licence MIT © 2026 Etherealmber & navigation persistante entre sous-écrans.")
+            },
+            htmlUrl = "${BuildConfig.PROJECT_REPO.trimEnd('/')}/releases",
+        ),
+    )
+
+    /**
+     * Loads full release notes directly inside Settings (`Paramètres`) from GitHub Releases,
+     * falling back gracefully to built-in version highlights when offline.
+     */
+    fun refreshChangelog() {
+        val apiUrl = releasesApiUrl?.takeIf { it.isNotBlank() } ?: return
+        if (changelogJob?.isActive == true) return
+        _changelogLoading.value = true
+        changelogJob = scope.launch(ioDispatcher) {
+            try {
+                val request = Request.Builder()
+                    .url(apiUrl)
+                    .get()
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", "Atlas-Android-Updater")
+                    .build()
+                val parsed = probeClient.newCall(request).execute().use { resp ->
+                    if (!resp.isSuccessful) emptyList()
+                    else {
+                        val raw = resp.body?.string().orEmpty()
+                        releasesListAdapter.fromJson(raw).orEmpty()
+                    }
+                }
+                val entries = parsed
+                    .filter { !it.draft && it.tagName.isNotBlank() }
+                    .mapIndexed { idx, rel ->
+                        val cleanedBody = cleanReleaseBody(rel.body.orEmpty(), rel.tagName)
+                        ReleaseChangelogEntry(
+                            tagName = rel.tagName.trim(),
+                            title = rel.name?.trim()?.takeIf { it.isNotEmpty() }
+                                ?: "Atlas Commerce ${rel.tagName.trim()}",
+                            publishedAt = rel.publishedAt?.take(10),
+                            isLatest = idx == 0,
+                            notes = cleanedBody,
+                            htmlUrl = rel.htmlUrl,
+                        )
+                    }
+                if (entries.isNotEmpty()) {
+                    _changelog.value = entries
+                }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (_: Throwable) {
+                // Keep existing / built-in changelog entries silently when offline
+            } finally {
+                _changelogLoading.value = false
+            }
+        }
+    }
+
+    private fun cleanReleaseBody(rawBody: String, tagName: String): String {
+        val lines = rawBody.lineSequence()
+            .map { it.trim() }
+            .filter { line ->
+                line.isNotEmpty() &&
+                    !line.startsWith("## ") &&
+                    !line.startsWith("### ") &&
+                    !line.startsWith("- **SHA-256", ignoreCase = true) &&
+                    !line.startsWith("- **Téléchargement", ignoreCase = true) &&
+                    !line.startsWith("- **Miroir", ignoreCase = true) &&
+                    !line.startsWith("**Comparatif", ignoreCase = true)
+            }
+            .map { line ->
+                line
+                    .removePrefix("- ")
+                    .removePrefix("* ")
+                    .let { if (it.startsWith("•")) it else "• $it" }
+            }
+            .take(6)
+            .toList()
+        return if (lines.isNotEmpty()) {
+            lines.joinToString("\n")
+        } else {
+            "• Mise à jour $tagName — optimisations et correctifs."
+        }
+    }
 
     /**
      * Measures real HTTPS latency in `ms` to both `CDN 1` and `GitHub Releases` in parallel.
@@ -161,7 +295,7 @@ class AppUpdateManager internal constructor(
     }
 
     internal fun measureEndpointMs(url: String): Pair<Boolean, Long?> {
-        val start = SystemClock.elapsedRealtime()
+        val startNs = System.nanoTime()
         val headReq = Request.Builder()
             .url(url)
             .head()
@@ -169,7 +303,7 @@ class AppUpdateManager internal constructor(
             .build()
         return try {
             probeClient.newCall(headReq).execute().use { resp ->
-                val elapsed = (SystemClock.elapsedRealtime() - start).coerceAtLeast(1L)
+                val elapsed = ((System.nanoTime() - startNs) / 1_000_000L).coerceAtLeast(1L)
                 if (resp.code in 200..399 || resp.code == 405) {
                     true to elapsed
                 } else {
@@ -182,8 +316,8 @@ class AppUpdateManager internal constructor(
     }
 
     /**
-     * Checks `GET /api/app/android-update` (and optional `CDN 1` `latest.json` mirror)
-     * without overriding any active download.
+     * Checks `GET /api/app/android-update`, `CDN 1/latest.json`, and
+     * `GitHub releases/latest/download/latest.json` without overriding any active download.
      */
     fun checkForUpdate(manual: Boolean = false) {
         synchronized(lock) {
@@ -205,6 +339,25 @@ class AppUpdateManager internal constructor(
         }
     }
 
+    private fun fetchManifestJson(url: String?): AndroidUpdateDto? {
+        val clean = url?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return try {
+            val req = Request.Builder()
+                .url(clean)
+                .get()
+                .header("Accept", "application/json")
+                .header("Cache-Control", "no-cache")
+                .header("User-Agent", "Atlas-Android-Updater")
+                .build()
+            probeClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) null
+                else resp.body?.string()?.let { updateAdapter.fromJson(it) }
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     private suspend fun performCheck(manual: Boolean) {
         val baseUrl = ServerUrl.normalize(baseUrlProvider()) ?: return
         if (ServerUrl.isCleartext(baseUrl) && !allowCleartext) {
@@ -216,6 +369,8 @@ class AppUpdateManager internal constructor(
             return
         }
 
+        val followLatest = runCatching { followLatestReleaseProvider() }.getOrDefault(true)
+
         val checkUrl = (ServerUrl.withSlash(baseUrl) + "api/app/android-update")
             .toHttpUrlOrNull()
             ?.newBuilder()
@@ -224,60 +379,59 @@ class AppUpdateManager internal constructor(
             ?.build()
             ?: return
 
-        var primaryDto: AndroidUpdateDto? = null
         var primaryError: String? = null
 
-        try {
-            val request = Request.Builder()
-                .url(checkUrl)
-                .get()
-                .header("Accept", "application/json")
-                .header("X-Atlas-Client", "android")
-                .build()
-            probeClient.newCall(request).execute().use { response ->
-                val rawBody = runCatching { response.body?.string() }.getOrNull().orEmpty()
-                if (response.isSuccessful) {
-                    primaryDto = runCatching { updateAdapter.fromJson(rawBody) }.getOrNull()
-                } else {
-                    primaryError = "Impossible de vérifier les mises à jour (${response.code})."
+        val (primaryDto, cdnManifestDto, ghManifestDto) = coroutineScope {
+            val primaryDeferred = async {
+                try {
+                    val request = Request.Builder()
+                        .url(checkUrl)
+                        .get()
+                        .header("Accept", "application/json")
+                        .header("X-Atlas-Client", "android")
+                        .build()
+                    probeClient.newCall(request).execute().use { response ->
+                        val rawBody = runCatching { response.body?.string() }.getOrNull().orEmpty()
+                        if (response.isSuccessful) {
+                            runCatching { updateAdapter.fromJson(rawBody) }.getOrNull()
+                        } else {
+                            primaryError = "Impossible de vérifier les mises à jour (${response.code})."
+                            null
+                        }
+                    }
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (_: IOException) {
+                    primaryError = "Impossible de joindre le serveur pour vérifier les mises à jour."
+                    null
+                } catch (t: Throwable) {
+                    primaryError = t.message?.takeIf { it.isNotBlank() } ?: "Erreur lors de la vérification."
+                    null
                 }
             }
-        } catch (c: CancellationException) {
-            throw c
-        } catch (_: IOException) {
-            primaryError = "Impossible de joindre le serveur pour vérifier les mises à jour."
-        } catch (t: Throwable) {
-            primaryError = t.message?.takeIf { it.isNotBlank() } ?: "Erreur lors de la vérification."
+            val cdnDeferred = async { fetchManifestJson(cdn1LatestJsonUrl) }
+            val ghDeferred = async { fetchManifestJson(githubLatestJsonUrl) }
+            Triple(primaryDeferred.await(), cdnDeferred.await(), ghDeferred.await())
         }
 
-        // Also check CDN 1 `latest.json` if configured and pick whichever manifest advertises the newest build
-        var cdnManifestDto: AndroidUpdateDto? = null
-        val cdnManifestUrl = cdn1LatestJsonUrl?.takeIf { it.isNotBlank() }
-        if (cdnManifestUrl != null) {
-            cdnManifestDto = try {
-                val req = Request.Builder()
-                    .url(cdnManifestUrl)
-                    .get()
-                    .header("Accept", "application/json")
-                    .header("Cache-Control", "no-cache")
-                    .build()
-                probeClient.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) null
-                    else resp.body?.string()?.let { updateAdapter.fromJson(it) }
-                }
-            } catch (_: Throwable) {
-                null
-            }
+        val candidates = listOfNotNull(primaryDto, cdnManifestDto, ghManifestDto)
+            .filter { it.success || it.ok || it.versionCode > 0 }
+
+        val dto = if (followLatest) {
+            // Treat whichever manifest was pushed most recently as the active latest release
+            candidates.maxWithOrNull(
+                compareBy<AndroidUpdateDto> { it.publishedAt?.trim().orEmpty() }
+                    .thenBy { it.versionCode },
+            )
+        } else {
+            candidates.maxByOrNull { it.versionCode }
         }
 
-        val dto = listOfNotNull(primaryDto, cdnManifestDto)
-            .maxByOrNull { it.versionCode }
-
-        if (dto == null || (!dto.success && !dto.ok && dto.versionCode <= 0)) {
+        if (dto == null) {
             synchronized(lock) {
                 if (!isDownloadingLocked() && manual) {
                     _state.value = UpdateState.Error(
-                        dto?.error ?: primaryError ?: "Réponse de mise à jour invalide.",
+                        primaryDto?.error ?: primaryError ?: "Réponse de mise à jour invalide.",
                     )
                 }
             }
@@ -288,17 +442,32 @@ class AppUpdateManager internal constructor(
         val resolvedCdn1 = dto.resolvedCdn1Url?.let { resolveApkUrl(baseUrl, it) }
             ?: resolvedPrimaryUrl?.takeIf { it.contains("cdn1", ignoreCase = true) }
         val resolvedGithub = dto.resolvedGithubUrl?.let { resolveApkUrl(baseUrl, it) }
-            ?: if (cdn1LatestJsonUrl != null) UpdateDefaults.GITHUB_LATEST_APK_URL else null
+            ?: if (cdn1LatestJsonUrl != null || githubLatestJsonUrl != null) {
+                UpdateDefaults.GITHUB_LATEST_APK_URL
+            } else {
+                null
+            }
 
         val primaryUrl = (resolvedPrimaryUrl ?: resolvedCdn1 ?: resolvedGithub)
             ?.takeIf { it.isNotBlank() }
-        val isNewer = dto.versionCode > currentVersionCode && primaryUrl != null &&
-            (dto.updateAvailable || dto.versionCode > currentVersionCode)
+
+        val remoteCleanName = dto.versionName?.trim()?.removePrefix("v")?.removePrefix("V").orEmpty()
+        val localCleanName = currentVersionName.trim().removePrefix("v").removePrefix("V")
+        val differsFromInstalled = dto.versionCode > 0 && (
+            dto.versionCode != currentVersionCode ||
+                (remoteCleanName.isNotEmpty() && !remoteCleanName.equals(localCleanName, ignoreCase = true))
+            )
+
+        val shouldOfferUpdate = primaryUrl != null && if (followLatest) {
+            dto.versionCode > currentVersionCode || differsFromInstalled
+        } else {
+            dto.versionCode > currentVersionCode
+        }
 
         synchronized(lock) {
             if (isDownloadingLocked()) return
 
-            if (!isNewer || primaryUrl == null) {
+            if (!shouldOfferUpdate || primaryUrl == null) {
                 _state.value = UpdateState.UpToDate(System.currentTimeMillis())
                 return
             }
@@ -312,11 +481,13 @@ class AppUpdateManager internal constructor(
                 cdn1Url = resolvedCdn1,
                 githubUrl = resolvedGithub,
                 sha256 = dto.sha256?.trim()?.lowercase()?.takeIf { it.length == 64 },
+                publishedAt = dto.publishedAt?.trim()?.takeIf { it.isNotBlank() },
             )
 
             val existingReady = _state.value as? UpdateState.ReadyToInstall
             if (existingReady != null &&
                 existingReady.info.versionCode == info.versionCode &&
+                (info.sha256 == null || existingReady.info.sha256 == info.sha256) &&
                 existingReady.apkFile.exists() &&
                 existingReady.apkFile.length() > 0L
             ) {
@@ -326,8 +497,12 @@ class AppUpdateManager internal constructor(
 
             val targetFile = targetApkFile(info.versionCode)
             if (!manual && targetFile.exists() && targetFile.length() > MIN_VALID_APK_BYTES) {
-                _state.value = UpdateState.ReadyToInstall(info = info, apkFile = targetFile)
-                return
+                val cachedMatches = info.sha256 == null ||
+                    runCatching { computeSha256Hex(targetFile) }.getOrNull().equals(info.sha256, ignoreCase = true)
+                if (cachedMatches) {
+                    _state.value = UpdateState.ReadyToInstall(info = info, apkFile = targetFile)
+                    return
+                }
             }
 
             _state.value = UpdateState.Available(info = info, dismissedBanner = false)
@@ -371,6 +546,7 @@ class AppUpdateManager internal constructor(
         val finalFile = targetApkFile(info.versionCode)
 
         val preferred = runCatching { sourceProvider() }.getOrDefault(UpdateDownloadSource.AUTO)
+        val useParallel = runCatching { parallelDownloadProvider() }.getOrDefault(true)
         val candidateUrls = info.orderedDownloadUrls(preferred, _mirrorPing.value)
             .ifEmpty { listOf(info.apkUrl) }
 
@@ -386,14 +562,15 @@ class AppUpdateManager internal constructor(
             }
 
             try {
-                streamSingleUrl(
+                downloadFromUrl(
                     info = info,
                     url = candidateUrl,
                     sourceLabel = sourceLabel,
                     partFile = partFile,
+                    allowParallel = useParallel,
                 )
 
-                // Optional SHA-256 verification when manifest supplies checksum
+                // Verify SHA-256 checksum when supplied by manifest
                 val expectedSha = info.sha256
                 if (!expectedSha.isNullOrBlank()) {
                     val actualSha = computeSha256Hex(partFile)
@@ -446,6 +623,215 @@ class AppUpdateManager internal constructor(
         notifier.showError(info, message)
     }
 
+    /**
+     * Fast multi-instance parallel HTTP `Range` downloader (`PARALLEL_CONNECTIONS` concurrent
+     * TCP/TLS streams writing directly to disjoint file offsets via positioned `FileChannel`),
+     * with zero-overhead single-stream reuse whenever the server replies `200 OK` without `Range`.
+     */
+    private suspend fun downloadFromUrl(
+        info: UpdateInfo,
+        url: String,
+        sourceLabel: String?,
+        partFile: File,
+        allowParallel: Boolean,
+    ) {
+        if (!allowParallel) {
+            streamSingleUrl(info, url, sourceLabel, partFile)
+            return
+        }
+
+        val probeRequest = Request.Builder()
+            .url(url)
+            .get()
+            .header("Range", "bytes=0-0")
+            .header("Accept-Encoding", "identity")
+            .header("Accept", "application/vnd.android.package-archive, application/octet-stream, */*")
+            .build()
+
+        val probeResponse = downloadClient.newCall(probeRequest).execute()
+        val resolvedUrl = probeResponse.request.url.toString()
+
+        if (probeResponse.code == 206) {
+            val totalBytes = parseTotalBytesFromContentRange(probeResponse.header("Content-Range"))
+            probeResponse.close()
+
+            if (totalBytes != null && totalBytes >= MIN_PARALLEL_BYTES) {
+                downloadParallelRanges(
+                    info = info,
+                    url = resolvedUrl,
+                    sourceLabel = sourceLabel,
+                    partFile = partFile,
+                    totalBytes = totalBytes,
+                    connections = PARALLEL_CONNECTIONS,
+                )
+                return
+            }
+
+            streamSingleUrl(info, resolvedUrl, sourceLabel, partFile)
+            return
+        }
+
+        // Server ignored `Range` and returned `200 OK` with full stream — reuse immediately!
+        probeResponse.use { fullResponse ->
+            if (!fullResponse.isSuccessful) {
+                throw IOException("Le miroir ${sourceLabel ?: "de téléchargement"} a répondu ${fullResponse.code}.")
+            }
+            streamOpenResponse(info, sourceLabel, partFile, fullResponse)
+        }
+    }
+
+    internal fun parseTotalBytesFromContentRange(headerValue: String?): Long? {
+        if (headerValue.isNullOrBlank()) return null
+        val slashIdx = headerValue.lastIndexOf('/')
+        if (slashIdx < 0 || slashIdx + 1 >= headerValue.length) return null
+        return headerValue.substring(slashIdx + 1).trim().toLongOrNull()?.takeIf { it > 0L }
+    }
+
+    private suspend fun downloadParallelRanges(
+        info: UpdateInfo,
+        url: String,
+        sourceLabel: String?,
+        partFile: File,
+        totalBytes: Long,
+        connections: Int,
+    ) = coroutineScope {
+        val segmentCount = connections.coerceIn(2, MAX_PARALLEL_CONNECTIONS)
+        val totalReadAtomic = AtomicLong(0L)
+        val lastUiPct = AtomicInteger(-1)
+        val lastNotifyPct = AtomicInteger(-1)
+        val startNs = System.nanoTime()
+        val lastUiEmitNs = AtomicLong(startNs)
+        val lastNotifyNs = AtomicLong(startNs)
+
+        _state.value = UpdateState.Downloading(
+            info = info,
+            bytesRead = 0L,
+            totalBytes = totalBytes,
+            activeSourceLabel = sourceLabel,
+            hiddenInForeground = hideActiveDownloadInForeground,
+            activeConnections = segmentCount,
+            speedBytesPerSec = 0L,
+        )
+        notifier.showProgress(info, 0L, totalBytes)
+
+        RandomAccessFile(partFile, "rw").use { raf ->
+            raf.setLength(totalBytes)
+            val channel = raf.channel
+            val chunkSize = totalBytes / segmentCount
+
+            val tasks = (0 until segmentCount).map { index ->
+                val startByte = index * chunkSize
+                val endByte = if (index == segmentCount - 1) totalBytes - 1L else (startByte + chunkSize - 1L)
+                async(ioDispatcher) {
+                    downloadSingleSegmentWithRetry(
+                        channel = channel,
+                        url = url,
+                        sourceLabel = sourceLabel,
+                        startByte = startByte,
+                        endByte = endByte,
+                    ) { delta ->
+                        val accumulated = totalReadAtomic.addAndGet(delta)
+                        val nowNs = System.nanoTime()
+                        val elapsedNs = (nowNs - startNs).coerceAtLeast(1_000_000L)
+                        val speedBps = (accumulated * 1_000_000_000L) / elapsedNs
+                        val pct = ((accumulated.toDouble() / totalBytes.toDouble()) * 100.0)
+                            .toInt()
+                            .coerceIn(0, 100)
+                        val done = accumulated >= totalBytes
+
+                        val prevUiNs = lastUiEmitNs.get()
+                        val prevPct = lastUiPct.get()
+                        if (done || pct > prevPct || nowNs - prevUiNs >= UI_PROGRESS_MIN_INTERVAL_NS) {
+                            lastUiPct.set(pct)
+                            lastUiEmitNs.set(nowNs)
+                            _state.value = UpdateState.Downloading(
+                                info = info,
+                                bytesRead = accumulated,
+                                totalBytes = totalBytes,
+                                activeSourceLabel = sourceLabel,
+                                hiddenInForeground = hideActiveDownloadInForeground,
+                                activeConnections = segmentCount,
+                                speedBytesPerSec = speedBps,
+                            )
+                        }
+
+                        val prevNotifyNs = lastNotifyNs.get()
+                        val prevNotifyPct = lastNotifyPct.get()
+                        if (done || (pct > prevNotifyPct && (prevNotifyPct < 0 || nowNs - prevNotifyNs >= NOTIFY_PROGRESS_MIN_INTERVAL_NS))) {
+                            lastNotifyPct.set(pct)
+                            lastNotifyNs.set(nowNs)
+                            notifier.showProgress(info, accumulated, totalBytes)
+                        }
+                    }
+                }
+            }
+            tasks.awaitAll()
+            channel.force(true)
+        }
+
+        val finalBytes = totalReadAtomic.get()
+        if (finalBytes < totalBytes) {
+            throw IOException(
+                "Téléchargement parallèle incomplet (${UpdateFormatter.dataSize(finalBytes)} / ${UpdateFormatter.dataSize(totalBytes)}).",
+            )
+        }
+    }
+
+    private fun downloadSingleSegmentWithRetry(
+        channel: FileChannel,
+        url: String,
+        sourceLabel: String?,
+        startByte: Long,
+        endByte: Long,
+        onBytesWritten: (Long) -> Unit,
+    ) {
+        var cursor = startByte
+        var attempt = 0
+        val expectedTotal = endByte - startByte + 1L
+
+        while (cursor <= endByte) {
+            attempt++
+            try {
+                val req = Request.Builder()
+                    .url(url)
+                    .get()
+                    .header("Range", "bytes=$cursor-$endByte")
+                    .header("Accept-Encoding", "identity")
+                    .header("Accept", "application/vnd.android.package-archive, application/octet-stream, */*")
+                    .build()
+
+                downloadClient.newCall(req).execute().use { resp ->
+                    if (resp.code != 206) {
+                        throw IOException(
+                            "Le serveur ${sourceLabel ?: ""} n'a pas honoré la plage HTTP (${resp.code}).".trim(),
+                        )
+                    }
+                    val body = resp.body ?: throw IOException("Segment vide reçu.")
+                    val buffer = ByteArray(STREAM_BUFFER_BYTES)
+                    body.byteStream().use { input ->
+                        while (cursor <= endByte) {
+                            val maxToRead = minOf(buffer.size.toLong(), endByte - cursor + 1L).toInt()
+                            val count = input.read(buffer, 0, maxToRead)
+                            if (count == -1) break
+                            var writtenInSlice = 0
+                            while (writtenInSlice < count) {
+                                val bb = ByteBuffer.wrap(buffer, writtenInSlice, count - writtenInSlice)
+                                writtenInSlice += channel.write(bb, cursor + writtenInSlice)
+                            }
+                            cursor += count
+                            onBytesWritten(count.toLong())
+                        }
+                    }
+                }
+                if (cursor <= endByte && attempt > MAX_SEGMENT_RETRIES) {
+                    throw IOException("Segment interrompu ($cursor / $expectedTotal octets).")
+                }
+            } catch (t: Throwable) {
+                if (attempt > MAX_SEGMENT_RETRIES) throw t
+            }
+        }
+    }
+
     private fun streamSingleUrl(
         info: UpdateInfo,
         url: String,
@@ -462,72 +848,88 @@ class AppUpdateManager internal constructor(
             if (!response.isSuccessful) {
                 throw IOException("Le miroir ${sourceLabel ?: "de téléchargement"} a répondu ${response.code}.")
             }
-            val body = response.body ?: throw IOException("Aucun fichier reçu du serveur.")
-            val totalBytes = body.contentLength()
+            streamOpenResponse(info, sourceLabel, partFile, response)
+        }
+    }
 
-            _state.value = UpdateState.Downloading(
-                info = info,
-                bytesRead = 0L,
-                totalBytes = totalBytes,
-                activeSourceLabel = sourceLabel,
-                hiddenInForeground = hideActiveDownloadInForeground,
-            )
-            notifier.showProgress(info, 0L, totalBytes)
+    private fun streamOpenResponse(
+        info: UpdateInfo,
+        sourceLabel: String?,
+        partFile: File,
+        response: Response,
+    ) {
+        val body = response.body ?: throw IOException("Aucun fichier reçu du serveur.")
+        val totalBytes = body.contentLength()
+        val startNs = System.nanoTime()
 
-            var totalRead = 0L
-            var lastUiPct = -1
-            var lastNotifyPct = -1
-            var lastUiEmitNs = System.nanoTime()
-            var lastNotifyNs = lastUiEmitNs
-            body.byteStream().use { input ->
-                FileOutputStream(partFile).use { output ->
-                    val buffer = ByteArray(STREAM_BUFFER_BYTES)
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count == -1) break
-                        output.write(buffer, 0, count)
-                        totalRead += count
+        _state.value = UpdateState.Downloading(
+            info = info,
+            bytesRead = 0L,
+            totalBytes = totalBytes,
+            activeSourceLabel = sourceLabel,
+            hiddenInForeground = hideActiveDownloadInForeground,
+            activeConnections = 1,
+            speedBytesPerSec = 0L,
+        )
+        notifier.showProgress(info, 0L, totalBytes)
 
-                        val nowNs = System.nanoTime()
-                        val currentPct = if (totalBytes > 0L) {
-                            ((totalRead.toDouble() / totalBytes.toDouble()) * 100.0).toInt().coerceIn(0, 100)
-                        } else {
-                            -1
-                        }
-                        val isCompleteChunk = totalBytes > 0L && totalRead >= totalBytes
+        var totalRead = 0L
+        var lastUiPct = -1
+        var lastNotifyPct = -1
+        var lastUiEmitNs = startNs
+        var lastNotifyNs = startNs
+        body.byteStream().use { input ->
+            FileOutputStream(partFile).use { output ->
+                val buffer = ByteArray(STREAM_BUFFER_BYTES)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count == -1) break
+                    output.write(buffer, 0, count)
+                    totalRead += count
 
-                        if (isCompleteChunk || currentPct != lastUiPct || nowNs - lastUiEmitNs >= UI_PROGRESS_MIN_INTERVAL_NS) {
-                            lastUiPct = currentPct
-                            lastUiEmitNs = nowNs
-                            _state.value = UpdateState.Downloading(
-                                info = info,
-                                bytesRead = totalRead,
-                                totalBytes = totalBytes,
-                                activeSourceLabel = sourceLabel,
-                                hiddenInForeground = hideActiveDownloadInForeground,
-                            )
-                        }
-                        if (isCompleteChunk ||
-                            (currentPct != lastNotifyPct && (lastNotifyPct < 0 || nowNs - lastNotifyNs >= NOTIFY_PROGRESS_MIN_INTERVAL_NS)) ||
-                            (totalBytes <= 0L && nowNs - lastNotifyNs >= NOTIFY_PROGRESS_MIN_INTERVAL_NS)
-                        ) {
-                            lastNotifyPct = currentPct
-                            lastNotifyNs = nowNs
-                            notifier.showProgress(info, totalRead, totalBytes)
-                        }
+                    val nowNs = System.nanoTime()
+                    val elapsedNs = (nowNs - startNs).coerceAtLeast(1_000_000L)
+                    val speedBps = (totalRead * 1_000_000_000L) / elapsedNs
+                    val currentPct = if (totalBytes > 0L) {
+                        ((totalRead.toDouble() / totalBytes.toDouble()) * 100.0).toInt().coerceIn(0, 100)
+                    } else {
+                        -1
                     }
-                    output.flush()
-                }
-            }
+                    val isCompleteChunk = totalBytes > 0L && totalRead >= totalBytes
 
-            if (totalRead <= 0L) {
-                throw IOException("Le fichier téléchargé est vide.")
+                    if (isCompleteChunk || currentPct != lastUiPct || nowNs - lastUiEmitNs >= UI_PROGRESS_MIN_INTERVAL_NS) {
+                        lastUiPct = currentPct
+                        lastUiEmitNs = nowNs
+                        _state.value = UpdateState.Downloading(
+                            info = info,
+                            bytesRead = totalRead,
+                            totalBytes = totalBytes,
+                            activeSourceLabel = sourceLabel,
+                            hiddenInForeground = hideActiveDownloadInForeground,
+                            activeConnections = 1,
+                            speedBytesPerSec = speedBps,
+                        )
+                    }
+                    if (isCompleteChunk ||
+                        (currentPct != lastNotifyPct && (lastNotifyPct < 0 || nowNs - lastNotifyNs >= NOTIFY_PROGRESS_MIN_INTERVAL_NS)) ||
+                        (totalBytes <= 0L && nowNs - lastNotifyNs >= NOTIFY_PROGRESS_MIN_INTERVAL_NS)
+                    ) {
+                        lastNotifyPct = currentPct
+                        lastNotifyNs = nowNs
+                        notifier.showProgress(info, totalRead, totalBytes)
+                    }
+                }
+                output.flush()
             }
-            if (totalBytes > 0L && totalRead < totalBytes) {
-                throw IOException(
-                    "Téléchargement interrompu avant la fin (${UpdateFormatter.dataSize(totalRead)} / ${UpdateFormatter.dataSize(totalBytes)}).",
-                )
-            }
+        }
+
+        if (totalRead <= 0L) {
+            throw IOException("Le fichier téléchargé est vide.")
+        }
+        if (totalBytes > 0L && totalRead < totalBytes) {
+            throw IOException(
+                "Téléchargement interrompu avant la fin (${UpdateFormatter.dataSize(totalRead)} / ${UpdateFormatter.dataSize(totalBytes)}).",
+            )
         }
     }
 
@@ -719,7 +1121,11 @@ class AppUpdateManager internal constructor(
     }
 
     private companion object {
-        const val STREAM_BUFFER_BYTES = 16 * 1024
+        const val PARALLEL_CONNECTIONS = 4
+        const val MAX_PARALLEL_CONNECTIONS = 8
+        const val MAX_SEGMENT_RETRIES = 2
+        const val MIN_PARALLEL_BYTES = 16 * 1024L
+        const val STREAM_BUFFER_BYTES = 32 * 1024
         const val MIN_VALID_APK_BYTES = 1_024L
         const val RESUME_RECHECK_DEBOUNCE_MS = 5_000L
         const val UI_PROGRESS_MIN_INTERVAL_NS = 80_000_000L

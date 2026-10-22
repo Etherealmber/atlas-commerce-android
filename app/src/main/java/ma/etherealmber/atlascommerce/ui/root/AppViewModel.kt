@@ -33,6 +33,7 @@ import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
 import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
+import ma.etherealmber.atlascommerce.core.update.ReleaseChangelogEntry
 import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.data.OfflineCache
@@ -98,6 +99,12 @@ class AppViewModel @Inject constructor(
     val autoCheckUpdates: StateFlow<Boolean> = preferences.autoCheckUpdates
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val parallelUpdateDownload: StateFlow<Boolean> = preferences.parallelUpdateDownload
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val followLatestRelease: StateFlow<Boolean> = preferences.followLatestRelease
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     val roleNotificationsEnabled: StateFlow<Boolean> = preferences.roleNotificationsEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
@@ -110,6 +117,8 @@ class AppViewModel @Inject constructor(
     val notices: SharedFlow<String> = sessionManager.notices
     val updateState: StateFlow<UpdateState> = updateManager.state
     val mirrorPing: StateFlow<MirrorPingResult> = updateManager.mirrorPing
+    val releaseChangelog: StateFlow<List<ReleaseChangelogEntry>> = updateManager.changelog
+    val releaseChangelogLoading: StateFlow<Boolean> = updateManager.changelogLoading
     val updateDownloadSource: StateFlow<UpdateDownloadSource> = preferences.updateDownloadSource
         .map { UpdateDownloadSource.fromKey(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, UpdateDownloadSource.AUTO)
@@ -465,6 +474,21 @@ class AppViewModel @Inject constructor(
 
     fun setAutoCheckUpdates(enabled: Boolean) {
         viewModelScope.launch { preferences.setAutoCheckUpdates(enabled) }
+    }
+
+    fun setParallelUpdateDownload(enabled: Boolean) {
+        viewModelScope.launch { preferences.setParallelUpdateDownload(enabled) }
+    }
+
+    fun setFollowLatestRelease(enabled: Boolean) {
+        viewModelScope.launch {
+            preferences.setFollowLatestRelease(enabled)
+            updateManager.checkForUpdate(manual = false)
+        }
+    }
+
+    fun refreshReleaseChangelog() {
+        updateManager.refreshChangelog()
     }
 
     fun setRoleNotificationsEnabled(enabled: Boolean) {

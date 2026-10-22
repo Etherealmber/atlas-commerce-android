@@ -37,7 +37,6 @@ import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -84,6 +83,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentQuotaCard
+import ma.etherealmber.atlascommerce.ui.screens.legal.EtherealmberAuthorCard
 import ma.etherealmber.atlascommerce.ui.shell.MainTab
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.util.openExternal
@@ -96,6 +96,7 @@ import ma.etherealmber.atlascommerce.ui.util.openExternal
  * Displays ONLY account details + app customizations, with direct access to [SettingsScreen]
  * via the top-right Settings button.
  */
+@Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfileScreen(
@@ -195,21 +196,13 @@ fun ProfileScreen(
                 AtlasInfoRow(label = "E-mail", value = user.email)
             }
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AtlasOutlinedButton(
-                    text = if (uploadingAvatar) "Envoi…" else "Changer la photo",
-                    onClick = { photoPicker.launch("image/*") },
-                    icon = Icons.Outlined.PhotoCamera,
-                    enabled = !uploadingAvatar,
-                    modifier = Modifier.weight(1f),
-                )
-                AtlasOutlinedButton(
-                    text = "Paramètres",
-                    onClick = onOpenSettings,
-                    icon = Icons.Outlined.Settings,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            AtlasOutlinedButton(
+                text = if (uploadingAvatar) "Envoi…" else "Changer la photo",
+                onClick = { photoPicker.launch("image/*") },
+                icon = Icons.Outlined.PhotoCamera,
+                enabled = !uploadingAvatar,
+                modifier = Modifier.fillMaxWidth(),
+            )
             Spacer(Modifier.height(8.dp))
             AtlasOutlinedButton(
                 text = "Se déconnecter de cette session",
@@ -550,12 +543,16 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
 
     val autoCheckUpdates by appViewModel.autoCheckUpdates.collectAsStateWithLifecycle()
+    val parallelUpdateDownload by appViewModel.parallelUpdateDownload.collectAsStateWithLifecycle()
+    val followLatestRelease by appViewModel.followLatestRelease.collectAsStateWithLifecycle()
     val serverSelection by appViewModel.server.collectAsStateWithLifecycle()
     val savedServers by appViewModel.savedServers.collectAsStateWithLifecycle()
     val agentPolicy by appViewModel.agentPolicy.collectAsStateWithLifecycle()
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val updateDownloadSource by appViewModel.updateDownloadSource.collectAsStateWithLifecycle()
     val mirrorPing by appViewModel.mirrorPing.collectAsStateWithLifecycle()
+    val releaseChangelog by appViewModel.releaseChangelog.collectAsStateWithLifecycle()
+    val releaseChangelogLoading by appViewModel.releaseChangelogLoading.collectAsStateWithLifecycle()
     val devices by appViewModel.devices.collectAsStateWithLifecycle()
     val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
@@ -564,6 +561,7 @@ fun SettingsScreen(
         appViewModel.loadDevices()
         appViewModel.refreshAgentPolicy()
         appViewModel.refreshCachedProductCount()
+        appViewModel.refreshReleaseChangelog()
     }
 
     Column(
@@ -629,7 +627,7 @@ fun SettingsScreen(
             onRefresh = appViewModel::refreshAgentPolicy,
         )
 
-        // 3. Updates & Mirrors
+        // 3. Updates, Fast Parallel Download, Latest Release Tracking & Changelog
         SettingsUpdateCard(
             state = updateState,
             selectedSource = updateDownloadSource,
@@ -644,6 +642,79 @@ fun SettingsScreen(
                 }
             },
         )
+
+        AtlasCard {
+            SettingsToggleRow(
+                title = "Téléchargement accéléré multi-connexions",
+                subtitle = "Télécharge les mises à jour via 4 connexions HTTP Range parallèles haute vitesse.",
+                checked = parallelUpdateDownload,
+                onCheckedChange = appViewModel::setParallelUpdateDownload,
+            )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            SettingsToggleRow(
+                title = "Toujours suivre la dernière version publiée",
+                subtitle = "Considère toute version publiée en dernier sur GitHub Releases ou CDN 1 comme la version active.",
+                checked = followLatestRelease,
+                onCheckedChange = appViewModel::setFollowLatestRelease,
+            )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Description,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Nouveautés des versions",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "Historique complet des changements publiés",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(
+                    onClick = appViewModel::refreshReleaseChangelog,
+                    enabled = !releaseChangelogLoading,
+                ) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser l'historique des versions")
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            releaseChangelog.take(5).forEachIndexed { idx, entry ->
+                if (idx > 0) AtlasDivider(Modifier.padding(vertical = 8.dp))
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = entry.title,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (entry.isLatest) {
+                            AtlasChip(text = "Dernière", tone = AtlasTone.POSITIVE)
+                        }
+                        entry.publishedAt?.let { date ->
+                            AtlasChip(text = date, tone = AtlasTone.NEUTRAL)
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = entry.notes,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
 
         // 4. Active Server & Saved Servers Management
         AtlasCard {
@@ -790,10 +861,22 @@ fun SettingsScreen(
             )
         }
 
-        // 7. Open Source Links
+        // 7. Author Identity (@Etherealmber rounded GitHub PFP + MIT) & Open Source Links
+        EtherealmberAuthorCard(onToast = onToast)
+
         AtlasCard {
             Text("Liens du projet", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
+            SettingsRow(
+                icon = Icons.Outlined.Person,
+                title = "Profil GitHub @${AppDetails.GITHUB_HANDLE}",
+                subtitle = "github.com/${AppDetails.GITHUB_HANDLE}",
+                onClick = {
+                    if (!openExternal(context, AppDetails.GITHUB_PROFILE_URL)) {
+                        onToast("Aucun navigateur disponible.")
+                    }
+                },
+            )
             SettingsRow(
                 icon = Icons.Outlined.Language,
                 title = "Projet web Atlas Commerce",

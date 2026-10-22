@@ -84,7 +84,7 @@ jobs:
           import xml.etree.ElementTree as ET
 
           repo = os.environ["GITHUB_REPOSITORY"]
-          dry_run = os.environ.get("DRY_RUN", "false").lower() == "true"
+          dry_run = os.environ.get("DRY_RUN", "false").lower() == "true" or os.environ.get("GITHUB_ACTIONS") != "true"
           gradle_outcome = os.environ.get("GRADLE_OUTCOME", "unknown")
           runner_temp = os.environ.get("RUNNER_TEMP", "/tmp")
 

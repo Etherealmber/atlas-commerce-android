@@ -22,8 +22,12 @@ object UpdateDefaults {
         "${BuildConfig.CDN1_BASE_URL.trimEnd('/')}/latest.json"
     val CDN1_LATEST_APK_URL: String =
         "${BuildConfig.CDN1_BASE_URL.trimEnd('/')}/latest.apk"
+    val GITHUB_LATEST_JSON_URL: String =
+        "${BuildConfig.PROJECT_REPO.trimEnd('/')}/releases/latest/download/latest.json"
     val GITHUB_LATEST_APK_URL: String =
         BuildConfig.DEFAULT_DOWNLOAD_URL
+    val GITHUB_RELEASES_API_URL: String =
+        "${BuildConfig.PROJECT_REPO.trimEnd('/').replace("https://github.com/", "https://api.github.com/repos/")}/releases?per_page=8"
 }
 
 data class MirrorPingResult(
@@ -43,6 +47,15 @@ data class MirrorPingResult(
         }
 }
 
+data class ReleaseChangelogEntry(
+    val tagName: String,
+    val title: String,
+    val publishedAt: String? = null,
+    val isLatest: Boolean = false,
+    val notes: String,
+    val htmlUrl: String? = null,
+)
+
 data class UpdateInfo(
     val versionCode: Int,
     val versionName: String,
@@ -52,6 +65,7 @@ data class UpdateInfo(
     val cdn1Url: String? = null,
     val githubUrl: String? = null,
     val sha256: String? = null,
+    val publishedAt: String? = null,
 ) {
     val displayVersion: String
         get() {
@@ -60,19 +74,18 @@ data class UpdateInfo(
         }
 
     /**
-     * Always provides meaningful, human-readable release notes even if a manifest
-     * omitted notes or only supplied a bare version number like `"1.0.8"`.
+     * Minimal, concise summary shown in update banners while full release history
+     * lives directly inside Paramètres → Nouveautés des versions.
      */
     val effectiveNotes: String
         get() {
             val raw = notes?.trim().orEmpty()
-            val bareVersionRegex = Regex("^[vV]?\\d+\\.\\d+(?:\\.\\d+)?(?:\\s*\\(build\\s*\\d+\\))?$", RegexOption.IGNORE_CASE)
+            val bareVersionRegex = Regex(
+                "^[vV]?\\d+\\.\\d+(?:\\.\\d+)?(?:\\s*\\(build\\s*\\d+\\))?$",
+                RegexOption.IGNORE_CASE,
+            )
             if (raw.isEmpty() || bareVersionRegex.matches(raw)) {
-                return buildString {
-                    appendLine("• Mise à niveau vers Atlas Commerce $displayVersion (build $versionCode).")
-                    appendLine("• Améliorations de fluidité, stabilité et sécurité des échanges.")
-                    append("• Téléchargement redondant haute vitesse via CDN 1 et GitHub.")
-                }
+                return "Mise à jour Atlas Commerce $displayVersion — optimisations et correctifs."
             }
             return raw
         }
@@ -120,6 +133,8 @@ sealed interface UpdateState {
         val totalBytes: Long,
         val activeSourceLabel: String? = null,
         val hiddenInForeground: Boolean = false,
+        val activeConnections: Int = 1,
+        val speedBytesPerSec: Long = 0L,
     ) : UpdateState {
         val progressFraction: Float?
             get() = if (totalBytes > 0L) {
@@ -138,10 +153,19 @@ sealed interface UpdateState {
             }
 
         val statusMessage: String
-            get() = "Appuyez sur Masquer pour réduire la barre en mini-bulle à côté du profil, ou suivez dans Paramètres / Notifications."
+            get() = if (activeConnections > 1) {
+                "Téléchargement accéléré actif ($activeConnections connexions parallèles). Appuyez sur Masquer pour réduire en mini-bulle."
+            } else {
+                "Appuyez sur Masquer pour réduire la barre en mini-bulle à côté du profil, ou suivez dans Paramètres."
+            }
 
         val progressSummary: String
-            get() = UpdateFormatter.progressSummary(bytesRead, totalBytes)
+            get() = UpdateFormatter.progressSummary(
+                bytesRead = bytesRead,
+                totalBytes = totalBytes,
+                speedBytesPerSec = speedBytesPerSec,
+                activeConnections = activeConnections,
+            )
     }
 
     data class ReadyToInstall(
@@ -177,16 +201,32 @@ object UpdateFormatter {
         return "${fmt.format(mb)} Mo"
     }
 
-    fun progressSummary(bytesRead: Long, totalBytes: Long): String {
+    fun speed(bytesPerSec: Long): String? {
+        if (bytesPerSec <= 0L) return null
+        return "${dataSize(bytesPerSec)}/s"
+    }
+
+    fun progressSummary(
+        bytesRead: Long,
+        totalBytes: Long,
+        speedBytesPerSec: Long = 0L,
+        activeConnections: Int = 1,
+    ): String {
         if (bytesRead <= 0L && totalBytes <= 0L) {
             return "Connexion au serveur de mise à jour…"
         }
+        val extras = buildList {
+            speed(speedBytesPerSec)?.let { add(it) }
+            if (activeConnections > 1) add("$activeConnections flux")
+        }.joinToString(" · ")
+        val suffix = if (extras.isNotEmpty()) " · $extras" else ""
+
         if (totalBytes > 0L) {
             val pct = ((bytesRead.toDouble() / totalBytes.toDouble()) * 100.0)
                 .toInt()
                 .coerceIn(0, 100)
-            return "$pct % · ${dataSize(bytesRead)} / ${dataSize(totalBytes)}"
+            return "$pct % · ${dataSize(bytesRead)} / ${dataSize(totalBytes)}$suffix"
         }
-        return "${dataSize(bytesRead)} téléchargés"
+        return "${dataSize(bytesRead)} téléchargés$suffix"
     }
 }

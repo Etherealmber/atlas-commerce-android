@@ -43,6 +43,7 @@ data class AndroidUpdateDto(
     val sha256: String? = null,
     val mandatory: Boolean = false,
     val notes: String? = null,
+    val publishedAt: String? = null,
     val message: String? = null,
     override val error: String? = null,
     override val code: String? = null,
@@ -63,6 +64,17 @@ data class AndroidUpdateDto(
         get() = githubUrl?.takeIf { it.isNotBlank() }
             ?: githubUrlSnake?.takeIf { it.isNotBlank() }
 }
+
+@JsonClass(generateAdapter = true)
+data class GitHubReleaseDto(
+    @Json(name = "tag_name") val tagName: String = "",
+    val name: String? = null,
+    val body: String? = null,
+    val draft: Boolean = false,
+    val prerelease: Boolean = false,
+    @Json(name = "published_at") val publishedAt: String? = null,
+    @Json(name = "html_url") val htmlUrl: String? = null,
+)
 
 // ---------------------------------------------------------------------------
 // Authentication, profile & QR / connected devices

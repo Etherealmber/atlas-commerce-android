@@ -24,8 +24,15 @@ object AppDetails {
     const val SECURITY_EMAIL: String = BuildConfig.SECURITY_EMAIL
 
     const val LICENSE_NAME = "MIT"
-    const val COPYRIGHT_HOLDER = "loxdpsy"
+    const val COPYRIGHT_HOLDER = "Etherealmber"
     const val COPYRIGHT_YEAR = "2026"
+    const val GITHUB_HANDLE = "Etherealmber"
+    const val GITHUB_PROFILE_URL = "https://github.com/Etherealmber"
+    const val GITHUB_AVATAR_URL = "https://github.com/Etherealmber.png"
+    val GITHUB_LATEST_JSON_URL: String =
+        "${PROJECT_REPO.trimEnd('/')}/releases/latest/download/latest.json"
+    val RELEASES_API_URL: String =
+        "${PROJECT_REPO.trimEnd('/').replace("https://github.com/", "https://api.github.com/repos/")}/releases?per_page=8"
 
     /** Identifier sent to the worker so it can skip Turnstile for the native app. */
     const val CLIENT_ID = "android"

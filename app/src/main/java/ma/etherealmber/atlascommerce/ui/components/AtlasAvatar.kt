@@ -304,7 +304,9 @@ fun AtlasAvatar(
                 bitmap = img,
                 contentDescription = "Photo de profil de $label",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape),
             )
         } else {
             Text(
