@@ -473,9 +473,65 @@ data class AssistNextActionsDto(
 data class AssistChatRequest(
     val message: String,
     @Json(name = "user_message") val userMessage: String,
-    val task: String = "mobile_field",
+    val task: String = "general",
     val timezone: String = "Africa/Casablanca",
-    @Json(name = "thread_id") val threadId: String = "mobile-live",
+    @Json(name = "thread_id") val threadId: String = "live",
+    @Json(name = "page_path") val pagePath: String? = "/agent",
+    @Json(name = "page_title") val pageTitle: String? = "Atlas Agent",
+    val source: String = "android",
+)
+
+@JsonClass(generateAdapter = true)
+data class AgentPolicyDto(
+    val blocked: Boolean = false,
+    val isAdmin: Boolean = false,
+    val dailyUsed: Long = 0L,
+    val weeklyUsed: Long = 0L,
+    val dailyLimit: Long = 25_000L,
+    val weeklyLimit: Long = 100_000L,
+    val dailyResetsAt: String? = null,
+    val weeklyResetsAt: String? = null,
+) {
+    val safeDailyLimit: Long get() = dailyLimit.coerceAtLeast(1L)
+    val safeWeeklyLimit: Long get() = weeklyLimit.coerceAtLeast(1L)
+
+    val dailyFraction: Float
+        get() = (dailyUsed.toDouble() / safeDailyLimit.toDouble()).toFloat().coerceIn(0f, 1f)
+
+    val weeklyFraction: Float
+        get() = (weeklyUsed.toDouble() / safeWeeklyLimit.toDouble()).toFloat().coerceIn(0f, 1f)
+
+    val isDailyExhausted: Boolean get() = !isAdmin && dailyLimit > 0L && dailyUsed >= dailyLimit
+    val isWeeklyExhausted: Boolean get() = !isAdmin && weeklyLimit > 0L && weeklyUsed >= weeklyLimit
+    val isExhausted: Boolean get() = blocked || isDailyExhausted || isWeeklyExhausted
+}
+
+@JsonClass(generateAdapter = true)
+data class AgentThreadSummaryDto(
+    val id: String = "",
+    val title: String = "Sans titre",
+    @Json(name = "updated_at") val updatedAt: String? = null,
+    @Json(name = "message_count") val messageCount: Int? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class AgentThreadMessageDto(
+    val role: String = "user",
+    val text: String = "",
+    val ms: Long? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class AgentThreadDetailDto(
+    val title: String? = null,
+    val messages: List<AgentThreadMessageDto> = emptyList(),
+    @Json(name = "updated_at") val updatedAt: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class PutAgentThreadRequest(
+    val title: String,
+    val messages: List<AgentThreadMessageDto>,
 )
 
 @JsonClass(generateAdapter = true)

@@ -77,14 +77,14 @@ class SaleViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             sessionManager.state
-                .map { (it as? SessionState.Active)?.user?.username }
+                .map { (it as? SessionState.Active)?.user?.scopeIdentity }
                 .distinctUntilChanged()
-                .collect { username ->
+                .collect { key ->
+                    idempotencyKey = UUID.randomUUID().toString()
                     _state.value = UiState(
                         clientName = defaultClientName.value,
-                        currency = _state.value.currency,
                     )
-                    if (username != null) loadCurrency()
+                    if (key != null) loadCurrency()
                 }
         }
         viewModelScope.launch {

@@ -54,16 +54,18 @@ class ShellViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             sessionManager.state
-                .map { st -> (st as? SessionState.Active)?.user?.let { "${it.username}:${it.role}" } }
+                .map { st -> (st as? SessionState.Active)?.user?.scopeIdentity }
                 .distinctUntilChanged()
                 .collect { key ->
                     pollJob?.cancel()
-                    if (key == null) {
-                        _notificationCount.value = 0
-                    } else {
+                    _notificationCount.value = 0
+                    if (key != null) {
                         val user = (sessionManager.state.value as? SessionState.Active)?.user
                         if (user != null) {
-                            notificationDispatcher.onSessionChanged(user.username, user.role)
+                            notificationDispatcher.onSessionChanged(
+                                "${user.serverUrl}|${user.username}",
+                                user.role,
+                            )
                             startRolePolling()
                         }
                     }

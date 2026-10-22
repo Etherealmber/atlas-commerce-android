@@ -1,6 +1,9 @@
 package ma.etherealmber.atlascommerce.core.net
 
 import ma.etherealmber.atlascommerce.data.model.ActionAckDto
+import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
+import ma.etherealmber.atlascommerce.data.model.AgentThreadDetailDto
+import ma.etherealmber.atlascommerce.data.model.AgentThreadSummaryDto
 import ma.etherealmber.atlascommerce.data.model.AlertItemDto
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
 import ma.etherealmber.atlascommerce.data.model.AssistApproveDto
@@ -28,6 +31,7 @@ import ma.etherealmber.atlascommerce.data.model.OtpRequest
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.ProfileUpdateRequest
+import ma.etherealmber.atlascommerce.data.model.PutAgentThreadRequest
 import ma.etherealmber.atlascommerce.data.model.QrClaimRequest
 import ma.etherealmber.atlascommerce.data.model.QrCompleteDto
 import ma.etherealmber.atlascommerce.data.model.QrCompleteRequest
@@ -39,10 +43,12 @@ import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
 import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -181,6 +187,24 @@ interface AtlasApi {
     ): ActionAckDto
 
     // --- Atlas Agent IA ---
+
+    @GET("api/agent/policy")
+    suspend fun agentPolicy(): ApiEnvelope<AgentPolicyDto>
+
+    @GET("api/admin/agent/threads")
+    suspend fun listAgentThreads(): ApiEnvelope<List<AgentThreadSummaryDto>>
+
+    @GET("api/admin/agent/threads/{id}")
+    suspend fun getAgentThread(@Path("id") id: String): ApiEnvelope<AgentThreadDetailDto>
+
+    @PUT("api/admin/agent/threads/{id}")
+    suspend fun putAgentThread(
+        @Path("id") id: String,
+        @Body body: PutAgentThreadRequest,
+    ): ActionAckDto
+
+    @DELETE("api/admin/agent/threads/{id}")
+    suspend fun deleteAgentThread(@Path("id") id: String): ActionAckDto
 
     @GET("api/assist/status")
     suspend fun assistStatus(): ApiEnvelope<AssistStatusDto>

@@ -84,9 +84,11 @@ class ProductsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             sessionManager.state
-                .map { (it as? SessionState.Active)?.user?.let { u -> "${u.username}:${u.role}" } }
+                .map { (it as? SessionState.Active)?.user?.scopeIdentity }
                 .distinctUntilChanged()
                 .collect { key ->
+                    searchJob?.cancel()
+                    fetchJob?.cancel()
                     _state.value = UiState()
                     if (key != null) {
                         loadCurrency()

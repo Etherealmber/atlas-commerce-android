@@ -5,24 +5,31 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.net.ProbeReport
 import ma.etherealmber.atlascommerce.core.net.ServerProbe
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
+import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
+import ma.etherealmber.atlascommerce.core.session.SessionManager
 import javax.inject.Inject
 
 @HiltViewModel
 class ServerSetupViewModel @Inject constructor(
     private val serverConfig: ServerConfig,
     private val serverProbe: ServerProbe,
+    private val sessionManager: SessionManager,
 ) : ViewModel() {
 
     data class UiState(
         val input: String = "",
+        val label: String = "",
+        val rememberServer: Boolean = true,
         val current: String? = null,
         val testing: Boolean = false,
         val saving: Boolean = false,
@@ -35,9 +42,12 @@ class ServerSetupViewModel @Inject constructor(
 
     private var probeJob: Job? = null
 
+    val savedServers: StateFlow<List<SavedServerEntry>> = serverConfig.savedServers
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     private val _state = MutableStateFlow(
         UiState(
-            input = serverConfig.selection.value?.baseUrl ?: ServerUrl.PRODUCTION,
+            input = serverConfig.selection.value?.baseUrl.orEmpty(),
             current = serverConfig.selection.value?.baseUrl,
         ),
     )
@@ -48,9 +58,33 @@ class ServerSetupViewModel @Inject constructor(
         _state.update { it.copy(input = value, report = null, testing = false, error = null) }
     }
 
-    fun choosePreset(url: String) {
-        _state.update { it.copy(input = url, report = null, error = null) }
+    fun onLabelChange(value: String) {
+        _state.update { it.copy(label = value) }
+    }
+
+    fun onRememberServerChange(value: Boolean) {
+        _state.update { it.copy(rememberServer = value) }
+    }
+
+    fun choosePreset(url: String, presetLabel: String = "") {
+        _state.update {
+            it.copy(
+                input = url,
+                label = presetLabel.ifBlank { it.label },
+                report = null,
+                error = null,
+            )
+        }
         test()
+    }
+
+    fun forgetServer(entry: SavedServerEntry) {
+        viewModelScope.launch {
+            serverConfig.forgetSavedServer(entry.url)
+            if (_state.value.input.equals(entry.url, ignoreCase = true)) {
+                _state.update { it.copy(input = "", label = "", report = null, error = null) }
+            }
+        }
     }
 
     fun test() {
@@ -64,7 +98,6 @@ class ServerSetupViewModel @Inject constructor(
         probeJob = viewModelScope.launch {
             _state.update { it.copy(testing = true, error = null) }
             val report = serverProbe.probe(raw)
-            // The address may have been edited while the probe was running.
             if (_state.value.input.trim() == raw) {
                 _state.update { it.copy(testing = false, report = report) }
             }
@@ -72,9 +105,8 @@ class ServerSetupViewModel @Inject constructor(
     }
 
     /**
-     * Saves the address and lets the root composable move on to the login screen.
-     * The probe is not mandatory: a firewall may block `/api/health` while the
-     * rest of the API still works, so we only validate the address format.
+     * Validates and switches server, signing out any session from a different server
+     * first so zero user or company data can ever cross servers.
      */
     fun continueToLogin(onDone: () -> Unit) {
         if (_state.value.saving) return
@@ -85,7 +117,16 @@ class ServerSetupViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _state.update { it.copy(saving = true, error = null) }
-            val result = serverConfig.select(raw)
+            val previousUrl = serverConfig.selection.value?.baseUrl
+            val targetNormalized = ServerUrl.normalize(raw)
+            if (previousUrl != null && !previousUrl.equals(targetNormalized, ignoreCase = true)) {
+                sessionManager.signOut()
+            }
+            val result = serverConfig.select(
+                rawUrl = raw,
+                label = _state.value.label,
+                rememberServer = _state.value.rememberServer,
+            )
             result.fold(
                 onSuccess = { selection ->
                     _state.update { it.copy(saving = false, current = selection.baseUrl) }

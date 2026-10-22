@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,10 +14,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesomeMotion
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Devices
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -75,33 +77,38 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
-import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
 import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
+import ma.etherealmber.atlascommerce.ui.screens.agent.AgentQuotaCard
 import ma.etherealmber.atlascommerce.ui.shell.MainTab
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.util.openExternal
 
+/**
+ * Dedicated **Profile & Personalization** screen (`MainTab.PROFILE`).
+ *
+ * Uses native `Column + verticalScroll(rememberScrollState())` instead of variable-height
+ * `LazyColumn` items so fast upward flings from the bottom never snap or skip back to index 0.
+ * Displays ONLY account details + app customizations, with direct access to [SettingsScreen]
+ * via the top-right Settings button.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SettingsScreen(
+fun ProfileScreen(
     user: SessionUser,
-    onChangeServer: () -> Unit,
-    onOpenQrDevice: () -> Unit = {},
-    onOpenLicense: () -> Unit,
-    onOpenSecurity: () -> Unit,
-    onOpenAbout: () -> Unit,
+    onOpenSettings: () -> Unit,
     onSignOut: () -> Unit,
     onToast: (String) -> Unit,
-    onStartUpdateDownload: () -> Unit = {},
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val density = Atlas.density
+    val scrollState = rememberScrollState()
+
     val themeMode by appViewModel.themeMode.collectAsStateWithLifecycle()
     val densityMode by appViewModel.densityMode.collectAsStateWithLifecycle()
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
@@ -112,17 +119,11 @@ fun SettingsScreen(
     val defaultStartTab by appViewModel.defaultStartTab.collectAsStateWithLifecycle()
     val savedClientName by appViewModel.defaultClientName.collectAsStateWithLifecycle()
     val confirmBeforeSale by appViewModel.confirmBeforeSale.collectAsStateWithLifecycle()
-    val autoCheckUpdates by appViewModel.autoCheckUpdates.collectAsStateWithLifecycle()
     val roleNotificationsEnabled by appViewModel.roleNotificationsEnabled.collectAsStateWithLifecycle()
     val serverSelection by appViewModel.server.collectAsStateWithLifecycle()
-    val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
-    val updateDownloadSource by appViewModel.updateDownloadSource.collectAsStateWithLifecycle()
-    val mirrorPing by appViewModel.mirrorPing.collectAsStateWithLifecycle()
-    val devices by appViewModel.devices.collectAsStateWithLifecycle()
-    val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
+    val savedAccounts by appViewModel.savedAccounts.collectAsStateWithLifecycle()
     val uploadingAvatar by appViewModel.uploadingAvatar.collectAsStateWithLifecycle()
     val savingProfile by appViewModel.savingProfile.collectAsStateWithLifecycle()
-    val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
 
     var confirmSignOut by remember { mutableStateOf(false) }
     var showEditProfile by remember { mutableStateOf(false) }
@@ -138,494 +139,316 @@ fun SettingsScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        appViewModel.loadDevices()
-        appViewModel.refreshCachedProductCount()
+    val otherSavedAccounts = savedAccounts.filterNot {
+        it.username.equals(user.username, ignoreCase = true)
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = density.screenPadding,
-            end = density.screenPadding,
-            top = density.cardMargin,
-            bottom = 32.dp,
-        ),
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(
+                start = density.screenPadding,
+                end = density.screenPadding,
+                top = density.cardMargin,
+                bottom = 32.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {
-        // 1. Profil & Compte
-        item {
-            AtlasEntrance(delayMillis = 0) {
-                AtlasCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        AtlasAvatar(
-                            avatarUrl = user.avatarUrl,
-                            label = user.displayName,
-                            size = 58.dp,
-                            serverBaseUrl = serverSelection?.baseUrl,
-                            onClick = { photoPicker.launch("image/*") },
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = user.displayName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = "@${user.username}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            AtlasChip(text = Roles.label(user.role), tone = AtlasTone.INFO)
-                        }
-                        IconButton(
-                            onClick = {
-                                draftDisplayName = user.displayName
-                                draftEmail = user.email
-                                showEditProfile = true
-                            },
-                        ) {
-                            Icon(Icons.Outlined.Edit, contentDescription = "Modifier le profil")
-                        }
-                    }
-                    if (user.email.isNotBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        AtlasInfoRow(label = "E-mail", value = user.email)
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AtlasOutlinedButton(
-                            text = if (uploadingAvatar) "Envoi…" else "Changer la photo",
-                            onClick = { photoPicker.launch("image/*") },
-                            icon = Icons.Outlined.PhotoCamera,
-                            enabled = !uploadingAvatar,
-                            modifier = Modifier.weight(1f),
-                        )
-                        AtlasOutlinedButton(
-                            text = "Déconnexion",
-                            onClick = { confirmSignOut = true },
-                            icon = Icons.Outlined.Logout,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-            }
-        }
-
-        // 2. Apparence, Navigation & Animations
-        item {
-            AtlasEntrance(delayMillis = 35) {
-                AtlasCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.AutoAwesomeMotion,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Apparence, navigation & animations",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                    Spacer(Modifier.height(10.dp))
+        // 1. Account & Profile Header Card
+        AtlasCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AtlasAvatar(
+                    avatarUrl = user.avatarUrl,
+                    label = user.displayName,
+                    size = 60.dp,
+                    serverBaseUrl = serverSelection?.baseUrl,
+                    onClick = { photoPicker.launch("image/*") },
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
                     Text(
-                        text = "Thème",
+                        text = user.displayName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "@${user.username}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(4.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ThemeMode.entries.forEach { mode ->
-                            FilterChip(
-                                selected = themeMode == mode,
-                                onClick = { appViewModel.setThemeMode(mode) },
-                                label = { Text(mode.label) },
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = "Densité d'affichage",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DensityMode.entries.forEach { mode ->
-                            FilterChip(
-                                selected = densityMode == mode,
-                                onClick = { appViewModel.setDensityMode(mode) },
-                                label = { Text(mode.label) },
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = "Onglet d'ouverture au lancement",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        MainTab.BottomBarTabs.forEach { item ->
-                            FilterChip(
-                                selected = defaultStartTab == item.name,
-                                onClick = { appViewModel.setDefaultStartTab(item.name) },
-                                label = { Text(item.label) },
-                            )
-                        }
-                    }
-                    AtlasDivider(Modifier.padding(vertical = 8.dp))
-                    SettingsToggleRow(
-                        title = "Animations fluides",
-                        subtitle = "Transitions entre les pages, apparitions d'accueil et effets de mouvement.",
-                        checked = animationsEnabled,
-                        onCheckedChange = appViewModel::setAnimationsEnabled,
-                    )
-                    AtlasDivider(Modifier.padding(vertical = 8.dp))
-                    SettingsToggleRow(
-                        title = "Notifications système par rôle",
-                        subtitle = "Affiche les notifications Android filtrées selon votre rôle (${Roles.label(user.role)}).",
-                        checked = roleNotificationsEnabled,
-                        onCheckedChange = appViewModel::setRoleNotificationsEnabled,
-                    )
-                    AtlasDivider(Modifier.padding(vertical = 8.dp))
-                    SettingsRow(
-                        icon = Icons.Outlined.AutoAwesomeMotion,
-                        title = "Revoir l'écran de bienvenue",
-                        subtitle = "Relancer la présentation animée d'Atlas Commerce",
-                        onClick = { appViewModel.replayOnboarding() },
-                    )
+                    AtlasChip(text = Roles.label(user.role), tone = AtlasTone.INFO)
+                }
+                IconButton(
+                    onClick = {
+                        draftDisplayName = user.displayName
+                        draftEmail = user.email
+                        showEditProfile = true
+                    },
+                ) {
+                    Icon(Icons.Outlined.Edit, contentDescription = "Modifier le profil")
                 }
             }
-        }
-
-        // 3. Caméra & Scan
-        item {
-            AtlasEntrance(delayMillis = 70) {
-                AtlasCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.QrCodeScanner,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Caméra & lecteur code-barres",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    SettingsToggleRow(
-                        title = "Ouvrir la caméra automatiquement",
-                        subtitle = "Désactivé par défaut — la caméra reste fermée en entrant dans Scan ou QR PC.",
-                        checked = autoOpenCamera,
-                        onCheckedChange = appViewModel::setAutoOpenCamera,
-                    )
-                    AtlasDivider(Modifier.padding(vertical = 6.dp))
-                    SettingsToggleRow(
-                        title = "Vibration au scan",
-                        subtitle = "Retour haptique dès qu'un code-barres ou QR est détecté.",
-                        checked = scanHapticEnabled,
-                        onCheckedChange = appViewModel::setScanHapticEnabled,
-                    )
-                    AtlasDivider(Modifier.padding(vertical = 6.dp))
-                    SettingsToggleRow(
-                        title = "Signal sonore au scan",
-                        subtitle = "Bip court de confirmation lors de la lecture d'un code.",
-                        checked = scanSoundEnabled,
-                        onCheckedChange = appViewModel::setScanSoundEnabled,
-                    )
-                    AtlasDivider(Modifier.padding(vertical = 6.dp))
-                    SettingsToggleRow(
-                        title = "Ajout automatique au panier",
-                        subtitle = "Ajoute immédiatement 1 unité au ticket VR lorsqu'un article est scanné.",
-                        checked = autoAddCartOnScan,
-                        onCheckedChange = appViewModel::setAutoAddCartOnScan,
-                    )
-                }
+            if (user.email.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                AtlasInfoRow(label = "E-mail", value = user.email)
             }
-        }
-
-        // 4. Vente rapide (Caisse) — visible uniquement aux rôles habilités Ventes/Facturation
-        if (Roles.canCreateDocuments(user.role)) {
-            item {
-                AtlasEntrance(delayMillis = 105) {
-                    AtlasCard {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Outlined.PointOfSale,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "Vente rapide & caisse",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            AtlasTextField(
-                                value = draftClientName,
-                                onValueChange = { draftClientName = it },
-                                label = "Client pré-rempli par défaut",
-                                placeholder = "Ex. Client comptoir",
-                                leadingIcon = Icons.Outlined.Person,
-                                imeAction = ImeAction.Done,
-                                onDone = {
-                                    appViewModel.setDefaultClientName(draftClientName)
-                                    onToast("Client par défaut enregistré.")
-                                },
-                                modifier = Modifier.weight(1f),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            AtlasOutlinedButton(
-                                text = "OK",
-                                onClick = {
-                                    appViewModel.setDefaultClientName(draftClientName)
-                                    onToast("Client par défaut enregistré.")
-                                },
-                            )
-                        }
-                        AtlasDivider(Modifier.padding(vertical = 8.dp))
-                        SettingsToggleRow(
-                            title = "Confirmer avant création du ticket",
-                            subtitle = "Affiche un récapitulatif du montant avant d'envoyer la vente au serveur.",
-                            checked = confirmBeforeSale,
-                            onCheckedChange = appViewModel::setConfirmBeforeSale,
-                        )
-                    }
-                }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AtlasOutlinedButton(
+                    text = if (uploadingAvatar) "Envoi…" else "Changer la photo",
+                    onClick = { photoPicker.launch("image/*") },
+                    icon = Icons.Outlined.PhotoCamera,
+                    enabled = !uploadingAvatar,
+                    modifier = Modifier.weight(1f),
+                )
+                AtlasOutlinedButton(
+                    text = "Paramètres",
+                    onClick = onOpenSettings,
+                    icon = Icons.Outlined.Settings,
+                    modifier = Modifier.weight(1f),
+                )
             }
-        }
-
-        // 5. Appareils connectés & QR PC
-        item {
-            AtlasEntrance(delayMillis = 140) {
-                AtlasCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.Devices,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = "Appareils connectés (${devices.size})",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = "Autorisez un ordinateur par QR ou révoquez une session.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        IconButton(onClick = appViewModel::loadDevices, enabled = !devicesLoading) {
-                            Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les appareils")
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    AtlasButton(
-                        text = "Scanner un poste PC (QR)",
-                        onClick = onOpenQrDevice,
-                        icon = Icons.Outlined.QrCode2,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    if (devices.isNotEmpty()) {
-                        Spacer(Modifier.height(10.dp))
-                        devices.forEachIndexed { idx, device ->
-                            if (idx > 0) AtlasDivider(Modifier.padding(vertical = 6.dp))
-                            ConnectedDeviceRow(
-                                device = device,
-                                onRevoke = { appViewModel.revokeDevice(device, onToast) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // 6. Cache hors ligne & Mises à jour
-        item {
-            AtlasEntrance(delayMillis = 175) {
-                AtlasCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.Inventory2,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = "Catalogue hors ligne & système",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = "$cachedProductCount article(s) mémorisé(s) sur cet appareil",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        AtlasOutlinedButton(
-                            text = "Vider",
-                            onClick = { appViewModel.clearOfflineCache(onToast) },
-                            icon = Icons.Outlined.DeleteOutline,
-                            enabled = cachedProductCount > 0,
-                        )
-                    }
-                    AtlasDivider(Modifier.padding(vertical = 8.dp))
-                    SettingsToggleRow(
-                        title = "Recherche automatique des mises à jour",
-                        subtitle = "Vérifie silencieusement les nouvelles versions APK à l'ouverture.",
-                        checked = autoCheckUpdates,
-                        onCheckedChange = appViewModel::setAutoCheckUpdates,
-                    )
-                }
-            }
-        }
-
-        item {
-            SettingsUpdateCard(
-                state = updateState,
-                selectedSource = updateDownloadSource,
-                mirrorPing = mirrorPing,
-                onSelectSource = appViewModel::setUpdateDownloadSource,
-                onPingMirrors = appViewModel::pingUpdateMirrors,
-                onCheck = { appViewModel.checkForUpdate(manual = true) },
-                onDownload = onStartUpdateDownload,
-                onInstall = {
-                    if (!appViewModel.installDownloadedUpdate(context)) {
-                        onToast("Impossible d'ouvrir l'installateur sur cet appareil.")
-                    }
-                },
+            Spacer(Modifier.height(8.dp))
+            AtlasOutlinedButton(
+                text = "Se déconnecter de cette session",
+                onClick = { confirmSignOut = true },
+                icon = Icons.Outlined.Logout,
+                modifier = Modifier.fillMaxWidth(),
             )
         }
 
-        // 7. Serveur
-        item {
+        // Quick-switch between other accounts saved specifically on THIS server (100% isolated)
+        if (otherSavedAccounts.isNotEmpty()) {
             AtlasCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.Dns,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Serveur", style = MaterialTheme.typography.titleSmall)
-                }
-                Spacer(Modifier.height(6.dp))
                 Text(
-                    text = ServerUrl.display(serverSelection?.baseUrl ?: AppDetails.DEFAULT_API_BASE),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    text = "Autres comptes mémorisés sur ce serveur",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "Vos données restent sur votre serveur Atlas. Changer de serveur vous déconnecte.",
+                    text = "Bascule instantanée — les paniers, caches et discussions restent strictement séparés.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
-                AtlasOutlinedButton(
-                    text = "Changer de serveur",
-                    onClick = onChangeServer,
-                    icon = Icons.Outlined.SwapHoriz,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    otherSavedAccounts.forEach { acc ->
+                        AtlasCard(
+                            onClick = { appViewModel.switchSavedAccount(acc, onToast) },
+                            padding = 10.dp,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                AtlasAvatar(
+                                    avatarUrl = acc.avatarUrl,
+                                    label = acc.displayName.ifBlank { acc.username },
+                                    size = 36.dp,
+                                    serverBaseUrl = serverSelection?.baseUrl,
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = acc.displayName.ifBlank { acc.username },
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        text = "@${acc.username} · ${Roles.label(acc.role)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { appViewModel.forgetSavedAccount(acc, onToast) },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Close,
+                                        contentDescription = "Oublier ce compte",
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        // 8. Mentions légales & liens
-        item {
-            AtlasCard(padding = 4.dp) {
-                SettingsRow(
-                    icon = Icons.Outlined.Security,
-                    title = "Sécurité & confidentialité",
-                    subtitle = "Sessions, appareil, données",
-                    onClick = onOpenSecurity,
+        // 2. Appearance, Navigation & Motion Customizations
+        AtlasCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.AutoAwesomeMotion,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
                 )
-                AtlasDivider(Modifier.padding(horizontal = 12.dp))
-                SettingsRow(
-                    icon = Icons.Outlined.Description,
-                    title = "Licence MIT",
-                    subtitle = "Sources et composants tiers",
-                    onClick = onOpenLicense,
-                )
-                AtlasDivider(Modifier.padding(horizontal = 12.dp))
-                SettingsRow(
-                    icon = Icons.Outlined.Info,
-                    title = "À propos",
-                    subtitle = "${AppDetails.NAME} ${AppDetails.VERSION_NAME}",
-                    onClick = onOpenAbout,
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Apparence, navigation & animations",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Thème",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ThemeMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = themeMode == mode,
+                        onClick = { appViewModel.setThemeMode(mode) },
+                        label = { Text(mode.label) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Densité d'affichage",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DensityMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = densityMode == mode,
+                        onClick = { appViewModel.setDensityMode(mode) },
+                        label = { Text(mode.label) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Onglet d'ouverture au lancement",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MainTab.BottomBarTabs.forEach { item ->
+                    FilterChip(
+                        selected = defaultStartTab == item.name,
+                        onClick = { appViewModel.setDefaultStartTab(item.name) },
+                        label = { Text(item.label) },
+                    )
+                }
+            }
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            SettingsToggleRow(
+                title = "Animations fluides",
+                subtitle = "Transitions entre les pages, apparitions d'accueil et effets de mouvement.",
+                checked = animationsEnabled,
+                onCheckedChange = appViewModel::setAnimationsEnabled,
+            )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            SettingsToggleRow(
+                title = "Notifications système par rôle",
+                subtitle = "Affiche les notifications Android filtrées selon votre rôle (${Roles.label(user.role)}).",
+                checked = roleNotificationsEnabled,
+                onCheckedChange = appViewModel::setRoleNotificationsEnabled,
+            )
         }
 
-        item {
+        // 3. Camera & Barcode Customizations
+        AtlasCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.QrCodeScanner,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Caméra & lecteur code-barres",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            SettingsToggleRow(
+                title = "Ouvrir la caméra automatiquement",
+                subtitle = "Désactivé par défaut — la caméra reste fermée en entrant dans Scan ou QR PC.",
+                checked = autoOpenCamera,
+                onCheckedChange = appViewModel::setAutoOpenCamera,
+            )
+            AtlasDivider(Modifier.padding(vertical = 6.dp))
+            SettingsToggleRow(
+                title = "Vibration au scan",
+                subtitle = "Retour haptique dès qu'un code-barres ou QR est détecté.",
+                checked = scanHapticEnabled,
+                onCheckedChange = appViewModel::setScanHapticEnabled,
+            )
+            AtlasDivider(Modifier.padding(vertical = 6.dp))
+            SettingsToggleRow(
+                title = "Signal sonore au scan",
+                subtitle = "Bip court de confirmation lors de la lecture d'un code.",
+                checked = scanSoundEnabled,
+                onCheckedChange = appViewModel::setScanSoundEnabled,
+            )
+            AtlasDivider(Modifier.padding(vertical = 6.dp))
+            SettingsToggleRow(
+                title = "Ajout automatique au panier",
+                subtitle = "Ajoute immédiatement 1 unité au ticket VR lorsqu'un article est scanné.",
+                checked = autoAddCartOnScan,
+                onCheckedChange = appViewModel::setAutoAddCartOnScan,
+            )
+        }
+
+        // 4. Cashier / Quick Sale Customizations (Role-gated)
+        if (Roles.canCreateDocuments(user.role)) {
             AtlasCard {
-                Text("Liens", style = MaterialTheme.typography.titleSmall)
-                Spacer(Modifier.height(6.dp))
-                SettingsRow(
-                    icon = Icons.Outlined.Language,
-                    title = "Projet web Atlas Commerce",
-                    subtitle = "Etherealmber/atlas-commerce",
-                    onClick = {
-                        if (!openExternal(context, AppDetails.WEB_REPO)) {
-                            onToast("Aucun navigateur disponible.")
-                        }
-                    },
-                )
-                SettingsRow(
-                    icon = Icons.Outlined.OpenInNew,
-                    title = "Code source Android",
-                    subtitle = "Etherealmber/atlas-commerce-android",
-                    onClick = {
-                        if (!openExternal(context, AppDetails.PROJECT_REPO)) {
-                            onToast("Aucun navigateur disponible.")
-                        }
-                    },
-                )
-                SettingsRow(
-                    icon = Icons.Outlined.OpenInNew,
-                    title = "Signaler un problème",
-                    subtitle = "Issues GitHub",
-                    onClick = {
-                        if (!openExternal(context, AppDetails.ISSUES_URL)) {
-                            onToast("Aucun navigateur disponible.")
-                        }
-                    },
-                )
-            }
-        }
-
-        item {
-            Column(Modifier.padding(vertical = 8.dp)) {
-                Text(
-                    text = "${AppDetails.NAME} ${AppDetails.VERSION_NAME} (build ${AppDetails.VERSION_CODE})",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER} · Licence ${AppDetails.LICENSE_NAME}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.PointOfSale,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Vente rapide & caisse",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AtlasTextField(
+                        value = draftClientName,
+                        onValueChange = { draftClientName = it },
+                        label = "Client pré-rempli par défaut",
+                        placeholder = "Ex. Client comptoir",
+                        leadingIcon = Icons.Outlined.Person,
+                        imeAction = ImeAction.Done,
+                        onDone = {
+                            appViewModel.setDefaultClientName(draftClientName)
+                            onToast("Client par défaut enregistré.")
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    AtlasOutlinedButton(
+                        text = "OK",
+                        onClick = {
+                            appViewModel.setDefaultClientName(draftClientName)
+                            onToast("Client par défaut enregistré.")
+                        },
+                    )
+                }
+                AtlasDivider(Modifier.padding(vertical = 8.dp))
+                SettingsToggleRow(
+                    title = "Confirmer avant création du ticket",
+                    subtitle = "Affiche un récapitulatif du montant avant d'envoyer la vente au serveur.",
+                    checked = confirmBeforeSale,
+                    onCheckedChange = appViewModel::setConfirmBeforeSale,
                 )
             }
         }
@@ -641,14 +464,14 @@ fun SettingsScreen(
                         value = draftDisplayName,
                         onValueChange = { draftDisplayName = it },
                         label = "Nom affiché *",
-                        placeholder = "Ex. MY Marbre",
+                        placeholder = "Ex. Nom complet",
                         imeAction = ImeAction.Next,
                     )
                     AtlasTextField(
                         value = draftEmail,
                         onValueChange = { draftEmail = it },
                         label = "Adresse e-mail",
-                        placeholder = "contact@exemple.ma",
+                        placeholder = "contact@exemple.com",
                         keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Done,
                     )
@@ -683,8 +506,8 @@ fun SettingsScreen(
             title = { Text("Se déconnecter ?") },
             text = {
                 Text(
-                    "Le jeton de session sera effacé de cet appareil et le panier vidé. " +
-                        "Aucune donnée de vente n'est supprimée sur le serveur.",
+                    "La session active, le panier et les données temporaires seront effacés. " +
+                        "Aucune donnée métier n'est supprimée sur le serveur.",
                 )
             },
             confirmButton = {
@@ -699,6 +522,322 @@ fun SettingsScreen(
                 TextButton(onClick = { confirmSignOut = false }) { Text("Annuler") }
             },
         )
+    }
+}
+
+/**
+ * Dedicated **System & Security Settings** screen (`MainTab.SETTINGS`), opened via the top-right
+ * Settings button inside [ProfileScreen].
+ *
+ * Includes QR PC pairing & connected devices, live Atlas Agent IA quota bars & reset countdown,
+ * saved servers management, OTA APK updates, isolated offline cache, and legal information.
+ */
+@Composable
+fun SettingsScreen(
+    user: SessionUser,
+    onChangeServer: () -> Unit,
+    onOpenQrDevice: () -> Unit = {},
+    onOpenLicense: () -> Unit,
+    onOpenSecurity: () -> Unit,
+    onOpenAbout: () -> Unit,
+    onSignOut: () -> Unit,
+    onToast: (String) -> Unit,
+    onStartUpdateDownload: () -> Unit = {},
+    appViewModel: AppViewModel = hiltViewModel(),
+) {
+    val context = LocalContext.current
+    val density = Atlas.density
+    val scrollState = rememberScrollState()
+
+    val autoCheckUpdates by appViewModel.autoCheckUpdates.collectAsStateWithLifecycle()
+    val serverSelection by appViewModel.server.collectAsStateWithLifecycle()
+    val savedServers by appViewModel.savedServers.collectAsStateWithLifecycle()
+    val agentPolicy by appViewModel.agentPolicy.collectAsStateWithLifecycle()
+    val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
+    val updateDownloadSource by appViewModel.updateDownloadSource.collectAsStateWithLifecycle()
+    val mirrorPing by appViewModel.mirrorPing.collectAsStateWithLifecycle()
+    val devices by appViewModel.devices.collectAsStateWithLifecycle()
+    val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
+    val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
+
+    LaunchedEffect(user.scopeIdentity) {
+        appViewModel.loadDevices()
+        appViewModel.refreshAgentPolicy()
+        appViewModel.refreshCachedProductCount()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(
+                start = density.screenPadding,
+                end = density.screenPadding,
+                top = density.cardMargin,
+                bottom = 32.dp,
+            ),
+        verticalArrangement = Arrangement.spacedBy(density.itemGap),
+    ) {
+        // 1. Connected Devices & QR PC Pairing
+        AtlasCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Devices,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Appareils connectés & QR PC (${devices.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "Autorisez un ordinateur par QR ou révoquez une session à distance.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = appViewModel::loadDevices, enabled = !devicesLoading) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les appareils")
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            AtlasButton(
+                text = "Scanner un poste PC (QR)",
+                onClick = onOpenQrDevice,
+                icon = Icons.Outlined.QrCode2,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (devices.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                devices.forEachIndexed { idx, device ->
+                    if (idx > 0) AtlasDivider(Modifier.padding(vertical = 6.dp))
+                    ConnectedDeviceRow(
+                        device = device,
+                        onRevoke = { appViewModel.revokeDevice(device, onToast) },
+                    )
+                }
+            }
+        }
+
+        // 2. Live Atlas Agent IA Quota Bars & Limit Countdown
+        AgentQuotaCard(
+            policy = agentPolicy,
+            onRefresh = appViewModel::refreshAgentPolicy,
+        )
+
+        // 3. Updates & Mirrors
+        SettingsUpdateCard(
+            state = updateState,
+            selectedSource = updateDownloadSource,
+            mirrorPing = mirrorPing,
+            onSelectSource = appViewModel::setUpdateDownloadSource,
+            onPingMirrors = appViewModel::pingUpdateMirrors,
+            onCheck = { appViewModel.checkForUpdate(manual = true) },
+            onDownload = onStartUpdateDownload,
+            onInstall = {
+                if (!appViewModel.installDownloadedUpdate(context)) {
+                    onToast("Impossible d'ouvrir l'installateur sur cet appareil.")
+                }
+            },
+        )
+
+        // 4. Active Server & Saved Servers Management
+        AtlasCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Dns,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Serveur & espaces enregistrés",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = serverSelection?.baseUrl?.let { ServerUrl.display(it) } ?: "Aucun serveur configuré",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "Chaque serveur dispose de son propre stockage chiffré isolé. Changer de serveur ferme automatiquement la session en cours.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            val otherServers = savedServers.filterNot {
+                it.url.equals(serverSelection?.baseUrl, ignoreCase = true)
+            }
+            if (otherServers.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    otherServers.forEach { entry ->
+                        AtlasCard(
+                            onClick = { appViewModel.switchSavedServer(entry, onToast) },
+                            padding = 10.dp,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = entry.label.ifBlank { ServerUrl.display(entry.url) },
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        text = ServerUrl.display(entry.url),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { appViewModel.forgetSavedServer(entry, onToast) },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Close,
+                                        contentDescription = "Supprimer ce serveur",
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            AtlasOutlinedButton(
+                text = "Changer ou ajouter un serveur",
+                onClick = onChangeServer,
+                icon = Icons.Outlined.SwapHoriz,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        // 5. Offline Cache & System Options
+        AtlasCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Inventory2,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Catalogue hors ligne & système",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "$cachedProductCount article(s) isolé(s) pour @${user.username}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                AtlasOutlinedButton(
+                    text = "Vider",
+                    onClick = { appViewModel.clearOfflineCache(onToast) },
+                    icon = Icons.Outlined.DeleteOutline,
+                    enabled = cachedProductCount > 0,
+                )
+            }
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            SettingsToggleRow(
+                title = "Recherche automatique des mises à jour",
+                subtitle = "Vérifie silencieusement les nouvelles versions APK à l'ouverture.",
+                checked = autoCheckUpdates,
+                onCheckedChange = appViewModel::setAutoCheckUpdates,
+            )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            SettingsRow(
+                icon = Icons.Outlined.AutoAwesomeMotion,
+                title = "Revoir l'écran de bienvenue",
+                subtitle = "Relancer la présentation animée d'Atlas Commerce",
+                onClick = { appViewModel.replayOnboarding() },
+            )
+        }
+
+        // 6. Security, License & About
+        AtlasCard(padding = 4.dp) {
+            SettingsRow(
+                icon = Icons.Outlined.Security,
+                title = "Sécurité & confidentialité",
+                subtitle = "Isolation multi-comptes, sessions, chiffrement",
+                onClick = onOpenSecurity,
+            )
+            AtlasDivider(Modifier.padding(horizontal = 12.dp))
+            SettingsRow(
+                icon = Icons.Outlined.Description,
+                title = "Licence MIT",
+                subtitle = "Sources et composants tiers",
+                onClick = onOpenLicense,
+            )
+            AtlasDivider(Modifier.padding(horizontal = 12.dp))
+            SettingsRow(
+                icon = Icons.Outlined.Info,
+                title = "À propos",
+                subtitle = "${AppDetails.NAME} ${AppDetails.VERSION_NAME}",
+                onClick = onOpenAbout,
+            )
+        }
+
+        // 7. Open Source Links
+        AtlasCard {
+            Text("Liens du projet", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(6.dp))
+            SettingsRow(
+                icon = Icons.Outlined.Language,
+                title = "Projet web Atlas Commerce",
+                subtitle = "Etherealmber/atlas-commerce",
+                onClick = {
+                    if (!openExternal(context, AppDetails.WEB_REPO)) {
+                        onToast("Aucun navigateur disponible.")
+                    }
+                },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.OpenInNew,
+                title = "Code source Android",
+                subtitle = "Etherealmber/atlas-commerce-android",
+                onClick = {
+                    if (!openExternal(context, AppDetails.PROJECT_REPO)) {
+                        onToast("Aucun navigateur disponible.")
+                    }
+                },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.OpenInNew,
+                title = "Signaler un problème",
+                subtitle = "Issues GitHub",
+                onClick = {
+                    if (!openExternal(context, AppDetails.ISSUES_URL)) {
+                        onToast("Aucun navigateur disponible.")
+                    }
+                },
+            )
+        }
+
+        Column(Modifier.padding(vertical = 8.dp)) {
+            Text(
+                text = "${AppDetails.NAME} ${AppDetails.VERSION_NAME} (build ${AppDetails.VERSION_CODE})",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER} · Licence ${AppDetails.LICENSE_NAME}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

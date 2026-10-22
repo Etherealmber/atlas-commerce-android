@@ -72,6 +72,10 @@ object AvatarBitmapCache {
 
     fun get(key: String): ImageBitmap? = memory.get(key)
 
+    fun clear() {
+        memory.evictAll()
+    }
+
     suspend fun load(
         rawUrl: String?,
         serverBaseUrl: String?,
@@ -113,8 +117,8 @@ object AvatarBitmapCache {
                 clean.startsWith("http://", ignoreCase = true) -> clean
 
             clean.startsWith("/") -> {
-                val base = (serverBaseUrl?.takeIf { it.isNotBlank() } ?: AppDetails.DEFAULT_API_BASE)
-                    .trimEnd('/')
+                val base = serverBaseUrl?.takeIf { it.isNotBlank() }?.trimEnd('/')
+                    ?: return null
                 "$base$clean"
             }
 

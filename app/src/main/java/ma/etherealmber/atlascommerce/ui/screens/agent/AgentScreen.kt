@@ -23,14 +23,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.outlined.AddComment
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,17 +43,23 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
+import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdown
@@ -57,6 +68,12 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.AtlasTypingDots
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
+import java.text.NumberFormat
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val QuickPrompts = listOf(
     "Quels articles sont en rupture ou à réapprovisionner ?",
@@ -72,9 +89,81 @@ fun AgentScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val density = Atlas.density
+    var showHistoryDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.notices.collect { msg -> onToast(msg) }
+    }
+
+    val quotaLocked = state.policy?.isExhausted == true
+
+    if (showHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showHistoryDialog = false },
+            title = { Text("Discussions synchronisées (Web & Mobile)") },
+            text = {
+                if (state.threads.isEmpty()) {
+                    Text(
+                        text = "Aucune discussion enregistrée sur ce compte pour le moment.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        state.threads.take(12).forEach { thread ->
+                            val isCurrent = thread.id == state.activeThreadId
+                            AtlasCard(
+                                onClick = {
+                                    viewModel.selectThread(thread)
+                                    showHistoryDialog = false
+                                },
+                                padding = 10.dp,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = thread.title.ifBlank { "Discussion" },
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = if (isCurrent) "Active actuellement" else "Synchronisée Web/R2",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    IconButton(onClick = { viewModel.deleteThread(thread.id) }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Close,
+                                            contentDescription = "Supprimer",
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.startNewConversation()
+                        showHistoryDialog = false
+                        onToast("Nouvelle discussion ouverte.")
+                    },
+                ) {
+                    Text("Nouvelle discussion")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showHistoryDialog = false }) {
+                    Text("Fermer")
+                }
+            },
+        )
     }
 
     Column(
@@ -94,7 +183,7 @@ fun AgentScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(density.itemGap),
         ) {
-            item {
+            item(key = "agent_header") {
                 AtlasEntrance {
                     AtlasCard {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -112,35 +201,59 @@ fun AgentScreen(
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    text = state.status?.model?.let { "Modèle actif : $it" }
-                                        ?: "Copilote stock, facturation & opérations terrain",
+                                    text = state.activeThreadTitle.takeIf { it.isNotBlank() }
+                                        ?: state.status?.model?.let { "Modèle actif : $it" }
+                                        ?: "Données réelles synchronisées en direct",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                             AtlasChip(
-                                text = if (state.status?.configured == false) "Veille" else "En ligne",
-                                tone = if (state.status?.configured == false) AtlasTone.WARNING else AtlasTone.POSITIVE,
+                                text = when {
+                                    quotaLocked -> "Quota atteint"
+                                    state.status?.configured == false -> "Veille"
+                                    else -> "En ligne"
+                                },
+                                tone = when {
+                                    quotaLocked -> AtlasTone.DANGER
+                                    state.status?.configured == false -> AtlasTone.WARNING
+                                    else -> AtlasTone.POSITIVE
+                                },
                             )
-                            if (state.messages.isNotEmpty()) {
-                                IconButton(
-                                    onClick = {
-                                        viewModel.clearConversation()
-                                        onToast("Conversation réinitialisée.")
-                                    },
-                                ) {
-                                    Icon(
-                                        Icons.Outlined.DeleteSweep,
-                                        contentDescription = "Effacer la conversation",
-                                    )
-                                }
+                            IconButton(onClick = { showHistoryDialog = true }) {
+                                Icon(
+                                    Icons.Outlined.History,
+                                    contentDescription = "Historique Web & Mobile",
+                                )
                             }
-                            IconButton(onClick = viewModel::refreshContext) {
+                            IconButton(
+                                onClick = {
+                                    viewModel.startNewConversation()
+                                    onToast("Nouvelle discussion prête.")
+                                },
+                            ) {
+                                Icon(
+                                    Icons.Outlined.AddComment,
+                                    contentDescription = "Nouvelle discussion",
+                                )
+                            }
+                            IconButton(onClick = { viewModel.refreshContext() }) {
                                 Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser")
                             }
                         }
-                        if (state.messages.isEmpty()) {
-                            Spacer(Modifier.height(8.dp))
+
+                        // Real-time quota progress bar right inside Atlas Agent!
+                        state.policy?.let { policy ->
+                            Spacer(Modifier.height(10.dp))
+                            AtlasDivider()
+                            Spacer(Modifier.height(10.dp))
+                            AgentQuotaBarsContent(policy = policy, compact = true)
+                        }
+
+                        if (state.messages.isEmpty() && !quotaLocked) {
+                            Spacer(Modifier.height(10.dp))
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 QuickPrompts.forEach { prompt ->
                                     AssistChip(
@@ -154,11 +267,14 @@ fun AgentScreen(
                 }
             }
 
-            if (state.messages.isEmpty() && state.nextActions.isNotEmpty()) {
-                item {
+            if (state.messages.isEmpty() && state.nextActions.isNotEmpty() && !quotaLocked) {
+                item(key = "agent_suggestions_hdr") {
                     AtlasSectionHeader(title = "Actions suggérées par l'IA")
                 }
-                items(state.nextActions) { item ->
+                items(
+                    items = state.nextActions,
+                    key = { "suggestion_${it.title}_${it.priority}" },
+                ) { item ->
                     AtlasCard(
                         onClick = { viewModel.sendPrompt("Aide-moi sur : ${item.title} (${item.detail})") },
                         padding = 12.dp,
@@ -196,7 +312,7 @@ fun AgentScreen(
             }
 
             if (state.sending) {
-                item {
+                item(key = "agent_typing") {
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(14.dp))
@@ -207,7 +323,7 @@ fun AgentScreen(
                         AtlasTypingDots()
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            text = "Atlas Agent analyse vos données…",
+                            text = "Atlas Agent vérifie vos données en direct…",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -216,7 +332,7 @@ fun AgentScreen(
             }
 
             if (!state.error.isNullOrBlank()) {
-                item {
+                item(key = "agent_err") {
                     AtlasErrorCard(
                         title = "Réponse IA indisponible",
                         message = state.error.orEmpty(),
@@ -238,27 +354,261 @@ fun AgentScreen(
                 AtlasTextField(
                     value = state.input,
                     onValueChange = viewModel::onInputChange,
-                    label = "Poser une question à Atlas Agent…",
+                    label = if (quotaLocked) {
+                        "Quota IA atteint — réinitialisation automatique…"
+                    } else {
+                        "Poser une question à Atlas Agent…"
+                    },
                     placeholder = "Ex. Résumé des ventes et impayés du jour",
                     imeAction = ImeAction.Send,
-                    enabled = !state.sending,
+                    enabled = !state.sending && !quotaLocked,
                     onDone = { viewModel.sendPrompt() },
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(8.dp))
                 IconButton(
                     onClick = { viewModel.sendPrompt() },
-                    enabled = state.input.isNotBlank() && !state.sending,
+                    enabled = state.input.isNotBlank() && !state.sending && !quotaLocked,
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Outlined.Send,
                         contentDescription = "Envoyer",
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = if (quotaLocked) {
+                            MaterialTheme.colorScheme.outline
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
                     )
                 }
             }
         }
     }
+}
+
+/**
+ * Shared live Quota card used in Settings AND inside Atlas Agent (`GET /api/agent/policy`).
+ */
+@Composable
+fun AgentQuotaCard(
+    policy: AgentPolicyDto?,
+    onRefresh: () -> Unit,
+) {
+    AtlasCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Outlined.AutoAwesome,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Atlas Agent IA — Quotas & Limites",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            policy?.let { p ->
+                AtlasChip(
+                    text = when {
+                        p.blocked -> "Suspendu"
+                        p.isAdmin -> "Admin · Illimité"
+                        p.isExhausted -> "Limite atteinte"
+                        else -> "Actif"
+                    },
+                    tone = when {
+                        p.blocked || p.isExhausted -> AtlasTone.DANGER
+                        p.isAdmin -> AtlasTone.INFO
+                        else -> AtlasTone.POSITIVE
+                    },
+                )
+            }
+            IconButton(onClick = onRefresh) {
+                Icon(
+                    imageVector = Icons.Outlined.Refresh,
+                    contentDescription = "Actualiser le quota",
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        if (policy == null) {
+            Text(
+                text = "Chargement des compteurs de jetons depuis le serveur…",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            AgentQuotaBarsContent(policy = policy, compact = false)
+        }
+    }
+}
+
+@Composable
+fun AgentQuotaBarsContent(
+    policy: AgentPolicyDto,
+    compact: Boolean,
+) {
+    val nf = remember { NumberFormat.getIntegerInstance(Locale.FRANCE) }
+
+    if (policy.blocked) {
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Atlas.palette.danger.copy(alpha = 0.12f),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.HourglassBottom,
+                    contentDescription = null,
+                    tint = Atlas.palette.danger,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Accès Atlas Agent suspendu sur ce compte. Contactez un administrateur pour le rétablir.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Atlas.palette.danger,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
+        return
+    }
+
+    if (policy.isDailyExhausted || policy.isWeeklyExhausted) {
+        val waitText = if (policy.isDailyExhausted) {
+            "Limite quotidienne atteinte — veuillez patienter ${formatQuotaWait(policy.dailyResetsAt, "minuit UTC")}."
+        } else {
+            "Limite hebdomadaire atteinte — veuillez patienter ${formatQuotaWait(policy.weeklyResetsAt, "lundi 00:00 UTC")}."
+        }
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Atlas.palette.danger.copy(alpha = 0.12f),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.HourglassBottom,
+                    contentDescription = null,
+                    tint = Atlas.palette.danger,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = waitText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Atlas.palette.danger,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+
+    // Daily bar
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = if (policy.isAdmin) "Quota quotidien · Admin sans limite" else "Quota quotidien",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "${nf.format(policy.dailyUsed)} / ${nf.format(policy.dailyLimit)} jetons",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+    Spacer(Modifier.height(4.dp))
+    LinearProgressIndicator(
+        progress = { policy.dailyFraction },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(7.dp)
+            .clip(RoundedCornerShape(4.dp)),
+        color = when {
+            policy.isDailyExhausted -> Atlas.palette.danger
+            !policy.isAdmin && policy.dailyFraction > 0.8f -> Atlas.palette.warning
+            else -> MaterialTheme.colorScheme.primary
+        },
+    )
+    if (!compact) {
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = "Renouvellement ${formatQuotaWait(policy.dailyResetsAt, "à minuit UTC chaque jour")}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    Spacer(Modifier.height(8.dp))
+
+    // Weekly bar
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = if (policy.isAdmin) "Quota hebdomadaire · Admin sans limite" else "Quota hebdomadaire",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "${nf.format(policy.weeklyUsed)} / ${nf.format(policy.weeklyLimit)} jetons",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+    Spacer(Modifier.height(4.dp))
+    LinearProgressIndicator(
+        progress = { policy.weeklyFraction },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(7.dp)
+            .clip(RoundedCornerShape(4.dp)),
+        color = when {
+            policy.isWeeklyExhausted -> Atlas.palette.danger
+            !policy.isAdmin && policy.weeklyFraction > 0.8f -> Atlas.palette.warning
+            else -> MaterialTheme.colorScheme.primary
+        },
+    )
+    if (!compact) {
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = "Renouvellement ${formatQuotaWait(policy.weeklyResetsAt, "lundi à 00:00 UTC")}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private fun formatQuotaWait(iso: String?, fallback: String): String {
+    if (iso.isNullOrBlank()) return "prévu à $fallback"
+    return runCatching {
+        val target = Instant.parse(iso)
+        val now = Instant.now()
+        val mins = Duration.between(now, target).toMinutes()
+        val stamp = DateTimeFormatter.ofPattern("dd/MM HH:mm 'UTC'", Locale.FRANCE)
+            .withZone(ZoneOffset.UTC)
+            .format(target)
+        if (mins > 0) {
+            val h = mins / 60
+            val m = mins % 60
+            if (h > 0) "dans ${h}h ${m}min ($stamp)" else "dans ${m} min ($stamp)"
+        } else {
+            "à $stamp"
+        }
+    }.getOrElse { "prévu à $fallback" }
 }
 
 @Composable

@@ -19,15 +19,8 @@ object ServerUrl {
     data class Preset(val label: String, val url: String, val hint: String, val recommended: Boolean)
 
     fun presets(): List<Preset> = buildList {
-        add(
-            Preset(
-                label = "Production",
-                url = PRODUCTION,
-                hint = "Serveur Atlas officiel (Cloudflare)",
-                recommended = true,
-            ),
-        )
-        // Plain-HTTP presets only make sense where cleartext is allowed (debug).
+        // Plain-HTTP developer presets only appear in debug builds; production
+        // installs never advertise a private company domain as "Recommandé".
         if (BuildConfig.ALLOW_CLEARTEXT) {
             add(
                 Preset(

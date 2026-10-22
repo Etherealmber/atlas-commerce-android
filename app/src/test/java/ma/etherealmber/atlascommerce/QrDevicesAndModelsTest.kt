@@ -2,13 +2,19 @@ package ma.etherealmber.atlascommerce
 
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.runBlocking
 import ma.etherealmber.atlascommerce.core.Roles
+import ma.etherealmber.atlascommerce.core.net.ServerUrl
+import ma.etherealmber.atlascommerce.data.OfflineCache
+import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
+import ma.etherealmber.atlascommerce.data.model.AgentThreadDetailDto
 import ma.etherealmber.atlascommerce.data.model.AssistChatResponseDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionDto
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.QrSessionStatusDto
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
+import ma.etherealmber.atlascommerce.ui.screens.agent.AgentViewModel
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrTokenParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -16,6 +22,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
 
 class QrDevicesAndModelsTest {
 
@@ -97,5 +105,87 @@ class QrDevicesAndModelsTest {
         val chat = moshi.adapter(AssistChatResponseDto::class.java)
             .fromJson("""{"reply":"3 articles sont sous le seuil.","proposals":[{"proposal_id":"p_1","title":"Commander Marbre"}]}""")
         assertEquals("p_1", chat?.proposals?.single()?.proposalId)
+    }
+
+    @Test
+    fun agentPolicyQuotaCalculationsAndWebThreadIdsMatchWebContract() {
+        val threadId = AgentViewModel.newWebCompatibleThreadId()
+        assertTrue(threadId.matches(Regex("^t-[0-9a-z]+$")))
+        assertFalse(threadId.startsWith("android-"))
+
+        val normalHalf = AgentPolicyDto(
+            blocked = false,
+            isAdmin = false,
+            dailyUsed = 12_500,
+            dailyLimit = 25_000,
+            weeklyUsed = 100_000,
+            weeklyLimit = 100_000,
+        )
+        assertEquals(0.5f, normalHalf.dailyFraction, 0.001f)
+        assertFalse(normalHalf.isDailyExhausted)
+        assertTrue(normalHalf.isWeeklyExhausted)
+        assertTrue(normalHalf.isExhausted)
+
+        val adminOverLimit = AgentPolicyDto(
+            blocked = false,
+            isAdmin = true,
+            dailyUsed = 80_000,
+            dailyLimit = 25_000,
+            weeklyUsed = 250_000,
+            weeklyLimit = 100_000,
+        )
+        assertFalse("Admins bypass quota exhaustion", adminOverLimit.isExhausted)
+
+        val detail = moshi.adapter(AgentThreadDetailDto::class.java)
+            .fromJson("""{"title":"Ventes du jour","messages":[{"role":"user","text":"CA ?"},{"role":"assistant","text":"12 400 DH","ms":420}]}""")
+        assertEquals("Ventes du jour", detail?.title)
+        assertEquals(2, detail?.messages?.size)
+
+        // Never pre-populate stock.afmarbre.com in UI server presets
+        assertTrue(ServerUrl.presets().none { it.url.contains("afmarbre", ignoreCase = true) })
+    }
+
+    @Test
+    fun offlineCacheStrictlyIsolatesEveryUserAndEveryServerWithZeroLeak() = runBlocking {
+        val dir = Files.createTempDirectory("atlas-cache-test").toFile()
+        try {
+            // Legacy global file from older builds must be purged automatically on startup
+            File(dir, "products.json").writeText("""[{"id":999,"name":"Legacy Leak"}]""")
+
+            val cache = OfflineCache(dir, moshi)
+            assertFalse("Legacy global products.json must be deleted on init", File(dir, "products.json").exists())
+            assertTrue("Unbound cache must return empty list", cache.readProducts().isEmpty())
+
+            // User A on Server 1 writes secret products
+            cache.bindScope("https://alpha.example.com", "alice")
+            cache.writeProducts(listOf(ProductDto(id = 1, name = "Alpha Secret Marble")))
+            assertEquals("Alpha Secret Marble", cache.readProducts().single().name)
+
+            // Switching to User B on the SAME Server 1 sees ZERO data from User A
+            cache.bindScope("https://alpha.example.com", "bob")
+            assertTrue("User B on same server must see zero items from User A", cache.readProducts().isEmpty())
+            cache.writeProducts(listOf(ProductDto(id = 2, name = "Bob Only Granite")))
+
+            // Switching to User A (same username!) on Server 2 sees ZERO data from Server 1
+            cache.bindScope("https://beta.example.com", "alice")
+            assertTrue("Same username on different server must see zero items", cache.readProducts().isEmpty())
+
+            // Switching back to User A on Server 1 restores ONLY User A's Server 1 cache
+            cache.bindScope("https://alpha.example.com", "alice")
+            assertEquals("Alpha Secret Marble", cache.readProducts().single().name)
+
+            // Unbinding on sign-out immediately exposes zero cached items
+            cache.unbindScope()
+            assertTrue(cache.readProducts().isEmpty())
+
+            // Clearing Server 1 wipes both Alice & Bob on Server 1 completely
+            cache.clearServerScope("https://alpha.example.com")
+            cache.bindScope("https://alpha.example.com", "alice")
+            assertTrue(cache.readProducts().isEmpty())
+            cache.bindScope("https://alpha.example.com", "bob")
+            assertTrue(cache.readProducts().isEmpty())
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 }
