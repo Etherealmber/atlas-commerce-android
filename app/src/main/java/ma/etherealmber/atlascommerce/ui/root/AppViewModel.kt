@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
+import ma.etherealmber.atlascommerce.core.diagnostics.CompressedReportAttachment
+import ma.etherealmber.atlascommerce.core.diagnostics.DeviceDiagnosticSnapshot
+import ma.etherealmber.atlascommerce.core.diagnostics.DiagnosticReporter
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.SessionEvents
@@ -27,6 +30,7 @@ import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
+import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.server.ServerSelection
 import ma.etherealmber.atlascommerce.core.session.SessionManager
@@ -41,7 +45,9 @@ import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
+import ma.etherealmber.atlascommerce.di.ProbeClient
 import ma.etherealmber.atlascommerce.ui.components.AvatarBitmapCache
+import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 /**
@@ -61,7 +67,12 @@ class AppViewModel @Inject constructor(
     private val apiProvider: ApiProvider,
     private val updateManager: AppUpdateManager,
     private val offlineCache: OfflineCache,
+    private val deviceIdentity: DeviceIdentity,
+    @ProbeClient private val probeClient: OkHttpClient,
 ) : ViewModel() {
+
+    val deviceShortId: String get() = deviceIdentity.shortId()
+    val deviceFingerprint: String get() = deviceIdentity.fingerprint
 
     val themeMode: StateFlow<ThemeMode> = preferences.themeMode
         .stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
@@ -490,6 +501,24 @@ class AppViewModel @Inject constructor(
     fun refreshReleaseChangelog() {
         updateManager.refreshChangelog()
     }
+
+    suspend fun trySubmitDiagnosticReport(
+        title: String,
+        category: String,
+        markdownBody: String,
+        snapshot: DeviceDiagnosticSnapshot,
+        logs: String,
+        attachments: List<CompressedReportAttachment>,
+    ): String? = DiagnosticReporter.tryDirectServerRelay(
+        client = probeClient,
+        serverBaseUrl = serverConfig.selection.value?.baseUrl,
+        title = title,
+        category = category,
+        markdownBody = markdownBody,
+        snapshot = snapshot,
+        logs = logs,
+        attachments = attachments,
+    )
 
     fun setRoleNotificationsEnabled(enabled: Boolean) {
         viewModelScope.launch { preferences.setRoleNotificationsEnabled(enabled) }

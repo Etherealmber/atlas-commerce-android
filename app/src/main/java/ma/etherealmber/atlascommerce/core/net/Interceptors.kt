@@ -29,7 +29,25 @@ class AtlasHeaderInterceptor(
                 }
             }
             .build()
-        return chain.proceed(request)
+        val startNs = System.nanoTime()
+        return try {
+            val resp = chain.proceed(request)
+            val ms = ((System.nanoTime() - startNs) / 1_000_000L).coerceAtLeast(1L)
+            ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+                tag = "HTTP",
+                message = "${request.method} ${request.url.encodedPath} -> ${resp.code} (${ms}ms)",
+                level = if (resp.code >= 400) "WARN" else "INFO",
+            )
+            resp
+        } catch (t: Throwable) {
+            val ms = ((System.nanoTime() - startNs) / 1_000_000L).coerceAtLeast(1L)
+            ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+                tag = "HTTP",
+                message = "${request.method} ${request.url.encodedPath} FAILED (${ms}ms): ${t.javaClass.simpleName}: ${t.message}",
+                level = "ERROR",
+            )
+            throw t
+        }
     }
 }
 

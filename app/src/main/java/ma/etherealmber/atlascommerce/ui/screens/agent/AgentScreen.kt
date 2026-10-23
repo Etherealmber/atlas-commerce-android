@@ -512,25 +512,39 @@ fun AgentQuotaBarsContent(
     }
 
     // Daily bar
+    val animatedDaily by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = policy.dailyFraction,
+        label = "quota_daily_bar",
+    )
+    val animatedWeekly by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = policy.weeklyFraction,
+        label = "quota_weekly_bar",
+    )
+
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = if (policy.isAdmin) "Quota quotidien · Admin sans limite" else "Quota quotidien",
+            text = if (policy.isAdmin) "Quota quotidien · Illimité" else "Quota quotidien",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
+        Spacer(Modifier.width(10.dp))
         Text(
             text = "${nf.format(policy.dailyUsed)} / ${nf.format(policy.dailyLimit)} jetons",
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false,
         )
     }
     Spacer(Modifier.height(4.dp))
     LinearProgressIndicator(
-        progress = { policy.dailyFraction },
+        progress = { animatedDaily },
         modifier = Modifier
             .fillMaxWidth()
             .height(7.dp)
@@ -555,23 +569,28 @@ fun AgentQuotaBarsContent(
     // Weekly bar
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = if (policy.isAdmin) "Quota hebdomadaire · Admin sans limite" else "Quota hebdomadaire",
+            text = if (policy.isAdmin) "Quota hebdomadaire · Illimité" else "Quota hebdomadaire",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
+        Spacer(Modifier.width(10.dp))
         Text(
             text = "${nf.format(policy.weeklyUsed)} / ${nf.format(policy.weeklyLimit)} jetons",
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false,
         )
     }
     Spacer(Modifier.height(4.dp))
     LinearProgressIndicator(
-        progress = { policy.weeklyFraction },
+        progress = { animatedWeekly },
         modifier = Modifier
             .fillMaxWidth()
             .height(7.dp)

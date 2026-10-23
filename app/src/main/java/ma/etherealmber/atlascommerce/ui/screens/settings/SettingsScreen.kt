@@ -2,7 +2,10 @@ package ma.etherealmber.atlascommerce.ui.screens.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -15,9 +18,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesomeMotion
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -39,6 +44,7 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -76,6 +82,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
+import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
 import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
@@ -84,6 +91,7 @@ import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentQuotaCard
 import ma.etherealmber.atlascommerce.ui.screens.legal.EtherealmberAuthorCard
+import ma.etherealmber.atlascommerce.ui.screens.legal.ProblemReportDialog
 import ma.etherealmber.atlascommerce.ui.shell.MainTab
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.util.openExternal
@@ -156,60 +164,92 @@ fun ProfileScreen(
             ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {
-        // 1. Account & Profile Header Card
-        AtlasCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AtlasAvatar(
-                    avatarUrl = user.avatarUrl,
-                    label = user.displayName,
-                    size = 60.dp,
-                    serverBaseUrl = serverSelection?.baseUrl,
-                    onClick = { photoPicker.launch("image/*") },
+        // 1. Account & Profile Header Card (tap directly on avatar to change photo)
+        AtlasEntrance(delayMillis = 0) {
+            AtlasCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clickable(enabled = !uploadingAvatar) {
+                                photoPicker.launch("image/*")
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        AtlasAvatar(
+                            avatarUrl = user.avatarUrl,
+                            label = user.displayName,
+                            size = 64.dp,
+                            serverBaseUrl = serverSelection?.baseUrl,
+                            onClick = {
+                                if (!uploadingAvatar) {
+                                    photoPicker.launch("image/*")
+                                }
+                            },
+                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            border = BorderStroke(2.dp, MaterialTheme.colorScheme.surface),
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(24.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                if (uploadingAvatar) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(12.dp),
+                                        strokeWidth = 1.8.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Outlined.PhotoCamera,
+                                        contentDescription = "Changer la photo de profil",
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(13.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = user.displayName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "@${user.username} · Appuyez sur la photo pour modifier",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        AtlasChip(text = Roles.label(user.role), tone = AtlasTone.INFO)
+                    }
+                    IconButton(
+                        onClick = {
+                            draftDisplayName = user.displayName
+                            draftEmail = user.email
+                            showEditProfile = true
+                        },
+                    ) {
+                        Icon(Icons.Outlined.Edit, contentDescription = "Modifier le profil")
+                    }
+                }
+                if (user.email.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    AtlasInfoRow(label = "E-mail", value = user.email)
+                }
+                Spacer(Modifier.height(10.dp))
+                AtlasOutlinedButton(
+                    text = "Se déconnecter de cette session",
+                    onClick = { confirmSignOut = true },
+                    icon = Icons.Outlined.Logout,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = user.displayName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = "@${user.username}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    AtlasChip(text = Roles.label(user.role), tone = AtlasTone.INFO)
-                }
-                IconButton(
-                    onClick = {
-                        draftDisplayName = user.displayName
-                        draftEmail = user.email
-                        showEditProfile = true
-                    },
-                ) {
-                    Icon(Icons.Outlined.Edit, contentDescription = "Modifier le profil")
-                }
             }
-            if (user.email.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                AtlasInfoRow(label = "E-mail", value = user.email)
-            }
-            Spacer(Modifier.height(10.dp))
-            AtlasOutlinedButton(
-                text = if (uploadingAvatar) "Envoi…" else "Changer la photo",
-                onClick = { photoPicker.launch("image/*") },
-                icon = Icons.Outlined.PhotoCamera,
-                enabled = !uploadingAvatar,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-            AtlasOutlinedButton(
-                text = "Se déconnecter de cette session",
-                onClick = { confirmSignOut = true },
-                icon = Icons.Outlined.Logout,
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
 
         // Quick-switch between other accounts saved specifically on THIS server (100% isolated)
@@ -556,6 +596,16 @@ fun SettingsScreen(
     val devices by appViewModel.devices.collectAsStateWithLifecycle()
     val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
+    var showProblemReportDialog by remember { mutableStateOf(false) }
+
+    if (showProblemReportDialog) {
+        ProblemReportDialog(
+            screenOrigin = "Paramètres",
+            onDismiss = { showProblemReportDialog = false },
+            onToast = onToast,
+            appViewModel = appViewModel,
+        )
+    }
 
     LaunchedEffect(user.scopeIdentity) {
         appViewModel.loadDevices()
@@ -898,14 +948,10 @@ fun SettingsScreen(
                 },
             )
             SettingsRow(
-                icon = Icons.Outlined.OpenInNew,
+                icon = Icons.Outlined.BugReport,
                 title = "Signaler un problème",
-                subtitle = "Issues GitHub",
-                onClick = {
-                    if (!openExternal(context, AppDetails.ISSUES_URL)) {
-                        onToast("Aucun navigateur disponible.")
-                    }
-                },
+                subtitle = "Capturer les journaux, ID appareil & jusqu'à 3 images (≤ 1 Mo) avec @atlas-bot",
+                onClick = { showProblemReportDialog = true },
             )
         }
 
