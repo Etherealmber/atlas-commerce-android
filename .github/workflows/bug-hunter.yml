@@ -159,9 +159,9 @@ jobs:
           # ------------------------------------------------------------------
           code_hazards = []
           src_files = [f for f in sorted(glob.glob("app/src/**/*", recursive=True)) if os.path.isfile(f)]
-          if len(src_files) != 82:
+          if len(src_files) != 83:
               code_hazards.append(
-                  f"- **Source file count drift**: found `{len(src_files)}` files under `app/src/` (expected `82` for `LegacySourceQuarantine` Windows pull compatibility)."
+                  f"- **Source file count drift**: found `{len(src_files)}` files under `app/src/` (expected `83` for `LegacySourceQuarantine` Windows pull compatibility)."
               )
 
           for kt in sorted(glob.glob("app/src/main/**/*.kt", recursive=True)):

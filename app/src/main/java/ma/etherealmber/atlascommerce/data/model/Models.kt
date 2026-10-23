@@ -158,7 +158,8 @@ data class TrustedDeviceDto(
         get() {
             val ua = userAgent.orEmpty()
             return when {
-                ua.contains("Atlas-Android", ignoreCase = true) -> "Atlas Android · Mobile"
+                ua.contains("Atlas-Android", ignoreCase = true) ||
+                    ua.contains("okhttp", ignoreCase = true) -> "Atlas Android · Mobile"
                 ua.contains("Android", ignoreCase = true) -> "Appareil Android"
                 ua.contains("iPhone", ignoreCase = true) || ua.contains("iPad", ignoreCase = true) -> "iPhone / iPad"
                 ua.contains("Windows", ignoreCase = true) && ua.contains("Edg", ignoreCase = true) -> "PC Windows · Edge"

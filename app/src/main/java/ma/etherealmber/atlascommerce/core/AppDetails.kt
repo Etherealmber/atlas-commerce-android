@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce.core
 
 import ma.etherealmber.atlascommerce.BuildConfig
+import java.util.Calendar
 
 /**
  * Product identity and build information.
@@ -25,7 +26,8 @@ object AppDetails {
 
     const val LICENSE_NAME = "MIT"
     const val COPYRIGHT_HOLDER = "Etherealmber"
-    const val COPYRIGHT_YEAR = "2026"
+    val COPYRIGHT_YEAR: String
+        get() = Calendar.getInstance().get(Calendar.YEAR).coerceAtLeast(2026).toString()
     const val GITHUB_HANDLE = "Etherealmber"
     const val GITHUB_PROFILE_URL = "https://github.com/Etherealmber"
     const val GITHUB_AVATAR_URL = "https://github.com/Etherealmber.png"

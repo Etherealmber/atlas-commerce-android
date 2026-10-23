@@ -1,9 +1,17 @@
 package ma.etherealmber.atlascommerce.ui.screens.legal
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,38 +22,443 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
+import ma.etherealmber.atlascommerce.core.diagnostics.CompressedReportAttachment
+import ma.etherealmber.atlascommerce.core.diagnostics.DiagnosticReporter
+import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasBullet
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
+import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
+import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
+import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
+import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
+import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
+import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.util.openExternal
 
+private val DiagnosticCategories = listOf(
+    "Affichage / Interface",
+    "Agent IA / Tableaux",
+    "Mise à jour / Réseau",
+    "Scan / Caméra",
+    "Autre anomalie",
+)
+
+/**
+ * Interactive in-app Diagnostic & Problem Reporter dialog:
+ * - Captures sanitized app + own-PID Android logcat traces, anonymized Device ID,
+ *   Android SDK/model/screen DPI/fontScale, and version build automatically.
+ * - Lets users attach up to **3 images** (`MAX_ATTACHMENTS = 3`), automatically downscaling
+ *   and JPEG-compressing any image over `1 MB` down to `<= 1 MB` (`1,000,000` bytes).
+ * - Sends directly via connected Worker relay or pre-filled GitHub `@atlas-bot` Issue
+ *   (which analyzes logs, identifies root cause, proposes fixes, and generates a ready-to-copy AI prompt).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ProblemReportDialog(
+    screenOrigin: String,
+    onDismiss: () -> Unit,
+    onToast: (String) -> Unit,
+    appViewModel: AppViewModel = hiltViewModel(),
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val session by appViewModel.session.collectAsStateWithLifecycle()
+    val activeRole = (session as? SessionState.Active)?.user?.role
+
+    var category by remember { mutableStateOf(DiagnosticCategories.first()) }
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var steps by remember { mutableStateOf("") }
+    var logsPreview by remember { mutableStateOf("") }
+    var showLogsPreview by remember { mutableStateOf(false) }
+    var compressing by remember { mutableStateOf(false) }
+    var submitting by remember { mutableStateOf(false) }
+    val attachments = remember { mutableStateListOf<CompressedReportAttachment>() }
+
+    val snapshot = remember(screenOrigin, activeRole) {
+        DiagnosticReporter.collectSnapshot(
+            context = context,
+            shortDeviceId = appViewModel.deviceShortId,
+            fullFingerprint = appViewModel.deviceFingerprint,
+            role = activeRole,
+            screenOrigin = screenOrigin,
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        logsPreview = AtlasLogBuffer.captureDiagnosticLogs(context)
+    }
+
+    val multiImagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents(),
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        val remainingSlots = DiagnosticReporter.MAX_ATTACHMENTS - attachments.size
+        if (remainingSlots <= 0) {
+            onToast("Maximum 3 captures autorisées par rapport.")
+            return@rememberLauncherForActivityResult
+        }
+        val selected = uris.take(remainingSlots)
+        if (uris.size > remainingSlots) {
+            onToast("Seules les $remainingSlots premières images ont été retenues (max 3).")
+        }
+        scope.launch {
+            compressing = true
+            selected.forEachIndexed { idx, uri ->
+                val prepared = DiagnosticReporter.prepareAttachment(
+                    context = context,
+                    uri = uri,
+                    slotIndex = attachments.size + idx,
+                )
+                if (prepared != null) {
+                    attachments.add(prepared)
+                }
+            }
+            compressing = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!submitting) onDismiss() },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.BugReport,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Signaler un problème",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "Journaux + ID appareil + @atlas-bot IA",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "Catégorie",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    DiagnosticCategories.forEach { cat ->
+                        FilterChip(
+                            selected = category == cat,
+                            onClick = { category = cat },
+                            label = { Text(cat, style = MaterialTheme.typography.labelSmall) },
+                        )
+                    }
+                }
+
+                AtlasTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = "Titre court du problème",
+                    placeholder = "Ex. : Tableau coupé à droite dans Agent IA",
+                    imeAction = ImeAction.Next,
+                )
+
+                AtlasTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = "Que s'est-il passé ?",
+                    placeholder = "Décrivez ce que vous voyez à l'écran…",
+                    singleLine = false,
+                    imeAction = ImeAction.Default,
+                )
+
+                AtlasTextField(
+                    value = steps,
+                    onValueChange = { steps = it },
+                    label = "Étapes (optionnel)",
+                    placeholder = "1. Ouvrir Agent IA  2. Envoyer une demande…",
+                    singleLine = false,
+                    imeAction = ImeAction.Done,
+                )
+
+                // Up to 3 attached images (auto-compressed <= 1 MB each)
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, Atlas.palette.cardBorder),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Outlined.PhotoLibrary,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = "Captures jointes (${attachments.size}/${DiagnosticReporter.MAX_ATTACHMENTS})",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = "Max 3 images · compression auto ≤ 1 Mo chacune",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (attachments.size < DiagnosticReporter.MAX_ATTACHMENTS) {
+                                TextButton(
+                                    onClick = { multiImagePicker.launch("image/*") },
+                                    enabled = !compressing && !submitting,
+                                ) {
+                                    Text(if (compressing) "Compression…" else "Ajouter")
+                                }
+                            }
+                        }
+
+                        if (attachments.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                attachments.forEach { item ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(MaterialTheme.colorScheme.surface)
+                                            .padding(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        if (item.preview != null) {
+                                            Image(
+                                                bitmap = item.preview,
+                                                contentDescription = item.fileName,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .size(44.dp)
+                                                    .clip(RoundedCornerShape(8.dp)),
+                                            )
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                text = item.fileName,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                maxLines = 1,
+                                            )
+                                            Text(
+                                                text = item.sizeSummary,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Atlas.palette.positive,
+                                            )
+                                        }
+                                        IconButton(onClick = { attachments.remove(item) }) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Close,
+                                                contentDescription = "Retirer l'image",
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Device ID & Live Captured Logs Summary
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, Atlas.palette.cardBorder),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "Diagnostic auto inclus : ID ${snapshot.maskedFingerprint} · ${snapshot.appVersion} · ${snapshot.androidVersion}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "${logsPreview.lines().size} lignes de journaux sanitisés prêtes",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            TextButton(onClick = { showLogsPreview = !showLogsPreview }) {
+                                Text(
+                                    text = if (showLogsPreview) "Masquer logs" else "Voir logs",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                        if (showLogsPreview) {
+                            AtlasDivider(Modifier.padding(vertical = 4.dp))
+                            Text(
+                                text = logsPreview.takeLast(1_400).ifBlank { "Aucun journal récent." },
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
+                if (attachments.isNotEmpty()) {
+                    AtlasOutlinedButton(
+                        text = "Partager captures & logs (${attachments.size} img ≤ 1 Mo)",
+                        icon = Icons.Outlined.Share,
+                        onClick = {
+                            val fullMd = DiagnosticReporter.buildMarkdownReport(
+                                category = category,
+                                title = title.ifBlank { category },
+                                description = description,
+                                stepsToReproduce = steps,
+                                snapshot = snapshot,
+                                logs = logsPreview,
+                                attachments = attachments.toList(),
+                            )
+                            if (!DiagnosticReporter.shareBundleWithAttachments(
+                                    context = context,
+                                    title = title.ifBlank { category },
+                                    fullMarkdown = fullMd,
+                                    logs = logsPreview,
+                                    attachments = attachments.toList(),
+                                )
+                            ) {
+                                onToast("Partage indisponible sur cet appareil.")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            AtlasButton(
+                text = "Envoyer à @atlas-bot",
+                loading = submitting,
+                onClick = {
+                    scope.launch {
+                        submitting = true
+                        val freshLogs = AtlasLogBuffer.captureDiagnosticLogs(context)
+                        val fullMarkdown = DiagnosticReporter.buildMarkdownReport(
+                            category = category,
+                            title = title.ifBlank { category },
+                            description = description,
+                            stepsToReproduce = steps,
+                            snapshot = snapshot,
+                            logs = freshLogs,
+                            attachments = attachments.toList(),
+                        )
+                        DiagnosticReporter.copyFullReportToClipboard(context, fullMarkdown)
+                        val relayedIssueUrl = appViewModel.trySubmitDiagnosticReport(
+                            title = title.ifBlank { category },
+                            category = category,
+                            markdownBody = fullMarkdown,
+                            snapshot = snapshot,
+                            logs = freshLogs,
+                            attachments = attachments.toList(),
+                        )
+                        submitting = false
+                        val targetUrl = relayedIssueUrl ?: DiagnosticReporter.buildGitHubIssueUrl(
+                            category = category,
+                            title = title,
+                            description = description,
+                            stepsToReproduce = steps,
+                            snapshot = snapshot,
+                            logs = freshLogs,
+                            attachments = attachments.toList(),
+                        )
+                        if (relayedIssueUrl != null) {
+                            onToast("Ticket GitHub créé avec journaux & captures !")
+                        } else {
+                            onToast("Rapport + journaux copiés et prêts pour @atlas-bot !")
+                        }
+                        openExternal(context, targetUrl)
+                        onDismiss()
+                    }
+                },
+            )
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !submitting) {
+                Text("Annuler")
+            }
+        },
+    )
+}
+
 /**
  * Reusable GitHub maintainer identity card displaying @Etherealmber's rounded
- * circular profile picture (`CircleShape`), MIT copyright ownership, and direct
- * one-tap link to https://github.com/Etherealmber.
+ * circular profile picture (`CircleShape`), dynamic year MIT copyright ownership,
+ * and direct one-tap link to https://github.com/Etherealmber.
  */
 @Composable
 fun EtherealmberAuthorCard(
@@ -59,17 +472,15 @@ fun EtherealmberAuthorCard(
         }
     }
 
-    AtlasCard(modifier = modifier) {
+    AtlasCard(modifier = modifier, onClick = openProfile) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = openProfile),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AtlasAvatar(
                 avatarUrl = AppDetails.GITHUB_AVATAR_URL,
                 label = AppDetails.GITHUB_HANDLE,
-                size = 48.dp,
+                size = 50.dp,
                 onClick = openProfile,
                 modifier = Modifier.clip(CircleShape),
             )
@@ -124,12 +535,12 @@ private fun LegalPage(
 }
 
 // ---------------------------------------------------------------------------
-// License
+// License (Dynamic Year + Etherealmber MIT Ownership)
 // ---------------------------------------------------------------------------
 
-private const val MIT_TEXT = """MIT License
+private fun mitLicenseText(): String = """MIT License
 
-Copyright (c) 2026 Etherealmber
+Copyright (c) ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -157,87 +568,100 @@ fun LicenseScreen(onBack: () -> Unit) {
         subtitle = "MIT · open source",
         onBack = onBack,
     ) {
-        EtherealmberAuthorCard()
+        AtlasEntrance(delayMillis = 0) {
+            EtherealmberAuthorCard()
+        }
 
-        AtlasCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        AtlasEntrance(delayMillis = 40) {
+            AtlasCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Licence MIT",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    AtlasChip(text = "Open source", tone = AtlasTone.POSITIVE)
+                }
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Licence MIT",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    text = "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}. L'application Android " +
+                        "Atlas Commerce est distribuée sous licence MIT, comme le projet web dont elle dépend.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.weight(1f))
-                AtlasChip(text = "Open source", tone = AtlasTone.POSITIVE)
+                Spacer(Modifier.height(10.dp))
+                AtlasButton(
+                    text = "Profil GitHub @${AppDetails.GITHUB_HANDLE}",
+                    onClick = { openExternal(context, AppDetails.GITHUB_PROFILE_URL) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                AtlasButton(
+                    text = "Voir le dépôt web",
+                    onClick = { openExternal(context, AppDetails.WEB_REPO) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}. L'application Android " +
-                    "Atlas Commerce est distribuée sous licence MIT, comme le projet web dont elle dépend.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(10.dp))
-            AtlasButton(
-                text = "Profil GitHub @${AppDetails.GITHUB_HANDLE}",
-                onClick = { openExternal(context, AppDetails.GITHUB_PROFILE_URL) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-            AtlasButton(
-                text = "Voir le dépôt web",
-                onClick = { openExternal(context, AppDetails.WEB_REPO) },
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
 
-        AtlasCard {
-            Text(
-                text = "Texte de la licence",
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = MIT_TEXT,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        AtlasEntrance(delayMillis = 80) {
+            AtlasCard {
+                Text(
+                    text = "Texte de la licence",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = mitLicenseText(),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
-        AtlasCard {
-            Text(
-                text = "Composants tiers",
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Chaque composant reste la propriété de ses auteurs et est utilisé selon sa licence.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(10.dp))
-            ThirdParty("Kotlin, Kotlin Coroutines", "Apache License 2.0")
-            ThirdParty("Jetpack Compose, AndroidX, DataStore", "Apache License 2.0")
-            ThirdParty("Hilt / Dagger", "Apache License 2.0")
-            ThirdParty("OkHttp, Retrofit, Moshi", "Apache License 2.0")
-            ThirdParty("CameraX", "Apache License 2.0")
-            ThirdParty("Google ML Kit — Barcode Scanning", "Google APIs Terms of Service (modèle embarqué)")
-            ThirdParty("Atlas Commerce worker & Android", "MIT — © ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}")
+        AtlasEntrance(delayMillis = 120) {
+            AtlasCard {
+                Text(
+                    text = "Composants tiers",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Chaque composant reste la propriété de ses auteurs et est utilisé selon sa licence.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                ThirdParty("Kotlin, Kotlin Coroutines", "Apache License 2.0")
+                ThirdParty("Jetpack Compose, AndroidX, DataStore", "Apache License 2.0")
+                ThirdParty("Hilt / Dagger", "Apache License 2.0")
+                ThirdParty("OkHttp, Retrofit, Moshi", "Apache License 2.0")
+                ThirdParty("CameraX", "Apache License 2.0")
+                ThirdParty("Google ML Kit — Barcode Scanning", "Google APIs Terms of Service (modèle embarqué)")
+                ThirdParty(
+                    "Atlas Commerce worker & Android",
+                    "MIT — © ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}",
+                )
+            }
         }
 
-        AtlasCard {
-            Text(
-                text = "Marques",
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "« Atlas Commerce » et le logo Atlas appartiennent à ${AppDetails.COPYRIGHT_HOLDER}. " +
-                    "Android et Google Play sont des marques de Google LLC. " +
-                    "Cloudflare est une marque de Cloudflare, Inc.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        AtlasEntrance(delayMillis = 150) {
+            AtlasCard {
+                Text(
+                    text = "Marques",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "« Atlas Commerce » et le logo Atlas appartiennent à ${AppDetails.COPYRIGHT_HOLDER}. " +
+                        "Android et Google Play sont des marques de Google LLC. " +
+                        "Cloudflare est une marque de Cloudflare, Inc.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -271,80 +695,92 @@ fun SecurityScreen(onBack: () -> Unit) {
         subtitle = "Ce que l'app fait de vos données",
         onBack = onBack,
     ) {
-        AtlasCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AtlasMark(size = 36.dp)
-                Spacer(Modifier.width(6.dp))
-                Column {
-                    Text("Aucun traqueur publicitaire", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        text = "Pas d'analytics, pas de publicité. Seul ML Kit (scan) transmet ses " +
-                            "statistiques d'usage à Google.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+        AtlasEntrance(delayMillis = 0) {
+            AtlasCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AtlasMark(size = 36.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Text("Aucun traqueur publicitaire", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = "Pas d'analytics, pas de publicité. Seul ML Kit (scan) transmet ses " +
+                                "statistiques d'usage à Google.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
+                Spacer(Modifier.height(10.dp))
+                AtlasBullet("L'application ne contacte que le serveur Atlas que vous avez choisi, à une exception : ML Kit.")
+                AtlasBullet("Aucune image de caméra n'est envoyée : les codes-barres sont décodés sur l'appareil.")
+                AtlasBullet(
+                    "ML Kit (Google, lecture des codes-barres) transmet ses métriques d'usage et de " +
+                        "performance à Google : version de l'app, identifiant d'installation, appareil. " +
+                        "Aucune image, aucun code scanné.",
+                )
+                AtlasBullet("Aucun contact, aucune localisation, aucun accès au stockage n'est demandé.")
             }
-            Spacer(Modifier.height(10.dp))
-            AtlasBullet("L'application ne contacte que le serveur Atlas que vous avez choisi, à une exception : ML Kit.")
-            AtlasBullet("Aucune image de caméra n'est envoyée : les codes-barres sont décodés sur l'appareil.")
-            AtlasBullet(
-                "ML Kit (Google, lecture des codes-barres) transmet ses métriques d'usage et de " +
-                    "performance à Google : version de l'app, identifiant d'installation, appareil. " +
-                    "Aucune image, aucun code scanné.",
-            )
-            AtlasBullet("Aucun contact, aucune localisation, aucun accès au stockage n'est demandé.")
         }
 
-        AtlasCard {
-            SectionTitle("Authentification", "Mot de passe + code e-mail")
-            AtlasBullet("Le mot de passe part en HTTPS et n'est jamais stocké sur l'appareil.")
-            AtlasBullet("Un nouvel appareil déclenche un code OTP à 6 chiffres, valable 10 minutes.")
-            AtlasBullet("La session est liée à l'adresse IP et à l'empreinte de l'appareil.")
-            AtlasBullet("Le jeton est chiffré en AES-256-GCM avec une clé du Keystore Android.")
-            AtlasBullet("La déconnexion efface le jeton, le panier et le cache du catalogue.")
+        AtlasEntrance(delayMillis = 50) {
+            AtlasCard {
+                SectionTitle("Authentification", "Mot de passe + code e-mail")
+                AtlasBullet("Le mot de passe part en HTTPS et n'est jamais stocké sur l'appareil.")
+                AtlasBullet("Un nouvel appareil déclenche un code OTP à 6 chiffres, valable 10 minutes.")
+                AtlasBullet("La session est liée à l'adresse IP et à l'empreinte de l'appareil.")
+                AtlasBullet("Le jeton est chiffré en AES-256-GCM avec une clé du Keystore Android.")
+                AtlasBullet("La déconnexion efface le jeton, le panier et le cache du catalogue.")
+            }
         }
 
-        AtlasCard {
-            SectionTitle("Transport réseau", "HTTPS obligatoire")
-            AtlasBullet("Les versions de production refusent le trafic HTTP en clair.")
-            AtlasBullet("Le certificat TLS est vérifié par la pile réseau d'Android.")
-            AtlasBullet("Seules les versions debug autorisent un serveur local (émulateur).")
+        AtlasEntrance(delayMillis = 90) {
+            AtlasCard {
+                SectionTitle("Transport réseau", "HTTPS obligatoire")
+                AtlasBullet("Les versions de production refusent le trafic HTTP en clair.")
+                AtlasBullet("Le certificat TLS est vérifié par la pile réseau d'Android.")
+                AtlasBullet("Seules les versions debug autorisent un serveur local (émulateur).")
+            }
         }
 
-        AtlasCard {
-            SectionTitle("Données conservées", "Minimum vital")
-            AtlasBullet("Jeton de session chiffré + identifiant, rôle et nom affiché.")
-            AtlasBullet("Catalogue produits en cache pour le mode hors ligne (aucune donnée financière).")
-            AtlasBullet("Préférences d'apparence et adresse du serveur.")
-            AtlasBullet("Effacement complet : déconnexion, puis désinstallation de l'app.")
+        AtlasEntrance(delayMillis = 120) {
+            AtlasCard {
+                SectionTitle("Données conservées", "Minimum vital")
+                AtlasBullet("Jeton de session chiffré + identifiant, rôle et nom affiché.")
+                AtlasBullet("Catalogue produits en cache pour le mode hors ligne (aucune donnée financière).")
+                AtlasBullet("Préférences d'apparence et adresse du serveur.")
+                AtlasBullet("Effacement complet : déconnexion, puis désinstallation de l'app.")
+            }
         }
 
-        AtlasCard {
-            SectionTitle("Vos responsabilités", "Auto-hébergement")
-            Text(
-                text = "Atlas Commerce fonctionne avec votre propre serveur. L'administrateur du serveur " +
-                    "voit les ventes, le stock et les comptes. Choisissez un serveur de confiance et un " +
-                    "mot de passe fort, et activez la double authentification côté web.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        AtlasEntrance(delayMillis = 150) {
+            AtlasCard {
+                SectionTitle("Vos responsabilités", "Auto-hébergement")
+                Text(
+                    text = "Atlas Commerce fonctionne avec votre propre serveur. L'administrateur du serveur " +
+                        "voit les ventes, le stock et les comptes. Choisissez un serveur de confiance et un " +
+                        "mot de passe fort, et activez la double authentification côté web.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
-        AtlasCard {
-            SectionTitle("Signaler une vulnérabilité", "Réponse sous 48 h")
-            Text(
-                text = "Merci de ne pas ouvrir d'issue publique pour une faille. Écrivez à " +
-                    "${AppDetails.SECURITY_EMAIL} avec les étapes de reproduction.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(10.dp))
-            AtlasButton(
-                text = "Contacter la sécurité",
-                onClick = { openExternal(context, "mailto:${AppDetails.SECURITY_EMAIL}") },
-                modifier = Modifier.fillMaxWidth(),
-            )
+        AtlasEntrance(delayMillis = 180) {
+            AtlasCard {
+                SectionTitle("Signaler une vulnérabilité", "Réponse sous 48 h")
+                Text(
+                    text = "Merci de ne pas ouvrir d'issue publique pour une faille. Écrivez à " +
+                        "${AppDetails.SECURITY_EMAIL} ou à @${AppDetails.GITHUB_HANDLE} avec les étapes de reproduction.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(10.dp))
+                AtlasButton(
+                    text = "Contacter la sécurité",
+                    onClick = { openExternal(context, "mailto:${AppDetails.SECURITY_EMAIL}") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -381,102 +817,133 @@ private fun SectionTitle(title: String, subtitle: String? = null) {
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    var showReportDialog by remember { mutableStateOf(false) }
+
+    if (showReportDialog) {
+        ProblemReportDialog(
+            screenOrigin = "À propos",
+            onDismiss = { showReportDialog = false },
+            onToast = {},
+        )
+    }
+
     LegalPage(
         title = "À propos",
         subtitle = "${AppDetails.NAME} ${AppDetails.VERSION_NAME}",
         onBack = onBack,
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            AtlasMark(size = 72.dp)
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = AppDetails.NAME,
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                text = AppDetails.TAGLINE,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                AtlasChip(text = "v${AppDetails.VERSION_NAME}", tone = AtlasTone.INFO)
-                AtlasChip(text = "build ${AppDetails.VERSION_CODE}")
-                AtlasChip(text = "MIT", tone = AtlasTone.POSITIVE)
+        AtlasEntrance(delayMillis = 0) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                AtlasPulseHalo(size = 104.dp) {
+                    AtlasMark(size = 68.dp)
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = AppDetails.NAME,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    text = AppDetails.TAGLINE,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AtlasChip(text = "v${AppDetails.VERSION_NAME}", tone = AtlasTone.INFO)
+                    AtlasChip(text = "build ${AppDetails.VERSION_CODE}")
+                    AtlasChip(text = "MIT", tone = AtlasTone.POSITIVE)
+                }
             }
         }
 
-        EtherealmberAuthorCard()
-
-        AtlasCard {
-            Text(
-                text = AppDetails.DESCRIPTION,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "Cette application est le compagnon Android du projet web Atlas Commerce : " +
-                    "elle se connecte à votre serveur et ne stocke aucune comptabilité localement.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        AtlasEntrance(delayMillis = 45) {
+            EtherealmberAuthorCard()
         }
 
-        AtlasCard {
-            Text("Fonctionnalités", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(8.dp))
-            AtlasBullet("Tableau de bord : trésorerie, valeur du stock, créances, tendance.")
-            AtlasBullet("Catalogue produits avec recherche, stock faible et mode hors ligne.")
-            AtlasBullet("Scan de codes-barres pour ajouter un article au panier.")
-            AtlasBullet("Vente rapide : ticket VR sans TVA, prêt à encaisser sur le web.")
-            AtlasBullet("Mises à jour accélérées multi-connexions (4 flux HTTP Range) et journal intégré.")
-        }
-
-        AtlasCard {
-            Text("Liens", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(8.dp))
-            AtlasButton(
-                text = "GitHub @${AppDetails.GITHUB_HANDLE}",
-                onClick = { openExternal(context, AppDetails.GITHUB_PROFILE_URL) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-            AtlasButton(
-                text = "Projet Atlas Commerce (web)",
-                onClick = { openExternal(context, AppDetails.WEB_REPO) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-            AtlasButton(
-                text = "Code source Android",
-                onClick = { openExternal(context, AppDetails.PROJECT_REPO) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        AtlasCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.CheckCircle,
-                    contentDescription = null,
-                    tint = Atlas.palette.positive,
+        AtlasEntrance(delayMillis = 85) {
+            AtlasCard {
+                Text(
+                    text = AppDetails.DESCRIPTION,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.width(6.dp))
-                Column {
-                    Text(
-                        text = "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}",
-                        style = MaterialTheme.typography.titleSmall,
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Cette application est le compagnon Android du projet web Atlas Commerce : " +
+                        "elle se connecte à votre serveur et ne stocke aucune comptabilité localement.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        AtlasEntrance(delayMillis = 120) {
+            AtlasCard {
+                Text("Fonctionnalités", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(8.dp))
+                AtlasBullet("Tableau de bord : trésorerie, valeur du stock, créances, tendance.")
+                AtlasBullet("Catalogue produits avec recherche, stock faible et mode hors ligne.")
+                AtlasBullet("Scan de codes-barres pour ajouter un article au panier.")
+                AtlasBullet("Vente rapide : ticket VR sans TVA, prêt à encaisser sur le web.")
+                AtlasBullet("Mises à jour accélérées multi-connexions (4 flux HTTP Range) et diagnostic @atlas-bot.")
+            }
+        }
+
+        AtlasEntrance(delayMillis = 155) {
+            AtlasCard {
+                Text("Liens & Support", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(8.dp))
+                AtlasButton(
+                    text = "GitHub @${AppDetails.GITHUB_HANDLE}",
+                    onClick = { openExternal(context, AppDetails.GITHUB_PROFILE_URL) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                AtlasButton(
+                    text = "Projet Atlas Commerce (web)",
+                    onClick = { openExternal(context, AppDetails.WEB_REPO) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                AtlasButton(
+                    text = "Code source Android",
+                    onClick = { openExternal(context, AppDetails.PROJECT_REPO) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                AtlasOutlinedButton(
+                    text = "Signaler un problème (avec journaux & captures)",
+                    icon = Icons.Outlined.BugReport,
+                    onClick = { showReportDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
+        AtlasEntrance(delayMillis = 185) {
+            AtlasCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.CheckCircle,
+                        contentDescription = null,
+                        tint = Atlas.palette.positive,
                     )
-                    Text(
-                        text = "Distribué sous licence MIT. Forkez, modifiez, citez-nous.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Spacer(Modifier.width(6.dp))
+                    Column {
+                        Text(
+                            text = "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = "Distribué sous licence MIT. Forkez, modifiez, citez-nous.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }

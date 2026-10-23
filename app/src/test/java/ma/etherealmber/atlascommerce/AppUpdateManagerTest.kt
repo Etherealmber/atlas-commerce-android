@@ -7,8 +7,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import androidx.compose.ui.graphics.Color
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
+import ma.etherealmber.atlascommerce.core.diagnostics.DeviceDiagnosticSnapshot
+import ma.etherealmber.atlascommerce.core.diagnostics.DiagnosticReporter
 import ma.etherealmber.atlascommerce.core.net.ApiEnvelope
+import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
+import ma.etherealmber.atlascommerce.ui.components.buildInlineMarkdownAnnotatedString
+import java.util.Calendar
 import ma.etherealmber.atlascommerce.core.net.ApiErrorPayload
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
 import ma.etherealmber.atlascommerce.core.update.UpdateFormatter
@@ -507,8 +514,63 @@ class AppUpdateManagerTest {
             if (File(cur, "LICENSE").isFile) cur else cur.parentFile
         }
         val legacyHandle = "lox" + "dpsy"
+        assertEquals(Calendar.getInstance().get(Calendar.YEAR).coerceAtLeast(2026).toString(), AppDetails.COPYRIGHT_YEAR)
         assertTrue(File(rootDir, "LICENSE").readText().contains("Copyright (c) 2026 Etherealmber"))
         assertFalse(File(rootDir, "LICENSE").readText().contains(legacyHandle))
+
+        // Verify HTML <br> tags inside AI Markdown table cells render as real newlines
+        val formattedCell = buildInlineMarkdownAnnotatedString(
+            rawInput = "(mois/année) <br>• Mention spéciale <br/>**Bien**",
+            codeBackground = Color.LightGray,
+            codeColor = Color.Black,
+            linkColor = Color.Blue,
+        ).text
+        assertFalse(formattedCell.contains("<br"))
+        assertTrue(formattedCell.contains("\n• Mention spéciale \nBien"))
+
+        // Verify okhttp user-agent maps cleanly to friendly mobile label
+        assertEquals(
+            "Atlas Android · Mobile",
+            TrustedDeviceDto(userAgent = "okhttp/4.12.0").friendlyLabel,
+        )
+
+        // Verify diagnostic reporter limits (max 3 images, <= 1 MB each) & log secret redaction
+        assertEquals(3, DiagnosticReporter.MAX_ATTACHMENTS)
+        assertTrue(DiagnosticReporter.MAX_IMAGE_BYTES <= 1_048_576)
+        val sanitized = AtlasLogBuffer.sanitize(
+            "Authorization: Bearer secret_jwt_token_123 otp=654321 user=test@example.com",
+        )
+        assertFalse(sanitized.contains("secret_jwt_token_123"))
+        assertFalse(sanitized.contains("654321"))
+        assertFalse(sanitized.contains("test@example.com"))
+
+        val mdReport = DiagnosticReporter.buildMarkdownReport(
+            category = "Agent IA / Tableaux",
+            title = "Tableau coupé à droite",
+            description = "Les colonnes débordent",
+            stepsToReproduce = "1. Ouvrir Agent IA",
+            snapshot = DeviceDiagnosticSnapshot(
+                reportId = "DIAG-TEST-a1b2c3d4",
+                timestampUtc = "2026-10-23T00:00:00Z",
+                deviceShortId = "a1b2c3d4",
+                maskedFingerprint = "a1b2c3d4…9f8e",
+                appVersion = "v1.1.0",
+                versionCode = 110,
+                manufacturerModel = "Google Pixel 8",
+                androidVersion = "Android 15 (SDK 35)",
+                cpuAbi = "arm64-v8a",
+                screenMetrics = "1080x2400px · 420dpi · fontScale=1.15",
+                memoryUsage = "92 Mo / 512 Mo",
+                networkStatus = "Wi-Fi actif",
+                userRole = "Propriétaire (Admin)",
+                screenOrigin = "Paramètres",
+            ),
+            logs = "12:00:00.001 [INFO/HTTP] GET /api/agent/policy -> 200 (42ms)",
+            attachments = emptyList(),
+        )
+        assertTrue(mdReport.contains("<!-- atlas-diag-v1"))
+        assertTrue(mdReport.contains("a1b2c3d4…9f8e"))
+        assertTrue(mdReport.contains("@atlas-bot"))
     }
 
     @Test

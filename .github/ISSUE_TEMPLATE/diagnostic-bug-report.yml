@@ -1,0 +1,51 @@
+name: "🩺 Diagnostic Bug Report (@atlas-bot)"
+description: "Envoyer un diagnostic complet (journaux, ID appareil, version & jusqu'à 3 captures ≤ 1 Mo) pour analyse automatique par @atlas-bot"
+title: "[Diag] "
+labels: ["bug", "diagnostic-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci d'aider à améliorer **Atlas Commerce Android** !
+        Vous pouvez ouvrir ce rapport directement depuis l'application (**Mon profil → ⚙️ Paramètres → Signaler un problème**), joindre jusqu'à **3 captures d'écran (≤ 1 Mo chacune)** ci-dessous, et **@atlas-bot** analysera automatiquement les journaux, proposera les correctifs et générera un **Prompt IA prêt à copier**.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Catégorie du problème
+      options:
+        - Affichage / Interface
+        - Agent IA / Tableaux
+        - Mise à jour / Réseau
+        - Scan / Caméra
+        - Autre anomalie
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description du problème observé
+      placeholder: Décrivez ce qui s'affiche ou ce qui bloque…
+    validations:
+      required: true
+
+  - type: input
+    id: device_info
+    attributes:
+      label: Appareil, version Android & ID diagnostic (optionnel si pré-rempli)
+      placeholder: Ex. Pixel 8 · Android 15 (SDK 35) · v1.1.0 (build 110)
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Captures d'écran (max 3 images · ≤ 1 Mo chacune)
+      description: Glissez ou collez jusqu'à 3 images ci-dessous (l'application les compresse automatiquement sous 1 Mo).
+      placeholder: Collez ou déposez jusqu'à 3 captures ici…
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Journaux capturés (App & Android Logcat)
+      render: log
+      placeholder: Collez ici les journaux copiés automatiquement par l'application…

@@ -33,6 +33,7 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/MainActivity.kt",
             "main/java/ma/etherealmber/atlascommerce/core/AppDetails.kt",
             "main/java/ma/etherealmber/atlascommerce/core/Appearance.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/diagnostics/DiagnosticReporter.kt",
             "main/java/ma/etherealmber/atlascommerce/core/format/AtlasFormat.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/ApiProvider.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/ApiResult.kt",

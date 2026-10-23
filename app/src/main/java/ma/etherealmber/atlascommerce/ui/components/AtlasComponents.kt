@@ -45,9 +45,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -402,13 +404,14 @@ fun AtlasButton(
         onClick = onClick,
         interactionSource = interactionSource,
         modifier = modifier
-            .height(50.dp)
+            .defaultMinSize(minHeight = 50.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             },
         enabled = enabled && !loading,
         shape = MaterialTheme.shapes.medium,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -425,7 +428,11 @@ fun AtlasButton(
             Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
         }
-        Text(text = text, style = MaterialTheme.typography.labelLarge)
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -437,18 +444,37 @@ fun AtlasOutlinedButton(
     enabled: Boolean = true,
     icon: ImageVector? = null,
 ) {
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && motionEnabled && enabled) 0.975f else 1f,
+        animationSpec = spring(dampingRatio = 0.76f, stiffness = 650f),
+        label = "outlined_btn_press_scale",
+    )
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.height(48.dp),
+        interactionSource = interactionSource,
+        modifier = modifier
+            .defaultMinSize(minHeight = 48.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
         enabled = enabled,
         shape = MaterialTheme.shapes.medium,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         if (icon != null) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
         }
-        Text(text = text, style = MaterialTheme.typography.labelLarge)
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -1245,7 +1271,9 @@ object AtlasMarkdownParser {
 
     /** Strips markdown syntax markers for natural table column width estimation. */
     fun stripInlineMarkers(text: String): String =
-        text.replace(Regex("\\*\\*\\*(.+?)\\*\\*\\*"), "$1")
+        text.replace(Regex("(?i)<br\\s*/?>"), " ")
+            .replace("&bull;", "•")
+            .replace(Regex("\\*\\*\\*(.+?)\\*\\*\\*"), "$1")
             .replace(Regex("\\*\\*(.+?)\\*\\*"), "$1")
             .replace(Regex("__(.+?)__"), "$1")
             .replace(Regex("~~(.+?)~~"), "$1")
@@ -1254,16 +1282,22 @@ object AtlasMarkdownParser {
             .trim()
 }
 
+private val HtmlBreakRegex = Regex("(?i)<br\\s*/?>")
+
 /**
- * Converts inline Markdown (`**bold**`, `*italic*`, `` `code` ``, `~~strike~~`, `[link](url)`)
+ * Converts inline Markdown (`**bold**`, `*italic*`, `` `code` ``, `~~strike~~`, `[link](url)`, `<br>`)
  * into a native Compose [AnnotatedString].
  */
 fun buildInlineMarkdownAnnotatedString(
-    raw: String,
+    rawInput: String,
     codeBackground: Color,
     codeColor: Color,
     linkColor: Color,
 ): AnnotatedString = buildAnnotatedString {
+    val raw = rawInput
+        .replace(HtmlBreakRegex, "\n")
+        .replace("&bull;", "•")
+        .replace("&nbsp;", " ")
     var i = 0
     val n = raw.length
     while (i < n) {
@@ -1578,77 +1612,115 @@ private fun MarkdownTableCard(
             val maxChars = maxOf(
                 AtlasMarkdownParser.stripInlineMarkers(table.headers[col]).length,
                 table.rows.maxOfOrNull { row ->
-                    AtlasMarkdownParser.stripInlineMarkers(row.getOrElse(col) { "" }).length
+                    row.getOrElse(col) { "" }
+                        .replace(HtmlBreakRegex, "\n")
+                        .lines()
+                        .maxOfOrNull { ln -> AtlasMarkdownParser.stripInlineMarkers(ln).length } ?: 0
                 } ?: 0,
             )
-            maxChars.coerceIn(8, 38).toFloat()
+            // Keep label columns compact so 2-3 column tables fit 100% cleanly without horizontal overflow
+            if (col == 0 && colCount == 2) {
+                maxChars.coerceIn(9, 17).toFloat()
+            } else {
+                maxChars.coerceIn(9, 34).toFloat()
+            }
         }
-    }
-    val minScrollWidth = remember(weights) {
-        weights.sumOf { w -> (w * 6.2f).toInt().coerceIn(88, 220) }.dp
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val resolvedWidth = maxOf(maxWidth, minScrollWidth)
+        // 1..3 columns fit 100% inside the card width with natural wrapping (zero right-edge cutoff);
+        // 4+ columns scroll smoothly inside the rounded card border with a clear visual hint.
+        val needsHorizontalScroll = colCount >= 4
+        val resolvedWidth = if (needsHorizontalScroll) {
+            maxOf(maxWidth, (colCount * 136).dp)
+        } else {
+            maxWidth
+        }
         val scrollState = rememberScrollState()
 
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, Atlas.palette.cardBorder),
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(scrollState),
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(modifier = Modifier.width(resolvedWidth)) {
-                // Header Row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f))
-                        .padding(horizontal = 10.dp, vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    table.headers.forEachIndexed { colIdx, header ->
-                        Text(
-                            text = rememberInline(header, codeBg, codeFg, linkFg),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = textColor,
-                            textAlign = table.alignments[colIdx].toComposeAlign(),
-                            modifier = Modifier
-                                .weight(weights[colIdx])
-                                .padding(horizontal = 6.dp),
-                        )
-                    }
-                }
-
-                // Data Rows
-                table.rows.forEachIndexed { rowIdx, row ->
-                    HorizontalDivider(color = Atlas.palette.cardBorder.copy(alpha = 0.65f))
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (needsHorizontalScroll) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(
-                                if (rowIdx % 2 == 1) {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
-                                } else {
-                                    Color.Transparent
-                                },
-                            )
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.Top,
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.End,
                     ) {
-                        row.forEachIndexed { colIdx, cell ->
+                        Text(
+                            text = "⇄ Glisser horizontalement ($colCount colonnes)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                Column(
+                    modifier = if (needsHorizontalScroll) {
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(scrollState)
+                            .width(resolvedWidth)
+                    } else {
+                        Modifier.fillMaxWidth()
+                    },
+                ) {
+                    // Header Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f))
+                            .padding(horizontal = 10.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        table.headers.forEachIndexed { colIdx, header ->
                             Text(
-                                text = rememberInline(cell, codeBg, codeFg, linkFg),
-                                style = MaterialTheme.typography.bodySmall,
+                                text = rememberInline(header, codeBg, codeFg, linkFg),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
                                 color = textColor,
+                                softWrap = true,
                                 textAlign = table.alignments[colIdx].toComposeAlign(),
                                 modifier = Modifier
                                     .weight(weights[colIdx])
-                                    .padding(horizontal = 6.dp),
+                                    .padding(horizontal = 5.dp),
                             )
+                        }
+                    }
+
+                    // Data Rows
+                    table.rows.forEachIndexed { rowIdx, row ->
+                        HorizontalDivider(color = Atlas.palette.cardBorder.copy(alpha = 0.65f))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (rowIdx % 2 == 1) {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                )
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            row.forEachIndexed { colIdx, cell ->
+                                Text(
+                                    text = rememberInline(cell, codeBg, codeFg, linkFg),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = textColor,
+                                    softWrap = true,
+                                    textAlign = table.alignments[colIdx].toComposeAlign(),
+                                    modifier = Modifier
+                                        .weight(weights[colIdx])
+                                        .padding(horizontal = 5.dp),
+                                )
+                            }
                         }
                     }
                 }

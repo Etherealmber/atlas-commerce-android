@@ -93,11 +93,17 @@ object AppModule {
     @Provides
     @Singleton
     @ProbeClient
-    fun provideProbeClient(): OkHttpClient = OkHttpClient.Builder()
+    fun provideProbeClient(deviceIdentity: DeviceIdentity): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .callTimeout(20, TimeUnit.SECONDS)
         .retryOnConnectionFailure(false)
+        .addInterceptor { chain ->
+            val req = chain.request().newBuilder()
+                .header("User-Agent", deviceIdentity.userAgent)
+                .build()
+            chain.proceed(req)
+        }
         .addInterceptor(
             HttpLoggingInterceptor().apply {
                 level = if (BuildConfig.DEBUG) {
