@@ -118,7 +118,7 @@ public final class LegacySourceQuarantine {
             "test/java/ma/etherealmber/atlascommerce/AppUpdateManagerTest.kt",
             "test/java/ma/etherealmber/atlascommerce/AtlasFormatTest.kt",
             "test/java/ma/etherealmber/atlascommerce/QrDevicesAndModelsTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/ServerUrlTest.kt"
+            "test/java/ma/etherealmber/atlascommerce/ServerUrlTest.kt",
             "main/java/ma/etherealmber/atlascommerce/core/diagnostics/CrashReportConsent.kt",
             "main/java/ma/etherealmber/atlascommerce/core/security/AndroidPasskeyCredentials.kt",
             "main/java/ma/etherealmber/atlascommerce/core/security/AndroidPasskeyOrigin.kt",
