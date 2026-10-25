@@ -4,10 +4,16 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -36,12 +42,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.VerticalDivider
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -261,43 +266,11 @@ fun MainShell(
             )
         },
         bottomBar = {
-            if (!useRail) NavigationBar(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp).clip(RoundedCornerShape(26.dp)),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                tonalElevation = 4.dp,
-            ) {
-                roleTabs.forEach { item ->
-                    NavigationBarItem(
-                        selected = tab == item,
-                        onClick = { switchTab(item) },
-                        icon = {
-                            if (item == MainTab.SALE && cartCount > 0) {
-                                BadgedBox(badge = { Badge { Text(cartCount.toString()) } }) {
-                                    AnimatedTabIcon(item.icon, item.label, selected = tab == item)
-                                }
-                            } else {
-                                AnimatedTabIcon(item.icon, item.label, selected = tab == item)
-                            }
-                        },
-                        label = {
-                            Text(
-                                text = item.label,
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                }
-            }
+            if (!useRail) AtlasFloatingBottomBar(
+                tabs = roleTabs,
+                selected = tab,
+                onSelect = switchTab,
+            )
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -389,6 +362,125 @@ fun MainShell(
         }
         }
     }
+    }
+}
+
+@Composable
+private fun AtlasFloatingBottomBar(
+    tabs: List<MainTab>,
+    selected: MainTab,
+    onSelect: (MainTab) -> Unit,
+) {
+    val centerTab = tabs.firstOrNull { it == MainTab.SCAN } ?: tabs.getOrNull(tabs.size / 2)
+    val centerIndex = centerTab?.let(tabs::indexOf) ?: -1
+    val leftTabs = if (centerIndex >= 0) tabs.take(centerIndex) else tabs
+    val rightTabs = if (centerIndex >= 0) tabs.drop(centerIndex + 1) else emptyList()
+    val barColor = MaterialTheme.colorScheme.surfaceContainerLow
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .height(84.dp),
+    ) {
+        Surface(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(64.dp),
+            shape = RoundedCornerShape(26.dp),
+            color = barColor,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 3.dp,
+            shadowElevation = 6.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                leftTabs.forEach { item ->
+                    FloatingBottomBarItem(
+                        item = item,
+                        selected = selected == item,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onSelect(item) },
+                    )
+                }
+                if (centerTab != null) Spacer(Modifier.width(68.dp))
+                rightTabs.forEach { item ->
+                    FloatingBottomBarItem(
+                        item = item,
+                        selected = selected == item,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onSelect(item) },
+                    )
+                }
+            }
+        }
+
+        if (centerTab != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .size(68.dp)
+                    .border(BorderStroke(4.dp, barColor), CircleShape)
+                    .padding(4.dp),
+            ) {
+                FloatingActionButton(
+                    onClick = { onSelect(centerTab) },
+                    modifier = Modifier.fillMaxSize(),
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    elevation = FloatingActionButtonDefaults.elevation(
+                        defaultElevation = 7.dp,
+                        pressedElevation = 10.dp,
+                        focusedElevation = 8.dp,
+                        hoveredElevation = 8.dp,
+                    ),
+                ) {
+                    Icon(centerTab.icon, contentDescription = centerTab.label, modifier = Modifier.size(25.dp))
+                }
+            }
+            Text(
+                text = centerTab.label,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 1.dp),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FloatingBottomBarItem(
+    item: MainTab,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 2.dp, vertical = 7.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(item.icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = item.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = tint,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
