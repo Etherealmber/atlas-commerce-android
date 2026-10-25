@@ -129,7 +129,7 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/ui/screens/balance/BalanceScreen.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/screens/balance/BalanceViewModel.kt",
             "test/java/ma/etherealmber/atlascommerce/FinanceReportCacheTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/WebAuthnCapabilityTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/WebAuthnCapabilityTest.kt"
         ))
     );
 
