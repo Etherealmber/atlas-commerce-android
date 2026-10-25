@@ -23,6 +23,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -46,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -91,6 +95,7 @@ fun LoginScreen(
         contentAlignment = Alignment.TopCenter,
     ) {
         val compact = maxWidth < 600.dp || maxHeight < 840.dp
+        val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         val verticalGap = if (compact) 6.dp else 16.dp
         Column(
             modifier = Modifier
@@ -100,7 +105,7 @@ fun LoginScreen(
                 .statusBarsPadding()
                 .navigationBarsPadding()
                 .imePadding()
-                .verticalScroll(rememberScrollState())
+                .then(if (keyboardVisible) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                 .padding(horizontal = if (compact) 16.dp else density.screenPadding, vertical = if (compact) 6.dp else density.sectionGap),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -140,14 +145,23 @@ fun LoginScreen(
             // measured both login steps at once on some small devices, causing overlap.
             if (state.step == LoginViewModel.Step.CREDENTIALS) {
                 if (savedAccounts.isNotEmpty()) {
-                    SavedAccountsCard(
-                        accounts = savedAccounts,
-                        serverBaseUrl = server?.baseUrl,
-                        loading = state.loading,
-                        onSelect = viewModel::signInWithSavedAccount,
-                        onForget = viewModel::forgetSavedAccount,
-                    )
-                    Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
+                    if (compact) {
+                        SavedAccountsCompact(
+                            accounts = savedAccounts,
+                            loading = state.loading,
+                            onSelect = viewModel::signInWithSavedAccount,
+                            onForget = viewModel::forgetSavedAccount,
+                        )
+                    } else {
+                        SavedAccountsCard(
+                            accounts = savedAccounts,
+                            serverBaseUrl = server?.baseUrl,
+                            loading = state.loading,
+                            onSelect = viewModel::signInWithSavedAccount,
+                            onForget = viewModel::forgetSavedAccount,
+                        )
+                    }
+                    Spacer(Modifier.height(if (compact) 4.dp else 12.dp))
                 }
 
                 CredentialsForm(
@@ -306,6 +320,36 @@ private fun SavedAccountsCard(
                                 modifier = Modifier.size(18.dp),
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SavedAccountsCompact(
+    accounts: List<SavedAccountEntry>,
+    loading: Boolean,
+    onSelect: (SavedAccountEntry) -> Unit,
+    onForget: (SavedAccountEntry) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text("Comptes mémorisés", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            accounts.forEach { account ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AtlasOutlinedButton(
+                        text = account.displayName.ifBlank { account.username },
+                        onClick = { onSelect(account) },
+                        enabled = !loading,
+                    )
+                    IconButton(onClick = { onForget(account) }, enabled = !loading, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Oublier ${account.username}", modifier = Modifier.size(16.dp))
                     }
                 }
             }
