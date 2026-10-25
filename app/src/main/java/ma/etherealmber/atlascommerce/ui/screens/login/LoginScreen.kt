@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QrCode2
@@ -35,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -71,6 +73,7 @@ fun LoginScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val server by viewModel.server.collectAsStateWithLifecycle()
     val savedAccounts by viewModel.savedAccounts.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val density = Atlas.density
     val host = server?.let { ServerUrl.display(it.baseUrl) } ?: "Serveur non sélectionné"
 
@@ -136,6 +139,18 @@ fun LoginScreen(
                 onRememberChange = viewModel::onRememberAccountChange,
                 onSubmit = viewModel::submit,
             )
+            if (state.passkeyAvailable) {
+                Spacer(Modifier.height(10.dp))
+                AtlasEntrance(delayMillis = 80, offsetY = 8.dp) {
+                    AtlasOutlinedButton(
+                        text = "Connexion avec une passkey",
+                        onClick = { viewModel.signInWithPasskey(context) },
+                        icon = Icons.Outlined.Fingerprint,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !state.loading,
+                    )
+                }
+            }
             Spacer(Modifier.height(12.dp))
             AtlasOutlinedButton(
                 text = "Scanner un QR de connexion PC",

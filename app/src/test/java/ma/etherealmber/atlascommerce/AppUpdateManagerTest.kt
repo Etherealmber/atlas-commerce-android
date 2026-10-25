@@ -208,12 +208,18 @@ class AppUpdateManagerTest {
             val available = manager.state.value as UpdateState.Available
             assertEquals("v1.0.7", available.info.displayVersion)
 
-            manager.startDownload()
+            manager.startDownload(fromSettings = true)
             assertTrue("Expected first half of stream to arrive", midStreamReached.await(5, TimeUnit.SECONDS))
             awaitCondition {
                 val dl = manager.state.value as? UpdateState.Downloading
                 dl != null && dl.bytesRead >= (apkBytes.size / 2).toLong()
             }
+            assertFalse("Settings already shows download progress; do not duplicate the OS alert", notifier.startedCalled)
+            assertTrue("Keep OS progress quiet while Settings is foregrounded", notifier.progressEvents.isEmpty())
+
+            // Once the app leaves foreground, the OS notification becomes the background progress surface.
+            manager.onAppStopped()
+            assertTrue(notifier.progressEvents.isNotEmpty())
 
             // Attempt every possible override action while downloading at 50%:
             manager.checkForUpdate(manual = false)
@@ -225,14 +231,14 @@ class AppUpdateManagerTest {
             val stillDownloading = manager.state.value as? UpdateState.Downloading
             assertNotNull("Active download state must never be overridden", stillDownloading)
             assertEquals(50, stillDownloading?.percent)
-            assertFalse(stillDownloading!!.hiddenInForeground)
-            assertTrue(stillDownloading.statusTitle.contains("Téléchargement de la mise à jour"))
+            assertTrue(stillDownloading?.hiddenInForeground == true)
+            assertTrue(stillDownloading?.statusTitle?.contains("Téléchargement de la mise à jour") == true)
 
             // Hiding the download banner collapses into Top Bar mini-ball while streaming continues uninterrupted
             manager.hideDownloadBanner()
             val hiddenDownloading = manager.state.value as? UpdateState.Downloading
             assertNotNull(hiddenDownloading)
-            assertTrue(hiddenDownloading!!.hiddenInForeground)
+            assertTrue(hiddenDownloading?.hiddenInForeground == true)
 
             // Tapping the Top Bar mini-ball re-expands the full banner cleanly and toggles reliably
             manager.showDownloadBanner()
@@ -246,7 +252,7 @@ class AppUpdateManagerTest {
             val ready = manager.state.value as UpdateState.ReadyToInstall
             assertTrue(ready.apkFile.exists())
             assertArrayEquals(apkBytes, ready.apkFile.readBytes())
-            assertTrue(notifier.startedCalled)
+            assertFalse("Settings-started update should not show a duplicate start alert", notifier.startedCalled)
             assertTrue(notifier.progressEvents.isNotEmpty())
             assertTrue(notifier.completedCalled)
             assertNull(notifier.errorMessage)

@@ -199,6 +199,10 @@ private fun AtlasGate(
         requestNotificationPermissionIfNeeded()
         viewModel.startUpdateDownload()
     }
+    val startSettingsDownloadWithNotificationPermission: () -> Unit = {
+        requestNotificationPermissionIfNeeded()
+        viewModel.startUpdateDownload(fromSettings = true)
+    }
 
     val triggerInstall: () -> Unit = {
         viewModel.installDownloadedUpdate(context)
@@ -357,7 +361,7 @@ private fun AtlasGate(
                                 onOpenSecurity = { overlay = Overlay.SECURITY },
                                 onOpenAbout = { overlay = Overlay.ABOUT },
                                 onSignOut = viewModel::signOut,
-                                onStartUpdateDownload = startDownloadWithNotificationPermission,
+                                onStartUpdateDownload = startSettingsDownloadWithNotificationPermission,
                             )
                         } else {
                             AtlasBootSplashScreen(holdUntilReady = true)

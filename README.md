@@ -3,7 +3,7 @@
   <h1>Atlas Commerce — Android</h1>
   <p><strong>Official Native Android Companion for <a href="https://github.com/Etherealmber/atlas-commerce">Atlas Commerce Web</a></strong><br/>Stock · POS &amp; Receipts · Invoicing · Barcode &amp; PC QR Scanner · Atlas Agent AI</p>
 
-![Version](https://img.shields.io/badge/version-1.0.8-blue)
+![Version](https://img.shields.io/badge/version-1.1.2-blue)
 ![License](https://img.shields.io/badge/license-MIT-yellow)
 ![Kotlin](https://img.shields.io/badge/kotlin-2.0.21-7f52ff)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285f4)
@@ -23,6 +23,8 @@
 
 > **This Android app is directly linked to an [Atlas Commerce Web (`Etherealmber/atlas-commerce`)](https://github.com/Etherealmber/atlas-commerce) server.**
 > It does **not** store a standalone local accounting database on your phone — **you MUST deploy and set up your [Atlas Commerce Web](https://github.com/Etherealmber/atlas-commerce) instance FIRST** before connecting this mobile app!
+>
+> **New from zero?** Follow the full [self-hosting and Android setup guide](docs/SETUP.md): Cloudflare account, D1 database/migrations, R2, mail/keys, app installation, optional Firebase crash reports, release signing, and passkeys.
 
 ### Step-by-Step Setup for Brand-New Users
 
@@ -37,6 +39,7 @@
    - Optionally toggle **« Enregistrer ce serveur »** and give it a label (e.g. *Main Store*, *North Warehouse*) if you manage multiple servers.
 4. **Step 4 — Sign In, Tap Your Email Link, or Pair PC via QR Code**:
    - Enter your **Atlas Commerce** username & password — on a new device, either tap the **« VÉRIFIER & CONTINUER »** one-tap button directly inside the verification e-mail (opens the app and authenticates against your selected Worker automatically with no code typing!) or type the 6-digit OTP manually.
+   - Passkey login/registration appears only when the selected Worker enables WebAuthn and confirms this Android package, signing certificate, and allowed origin. Keep the feature disabled until the [staging setup and device smoke test](docs/SETUP.md#5-optional-android-passkeys--keep-disabled-until-the-full-smoke-test-passes) passes.
    - Optionally toggle **« Mémoriser ce compte »** to save encrypted credentials **strictly isolated to that specific server**.
 
 ---
@@ -61,10 +64,14 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
    - Non-admin accounts have daily (`00:00 UTC`) and weekly (`Monday 00:00 UTC`) token limits enforced by the server. Check the live **Quota Bar** inside **Atlas Agent** or **Mon profil → ⚙️ Paramètres** to see remaining tokens and exact reset countdown time.
 5. **Check Cloudflare Bot Fight / WAF Rules on Custom Domains 🛡️**
    - If you enabled aggressive Cloudflare *Super Bot Fight Mode* on your custom domain, allow requests carrying path `/api/*` so mobile API calls and automated release uploads are never challenged by HTML CAPTCHA pages.
+6. **Passkey button missing or verification rejected 🔑**
+   - Passkeys default to disabled. Check the selected server's `GET /api/auth/webauthn/status`, the exact Android package and Play signing fingerprint, `/.well-known/assetlinks.json`, and the physical-build origin comparison in the [setup guide](docs/SETUP.md#5-optional-android-passkeys--keep-disabled-until-the-full-smoke-test-passes). Do not bypass exact-origin checks.
+7. **Crash reports not appearing 🐞**
+   - Firebase is optional and automatic upload is off until the user opts in under Settings. Confirm the correct `google-services.json` is installed in the build, Crashlytics is enabled in Firebase Console, and the test install has opted in. See [Firebase setup](docs/SETUP.md#4-optional-push-notifications-and-automatic-crash-reports-firebase).
 
 ---
 
-## ✨ Key Features (`v1.0.8`)
+## ✨ Key Features (`v1.1.2`)
 
 - **Strict Multi-Server & Multi-Account Isolation (Zero Data Leak)**:
   - Save multiple servers and multiple user accounts on one device with **100% cryptographic & filesystem isolation** (`AES-256-GCM` per server + `SHA-256` scoped offline caches). Switching accounts or servers immediately purges in-memory carts, caches, avatars, notifications, and AI chats.
@@ -74,21 +81,29 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
   - Tap your top-bar **Avatar** for **Mon profil** (Account & UI/POS/Scanner customizations) and tap **⚙️** in the top-right corner for **Paramètres** (PC QR pairing & devices, live AI quota bars, dual-mirror OTA APK updates, saved servers, and cache controls).
 - **Camera Privacy & Explicit Controls**:
   - Camera hardware stays completely off when opening *Scan* or *QR PC* until you tap start, unbinds immediately upon leaving the screen, and lets you cancel (`Annuler`) any scanned code at any time.
+- **Server-gated Android passkeys**:
+  - Credential Manager registration/login are available only when the selected Worker confirms global and Android enablement, the exact package and signing origin, and the selected server origin. Login sessions are created only after server-side cryptographic verification; password/OTP stays available as fallback.
+- **Automatic crash reporting is optional and consent-based**:
+  - Firebase Crashlytics uploads crash reports automatically only after the user opts in under Settings. It is off by default; builds without Firebase configuration continue to work without push or automatic crash uploads.
+- **Temporary finance reports and local-data controls**:
+  - Download/open/share combined monthly PDF reports, retain them in private app cache for up to seven days, and delete them from Settings without touching server business records.
 
 ---
 
 ## 🛠️ Building From Source
 
 ### Prerequisites
-- **Android Studio** Ladybug (or newer) — JDK 17+, Gradle 8.9+
+- **Android Studio** current stable — JDK 17+ (CI uses JDK 21)
 - **Android SDK 35** (`minSdk = 28` / Android 9+)
 
 ```bash
 git clone https://github.com/Etherealmber/atlas-commerce-android.git
 cd atlas-commerce-android
-gradle :app:assembleDebug
+./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+For the complete backend-first onboarding and optional provider configuration, see [docs/SETUP.md](docs/SETUP.md).
 
 ---
 
@@ -99,8 +114,8 @@ Version numbers and releases are **never** bumped or published automatically on 
 
 1. Open **[Actions → Android CI](https://github.com/Etherealmber/atlas-commerce-android/actions/workflows/android.yml)** and click **Run workflow** on branch **`main`**.
 2. Fill in the prompt fields before building:
-   - **`version_name`** *(required)* — e.g. `1.0.9`
-   - **`version_code`** *(required integer)* — e.g. `109`
+   - **`version_name`** *(required)* — e.g. `1.1.3`
+   - **`version_code`** *(required integer)* — e.g. `113`
    - **`release_type`** *(required)* — choose **`release`** (official *Latest* release) or **`prerelease`**
    - **`mandatory`** — force mandatory update screen in app (`true` / `false`)
    - **`download_url`** *(optional)* — custom direct APK URL (uses automatic default if left blank)
@@ -124,6 +139,11 @@ If Cloudflare Zone Bot Fight Mode challenges `POST /api/admin/android-release` f
 ### 3. Automated Bug & Health Issue Creator (`.github/workflows/bug-hunter.yml`)
 - Runs automatically twice every week **and** on demand under **Actions → Bug & Health Audit (Auto Issue Creator) → Run workflow**.
 - Checks Gradle compilation, unit tests, KSP Moshi codegen, Android Lint XML errors, multi-tenant privacy invariants, API route parity against `Etherealmber/atlas-commerce`, and **GitHub Releases ↔ CDN 1 `latest.json` sync**, automatically opening deduplicated GitHub Issues when problems appear and auto-closing them as soon as they are resolved.
+
+### 4. Dependency and provider security review
+- Before publishing, open **Repository → Security → Dependabot alerts**, review every open high/critical alert, and update or mitigate affected dependencies. Do not dismiss an alert without recording the reason and a safe upgrade plan.
+- Review Cloudflare/Firebase/Google Play provider keys and permissions at least once per release. Rotate leaked secrets at the provider; do not try to fix a leak by deleting it from Git history alone.
+- See [SECURITY.md](SECURITY.md) and the [from-zero provider setup](docs/SETUP.md) for key handling and data-collection boundaries.
 
 ---
 

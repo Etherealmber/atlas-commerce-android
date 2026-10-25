@@ -40,6 +40,7 @@ class HomeViewModel @Inject constructor(
         val settings: CompanySettingsDto? = null,
         val currency: String = "MAD",
         val finance: FinanceMonthlyDto? = null,
+        val selectedFinancePeriod: String? = null,
         val payroll: PayrollPageDto? = null,
         val financeLoading: Boolean = false,
         val financeError: String? = null,
@@ -68,6 +69,51 @@ class HomeViewModel @Inject constructor(
 
     fun refresh() {
         load(initial = false)
+    }
+
+    fun selectFinancePeriod(period: String) {
+        if (!period.matches(Regex("\\d{4}-(0[1-9]|1[0-2])"))) return
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return
+        if (!Roles.isAdmin(activeUser.role)) return
+        val current = _state.value
+        if (current.selectedFinancePeriod == period && current.finance?.period == period) return
+
+        val requestedScope = activeUser.scopeIdentity
+        _state.update {
+            it.copy(
+                selectedFinancePeriod = period,
+                finance = null,
+                payroll = null,
+                financeLoading = true,
+                financeError = null,
+                payrollLoadingMore = false,
+            )
+        }
+        viewModelScope.launch {
+            val financeResult = commerceRepository.financeMonthly(period)
+            val finance = financeResult.successOrNull()
+            val payrollResult = if (finance != null && finance.period.isNotBlank()) {
+                commerceRepository.employeePayroll(period = finance.period, pageSize = 20)
+            } else {
+                null
+            }
+            val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope
+            if (!stillSameScope || _state.value.selectedFinancePeriod != period) return@launch
+
+            val failure = financeResult.failureOrNull() ?: payrollResult?.failureOrNull()
+            _state.update { state ->
+                state.copy(
+                    selectedFinancePeriod = finance?.period ?: period,
+                    finance = finance,
+                    payroll = payrollResult?.successOrNull(),
+                    currency = finance?.currency?.takeIf { it.isNotBlank() } ?: state.currency,
+                    financeLoading = false,
+                    financeError = failure?.let {
+                        if (it.code == "FIN_FORBIDDEN") "Réservé aux administrateurs (owner/admin)." else it.message
+                    },
+                )
+            }
+        }
     }
 
     fun loadMorePayroll() {
@@ -104,8 +150,10 @@ class HomeViewModel @Inject constructor(
 
     private fun load(initial: Boolean) {
         viewModelScope.launch {
-            val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
-            val isAdmin = Roles.isAdmin(activeUser?.role)
+            val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return@launch
+            val requestedScope = activeUser.scopeIdentity
+            val isAdmin = Roles.isAdmin(activeUser.role)
+            val requestedFinancePeriod = _state.value.selectedFinancePeriod
             _state.update {
                 it.copy(
                     loading = initial && it.dashboard == null,
@@ -118,7 +166,7 @@ class HomeViewModel @Inject constructor(
 
             val dashboardJob = async { commerceRepository.dashboard() }
             val settingsJob = async { commerceRepository.settings() }
-            val financeJob = if (isAdmin) async { commerceRepository.financeMonthly() } else null
+            val financeJob = if (isAdmin) async { commerceRepository.financeMonthly(requestedFinancePeriod) } else null
             val dashboardResult = dashboardJob.await()
             val settingsResult = settingsJob.await()
             val financeResult = financeJob?.await()
@@ -135,26 +183,42 @@ class HomeViewModel @Inject constructor(
             val dashboard = dashboardResult.successOrNull()
             val settings = settingsResult.successOrNull()
 
+            val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope
+            if (!stillSameScope) return@launch
             _state.update { current ->
+                val financeIsCurrent = current.selectedFinancePeriod == requestedFinancePeriod
                 current.copy(
                     loading = false,
                     refreshing = false,
                     dashboard = dashboard ?: current.dashboard,
                     settings = settings ?: current.settings,
-                    currency = finance?.currency?.takeIf { it.isNotBlank() }
+                    currency = (if (financeIsCurrent) finance?.currency?.takeIf { it.isNotBlank() } else null)
                         ?: dashboard?.activeCurrency
                         ?: settings?.currency?.takeIf { it.isNotBlank() }
                         ?: current.currency,
-                    finance = finance,
-                    payroll = payroll,
-                    financeLoading = false,
-                    financeError = financeFailure?.let { failed ->
+                    selectedFinancePeriod = when {
+                        !isAdmin -> null
+                        financeIsCurrent -> finance?.period ?: requestedFinancePeriod
+                        else -> current.selectedFinancePeriod
+                    },
+                    finance = when {
+                        !isAdmin -> null
+                        financeIsCurrent -> finance
+                        else -> current.finance
+                    },
+                    payroll = when {
+                        !isAdmin -> null
+                        financeIsCurrent -> payroll
+                        else -> current.payroll
+                    },
+                    financeLoading = if (!isAdmin || financeIsCurrent) false else current.financeLoading,
+                    financeError = if (!isAdmin) null else if (financeIsCurrent) financeFailure?.let { failed ->
                         if (failed.code == "FIN_FORBIDDEN") {
                             "Réservé aux administrateurs (owner/admin)."
                         } else {
                             failed.message
                         }
-                    },
+                    } else current.financeError,
                     error = if (dashboard == null && failure != null && failure.code != ApiRunner.CODE_NETWORK) {
                         failure.message
                     } else {
@@ -171,16 +235,15 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun downloadFinanceReport(cacheDirectory: File, onResult: (ApiResult<File>) -> Unit) {
+    fun downloadFinanceReport(cacheDirectory: File, period: String, onResult: (ApiResult<File>) -> Unit) {
         val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
         if (activeUser == null || !Roles.isAdmin(activeUser.role)) {
             onResult(ApiResult.Failure("FIN_FORBIDDEN", "Réservé aux administrateurs (owner/admin)."))
             return
         }
         val requestedScope = activeUser.scopeIdentity
-        val period = _state.value.finance?.period?.takeIf { it.isNotBlank() }
-        if (period == null) {
-            onResult(ApiResult.Failure("FINANCE_UNAVAILABLE", "Actualisez le tableau de bord avant de télécharger le rapport."))
+        if (!period.matches(Regex("\\d{4}-(0[1-9]|1[0-2])"))) {
+            onResult(ApiResult.Failure("BAD_PERIOD", "Période invalide — format attendu AAAA-MM."))
             return
         }
         viewModelScope.launch {
@@ -189,6 +252,7 @@ class HomeViewModel @Inject constructor(
                 File(cacheDirectory, "finance"),
                 scopeCacheKey(requestedScope),
             ).apply { mkdirs() }
+            ma.etherealmber.atlascommerce.data.FinanceReportCache.pruneAccount(directory)
             val destination = File(directory, "rapport-mensuel-$period.pdf")
             val result = commerceRepository.downloadFinanceReport(period, destination)
             _state.update { it.copy(reportGenerating = false) }
@@ -196,6 +260,26 @@ class HomeViewModel @Inject constructor(
             if (currentScope != requestedScope) {
                 (result as? ApiResult.Success)?.data?.delete()
                 onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Relancez le téléchargement avec le bon compte."))
+            } else {
+                onResult(result)
+            }
+        }
+    }
+
+    fun createCombinedReportUrl(onResult: (ApiResult<String>) -> Unit) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+        if (activeUser == null || !Roles.isAdmin(activeUser.role)) {
+            onResult(ApiResult.Failure("FIN_FORBIDDEN", "Réservé aux administrateurs (owner/admin)."))
+            return
+        }
+        val requestedScope = activeUser.scopeIdentity
+        viewModelScope.launch {
+            _state.update { it.copy(reportGenerating = true) }
+            val result = commerceRepository.createCombinedReportUrl()
+            _state.update { it.copy(reportGenerating = false) }
+            val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (currentScope != requestedScope) {
+                onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Relancez l'ouverture avec le bon compte."))
             } else {
                 onResult(result)
             }

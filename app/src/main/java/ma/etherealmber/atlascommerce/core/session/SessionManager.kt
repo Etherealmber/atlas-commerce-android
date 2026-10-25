@@ -180,6 +180,19 @@ class SessionManager @Inject constructor(
         }
     }
 
+    /** Accepts a LoginResponse only after the server's WebAuthn verifier returns success. */
+    suspend fun signInWithPasskey(response: LoginResponse): ApiResult<LoginOutcome> {
+        if (!response.success || response.needsOtp) {
+            return ApiResult.Failure(
+                response.code ?: "PASSKEY_LOGIN_FAILED",
+                response.error ?: response.message ?: "La connexion passkey n'a pas pu être finalisée.",
+            )
+        }
+        val username = response.username?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return ApiResult.Failure("PASSKEY_LOGIN_FAILED", "Le serveur n'a pas confirmé le compte de cette passkey.")
+        return completeLogin(response, username, rememberAccount = true)
+    }
+
     suspend fun verifyOtp(
         username: String,
         password: String,

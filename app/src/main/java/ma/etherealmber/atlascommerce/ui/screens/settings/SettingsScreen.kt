@@ -1,6 +1,15 @@
 package ma.etherealmber.atlascommerce.ui.screens.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.spring
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -31,6 +40,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Language
@@ -57,6 +67,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -597,8 +609,62 @@ fun SettingsScreen(
     val devices by appViewModel.devices.collectAsStateWithLifecycle()
     val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
+    val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
+    val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
+    val automaticCrashReportsEnabled by appViewModel.automaticCrashReportsEnabled.collectAsStateWithLifecycle()
+    val automaticCrashReportsAvailable = appViewModel.automaticCrashReportsAvailable
+    val androidPasskeysAvailable by appViewModel.androidPasskeysAvailable.collectAsStateWithLifecycle()
+    val registeringPasskey by appViewModel.registeringPasskey.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
     var showReleaseHistoryDialog by remember { mutableStateOf(false) }
+    var showClearReportsDialog by remember { mutableStateOf(false) }
+    var showClearLocalDataDialog by remember { mutableStateOf(false) }
+    var buildTapCount by remember { mutableIntStateOf(0) }
+    var lastBuildTapAt by remember { mutableLongStateOf(0L) }
+
+    val onBuildVersionTap: () -> Unit = {
+        val now = System.currentTimeMillis()
+        if (now - lastBuildTapAt > 2_000L) buildTapCount = 0
+        lastBuildTapAt = now
+        buildTapCount += 1
+        if (buildTapCount >= 7) {
+            buildTapCount = 0
+            appViewModel.setDeveloperModeEnabled(true)
+            onToast("Mode développeur activé. Désactivez-le depuis ce panneau.")
+        }
+    }
+
+    if (showClearReportsDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearReportsDialog = false },
+            title = { Text("Supprimer les PDF temporaires ?") },
+            text = { Text("Les rapports téléchargés dans le cache privé de cette application seront supprimés de cet appareil. Les copies déjà enregistrées ou partagées ailleurs ne seront pas touchées.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearReportsDialog = false
+                    appViewModel.clearFinanceReportCache(onToast)
+                }) { Text("Supprimer") }
+            },
+            dismissButton = { TextButton(onClick = { showClearReportsDialog = false }) { Text("Annuler") } },
+        )
+    }
+
+    if (showClearLocalDataDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearLocalDataDialog = false },
+            title = { Text("Effacer les données locales ?") },
+            text = {
+                Text("Cette action déconnecte ce compte et supprime les sessions mémorisées, serveurs enregistrés, préférences, cache hors ligne, journaux et PDF temporaires de cet appareil. Elle ne supprime aucune vente, facture ni donnée d'entreprise sur le serveur.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearLocalDataDialog = false
+                    appViewModel.clearAllLocalAppData(onToast)
+                }) { Text("Effacer de cet appareil") }
+            },
+            dismissButton = { TextButton(onClick = { showClearLocalDataDialog = false }) { Text("Annuler") } },
+        )
+    }
 
     if (showReleaseHistoryDialog) {
         AlertDialog(
@@ -672,7 +738,8 @@ fun SettingsScreen(
         )
     }
 
-    LaunchedEffect(user.scopeIdentity) {
+    LaunchedEffect(user.scopeIdentity, serverSelection?.baseUrl) {
+        appViewModel.refreshPasskeyCapability()
         appViewModel.loadDevices()
         appViewModel.refreshAgentPolicy()
         appViewModel.refreshCachedProductCount()
@@ -683,6 +750,7 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
+            .animateContentSize(spring(dampingRatio = 0.9f, stiffness = 420f))
             .padding(
                 start = density.screenPadding,
                 end = density.screenPadding,
@@ -737,26 +805,30 @@ fun SettingsScreen(
         }
 
         // 2. Live Atlas Agent IA Quota Bars & Limit Countdown
-        AgentQuotaCard(
-            policy = agentPolicy,
-            onRefresh = appViewModel::refreshAgentPolicy,
-        )
+        AtlasEntrance(delayMillis = 45, offsetY = 8.dp) {
+            AgentQuotaCard(
+                policy = agentPolicy,
+                onRefresh = appViewModel::refreshAgentPolicy,
+            )
+        }
 
         // 3. Updates, Fast Parallel Download, Latest Release Tracking & Changelog
-        SettingsUpdateCard(
-            state = updateState,
-            selectedSource = updateDownloadSource,
-            mirrorPing = mirrorPing,
-            onSelectSource = appViewModel::setUpdateDownloadSource,
-            onPingMirrors = appViewModel::pingUpdateMirrors,
-            onCheck = { appViewModel.checkForUpdate(manual = true) },
-            onDownload = onStartUpdateDownload,
-            onInstall = {
-                if (!appViewModel.installDownloadedUpdate(context)) {
-                    onToast("Impossible d'ouvrir l'installateur sur cet appareil.")
-                }
-            },
-        )
+        AtlasEntrance(delayMillis = 90, offsetY = 8.dp) {
+            SettingsUpdateCard(
+                state = updateState,
+                selectedSource = updateDownloadSource,
+                mirrorPing = mirrorPing,
+                onSelectSource = appViewModel::setUpdateDownloadSource,
+                onPingMirrors = appViewModel::pingUpdateMirrors,
+                onCheck = { appViewModel.checkForUpdate(manual = true) },
+                onDownload = onStartUpdateDownload,
+                onInstall = {
+                    if (!appViewModel.installDownloadedUpdate(context)) {
+                        onToast("Impossible d'ouvrir l'installateur sur cet appareil.")
+                    }
+                },
+            )
+        }
 
         AtlasCard {
             SettingsToggleRow(
@@ -918,12 +990,102 @@ fun SettingsScreen(
                 onCheckedChange = appViewModel::setAutoCheckUpdates,
             )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
+            if (automaticCrashReportsAvailable) {
+                SettingsToggleRow(
+                    title = "Envoyer automatiquement les rapports de plantage",
+                    subtitle = "Envoi opt-in à Firebase Crashlytics, sans jetons, mots de passe ni données commerciales jointes.",
+                    checked = automaticCrashReportsEnabled,
+                    onCheckedChange = { appViewModel.setAutomaticCrashReportsEnabled(it, onToast) },
+                )
+            } else {
+                SettingsRow(
+                    icon = Icons.Outlined.BugReport,
+                    title = "Rapports automatiques de plantage",
+                    subtitle = "Indisponible : cette version n'est pas configurée avec Firebase Crashlytics.",
+                    onClick = { onToast("L'administrateur doit configurer Firebase Crashlytics pour cette version.") },
+                )
+            }
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsRow(
                 icon = Icons.Outlined.AutoAwesomeMotion,
                 title = "Revoir l'écran de bienvenue",
                 subtitle = "Relancer la présentation animée d'Atlas Commerce",
                 onClick = { appViewModel.replayOnboarding() },
             )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            SettingsRow(
+                icon = Icons.Outlined.DeleteOutline,
+                title = "Supprimer les PDF temporaires",
+                subtitle = "Les rapports privés sont purgés automatiquement après 7 jours.",
+                onClick = { showClearReportsDialog = true },
+            )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            SettingsRow(
+                icon = Icons.Outlined.DeleteOutline,
+                title = "Effacer toutes les données locales",
+                subtitle = "Déconnecte le compte et efface les données stockées sur cet appareil uniquement.",
+                onClick = { showClearLocalDataDialog = true },
+            )
+        }
+
+        AnimatedVisibility(
+            visible = developerModeEnabled,
+            enter = if (animationsEnabled) fadeIn() + expandVertically() else EnterTransition.None,
+            exit = if (animationsEnabled) fadeOut() + shrinkVertically() else ExitTransition.None,
+        ) {
+            AtlasCard {
+                SettingsToggleRow(
+                    title = "Mode développeur",
+                    subtitle = "Actif. Affiche des détails de diagnostic non secrets.",
+                    checked = true,
+                    onCheckedChange = appViewModel::setDeveloperModeEnabled,
+                )
+                AtlasDivider(Modifier.padding(vertical = 8.dp))
+                AtlasInfoRow("Serveur sélectionné", serverSelection?.let { ServerUrl.display(it.baseUrl) } ?: "Aucun")
+                AtlasInfoRow("Version Android", "${AppDetails.VERSION_NAME} · build ${AppDetails.VERSION_CODE}")
+                AtlasInfoRow("Identifiant appareil", appViewModel.deviceShortId)
+                Text(
+                    "Les jetons, mots de passe et clés d'accès ne sont jamais affichés ici.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = androidPasskeysAvailable,
+            enter = if (animationsEnabled) fadeIn() + expandVertically() else EnterTransition.None,
+            exit = if (animationsEnabled) fadeOut() + shrinkVertically() else ExitTransition.None,
+        ) {
+            AtlasEntrance(delayMillis = 30, offsetY = 8.dp) {
+                AtlasCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Outlined.Fingerprint,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Passkey Android", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Ajoutez une connexion biométrique vérifiée sur le serveur sélectionné.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    AtlasOutlinedButton(
+                        text = if (registeringPasskey) "Enregistrement en cours…" else "Enregistrer une passkey",
+                        onClick = { appViewModel.registerAndroidPasskey(context, onToast) },
+                        icon = Icons.Outlined.Fingerprint,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !registeringPasskey,
+                    )
+                }
+            }
         }
 
         // 6. Security, License & About
@@ -999,6 +1161,9 @@ fun SettingsScreen(
                 text = "${AppDetails.NAME} ${AppDetails.VERSION_NAME} (build ${AppDetails.VERSION_CODE})",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable(onClick = onBuildVersionTap)
+                    .padding(vertical = 8.dp),
             )
             Text(
                 text = "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER} · Licence ${AppDetails.LICENSE_NAME}",
@@ -1019,6 +1184,7 @@ private fun SettingsToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .animateContentSize(spring(dampingRatio = 0.9f, stiffness = 520f))
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

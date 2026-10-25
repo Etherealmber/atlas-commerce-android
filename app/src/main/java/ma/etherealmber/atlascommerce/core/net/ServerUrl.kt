@@ -76,6 +76,17 @@ object ServerUrl {
         return "$scheme://${host.lowercase()}$port$path"
     }
 
+    /** Returns only the URI origin (scheme, host and non-default port), excluding any path. */
+    fun origin(url: String?): String? {
+        val normalized = normalize(url) ?: return null
+        val uri = runCatching { URI(normalized) }.getOrNull() ?: return null
+        val scheme = uri.scheme?.lowercase() ?: return null
+        val host = uri.host?.lowercase() ?: return null
+        val defaultPort = (scheme == "https" && uri.port == 443) || (scheme == "http" && uri.port == 80)
+        val port = if (uri.port > 0 && !defaultPort) ":${uri.port}" else ""
+        return "$scheme://$host$port"
+    }
+
     fun isCleartext(url: String): Boolean = url.startsWith("http://", ignoreCase = true)
 
     fun isLocal(url: String): Boolean {

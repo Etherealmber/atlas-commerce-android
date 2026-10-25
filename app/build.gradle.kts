@@ -127,12 +127,11 @@ android {
     }
 }
 
-// FCM bridge (v1.2): the google-services plugin runs ONLY when the Firebase
-// project config is present (google-services.json is a per-deployment secret —
-// never committed). Without it the app still builds and runs; push registration
-// no-ops (see PushTokenRegistrar.firebaseConfigured()).
+// Firebase integrations are optional for self-hosters. App-specific Firebase config is
+// injected outside git; without it the APK still builds and push/crash reporting stay inactive.
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
+    apply(plugin = "com.google.firebase.crashlytics")
 }
 
 kotlin {
@@ -152,6 +151,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.activity:activity-compose:1.9.3")
+    // Android Credential Manager for server-gated WebAuthn passkeys.
+    implementation("androidx.credentials:credentials:1.5.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
@@ -173,6 +175,7 @@ dependencies {
     // is registered with POST /api/assist/device-token after each sign-in.
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-crashlytics")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     implementation("com.google.dagger:hilt-android:2.59")

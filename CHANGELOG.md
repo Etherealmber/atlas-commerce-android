@@ -7,6 +7,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
 
 ### Ajouté
 
+- **Passkeys Android Credential Manager protégées par la capacité du serveur** : l'app exige
+  `data.enabled`, `data.android.enabled`, le package exact, l'origine de signature Play dérivée du
+  certificat installé et l'origine HTTPS sélectionnée dans `data.origins`. Le client transmet
+  l'origine au Credential Manager lorsque l'API Android le permet; aucune session n'est créée avant
+  la vérification cryptographique côté Worker. Voir [docs/SETUP.md](docs/SETUP.md) et le guide
+  backend [WebAuthn](https://github.com/Etherealmber/atlas-commerce/blob/main/docs/webauthn.md).
+- **Envoi automatique de rapports de plantage, avec consentement explicite** : Firebase Crashlytics
+  reste désactivé par défaut et n'envoie rien tant que l'utilisateur n'a pas activé l'option dans
+  Paramètres. Les builds sans `google-services.json` restent fonctionnels sans Firebase.
+- **Configuration complète depuis zéro** : [docs/SETUP.md](docs/SETUP.md) couvre le Worker Cloudflare,
+  D1/migrations, R2, les clés provider, l'app Android, Crashlytics, le certificat Play, assetlinks
+  et la validation passkey en staging.
 - **Connexion vérifiée en un tap par lien e-mail signé (`VerifyLinkParser` & `POST /api/auth/verify-link`)** :
   prise en charge des liens profonds `https://<serveur>/verify?user=…&code=…&sig=…&exp=…` et du
   relais natif `atlascommerce://verify?…` depuis le bouton **VÉRIFIER & CONTINUER**, sans saisie
@@ -19,9 +31,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
 
 ### Modifié
 
-- **Téléchargement de mise à jour masquable & notifications système visibles** : possibilité de
-  masquer l'encart de téléchargement tout en poursuivant le transfert en arrière-plan, avec rappel
-  d'accès via **Paramètres** ou le volet de **Notifications** Android (canaux haute visibilité).
+- **Téléchargement démarré depuis Paramètres sans notification en double** : la progression reste
+  visible dans Paramètres; les alertes système de début/progression sont supprimées tant que l'app
+  reste au premier plan, puis une notification est publiée si l'app passe en arrière-plan. Le retour
+  dans l'app efface l'alerte redondante sans annuler ni redémarrer le téléchargement.
+- **Compatibilité Credential Manager / WebAuthn explicitement vérifiée** : le statut du Worker expose
+  l'origine Android SHA-256 et, en option, l'origine legacy SHA-1; l'app compare ces valeurs au
+  certificat installé et ne montre pas l'option si package, origine ou allowlist ne correspondent pas.
 
 ## [1.0.7] — 2026-10-22
 

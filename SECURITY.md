@@ -1,6 +1,6 @@
 # Security Policy — Atlas Commerce (Android)
 
-© 2026 Etherealmber — MIT — current release: **1.0.9** (versionCode 109)
+© 2026 Etherealmber — MIT — current app baseline: **1.1.2** (versionCode 112); use the [Releases page](https://github.com/Etherealmber/atlas-commerce-android/releases) for the latest published build.
 
 This document covers the **Android client** in this repository. The server (Cloudflare Worker,
 D1, R2) has its own policy in
@@ -43,6 +43,22 @@ and are not supported for production use.
 - Logout clears the token, the cart and the offline catalogue; sessions are never shared between
   servers, and changing the server forces a fresh login.
 
+### Passkeys / WebAuthn
+
+- Passkey UI is fail-closed and scoped to the selected Worker. It requires `data.enabled`,
+  `data.android.enabled`, the exact application ID, at least one server-advertised SHA-256 or legacy
+  SHA-1 signing origin to exactly match the installed APK certificate, and the selected web origin
+  to be listed in `data.origins`.
+- Android uses Credential Manager with the server challenge and selected HTTPS origin; the request
+  uses `CREDENTIAL_MANAGER_SET_ORIGIN` so the Worker can validate the web origin, `crossOrigin`,
+  and Android package together. The server performs cryptographic registration/assertion verification;
+  the app does not create a session until login verification succeeds.
+- Registration endpoints are called only from an existing authenticated session. Challenges and
+  credential JSON are not stored in app preferences or logs. Password/OTP remains the fallback.
+- Keep the backend disabled until the Play signing certificate, `assetlinks.json`, both origins,
+  and physical-device staging test are verified. See [the passkey enablement guide](https://github.com/Etherealmber/atlas-commerce/blob/main/docs/webauthn.md)
+  and the client [setup guide](docs/SETUP.md#5-optional-android-passkeys--keep-disabled-until-the-full-smoke-test-passes).
+
 ### Transport
 
 - Release builds set `android:usesCleartextTraffic="false"` and refuse `http://` server addresses.
@@ -59,8 +75,11 @@ and are not supported for production use.
 | Server address, theme, density | DataStore | Settings |
 | Last product catalogue | App-private files (`atlas-cache/products.json`) | Offline browsing |
 | Install UUID | SharedPreferences (app-private) | Stable device fingerprint |
+| Downloaded finance-report PDFs | App-private cache (`cache/finance`) | Open/share monthly combined reports; automatically pruned after 7 days and deletable in Settings |
+| Last sanitized uncaught-crash trace | App-private cache (`cache/diagnostics/last_crash.txt`) | Included only if the user later submits an in-app diagnostic report |
+| Crash-report consent | App-private SharedPreferences | Remembers the user's explicit Firebase Crashlytics opt-in/out |
 
-No financial documents, no invoices, no customer databases and no images are stored locally.
+The app does not maintain a local accounting database or cache server-side customer records. A finance PDF exists temporarily in private cache only when the user downloads a report; the user can open/share it or delete cached PDFs from Settings. Camera images are not stored unless explicitly attached to a user-submitted issue report.
 
 ### Permissions
 
@@ -70,16 +89,15 @@ No financial documents, no invoices, no customer databases and no images are sto
 | `CAMERA` | Decode barcodes on-device with ML Kit (no frame is uploaded or saved) |
 | `POST_NOTIFICATIONS` | Display live progress notifications while downloading an APK update |
 | `REQUEST_INSTALL_PACKAGES` | Hand downloaded `.apk` updates to Android's system package installer via `FileProvider` |
+| `CREDENTIAL_MANAGER_SET_ORIGIN` | Let Credential Manager sign requests for the selected, allowlisted Worker origin; server also verifies the Android package and exact origin |
 
 No location, contacts, microphone, storage or advertising permissions are requested.
 
 ### Third parties
 
-There is **no analytics, telemetry, crash reporting or advertising SDK**. Network calls go only to
-the server you chose. ML Kit barcode decoding runs on-device with the bundled model; per Google's
-ML Kit terms the SDK also reports its own usage/performance metrics (app version, installation and
-device identifiers — never images or scanned codes). Opening GitHub or e-mail links hands control
-to the user's browser/mail app.
+There is no advertising SDK and no Firebase Analytics dependency. Firebase is an optional build-time provider for FCM push and Firebase Crashlytics. **Automatic Crashlytics collection is off by default in the manifest and remains off until the user opts in under Settings**; opting out disables future automatic uploads. If opted in and the build has a valid Firebase Android configuration, Crashlytics can upload an uncaught crash report (stack trace, app/device/OS version, timestamp and Firebase installation identifiers) automatically when connectivity permits. The app does not attach session tokens, passwords, OTPs, financial records, or its redacted in-app log buffer as Crashlytics custom data. Firebase provider configuration and the exact consent flow are documented in [docs/SETUP.md](docs/SETUP.md#4-optional-push-notifications-and-automatic-crash-reports-firebase).
+
+ML Kit barcode decoding runs on-device with the bundled model; per Google's ML Kit terms the SDK may report its own usage/performance metrics (app version, installation and device identifiers — never images or scanned codes). Network calls for business data go only to the selected Atlas Worker; Crashlytics/FCM use Google's Firebase services only when configured. Opening GitHub or e-mail links hands control to the user's browser/mail app.
 
 ## Hardening checklist for self-hosters
 

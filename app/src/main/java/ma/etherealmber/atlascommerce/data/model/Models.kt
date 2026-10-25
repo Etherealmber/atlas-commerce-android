@@ -81,6 +81,80 @@ data class GitHubReleaseDto(
 // ---------------------------------------------------------------------------
 
 @JsonClass(generateAdapter = true)
+data class ReportLinkTicketDto(
+    val rt: String = "",
+    @Json(name = "expires_in") val expiresIn: Int = 0,
+)
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnCapabilitiesDto(
+    val enabled: Boolean = false,
+    val origins: List<String> = emptyList(),
+    val android: WebAuthnAndroidCapabilityDto? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnAndroidCapabilityDto(
+    val enabled: Boolean = false,
+    @Json(name = "package") val packageName: String? = null,
+    val origin: String? = null,
+    @Json(name = "origin_legacy") val originLegacy: String? = null,
+)
+
+/**
+ * Require one server-advertised signing-certificate origin and the selected Worker web origin to
+ * match this installed build. The request may use an explicit web origin only with the declared
+ * CREDENTIAL_MANAGER_SET_ORIGIN permission; the backend still checks package and crossOrigin.
+ */
+fun WebAuthnCapabilitiesDto.supportsAndroid(
+    packageName: String,
+    signingOrigins: Set<String>,
+    selectedServerOrigin: String?,
+): Boolean =
+    enabled &&
+        android?.enabled == true &&
+        android.packageName == packageName &&
+        listOfNotNull(android.origin, android.originLegacy).any { it in signingOrigins } &&
+        !selectedServerOrigin.isNullOrBlank() &&
+        selectedServerOrigin in origins
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnLoginOptionsRequest(
+    val username: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnRegistrationOptionsRequest(
+    val fingerprint: String,
+    @Json(name = "device_type") val deviceType: String = "platform",
+)
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnOptionsResponse(
+    override val success: Boolean = false,
+    val options: Map<String, Any?> = emptyMap(),
+    override val error: String? = null,
+    override val code: String? = null,
+) : ma.etherealmber.atlascommerce.core.net.ApiStatus
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnCredentialVerifyRequest(
+    val credential: Map<String, Any?>,
+    val fingerprint: String,
+    @Json(name = "device_type") val deviceType: String? = null,
+    @Json(name = "device_label") val deviceLabel: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnRegistrationVerifyResponse(
+    override val success: Boolean = false,
+    val message: String? = null,
+    val label: String? = null,
+    override val error: String? = null,
+    override val code: String? = null,
+) : ma.etherealmber.atlascommerce.core.net.ApiStatus
+
+@JsonClass(generateAdapter = true)
 data class LoginRequest(
     val username: String,
     val password: String,

@@ -2,6 +2,11 @@ package ma.etherealmber.atlascommerce.ui.root
 
 import android.content.Context
 import android.net.Uri
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -11,6 +16,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -18,9 +24,11 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.diagnostics.CompressedReportAttachment
+import ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent
 import ma.etherealmber.atlascommerce.core.diagnostics.DeviceDiagnosticSnapshot
 import ma.etherealmber.atlascommerce.core.diagnostics.DiagnosticReporter
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
@@ -30,7 +38,10 @@ import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
+import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyCredentials
+import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyOrigin
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
+import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.server.ServerSelection
 import ma.etherealmber.atlascommerce.core.session.SessionManager
@@ -43,6 +54,7 @@ import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
+import ma.etherealmber.atlascommerce.data.model.supportsAndroid
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import ma.etherealmber.atlascommerce.di.ProbeClient
@@ -58,6 +70,7 @@ import javax.inject.Inject
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class AppViewModel @Inject constructor(
+    @ApplicationContext private val applicationContext: Context,
     private val preferences: AtlasPreferences,
     private val serverConfig: ServerConfig,
     private val sessionManager: SessionManager,
@@ -85,6 +98,15 @@ class AppViewModel @Inject constructor(
 
     val animationsEnabled: StateFlow<Boolean> = preferences.animationsEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val developerModeEnabled: StateFlow<Boolean> = preferences.developerModeEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val _automaticCrashReportsEnabled = MutableStateFlow(
+        CrashReportConsent.isConfigured(applicationContext) && CrashReportConsent.isEnabled(applicationContext),
+    )
+    val automaticCrashReportsEnabled: StateFlow<Boolean> = _automaticCrashReportsEnabled.asStateFlow()
+    val automaticCrashReportsAvailable: Boolean = CrashReportConsent.isConfigured(applicationContext)
 
     val autoOpenCamera: StateFlow<Boolean> = preferences.autoOpenCamera
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -159,9 +181,16 @@ class AppViewModel @Inject constructor(
     private val _cachedProductCount = MutableStateFlow(0)
     val cachedProductCount: StateFlow<Int> = _cachedProductCount.asStateFlow()
 
+    private val _androidPasskeysAvailable = MutableStateFlow(false)
+    val androidPasskeysAvailable: StateFlow<Boolean> = _androidPasskeysAvailable.asStateFlow()
+
+    private val _registeringPasskey = MutableStateFlow(false)
+    val registeringPasskey: StateFlow<Boolean> = _registeringPasskey.asStateFlow()
+
     init {
         observeSessionExpiry()
         observeServerChanges()
+        observePasskeyCapabilities()
         observeActiveSessionDevices()
         checkUpdatesOnceServerReady()
     }
@@ -189,6 +218,124 @@ class AppViewModel @Inject constructor(
                     updateManager.checkForUpdate(manual = false)
                 }
                 previous = next
+            }
+        }
+    }
+
+    private fun observePasskeyCapabilities() {
+        viewModelScope.launch {
+            serverConfig.selection.collectLatest { selection ->
+                _androidPasskeysAvailable.value = false
+                val selectedBase = selection?.baseUrl ?: return@collectLatest
+                val result = authRepository.webAuthnCapabilities()
+                val currentBase = serverConfig.selection.value?.baseUrl
+                if (currentBase != null && currentBase.equals(selectedBase, ignoreCase = true)) {
+                    val capability = (result as? ApiResult.Success)?.data
+                    _androidPasskeysAvailable.value = capability?.supportsAndroid(
+                        BuildConfig.APPLICATION_ID,
+                        AndroidPasskeyOrigin.forInstalledApp(applicationContext),
+                        ServerUrl.origin(selectedBase),
+                    ) == true
+                }
+            }
+        }
+    }
+
+    private suspend fun supportsSelectedServerPasskeyOrigin(origin: String): Boolean {
+        if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != origin) return false
+        val capability = (authRepository.webAuthnCapabilities() as? ApiResult.Success)?.data ?: return false
+        return capability.supportsAndroid(
+            BuildConfig.APPLICATION_ID,
+            AndroidPasskeyOrigin.forInstalledApp(applicationContext),
+            origin,
+        )
+    }
+
+    fun refreshPasskeyCapability() {
+        val selectedBase = serverConfig.selection.value?.baseUrl ?: run {
+            _androidPasskeysAvailable.value = false
+            return
+        }
+        viewModelScope.launch {
+            val result = authRepository.webAuthnCapabilities()
+            val currentBase = serverConfig.selection.value?.baseUrl
+            if (currentBase != null && currentBase.equals(selectedBase, ignoreCase = true)) {
+                val capability = (result as? ApiResult.Success)?.data
+                _androidPasskeysAvailable.value = capability?.supportsAndroid(
+                    BuildConfig.APPLICATION_ID,
+                    AndroidPasskeyOrigin.forInstalledApp(applicationContext),
+                    ServerUrl.origin(selectedBase),
+                ) == true
+            }
+        }
+    }
+
+    fun registerAndroidPasskey(context: Context, onDone: (String) -> Unit) {
+        if (!_androidPasskeysAvailable.value) {
+            onDone("Les passkeys Android ne sont pas activées pour le serveur sélectionné.")
+            return
+        }
+        if (_registeringPasskey.value) return
+        viewModelScope.launch {
+            _registeringPasskey.value = true
+            try {
+                val selectedServerOrigin = ServerUrl.origin(serverConfig.selection.value?.baseUrl)
+                if (selectedServerOrigin == null) {
+                    _androidPasskeysAvailable.value = false
+                    onDone("L'origine du serveur sélectionné est invalide.")
+                    return@launch
+                }
+                when (val capabilityResult = authRepository.webAuthnCapabilities()) {
+                    is ApiResult.Failure -> {
+                        _androidPasskeysAvailable.value = false
+                        onDone("Impossible de vérifier les passkeys du serveur sélectionné : ${capabilityResult.message}")
+                        return@launch
+                    }
+                    is ApiResult.Success -> {
+                        if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != selectedServerOrigin ||
+                            !capabilityResult.data.supportsAndroid(
+                                BuildConfig.APPLICATION_ID,
+                                AndroidPasskeyOrigin.forInstalledApp(applicationContext),
+                                selectedServerOrigin,
+                            )
+                        ) {
+                            _androidPasskeysAvailable.value = false
+                            onDone("Les passkeys Android ne sont plus activées pour le serveur sélectionné.")
+                            return@launch
+                        }
+                    }
+                }
+                when (val options = authRepository.webAuthnRegistrationOptions(deviceIdentity.fingerprint)) {
+                    is ApiResult.Failure -> onDone(options.message)
+                    is ApiResult.Success -> {
+                        if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
+                            _androidPasskeysAvailable.value = false
+                            onDone("Les passkeys Android ne sont plus disponibles sur ce serveur.")
+                            return@launch
+                        }
+                        val credentialJson = AndroidPasskeyCredentials.create(context, options.data, selectedServerOrigin)
+                        val label = listOf("Android", android.os.Build.MANUFACTURER, android.os.Build.MODEL)
+                            .filter { it.isNotBlank() }
+                            .distinct()
+                            .joinToString(" ")
+                        when (
+                            val result = authRepository.verifyWebAuthnRegistration(
+                                credentialJson = credentialJson,
+                                fingerprint = deviceIdentity.fingerprint,
+                                deviceLabel = label,
+                            )
+                        ) {
+                            is ApiResult.Failure -> onDone(result.message)
+                            is ApiResult.Success -> onDone(result.data)
+                        }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                onDone("Enregistrement passkey annulé ou indisponible. Vérifiez l'association Android du serveur et réessayez.")
+            } finally {
+                _registeringPasskey.value = false
             }
         }
     }
@@ -224,8 +371,8 @@ class AppViewModel @Inject constructor(
         updateManager.checkForUpdate(manual = manual)
     }
 
-    fun startUpdateDownload() {
-        updateManager.startDownload()
+    fun startUpdateDownload(fromSettings: Boolean = false) {
+        updateManager.startDownload(fromSettings = fromSettings)
     }
 
     fun setUpdateDownloadSource(source: UpdateDownloadSource) {
@@ -283,9 +430,7 @@ class AppViewModel @Inject constructor(
         updateManager.installApk(context)
 
     fun onAppResumed(context: Context) {
-        if (autoCheckUpdates.value) {
-            updateManager.onAppResumed(context)
-        }
+        updateManager.onAppResumed(context, autoCheck = autoCheckUpdates.value)
         if (sessionManager.state.value is SessionState.Active) {
             viewModelScope.launch {
                 sessionManager.refreshProfile()
@@ -453,6 +598,52 @@ class AppViewModel @Inject constructor(
 
     fun setAnimationsEnabled(enabled: Boolean) {
         viewModelScope.launch { preferences.setAnimationsEnabled(enabled) }
+    }
+
+    fun setDeveloperModeEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setDeveloperModeEnabled(enabled) }
+    }
+
+    fun setAutomaticCrashReportsEnabled(enabled: Boolean, onDone: (String) -> Unit) {
+        if (!CrashReportConsent.setEnabled(applicationContext, enabled)) {
+            onDone("Rapports automatiques indisponibles : Firebase Crashlytics n'est pas configuré pour cette version.")
+            return
+        }
+        _automaticCrashReportsEnabled.value = enabled
+        onDone(
+            if (enabled) "Rapports de plantage activés. Les prochains plantages seront envoyés automatiquement à Firebase Crashlytics."
+            else "Envoi automatique des rapports de plantage désactivé.",
+        )
+    }
+
+    fun clearFinanceReportCache(onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            val removed = withContext(Dispatchers.IO) {
+                val directory = File(applicationContext.cacheDir, "finance")
+                val count = directory.walkTopDown().count { it.isFile && it.extension.equals("pdf", true) }
+                directory.deleteRecursively()
+                count
+            }
+            onDone(if (removed == 0) "Aucun rapport PDF temporaire à supprimer." else "$removed rapport(s) PDF temporaire(s) supprimé(s).")
+        }
+    }
+
+    /** Clears local app data only; this does not delete company records from the server. */
+    fun clearAllLocalAppData(onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            val updateFilesCleared = updateManager.clearCachedUpdateFiles()
+            sessionManager.signOut()
+            serverConfig.clear()
+            preferences.clearAllLocalPreferences()
+            offlineCache.clearAll()
+            withContext(Dispatchers.IO) {
+                File(applicationContext.cacheDir, "finance").deleteRecursively()
+                File(applicationContext.cacheDir, "diagnostics").deleteRecursively()
+                File(applicationContext.filesDir, "atlas-cache").deleteRecursively()
+            }
+            val updateNote = if (updateFilesCleared) "" else " Le téléchargement de mise à jour actif est conservé jusqu'à sa fin."
+            onDone("Données locales supprimées.$updateNote Les données de l'entreprise sur le serveur n'ont pas été modifiées.")
+        }
     }
 
     fun setAutoOpenCamera(enabled: Boolean) {

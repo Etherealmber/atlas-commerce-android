@@ -155,6 +155,16 @@ class AppUpdateManager internal constructor(
     @Volatile
     private var hideActiveDownloadInForeground: Boolean = false
 
+    /** Settings already shows its own download state, so avoid a duplicate OS alert while foregrounded. */
+    @Volatile
+    private var settingsStartedDownload: Boolean = false
+
+    @Volatile
+    private var appInForeground: Boolean = true
+
+    @Volatile
+    private var deferredSettingsResultNotification: Boolean = false
+
     private val updateAdapter by lazy { moshi.adapter(AndroidUpdateDto::class.java) }
     private val releasesListAdapter by lazy {
         val type = Types.newParameterizedType(List::class.java, GitHubReleaseDto::class.java)
@@ -165,6 +175,20 @@ class AppUpdateManager internal constructor(
         get() = synchronized(lock) {
             _state.value is UpdateState.Downloading || downloadJob?.isActive == true
         }
+
+    /** Clear the cached update package only when no transfer is in progress. */
+    fun clearCachedUpdateFiles(): Boolean = synchronized(lock) {
+        if (isDownloadingLocked()) return@synchronized false
+        runCatching { updatesDirProvider().deleteRecursively() }.getOrDefault(false)
+        if (_state.value is UpdateState.ReadyToInstall || _state.value is UpdateState.Error || _state.value is UpdateState.Available) {
+            _state.value = UpdateState.Idle
+        }
+        notifier.cancel()
+        settingsStartedDownload = false
+        appInForeground = true
+        deferredSettingsResultNotification = false
+        true
+    }
 
     private fun defaultOfflineChangelog(): List<ReleaseChangelogEntry> = listOf(
         ReleaseChangelogEntry(
@@ -486,7 +510,7 @@ class AppUpdateManager internal constructor(
     /**
      * Starts downloading the available update APK if no download is currently running.
      */
-    fun startDownload(overrideInfo: UpdateInfo? = null) {
+    fun startDownload(overrideInfo: UpdateInfo? = null, fromSettings: Boolean = false) {
         val infoToDownload: UpdateInfo
         synchronized(lock) {
             if (isDownloadingLocked()) {
@@ -500,14 +524,17 @@ class AppUpdateManager internal constructor(
             } ?: return
 
             infoToDownload = candidate
-            hideActiveDownloadInForeground = false
+            settingsStartedDownload = fromSettings && !infoToDownload.mandatory
+            appInForeground = true
+            deferredSettingsResultNotification = false
+            hideActiveDownloadInForeground = settingsStartedDownload
             _state.value = UpdateState.Downloading(
                 info = infoToDownload,
                 bytesRead = 0L,
                 totalBytes = -1L,
-                hiddenInForeground = false,
+                hiddenInForeground = hideActiveDownloadInForeground,
             )
-            notifier.showStarting(infoToDownload)
+            notifyStarting(infoToDownload)
             downloadJob = scope.launch(ioDispatcher) {
                 executeDownload(infoToDownload)
             }
@@ -574,7 +601,7 @@ class AppUpdateManager internal constructor(
                         awaitingInstallPermission = false,
                     )
                 }
-                notifier.showCompleted(info, finalFile)
+                notifyCompleted(info, finalFile)
                 return
             } catch (c: CancellationException) {
                 runCatching { partFile.delete() }
@@ -594,7 +621,7 @@ class AppUpdateManager internal constructor(
         synchronized(lock) {
             _state.value = UpdateState.Error(message = message, info = info)
         }
-        notifier.showError(info, message)
+        notifyError(info, message)
     }
 
     /**
@@ -686,7 +713,7 @@ class AppUpdateManager internal constructor(
             activeConnections = segmentCount,
             speedBytesPerSec = 0L,
         )
-        notifier.showProgress(info, 0L, totalBytes)
+        notifyProgress(info, 0L, totalBytes)
 
         RandomAccessFile(partFile, "rw").use { raf ->
             raf.setLength(totalBytes)
@@ -734,7 +761,7 @@ class AppUpdateManager internal constructor(
                         if (done || (pct > prevNotifyPct && (prevNotifyPct < 0 || nowNs - prevNotifyNs >= NOTIFY_PROGRESS_MIN_INTERVAL_NS))) {
                             lastNotifyPct.set(pct)
                             lastNotifyNs.set(nowNs)
-                            notifier.showProgress(info, accumulated, totalBytes)
+                            notifyProgress(info, accumulated, totalBytes)
                         }
                     }
                 }
@@ -845,7 +872,7 @@ class AppUpdateManager internal constructor(
             activeConnections = 1,
             speedBytesPerSec = 0L,
         )
-        notifier.showProgress(info, 0L, totalBytes)
+        notifyProgress(info, 0L, totalBytes)
 
         var totalRead = 0L
         var lastUiPct = -1
@@ -890,7 +917,7 @@ class AppUpdateManager internal constructor(
                     ) {
                         lastNotifyPct = currentPct
                         lastNotifyNs = nowNs
-                        notifier.showProgress(info, totalRead, totalBytes)
+                        notifyProgress(info, totalRead, totalBytes)
                     }
                 }
                 output.flush()
@@ -943,7 +970,7 @@ class AppUpdateManager internal constructor(
             if (current is UpdateState.Downloading && !current.info.mandatory) {
                 hideActiveDownloadInForeground = true
                 _state.value = current.copy(hiddenInForeground = true)
-                notifier.showProgress(current.info, current.bytesRead, current.totalBytes)
+                notifyProgress(current.info, current.bytesRead, current.totalBytes)
             }
         }
     }
@@ -977,12 +1004,13 @@ class AppUpdateManager internal constructor(
      * notification permission is granted so the user sees it right away.
      */
     fun repostActiveNotification() {
+        if (settingsStartedDownload && appInForeground) return
         when (val current = _state.value) {
             is UpdateState.Downloading -> {
                 if (current.bytesRead <= 0L && current.totalBytes <= 0L) {
                     notifier.showStarting(current.info)
                 } else {
-                    notifier.showProgress(current.info, current.bytesRead, current.totalBytes)
+                    notifyProgress(current.info, current.bytesRead, current.totalBytes)
                 }
             }
             is UpdateState.ReadyToInstall -> notifier.showCompleted(current.info, current.apkFile)
@@ -1057,7 +1085,12 @@ class AppUpdateManager internal constructor(
         }
     }
 
-    fun onAppResumed(context: Context) {
+    fun onAppResumed(context: Context, autoCheck: Boolean = true) {
+        appInForeground = true
+        if (settingsStartedDownload) {
+            notifier.cancel()
+            deferredSettingsResultNotification = false
+        }
         val current = _state.value
         if (current is UpdateState.ReadyToInstall &&
             current.awaitingInstallPermission &&
@@ -1066,6 +1099,7 @@ class AppUpdateManager internal constructor(
             installApk(context)
             return
         }
+        if (!autoCheck) return
         val now = System.currentTimeMillis()
         if (!isDownloading && now - lastAutoCheckMs >= RESUME_RECHECK_DEBOUNCE_MS) {
             lastAutoCheckMs = now
@@ -1075,6 +1109,41 @@ class AppUpdateManager internal constructor(
 
     fun onAppStopped() {
         lastAutoCheckMs = 0L
+        appInForeground = false
+        if (settingsStartedDownload) {
+            val current = _state.value
+            if (current is UpdateState.Downloading || deferredSettingsResultNotification) {
+                deferredSettingsResultNotification = false
+                repostActiveNotification()
+            }
+        }
+    }
+
+    private fun shouldSuppressSettingsNotification(): Boolean =
+        settingsStartedDownload && appInForeground
+
+    private fun notifyStarting(info: UpdateInfo) {
+        if (!shouldSuppressSettingsNotification()) notifier.showStarting(info)
+    }
+
+    private fun notifyProgress(info: UpdateInfo, bytesRead: Long, totalBytes: Long) {
+        if (!shouldSuppressSettingsNotification()) notifier.showProgress(info, bytesRead, totalBytes)
+    }
+
+    private fun notifyCompleted(info: UpdateInfo, apkFile: File) {
+        if (shouldSuppressSettingsNotification()) {
+            deferredSettingsResultNotification = true
+        } else {
+            notifier.showCompleted(info, apkFile)
+        }
+    }
+
+    private fun notifyError(info: UpdateInfo?, message: String) {
+        if (shouldSuppressSettingsNotification()) {
+            deferredSettingsResultNotification = true
+        } else {
+            notifier.showError(info, message)
+        }
     }
 
     private fun isDownloadingLocked(): Boolean =
