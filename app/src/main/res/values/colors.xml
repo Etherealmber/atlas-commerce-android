@@ -2,4 +2,5 @@
 <resources>
     <color name="atlas_window_background">#F5F2EB</color>
     <color name="atlas_ink">#0A0A0A</color>
+    <color name="atlas_launcher_background">#FFFFFF</color>
 </resources>

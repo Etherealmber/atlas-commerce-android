@@ -36,6 +36,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -106,11 +107,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -136,7 +139,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
-import ma.etherealmber.atlascommerce.ui.theme.AtlasPalette
 
 /** Semantic tone shared by chips, tiles and banners. */
 enum class AtlasTone { NEUTRAL, POSITIVE, WARNING, DANGER, INFO }
@@ -165,44 +167,57 @@ fun toneBackground(tone: AtlasTone): Color {
     }
 }
 
-/**
- * The Atlas "A" mark, drawn with Canvas so it stays crisp at any size and never
- * depends on an asset pipeline.
- */
+/** The Atlas sun-ray emblem, drawn in the active theme's foreground color. */
 @Composable
 fun AtlasMark(
     modifier: Modifier = Modifier,
     size: Dp = 56.dp,
-    palette: AtlasPalette = Atlas.palette,
 ) {
+    val ink = MaterialTheme.colorScheme.onBackground
     Canvas(modifier = modifier.size(size)) {
-        val w = this.size.width
-        val h = this.size.height
-        drawRoundRect(
-            color = palette.markFace,
-            cornerRadius = CornerRadius(w * 0.24f, w * 0.24f),
-            size = Size(w, h),
+        val diameter = this.size.minDimension
+        val center = Offset(this.size.width / 2f, this.size.height / 2f)
+        val innerRadius = diameter * 0.30f
+        val outerRadius = diameter * 0.46f
+        val strokeWidth = diameter * 0.055f
+
+        // The right-hand ray is extended into the distinctive horizontal Atlas beam.
+        for (index in 0 until 16) {
+            val degrees = -90.0 + index * 22.5
+            if (degrees == 0.0) continue
+            val radians = Math.toRadians(degrees)
+            val direction = Offset(kotlin.math.cos(radians).toFloat(), kotlin.math.sin(radians).toFloat())
+            drawLine(
+                color = ink,
+                start = Offset(center.x + direction.x * innerRadius, center.y + direction.y * innerRadius),
+                end = Offset(center.x + direction.x * outerRadius, center.y + direction.y * outerRadius),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Butt,
+            )
+        }
+        drawLine(
+            color = ink,
+            start = center,
+            end = Offset(center.x + diameter * 0.48f, center.y),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Butt,
         )
-        val glyph = Path().apply {
-            moveTo(w * 0.50f, h * 0.20f)
-            lineTo(w * 0.80f, h * 0.80f)
-            lineTo(w * 0.655f, h * 0.80f)
-            lineTo(w * 0.605f, h * 0.665f)
-            lineTo(w * 0.395f, h * 0.665f)
-            lineTo(w * 0.345f, h * 0.80f)
-            lineTo(w * 0.20f, h * 0.80f)
-            close()
-        }
-        drawPath(glyph, color = palette.markInk)
-        // Inner counter of the "A", punched out in the face colour.
-        val counter = Path().apply {
-            moveTo(w * 0.50f, h * 0.375f)
-            lineTo(w * 0.565f, h * 0.545f)
-            lineTo(w * 0.435f, h * 0.545f)
-            close()
-        }
-        drawPath(counter, color = palette.markFace)
     }
+}
+
+/** Full Atlas wordmark from the supplied artwork; the alpha mask is tinted per active theme. */
+@Composable
+fun AtlasBrandWordmark(
+    modifier: Modifier = Modifier,
+    height: Dp = 58.dp,
+) {
+    Image(
+        painter = painterResource(ma.etherealmber.atlascommerce.R.drawable.atlas_wordmark_mask),
+        contentDescription = "Atlas Commerce",
+        modifier = modifier.height(height),
+        contentScale = ContentScale.Fit,
+        colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground),
+    )
 }
 
 @Composable
@@ -1796,7 +1811,7 @@ private fun CodeBlockCard(
 /**
  * Executive App Turn-On / Boot Splash Screen played smoothly on every app launch.
  * Uses strictly finite animations so UI Automator & accessibility snapshots remain 100% idle-safe,
- * while always rendering "Atlas Commerce" visibly from frame 1.
+ * while rendering the theme-aware Atlas wordmark from frame 1.
  */
 @Composable
 fun AtlasBootSplashScreen(
@@ -1805,7 +1820,6 @@ fun AtlasBootSplashScreen(
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val logoScale = remember { Animatable(if (motionEnabled) 0.72f else 1f) }
-    val ringSweep = remember { Animatable(if (motionEnabled) 0f else 1f) }
     val barProgress = remember { Animatable(if (motionEnabled) 0.08f else 1f) }
 
     LaunchedEffect(motionEnabled) {
@@ -1818,8 +1832,7 @@ fun AtlasBootSplashScreen(
     }
     LaunchedEffect(motionEnabled, holdUntilReady) {
         if (motionEnabled) {
-            ringSweep.animateTo(1f, tween(durationMillis = 720, easing = FastOutSlowInEasing))
-            barProgress.animateTo(1f, tween(durationMillis = 360, easing = FastOutSlowInEasing))
+            barProgress.animateTo(1f, tween(durationMillis = 520, easing = FastOutSlowInEasing))
             delay(90)
         } else {
             delay(150)
@@ -1845,41 +1858,17 @@ fun AtlasBootSplashScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Box(
+            AtlasBrandWordmark(
                 modifier = Modifier
-                    .size(132.dp)
+                    .fillMaxWidth()
                     .graphicsLayer {
                         scaleX = logoScale.value
                         scaleY = logoScale.value
                     },
-                contentAlignment = Alignment.Center,
-            ) {
-                Canvas(modifier = Modifier.matchParentSize()) {
-                    val strokePx = 2.5.dp.toPx()
-                    drawCircle(
-                        color = primary.copy(alpha = 0.09f),
-                        radius = this.size.minDimension * 0.46f,
-                    )
-                    drawArc(
-                        color = primary.copy(alpha = 0.45f),
-                        startAngle = -90f,
-                        sweepAngle = 360f * ringSweep.value,
-                        useCenter = false,
-                        style = Stroke(width = strokePx),
-                    )
-                }
-                AtlasMark(size = 78.dp)
-            }
-
-            Spacer(Modifier.height(22.dp))
-
-            Text(
-                text = AppDetails.NAME,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
+                height = 78.dp,
             )
-            Spacer(Modifier.height(6.dp))
+
+            Spacer(Modifier.height(24.dp))
             Text(
                 text = AppDetails.TAGLINE,
                 style = MaterialTheme.typography.bodyMedium,

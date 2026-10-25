@@ -1,5 +1,8 @@
 package ma.etherealmber.atlascommerce.ui.screens.settings
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -35,6 +38,7 @@ import androidx.compose.material.icons.outlined.AutoAwesomeMotion
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Devices
@@ -83,6 +87,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.Roles
@@ -1036,47 +1041,95 @@ fun SettingsScreen(
             AtlasCard {
                 SettingsToggleRow(
                     title = "Mode développeur",
-                    subtitle = "Actif. Affiche des détails de diagnostic non secrets.",
+                    subtitle = "Actif. Affiche des diagnostics et réglages avancés non secrets.",
                     checked = true,
                     onCheckedChange = appViewModel::setDeveloperModeEnabled,
                 )
                 AtlasDivider(Modifier.padding(vertical = 8.dp))
-                AtlasInfoRow("Serveur sélectionné", serverSelection?.let { ServerUrl.display(it.baseUrl) } ?: "Aucun")
-                AtlasInfoRow("Version Android", "${AppDetails.VERSION_NAME} · build ${AppDetails.VERSION_CODE}")
-                AtlasInfoRow("Identifiant appareil", appViewModel.deviceShortId)
+                SettingsToggleRow(
+                    title = "Animations d'interface",
+                    subtitle = "Désactivez-les temporairement pour diagnostiquer les transitions.",
+                    checked = animationsEnabled,
+                    onCheckedChange = appViewModel::setAnimationsEnabled,
+                )
+                AtlasDivider(Modifier.padding(vertical = 8.dp))
+                AtlasInfoRow("Serveur sélectionné", ServerUrl.origin(serverSelection?.baseUrl) ?: "Aucun")
+                AtlasInfoRow("Version de l'application", "${AppDetails.VERSION_NAME} · build ${AppDetails.VERSION_CODE}")
+                AtlasInfoRow("Variante / application", "${BuildConfig.BUILD_TYPE} · ${BuildConfig.APPLICATION_ID}")
+                AtlasInfoRow("Android", "${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}")
+                AtlasInfoRow("Appareil", "${Build.MANUFACTURER} ${Build.MODEL}")
+                AtlasInfoRow("Cache catalogue", "$cachedProductCount article(s)")
+                AtlasInfoRow("Passkey Android", if (androidPasskeysAvailable) "Disponible" else "Non confirmée par le serveur")
+                AtlasInfoRow(
+                    "Rapports automatiques",
+                    when {
+                        !automaticCrashReportsAvailable -> "Firebase Crashlytics non configuré"
+                        automaticCrashReportsEnabled -> "Activés avec consentement"
+                        else -> "Configurés, mais désactivés"
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                TextButton(
+                    onClick = {
+                        val crashStatus = when {
+                            !automaticCrashReportsAvailable -> "non configuré"
+                            automaticCrashReportsEnabled -> "activé avec consentement"
+                            else -> "configuré mais désactivé"
+                        }
+                        val diagnostic = listOf(
+                            "Atlas Commerce ${AppDetails.VERSION_NAME} (${AppDetails.VERSION_CODE})",
+                            "Build: ${BuildConfig.BUILD_TYPE} · ${BuildConfig.APPLICATION_ID}",
+                            "Android: ${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}",
+                            "Appareil: ${Build.MANUFACTURER} ${Build.MODEL}",
+                            "Serveur: ${ServerUrl.origin(serverSelection?.baseUrl) ?: "aucun"}",
+                            "Cache catalogue: $cachedProductCount article(s)",
+                            "Passkey Android: ${if (androidPasskeysAvailable) "disponible" else "non confirmée"}",
+                            "Rapports automatiques: $crashStatus",
+                        ).joinToString("\n")
+                        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(
+                            ClipData.newPlainText("Diagnostic Atlas Commerce", diagnostic),
+                        )
+                        onToast("Infos techniques copiées sans jeton ni mot de passe.")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Copier les infos de diagnostic")
+                }
                 Text(
-                    "Les jetons, mots de passe et clés d'accès ne sont jamais affichés ici.",
+                    "Les jetons, mots de passe et clés d'accès ne sont jamais affichés ni copiés ici.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
-        AnimatedVisibility(
-            visible = androidPasskeysAvailable,
-            enter = if (animationsEnabled) fadeIn() + expandVertically() else EnterTransition.None,
-            exit = if (animationsEnabled) fadeOut() + shrinkVertically() else ExitTransition.None,
-        ) {
-            AtlasEntrance(delayMillis = 30, offsetY = 8.dp) {
-                AtlasCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.Fingerprint,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
+        AtlasEntrance(delayMillis = 30, offsetY = 8.dp) {
+            AtlasCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Fingerprint,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Passkey Android", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (androidPasskeysAvailable) {
+                                "Disponibles sur ce serveur. L'inscription reste manuelle : aucune passkey n'est créée automatiquement."
+                            } else {
+                                "Configuration Android non confirmée par le serveur sélectionné. L'inscription reste masquée tant que le serveur ne l'annonce pas comme disponible."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Passkey Android", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "Passkey prête à tester une fois, si ce serveur l'autorise. L'inscription reste manuelle : aucune passkey n'est créée automatiquement.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
                     }
-                    Spacer(Modifier.height(10.dp))
+                }
+                Spacer(Modifier.height(10.dp))
+                if (androidPasskeysAvailable) {
                     AtlasOutlinedButton(
                         text = if (registeringPasskey) "Enregistrement en cours…" else "Enregistrer une passkey",
                         onClick = { appViewModel.registerAndroidPasskey(context, onToast) },
@@ -1084,6 +1137,15 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !registeringPasskey,
                     )
+                } else {
+                    TextButton(
+                        onClick = appViewModel::refreshPasskeyCapability,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Vérifier à nouveau")
+                    }
                 }
             }
         }

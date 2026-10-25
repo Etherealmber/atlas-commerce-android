@@ -16,7 +16,7 @@ class WebAuthnCapabilityTest {
     private val webOrigin = "https://stock.afmarbre.com"
 
     @Test
-    fun androidPasskeyUiRequiresServerGatesPackageAllowedWebOriginAndMatchingCertificateOrigin() {
+    fun androidPasskeyUiAllowsTheConfiguredWebOriginWhenInstalledSigningKeyDiffers() {
         assertTrue(capabilities().supportsAndroid(packageName, setOf(sha256Origin, legacySha1Origin), webOrigin))
         assertTrue(
             capabilities(originLegacy = null)
@@ -38,7 +38,8 @@ class WebAuthnCapabilityTest {
             capabilities(packageNameValue = "other.package")
                 .supportsAndroid(packageName, setOf(sha256Origin, legacySha1Origin), webOrigin),
         )
-        assertFalse(
+        assertTrue(
+            "The explicit selected web origin is package-checked by the backend, so a debug/upload signing key mismatch must not hide passkeys.",
             capabilities().supportsAndroid(packageName, setOf("android:apk-key-hash-sha256:wrong"), webOrigin),
         )
         assertFalse(

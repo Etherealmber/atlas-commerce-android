@@ -5,7 +5,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -27,7 +26,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AlternateEmail
@@ -47,7 +45,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -66,9 +63,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
-import ma.etherealmber.atlascommerce.ui.components.AtlasMark
+import ma.etherealmber.atlascommerce.ui.components.AtlasBrandWordmark
 import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
-import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.AtlasServerChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
@@ -111,31 +107,18 @@ fun LoginScreen(
         ) {
             Spacer(Modifier.height(if (compact) 4.dp else 18.dp))
             AtlasEntrance(delayMillis = 0) {
-                AtlasPulseHalo(size = if (compact) 76.dp else 112.dp) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(if (compact) 18.dp else 22.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(if (compact) 4.dp else 6.dp),
-                    ) {
-                        AtlasMark(size = if (compact) 52.dp else 64.dp)
-                    }
-                }
+                AtlasBrandWordmark(
+                    modifier = Modifier.fillMaxWidth(),
+                    height = if (compact) 54.dp else 68.dp,
+                )
             }
-            Spacer(Modifier.height(if (compact) 4.dp else 12.dp))
+            Spacer(Modifier.height(if (compact) 4.dp else 10.dp))
             AtlasEntrance(delayMillis = 40) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = AppDetails.NAME,
-                        style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
-                    Text(
-                        text = AppDetails.TAGLINE,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text(
+                    text = AppDetails.TAGLINE,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Spacer(Modifier.height(verticalGap))
             AtlasServerChip(host = host, onClick = onChangeServer)

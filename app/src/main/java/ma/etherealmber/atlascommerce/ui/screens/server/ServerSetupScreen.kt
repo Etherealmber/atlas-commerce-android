@@ -48,9 +48,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
-import ma.etherealmber.atlascommerce.ui.components.AtlasMark
+import ma.etherealmber.atlascommerce.ui.components.AtlasBrandWordmark
 import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
-import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.toneBackground
@@ -84,9 +83,10 @@ fun ServerSetupScreen(
         }
 
         AtlasEntrance(delayMillis = 0) {
-            AtlasPulseHalo {
-                AtlasMark(size = 64.dp)
-            }
+            AtlasBrandWordmark(
+                modifier = Modifier.fillMaxWidth(),
+                height = 68.dp,
+            )
         }
         Spacer(Modifier.height(18.dp))
         AtlasEntrance(delayMillis = 55) {

@@ -4,6 +4,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -454,6 +456,7 @@ private fun ProductRow(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ProductDetailDialog(
     product: ProductDto,
@@ -530,14 +533,18 @@ private fun ProductDetailDialog(
             }
         },
         dismissButton = {
-            Row {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
                 if (product.trackInventory && canAdjustStock) {
-                    TextButton(onClick = onAdjustStock) { Text("Ajuster stock") }
+                    TextButton(onClick = onAdjustStock) { Text("Ajuster stock", maxLines = 1, softWrap = false) }
                 }
                 if (canSell) {
-                    TextButton(onClick = onOpenSale) { Text("Voir le panier") }
+                    TextButton(onClick = onOpenSale) { Text("Voir le panier", maxLines = 1, softWrap = false) }
                 }
-                TextButton(onClick = onDismiss) { Text("Fermer") }
+                TextButton(onClick = onDismiss) { Text("Fermer", maxLines = 1, softWrap = false) }
             }
         },
     )
