@@ -257,10 +257,13 @@ jobs:
               selected = lines[-80:]
           else:
               selected = selected[-100:]
+          detail = "\n".join(selected[-40:])[-6000:]
           with open(sys.argv[2], "a", encoding="utf-8") as summary:
               summary.write("## Gradle failure details\n\n```text\n")
-              summary.write("\n".join(selected))
+              summary.write(detail)
               summary.write("\n```\n")
+          annotation = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Gradle failure details::{annotation}")
           PY
           fi
           exit "$GRADLE_RC"
