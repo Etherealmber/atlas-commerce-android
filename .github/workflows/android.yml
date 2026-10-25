@@ -162,7 +162,7 @@ jobs:
         run: |
           if [ -z "$GOOGLE_SERVICES_JSON_BASE64" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "No Android Firebase client config secret; building with push disabled."
+            echo "::warning title=Firebase push disabled::GOOGLE_SERVICES_JSON_BASE64 is not configured; this build will no-op push registration."
             exit 0
           fi
           python3 - <<'PY'
@@ -188,7 +188,7 @@ jobs:
           destination.chmod(0o600)
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write("configured=true\n")
-          print("Firebase Android client config installed for this CI build.")
+          print("::notice title=Firebase client config::Android Firebase config validated for this build.")
           PY
 
       - name: Set up Gradle
