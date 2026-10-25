@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce.ui.screens.balance
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +20,7 @@ import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.model.CreateFinanceEntryRequest
 import ma.etherealmber.atlascommerce.data.model.FinanceEntryDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
+import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
@@ -35,6 +37,8 @@ class BalanceViewModel @Inject constructor(
         val isAdmin: Boolean = false,
         val selectedPeriod: String? = null,
         val finance: FinanceMonthlyDto? = null,
+        val periodBreakdown: FinancePeriodDto? = null,
+        val periodBreakdownError: String? = null,
         val statement: FinanceStatementDto? = null,
         val rows: List<FinanceStatementRowDto> = emptyList(),
         val loadingMore: Boolean = false,
@@ -182,6 +186,8 @@ class BalanceViewModel @Inject constructor(
                 refreshing = !initial,
                 selectedPeriod = period ?: it.selectedPeriod,
                 finance = if (initial) null else it.finance,
+                periodBreakdown = if (initial) null else it.periodBreakdown,
+                periodBreakdownError = null,
                 statement = if (initial) null else it.statement,
                 rows = if (initial) emptyList() else it.rows,
                 loadingMore = false,
@@ -192,14 +198,17 @@ class BalanceViewModel @Inject constructor(
         viewModelScope.launch {
             val financeResult = repository.financeMonthly(period)
             val finance = (financeResult as? ApiResult.Success)?.data
-            val statementResult = if (finance != null && finance.period.isNotBlank()) {
-                repository.financeStatement(finance.period, page = 1, pageSize = 50)
-            } else null
+            val periodKey = finance?.period?.takeIf { it.isNotBlank() }
+            val statementDeferred = periodKey?.let { key -> async { repository.financeStatement(key, page = 1, pageSize = 50) } }
+            val breakdownDeferred = periodKey?.let { key -> async { repository.financePeriod(key) } }
+            val statementResult = statementDeferred?.await()
+            val breakdownResult = breakdownDeferred?.await()
             val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
             if (!stillSameScope) return@launch
             val selectionStillCurrent = if (period == null) _state.value.selectedPeriod == null else _state.value.selectedPeriod == period
             if (!selectionStillCurrent) return@launch
             val statement = (statementResult as? ApiResult.Success)?.data
+            val breakdown = (breakdownResult as? ApiResult.Success)?.data
             val error = when {
                 financeResult is ApiResult.Failure -> financeResult.message
                 statementResult is ApiResult.Failure -> statementResult.message
@@ -211,6 +220,8 @@ class BalanceViewModel @Inject constructor(
                     refreshing = false,
                     selectedPeriod = finance?.period ?: period ?: state.selectedPeriod,
                     finance = finance,
+                    periodBreakdown = breakdown,
+                    periodBreakdownError = (breakdownResult as? ApiResult.Failure)?.message,
                     statement = statement,
                     rows = statement?.rows.orEmpty(),
                     error = error,

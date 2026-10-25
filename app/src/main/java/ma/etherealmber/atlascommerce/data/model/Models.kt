@@ -386,6 +386,69 @@ data class FinanceStatementDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class FinancePeriodDto(
+    val period: String = "",
+    val timezone: String = "",
+    val currency: String = "MAD",
+    @Json(name = "as_of") val asOf: String = "",
+    val status: String = "open",
+    val inflows: FinancePeriodSplitDto = FinancePeriodSplitDto(),
+    val outflows: FinancePeriodOutflowsDto = FinancePeriodOutflowsDto(),
+    val owner: FinanceOwnerMovementsDto = FinanceOwnerMovementsDto(),
+    @Json(name = "expense_categories") val expenseCategories: List<FinanceCategoryTotalDto> = emptyList(),
+    @Json(name = "categories_truncated") val categoriesTruncated: Boolean = false,
+    val statement: FinancePeriodStatementDto = FinancePeriodStatementDto(),
+)
+
+@JsonClass(generateAdapter = true)
+data class FinancePeriodSplitDto(
+    val total: Double = 0.0,
+    val count: Int = 0,
+    val cash: Double = 0.0,
+    val bank: Double = 0.0,
+    @Json(name = "not_recorded") val notRecorded: Double = 0.0,
+    @Json(name = "by_method") val byMethod: Map<String, Double> = emptyMap(),
+    @Json(name = "by_source") val bySource: Map<String, FinancePeriodSplitDto> = emptyMap(),
+)
+
+@JsonClass(generateAdapter = true)
+data class FinancePeriodOutflowsDto(
+    val total: Double = 0.0,
+    val count: Int = 0,
+    val cash: Double = 0.0,
+    val bank: Double = 0.0,
+    @Json(name = "not_recorded") val notRecorded: Double = 0.0,
+    @Json(name = "refunds_total") val refundsTotal: Double = 0.0,
+    @Json(name = "by_source") val bySource: Map<String, FinancePeriodSplitDto> = emptyMap(),
+)
+
+@JsonClass(generateAdapter = true)
+data class FinanceOwnerMovementsDto(
+    val contributions: FinancePeriodSplitDto = FinancePeriodSplitDto(),
+    val withdrawals: FinancePeriodSplitDto = FinancePeriodSplitDto(),
+    val net: Double = 0.0,
+)
+
+@JsonClass(generateAdapter = true)
+data class FinanceCategoryTotalDto(
+    val category: String = "",
+    val total: Double = 0.0,
+    val count: Int = 0,
+)
+
+@JsonClass(generateAdapter = true)
+data class FinancePeriodStatementDto(
+    @Json(name = "opening_balance") val openingBalance: Double = 0.0,
+    val credits: Double = 0.0,
+    val debits: Double = 0.0,
+    @Json(name = "closing_balance") val closingBalance: Double = 0.0,
+    val net: Double = 0.0,
+    val balanced: Boolean = false,
+    @Json(name = "consistent_with_breakdown") val consistentWithBreakdown: Boolean = false,
+    val rule: String = "",
+)
+
+@JsonClass(generateAdapter = true)
 data class FinanceStatementTotalsDto(
     val credits: Double = 0.0,
     val debits: Double = 0.0,
@@ -754,6 +817,7 @@ data class AssistChatRequest(
     @Json(name = "page_title") val pageTitle: String? = "Atlas Agent",
     val source: String = "android",
     val images: List<String> = emptyList(),
+    val documents: List<String> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)

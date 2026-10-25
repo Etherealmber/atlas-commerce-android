@@ -39,6 +39,7 @@ class AgentViewModel @Inject constructor(
     data class AgentAttachment(
         val name: String,
         val imageDataUrls: List<String>,
+        val documentDataUrls: List<String>,
     )
 
     data class ChatMessage(
@@ -64,6 +65,7 @@ class AgentViewModel @Inject constructor(
         val input: String = "",
         val attachments: List<AgentAttachment> = emptyList(),
         val sensitiveConfirmation: Boolean = false,
+        val streamingReply: String = "",
         val sending: Boolean = false,
         val approvingId: String? = null,
         val error: String? = null,
@@ -97,11 +99,16 @@ class AgentViewModel @Inject constructor(
     /** Starts a fresh conversation using the exact web `t-<base36>` thread ID format. */
     fun startNewConversation() {
         val freshId = newWebCompatibleThreadId()
+        pendingSensitivePrompt = null
+        pendingSensitiveAttachments = emptyList()
         _state.update {
             it.copy(
                 activeThreadId = freshId,
                 activeThreadTitle = "",
                 messages = emptyList(),
+                attachments = emptyList(),
+                streamingReply = "",
+                sensitiveConfirmation = false,
                 error = null,
                 sending = false,
             )
@@ -122,12 +129,17 @@ class AgentViewModel @Inject constructor(
 
     fun selectThread(summary: AgentThreadSummaryDto) {
         if (summary.id.isBlank()) return
+        pendingSensitivePrompt = null
+        pendingSensitiveAttachments = emptyList()
         viewModelScope.launch {
             _state.update {
                 it.copy(
                     activeThreadId = summary.id,
                     activeThreadTitle = summary.title,
                     loadingThread = true,
+                    attachments = emptyList(),
+                    streamingReply = "",
+                    sensitiveConfirmation = false,
                     error = null,
                 )
             }
@@ -216,13 +228,18 @@ class AgentViewModel @Inject constructor(
     fun addAttachment(attachment: PreparedAgentAttachment) {
         val current = _state.value.attachments
         val usedPages = current.sumOf { it.imageDataUrls.size }
+        val usedDocuments = current.sumOf { it.documentDataUrls.size }
         if (usedPages + attachment.imageDataUrls.size > 4) {
-            _notices.tryEmit("Atlas Agent accepte jusqu'à 4 pages/images par message.")
+            _notices.tryEmit("Atlas Agent accepte jusqu'à 4 images par message.")
+            return
+        }
+        if (usedDocuments + attachment.documentDataUrls.size > 2) {
+            _notices.tryEmit("Atlas Agent accepte jusqu'à 2 documents par message.")
             return
         }
         _state.update {
             it.copy(
-                attachments = it.attachments + AgentAttachment(attachment.displayName, attachment.imageDataUrls),
+                attachments = it.attachments + AgentAttachment(attachment.displayName, attachment.imageDataUrls, attachment.documentDataUrls),
                 error = null,
             )
         }
@@ -296,6 +313,7 @@ class AgentViewModel @Inject constructor(
                 input = if (typed == it.input) "" else it.input,
                 activeThreadTitle = resolvedTitle,
                 sending = true,
+                streamingReply = "",
                 error = null,
                 messages = it.messages + userBubble,
             )
@@ -305,12 +323,18 @@ class AgentViewModel @Inject constructor(
             val startedMs = System.currentTimeMillis()
             val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return@launch
             val requestScope = activeUser.scopeIdentity
-            val result = commerceRepository.assistChat(
-                clean,
+            val result = commerceRepository.assistChatStream(
+                message = clean,
                 role = activeUser.role,
                 username = activeUser.username,
                 threadId = activeId,
                 images = attachments.flatMap { it.imageDataUrls }.take(4),
+                documents = attachments.flatMap { it.documentDataUrls }.take(2),
+                onToken = { delta ->
+                    _state.update { current ->
+                        if (current.sending && current.activeThreadId == activeId) current.copy(streamingReply = current.streamingReply + delta) else current
+                    }
+                },
             )
             val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
             if (requestScope != currentScope) return@launch
@@ -321,6 +345,7 @@ class AgentViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             sending = false,
+                            streamingReply = "",
                             policy = refreshedPolicy ?: it.policy,
                             error = res.message,
                         )
@@ -346,6 +371,7 @@ class AgentViewModel @Inject constructor(
                     _state.update { cur ->
                         cur.copy(
                             sending = false,
+                            streamingReply = "",
                             attachments = emptyList(),
                             messages = allMessages,
                             threads = listOf(summaryEntry) + cur.threads.filterNot { it.id == activeId },

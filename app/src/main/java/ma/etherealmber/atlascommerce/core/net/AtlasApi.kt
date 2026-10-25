@@ -25,6 +25,7 @@ import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.HealthDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
+import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.LoginRequest
@@ -255,6 +256,10 @@ interface AtlasApi {
     @POST("api/assist/chat")
     suspend fun assistChat(@Body body: AssistChatRequest): ApiEnvelope<AssistChatResponseDto>
 
+    @Streaming
+    @POST("api/assist/chat/stream")
+    suspend fun assistChatStream(@Body body: AssistChatRequest): Response<ResponseBody>
+
     @POST("api/assist/approve")
     suspend fun assistApprove(@Body body: AssistApproveRequest): ApiEnvelope<AssistApproveDto>
 
@@ -275,6 +280,9 @@ interface AtlasApi {
     suspend fun financeMonthly(
         @Query("period") period: String? = null,
     ): ApiEnvelope<FinanceMonthlyDto>
+
+    @GET("api/admin/finance/period")
+    suspend fun financePeriod(@Query("period") period: String): ApiEnvelope<FinancePeriodDto>
 
     @POST("api/expenses")
     suspend fun createFinanceEntry(@Body body: CreateFinanceEntryRequest): ApiEnvelope<FinanceEntryDto>

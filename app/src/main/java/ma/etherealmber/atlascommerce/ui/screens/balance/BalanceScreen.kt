@@ -68,6 +68,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.data.model.CreateFinanceEntryRequest
+import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
@@ -260,6 +261,19 @@ fun BalanceScreen(
                 when (section) {
                     BalanceSection.MOVEMENTS -> {
                         val finance = state.finance
+                        state.periodBreakdown?.let { periodData ->
+                            item(key = "cash-bank-summary") {
+                                CashBankDashboard(periodData, finance?.currency ?: periodData.currency)
+                            }
+                        } ?: state.periodBreakdownError?.let { detailError ->
+                            item(key = "cash-bank-unavailable") {
+                                Text(
+                                    "Ventilation caisse/banque indisponible sur ce serveur. Les soldes détaillés ne sont pas estimés. ${detailError.take(100)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                         if (finance != null) {
                             item(key = "balance-summary") {
                                 BalanceSummary(
@@ -272,30 +286,32 @@ fun BalanceScreen(
                                 )
                             }
                             item(key = "flow-panels") {
-                                val outflows = listOf(
-                                    "Dépenses" to finance.expenses,
-                                    "Fournisseurs" to finance.supplierPaid,
-                                    "Paie" to finance.payrollPaid,
-                                    "Remboursements" to finance.refunds,
-                                )
-                                val totals = state.statement?.totals
+                                val breakdown = state.periodBreakdown
+                                val outflows = if (breakdown != null) {
+                                    breakdown.expenseCategories.map { it.category to it.total }.ifEmpty { listOf("Aucune dépense" to 0.0) }
+                                } else {
+                                    listOf("Dépenses" to finance.expenses, "Fournisseurs" to finance.supplierPaid, "Paie" to finance.payrollPaid, "Remboursements" to finance.refunds)
+                                }
+                                val incomingTotal = breakdown?.inflows?.total ?: state.statement?.totals?.credits ?: 0.0
+                                val outgoingTotal = breakdown?.outflows?.total ?: state.statement?.totals?.debits ?: 0.0
+                                val categoryTitle = if (breakdown != null) "Dépenses par catégorie" else "Sorties par type"
                                 if (maxWidth < 600.dp) {
                                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        FinanceFlowCard("Sorties par type", outflows, finance.currency)
-                                        FinanceFlowCard("Entrées et sorties", listOf("Entrées" to (totals?.credits ?: 0.0), "Sorties" to (totals?.debits ?: 0.0)), finance.currency)
+                                        FinanceFlowCard(categoryTitle, outflows, finance.currency)
+                                        FinanceFlowCard("Entrées et sorties", listOf("Entrées" to incomingTotal, "Sorties" to outgoingTotal), finance.currency)
                                     }
                                 } else {
                                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        FinanceFlowCard("Sorties par type", outflows, finance.currency, Modifier.weight(1f))
-                                        FinanceFlowCard("Entrées et sorties", listOf("Entrées" to (totals?.credits ?: 0.0), "Sorties" to (totals?.debits ?: 0.0)), finance.currency, Modifier.weight(1f))
+                                        FinanceFlowCard(categoryTitle, outflows, finance.currency, Modifier.weight(1f))
+                                        FinanceFlowCard("Entrées et sorties", listOf("Entrées" to incomingTotal, "Sorties" to outgoingTotal), finance.currency, Modifier.weight(1f))
                                     }
                                 }
                             }
                             item(key = "reconcile") {
                                 ReconciliationNotice(
-                                    balanced = state.statement?.reconciliation?.balanced,
-                                    status = state.statement?.status.orEmpty(),
-                                    asOf = state.statement?.asOf.orEmpty(),
+                                    balanced = state.periodBreakdown?.statement?.balanced ?: state.statement?.reconciliation?.balanced,
+                                    status = state.periodBreakdown?.status ?: state.statement?.status.orEmpty(),
+                                    asOf = state.periodBreakdown?.asOf ?: state.statement?.asOf.orEmpty(),
                                 )
                             }
                         }
@@ -506,6 +522,76 @@ private fun SummaryAmountCard(title: String, amount: Double, currency: String, s
             }
             Text(formatMoney(amount, currency), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun CashBankDashboard(data: FinancePeriodDto, currency: String) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth < 600.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CashAccountCard("Caisse", data.inflows.cash, data.outflows.cash, currency, Modifier.weight(1f))
+                    CashAccountCard("Banque", data.inflows.bank, data.outflows.bank, currency, Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OwnerMovementCard("Apports", data.owner.contributions.total, data.owner.contributions.count, positive = true, currency = currency, modifier = Modifier.weight(1f))
+                    OwnerMovementCard("Prélèvements", data.owner.withdrawals.total, data.owner.withdrawals.count, positive = false, currency = currency, modifier = Modifier.weight(1f))
+                }
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CashAccountCard("Caisse", data.inflows.cash, data.outflows.cash, currency, Modifier.weight(1f))
+                CashAccountCard("Banque", data.inflows.bank, data.outflows.bank, currency, Modifier.weight(1f))
+                OwnerMovementCard("Apports", data.owner.contributions.total, data.owner.contributions.count, positive = true, currency = currency, modifier = Modifier.weight(1f))
+                OwnerMovementCard("Prélèvements", data.owner.withdrawals.total, data.owner.withdrawals.count, positive = false, currency = currency, modifier = Modifier.weight(1f))
+            }
+        }
+    }
+    if (data.outflows.notRecorded > 0.0) {
+        Text(
+            "Mode de paiement non enregistré (paie) : ${formatMoney(data.outflows.notRecorded, currency)} — non attribué à la caisse ni à la banque.",
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (!data.statement.consistentWithBreakdown) {
+        Text(
+            "La ventilation diffère du relevé; vérifiez la cohérence des données serveur.",
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
+@Composable
+private fun CashAccountCard(title: String, incoming: Double, outgoing: Double, currency: String, modifier: Modifier = Modifier) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title.uppercase(Locale.FRENCH), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Entrées  +${formatMoney(incoming, currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            Text("Sorties  −${formatMoney(outgoing, currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            val net = incoming - outgoing
+            Text("Net  ${if (net >= 0.0) "+" else "−"}${formatMoney(kotlin.math.abs(net), currency)}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = if (net >= 0.0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+@Composable
+private fun OwnerMovementCard(title: String, amount: Double, count: Int, positive: Boolean, currency: String, modifier: Modifier = Modifier) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(title.uppercase(Locale.FRENCH), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "${if (positive) "+" else "−"}${formatMoney(amount, currency)}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (positive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
+            Text("$count mouvement(s) · hors solde caisse/banque", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

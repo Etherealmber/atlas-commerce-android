@@ -357,6 +357,23 @@ fun AgentScreen(
                 }
             }
 
+            if (state.streamingReply.isNotBlank()) {
+                item(key = "agent_streaming_reply") {
+                    AtlasEntrance(offsetY = 8.dp) {
+                        ChatBubbleRow(
+                            message = AgentViewModel.ChatMessage(fromUser = false, text = state.streamingReply),
+                            approvingId = state.approvingId,
+                            onCopy = {
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                cm?.setPrimaryClip(ClipData.newPlainText("Atlas Agent", state.streamingReply))
+                                onToast("Réponse copiée.")
+                            },
+                            onApprove = {},
+                        )
+                    }
+                }
+            }
+
             if (state.sending) {
                 item(key = "agent_typing") {
                     Row(
@@ -369,7 +386,11 @@ fun AgentScreen(
                         AtlasTypingDots()
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            text = if (state.attachments.isNotEmpty()) "Atlas Agent lit les fichiers et analyse…" else "Atlas Agent vérifie vos données en direct…",
+                            text = when {
+                                state.streamingReply.isNotBlank() -> "Atlas Agent rédige sa réponse…"
+                                state.attachments.isNotEmpty() -> "Atlas Agent extrait les documents et analyse…"
+                                else -> "Atlas Agent vérifie vos données en direct…"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -416,10 +437,10 @@ fun AgentScreen(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
-                        onClick = { attachmentPicker.launch(arrayOf("image/*", "application/pdf")) },
-                        enabled = !state.sending && !quotaLocked && state.attachments.sumOf { it.imageDataUrls.size } < 4,
+                        onClick = { attachmentPicker.launch(arrayOf("image/*", "application/pdf", "text/plain", "text/csv", "text/markdown", "application/json")) },
+                        enabled = !state.sending && !quotaLocked && (state.attachments.sumOf { it.imageDataUrls.size } < 4 || state.attachments.sumOf { it.documentDataUrls.size } < 2),
                     ) {
-                        Icon(Icons.Outlined.AttachFile, contentDescription = "Joindre une image ou un PDF", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Outlined.AttachFile, contentDescription = "Joindre un fichier ou une image", tint = MaterialTheme.colorScheme.primary)
                     }
                     AtlasTextField(
                         value = state.input,
