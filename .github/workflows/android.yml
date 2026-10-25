@@ -287,13 +287,11 @@ jobs:
           from pathlib import Path
 
           lines = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace").splitlines()
-          patterns = re.compile(r"(^e: |^w: |FAILURE:|What went wrong:|Execution failed for task|Caused by:|Unresolved reference|Compilation error|No matching variant|Could not resolve|Could not find|FAILED$|error:)", re.I)
+          patterns = re.compile(r"(^e: |FAILURE:|What went wrong:|Execution failed for task|Caused by:|Unresolved reference|Compilation error|No matching variant|Could not resolve|Could not find|FAILED$|error:)", re.I)
           selected = [line for line in lines if patterns.search(line)]
           if not selected:
-              selected = lines[-80:]
-          else:
-              selected = selected[-100:]
-          detail = "\n".join(selected[-40:])[-6000:]
+              selected = lines[-60:]
+          detail = "\n".join(selected[-40:])[-3000:]
           with open(sys.argv[2], "a", encoding="utf-8") as summary:
               summary.write("## Gradle failure details\n\n```text\n")
               summary.write(detail)
