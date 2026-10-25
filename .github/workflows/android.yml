@@ -158,7 +158,6 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '9.8.2'
           cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
 
       - name: Configure release signing keystore (on release runs)
@@ -230,19 +229,19 @@ jobs:
           readarray -t URL_ARGS < <(python3 -c 'import json,os; d=json.load(open(os.path.join(os.environ["RUNNER_TEMP"],"resolved-urls.json"))); print("-PoverrideRepoUrl=" + d["repo_url"]); print("-PoverrideCdnUrl=" + d["cdn_url"]); print("-PoverrideDownloadUrl=" + d["download_url"])')
 
           if [ "$IS_RELEASE_RUN" = "true" ]; then
-            gradle :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease \
+            ./gradlew :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease \
               "-PoverrideVersionName=${VER_NAME}" \
               "-PoverrideVersionCode=${VER_CODE}" \
               "${URL_ARGS[@]}" \
               --build-cache --console=plain --stacktrace
           else
-            gradle :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:kspReleaseKotlin :app:lintDebug \
+            ./gradlew :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:kspReleaseKotlin :app:lintDebug \
               "-PoverrideVersionName=${VER_NAME}" \
               "-PoverrideVersionCode=${VER_CODE}" \
               "${URL_ARGS[@]}" \
               --build-cache --console=plain --stacktrace
           fi
-          gradle --stop || true
+          ./gradlew --stop || true
 
       - name: Clean temporary signing files & prepare single release APK
         if: always()
