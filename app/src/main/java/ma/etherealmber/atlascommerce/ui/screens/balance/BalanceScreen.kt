@@ -74,6 +74,8 @@ import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
 import ma.etherealmber.atlascommerce.ui.components.CombinedReportWebViewDialog
 import ma.etherealmber.atlascommerce.ui.components.FinancePdfViewerDialog
+import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelection
+import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelectionDialog
 import java.io.File
 import java.text.NumberFormat
 import java.time.YearMonth
@@ -95,6 +97,8 @@ fun BalanceScreen(
     var pdfViewerFile by remember { mutableStateOf<File?>(null) }
     var pendingPdfFile by remember { mutableStateOf<File?>(null) }
     var combinedUrl by remember { mutableStateOf<String?>(null) }
+    var reportSelection by remember { mutableStateOf(FinanceReportSelection()) }
+    var showReportSelection by remember { mutableStateOf(false) }
     var confirmCombined by remember { mutableStateOf(false) }
     var showEntryDialog by remember { mutableStateOf(false) }
     var entryKind by remember { mutableStateOf(EntryKind.EXPENSE) }
@@ -113,22 +117,32 @@ fun BalanceScreen(
         pendingPdfFile = null
     }
 
+    if (showReportSelection) {
+        FinanceReportSelectionDialog(
+            initial = reportSelection,
+            onDismiss = { showReportSelection = false },
+            onGenerate = { selection ->
+                reportSelection = selection
+                showReportSelection = false
+                confirmCombined = true
+            },
+        )
+    }
+
     if (confirmCombined) {
         AlertDialog(
             onDismissRequest = { confirmCombined = false },
             title = { Text("Ouvrir le rapport combiné ?") },
-            text = { Text("Le rapport sera consulté dans Atlas via un ticket HMAC temporaire. Ne partagez pas le lien ni l'écran pendant sa validité.") },
+            text = { Text("${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. Le lien HMAC est temporaire (30 min) et privé : ne le partagez pas.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmCombined = false
-                    state.selectedPeriod?.let { period ->
-                        viewModel.createCombinedReportUrl(period) { result ->
-                            when (result) {
-                                is ApiResult.Success -> combinedUrl = result.data
-                                is ApiResult.Failure -> onToast(result.message)
-                            }
+                    viewModel.createCombinedReportUrl(reportSelection.period, reportSelection.from, reportSelection.to, reportSelection.sectionKeys) { result ->
+                        when (result) {
+                            is ApiResult.Success -> combinedUrl = result.data
+                            is ApiResult.Failure -> onToast(result.message)
                         }
-                    } ?: onToast("Sélectionnez un mois avant d'ouvrir le rapport.")
+                    }
                 }) { Text("Continuer") }
             },
             dismissButton = { TextButton(onClick = { confirmCombined = false }) { Text("Annuler") } },
@@ -136,7 +150,7 @@ fun BalanceScreen(
     }
 
     combinedUrl?.let { url ->
-        CombinedReportWebViewDialog(url = url, onDismiss = { combinedUrl = null })
+        CombinedReportWebViewDialog(url = url, selectedSections = reportSelection.sectionKeys, onDismiss = { combinedUrl = null })
     }
     pdfViewerFile?.let { file ->
         FinancePdfViewerDialog(
@@ -197,21 +211,31 @@ fun BalanceScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Balance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Soldes, créances et mouvements réconciliés", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            MonthSelector(
-                selectedPeriod = state.selectedPeriod,
-                onSelect = viewModel::selectPeriod,
-            )
-            IconButton(onClick = viewModel::refresh, enabled = !state.refreshing) {
-                if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
-                else Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les soldes")
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 8.dp)) {
+            if (maxWidth < 460.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Balance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        MonthSelector(selectedPeriod = state.selectedPeriod, onSelect = viewModel::selectPeriod)
+                        IconButton(onClick = viewModel::refresh, enabled = !state.refreshing) {
+                            if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les soldes")
+                        }
+                    }
+                    Text("Soldes, créances et mouvements réconciliés", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Balance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("Soldes, créances et mouvements réconciliés", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    MonthSelector(selectedPeriod = state.selectedPeriod, onSelect = viewModel::selectPeriod)
+                    IconButton(onClick = viewModel::refresh, enabled = !state.refreshing) {
+                        if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les soldes")
+                    }
+                }
             }
         }
         Row(
@@ -446,12 +470,12 @@ fun BalanceScreen(
                         }
                         item(key = "combined-report") {
                             ReportActionCard(
-                                title = "Pack de rapports combiné",
-                                description = "Pack pour ${state.selectedPeriod ?: "le mois sélectionné"} : balance, stock, créances clients et fournisseurs, et paie. Ouvert dans le lecteur intégré.",
+                                title = "Pack de rapports personnalisable",
+                                description = "Choisissez les rubriques et la période : mois, année en cours, derniers mois ou dates exactes.",
                                 icon = { Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null) },
                                 actionLabel = if (state.reportGenerating) "Préparation…" else "Ouvrir dans Atlas",
                                 enabled = !state.reportGenerating,
-                            ) { confirmCombined = true }
+                            ) { showReportSelection = true }
                         }
                         item(key = "report-note") {
                             Text("Les chiffres proviennent des API financières du serveur sélectionné. Aucun solde n'est calculé ou codé en dur dans l'application.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -491,22 +515,37 @@ private fun monthLabel(month: YearMonth): String {
 }
 
 @Composable
+private fun BalanceClosingCard(closing: Double, currency: String, modifier: Modifier = Modifier) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                Spacer(Modifier.width(8.dp))
+                Text("SOLDE DE CLÔTURE", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+            Text(formatMoney(closing, currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Après les mouvements comptabilisés", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f))
+        }
+    }
+}
+
+@Composable
 private fun BalanceSummary(opening: Double, closing: Double, income: Double, outflows: Double, currency: String, compact: Boolean) {
-    val cards = listOf(
-        Triple("Solde d'ouverture", opening, Icons.Outlined.AccountBalanceWallet),
-        Triple("Solde actuel", closing, Icons.Outlined.AccountBalanceWallet),
-        Triple("Entrées", income, Icons.Outlined.ArrowDownward),
-        Triple("Sorties payées", outflows, Icons.Outlined.ArrowUpward),
-    )
     if (compact) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            cards.chunked(2).forEach { pair -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                pair.forEach { (title, value, icon) -> SummaryAmountCard(title, value, currency, icon = icon, modifier = Modifier.weight(1f)) }
-            } }
+            BalanceClosingCard(closing, currency, Modifier.fillMaxWidth())
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SummaryAmountCard("Ouverture", opening, currency, icon = Icons.Outlined.AccountBalanceWallet, modifier = Modifier.weight(1f))
+                SummaryAmountCard("Entrées", income, currency, icon = Icons.Outlined.ArrowDownward, modifier = Modifier.weight(1f))
+            }
+            SummaryAmountCard("Sorties payées", outflows, currency, icon = Icons.Outlined.ArrowUpward, modifier = Modifier.fillMaxWidth())
         }
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            cards.forEach { (title, value, icon) -> SummaryAmountCard(title, value, currency, icon = icon, modifier = Modifier.weight(1f)) }
+            BalanceClosingCard(closing, currency, Modifier.weight(1.25f))
+            SummaryAmountCard("Ouverture", opening, currency, icon = Icons.Outlined.AccountBalanceWallet, modifier = Modifier.weight(1f))
+            SummaryAmountCard("Entrées", income, currency, icon = Icons.Outlined.ArrowDownward, modifier = Modifier.weight(1f))
+            SummaryAmountCard("Sorties payées", outflows, currency, icon = Icons.Outlined.ArrowUpward, modifier = Modifier.weight(1f))
         }
     }
 }

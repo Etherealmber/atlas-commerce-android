@@ -1,6 +1,8 @@
 package ma.etherealmber.atlascommerce.ui.screens.products
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,8 +12,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -89,33 +95,50 @@ fun ProductsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = density.screenPadding, vertical = density.itemGap),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AtlasTextField(
-                    value = state.query,
-                    onValueChange = viewModel::onQueryChange,
-                    label = "Rechercher un produit",
-                    placeholder = "Nom, SKU ou code-barres",
-                    leadingIcon = Icons.Outlined.Search,
-                    imeAction = ImeAction.Search,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(4.dp))
-                IconButton(onClick = { showCreateDialog = true }) {
-                    Icon(
-                        imageVector = if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send,
-                        contentDescription = if (isAdmin) "Créer un produit" else "Demander un produit à l'Admin",
-                    )
-                }
-                IconButton(onClick = onOpenScan) {
-                    Icon(Icons.Outlined.QrCodeScanner, contentDescription = "Scanner un code-barres")
-                }
-                IconButton(onClick = viewModel::refresh) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser")
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val compact = maxWidth < 460.dp
+                if (compact) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        AtlasTextField(
+                            value = state.query,
+                            onValueChange = viewModel::onQueryChange,
+                            label = "Rechercher un produit",
+                            placeholder = "Nom, SKU ou code-barres",
+                            leadingIcon = Icons.Outlined.Search,
+                            imeAction = ImeAction.Search,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { showCreateDialog = true }) {
+                                Icon(if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send, contentDescription = if (isAdmin) "Créer un produit" else "Demander un produit à l'Admin")
+                            }
+                            IconButton(onClick = onOpenScan) { Icon(Icons.Outlined.QrCodeScanner, contentDescription = "Scanner un code-barres") }
+                            IconButton(onClick = viewModel::refresh) { Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser") }
+                        }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AtlasTextField(
+                            value = state.query,
+                            onValueChange = viewModel::onQueryChange,
+                            label = "Rechercher un produit",
+                            placeholder = "Nom, SKU ou code-barres",
+                            leadingIcon = Icons.Outlined.Search,
+                            imeAction = ImeAction.Search,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { showCreateDialog = true }) {
+                            Icon(if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send, contentDescription = if (isAdmin) "Créer un produit" else "Demander un produit à l'Admin")
+                        }
+                        IconButton(onClick = onOpenScan) { Icon(Icons.Outlined.QrCodeScanner, contentDescription = "Scanner un code-barres") }
+                        IconButton(onClick = viewModel::refresh) { Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser") }
+                    }
                 }
             }
-            Spacer(Modifier.height(4.dp))
             Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -132,15 +155,14 @@ fun ProductsScreen(
                 FilterChip(
                     selected = state.filter == ProductsViewModel.FilterMode.REQUESTS,
                     onClick = { viewModel.setFilter(ProductsViewModel.FilterMode.REQUESTS) },
-                    label = {
-                        Text(
-                            if (isAdmin) {
-                                "À valider (${state.openRequests.size})"
-                            } else {
-                                "Mes demandes (${state.openRequests.size})"
-                            },
-                        )
-                    },
+                    label = { Text(if (isAdmin) "À valider (${state.openRequests.size})" else "Mes demandes (${state.openRequests.size})") },
+                )
+            }
+            if (state.filter != ProductsViewModel.FilterMode.REQUESTS && !state.loading) {
+                Text(
+                    "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue en direct",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -173,16 +195,14 @@ fun ProductsScreen(
                         onAction = { showCreateDialog = true },
                     )
                 } else {
-                    LazyColumn(
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 320.dp),
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            start = density.screenPadding,
-                            end = density.screenPadding,
-                            bottom = 24.dp,
-                        ),
+                        contentPadding = PaddingValues(start = density.screenPadding, end = density.screenPadding, bottom = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(density.itemGap),
                         verticalArrangement = Arrangement.spacedBy(density.itemGap),
                     ) {
-                        items(state.openRequests, key = { it.id }) { req ->
+                        gridItems(state.openRequests, key = { it.id }) { req ->
                             ProductRequestRow(
                                 request = req,
                                 isAdmin = isAdmin,
@@ -211,17 +231,15 @@ fun ProductsScreen(
             )
 
             else -> {
-                LazyColumn(
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 320.dp),
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = density.screenPadding,
-                        end = density.screenPadding,
-                        bottom = 24.dp,
-                    ),
+                    contentPadding = PaddingValues(start = density.screenPadding, end = density.screenPadding, bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(density.itemGap),
                     verticalArrangement = Arrangement.spacedBy(density.itemGap),
                 ) {
                     if (!isAdmin) {
-                        item {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
                             AtlasCard {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     AtlasChip(text = Roles.label(user.role), tone = AtlasTone.INFO)
@@ -241,7 +259,7 @@ fun ProductsScreen(
                             }
                         }
                     }
-                    items(state.visibleProducts, key = { it.id }) { product ->
+                    gridItems(state.visibleProducts, key = { it.id }) { product ->
                         ProductRow(
                             product = product,
                             currency = state.currency,
@@ -390,52 +408,46 @@ private fun ProductRow(
     onOpen: () -> Unit,
     onAdd: () -> Unit,
 ) {
-    AtlasCard(onClick = onOpen, padding = 12.dp) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = product.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (product.subtitle.isNotBlank()) {
-                    Text(
-                        text = product.subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+    AtlasCard(onClick = onOpen, padding = 14.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.size(44.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Icon(Icons.Outlined.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(10.dp).size(24.dp))
                 }
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AtlasChip(
-                        text = "Stock ${AtlasFormat.quantity(product.stock)}",
-                        tone = when {
-                            product.isOutOfStock -> AtlasTone.DANGER
-                            product.isLowStock -> AtlasTone.WARNING
-                            else -> AtlasTone.POSITIVE
-                        },
-                    )
-                    if (product.neededQuantity > 0.0) {
-                        AtlasChip(
-                            text = "Manque ${AtlasFormat.quantity(product.neededQuantity)}",
-                            tone = if (product.isOutOfStock) AtlasTone.DANGER else AtlasTone.WARNING,
-                        )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(product.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (product.subtitle.isNotBlank()) {
+                        Text(product.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    AtlasChip(text = AtlasFormat.money(product.price, currency))
+                }
+                if (canSell) {
+                    IconButton(onClick = onAdd) {
+                        Icon(Icons.Outlined.AddShoppingCart, contentDescription = "Ajouter au panier", tint = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
-            if (canSell) {
-                Spacer(Modifier.width(8.dp))
-                IconButton(onClick = onAdd) {
-                    Icon(
-                        imageVector = Icons.Outlined.AddShoppingCart,
-                        contentDescription = "Ajouter au panier",
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AtlasChip(
+                    text = "Stock ${AtlasFormat.quantity(product.stock)}",
+                    tone = when {
+                        product.isOutOfStock -> AtlasTone.DANGER
+                        product.isLowStock -> AtlasTone.WARNING
+                        else -> AtlasTone.POSITIVE
+                    },
+                )
+                if (product.neededQuantity > 0.0) {
+                    AtlasChip(text = "Manque ${AtlasFormat.quantity(product.neededQuantity)}", tone = if (product.isOutOfStock) AtlasTone.DANGER else AtlasTone.WARNING)
                 }
+                AtlasChip(text = AtlasFormat.money(product.price, currency))
             }
         }
     }

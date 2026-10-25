@@ -154,7 +154,13 @@ class BalanceViewModel @Inject constructor(
         }
     }
 
-    fun createCombinedReportUrl(period: String, onResult: (ApiResult<String>) -> Unit) {
+    fun createCombinedReportUrl(
+        period: String,
+        from: String?,
+        to: String?,
+        sections: List<String>,
+        onResult: (ApiResult<String>) -> Unit,
+    ) {
         val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
         if (activeUser == null || !Roles.isAdmin(activeUser.role)) {
             onResult(ApiResult.Failure("FIN_FORBIDDEN", "Réservé aux administrateurs (owner/admin)."))
@@ -163,7 +169,7 @@ class BalanceViewModel @Inject constructor(
         val scopeIdentity = activeUser.scopeIdentity
         viewModelScope.launch {
             _state.update { it.copy(reportGenerating = true) }
-            val result = repository.createCombinedReportUrl(period)
+            val result = repository.createCombinedReportUrl(period, from, to, sections)
             _state.update { it.copy(reportGenerating = false) }
             val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
             if (!stillSameScope) onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Relancez l'ouverture avec le bon compte."))

@@ -9,8 +9,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -560,45 +562,40 @@ fun SettingsUpdateCard(
 
         // Live Ping tester (CDN 1 vs GitHub in ms)
         Spacer(Modifier.height(6.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            AtlasChip(
-                text = when {
-                    mirrorPing.testing -> "CDN 1 : test…"
-                    mirrorPing.cdn1Online == true -> "CDN 1 : ${mirrorPing.cdn1Ms} ms"
-                    mirrorPing.cdn1Online == false -> "CDN 1 : indisponible"
-                    else -> "CDN 1 : prêt"
-                },
-                tone = when (mirrorPing.cdn1Online) {
-                    true -> AtlasTone.POSITIVE
-                    false -> AtlasTone.WARNING
-                    null -> AtlasTone.NEUTRAL
-                },
-            )
-            AtlasChip(
-                text = when {
-                    mirrorPing.testing -> "GitHub : test…"
-                    mirrorPing.githubOnline == true -> "GitHub : ${mirrorPing.githubMs} ms"
-                    mirrorPing.githubOnline == false -> "GitHub : indisponible"
-                    else -> "GitHub : prêt"
-                },
-                tone = when (mirrorPing.githubOnline) {
-                    true -> AtlasTone.POSITIVE
-                    false -> AtlasTone.WARNING
-                    null -> AtlasTone.NEUTRAL
-                },
-            )
-            Spacer(Modifier.weight(1f))
-            TextButton(
-                onClick = onPingMirrors,
-                enabled = !mirrorPing.testing,
-            ) {
-                Icon(Icons.Outlined.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Ping")
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            if (maxWidth < 480.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        MirrorLatencyChips(mirrorPing)
+                    }
+                    TextButton(
+                        onClick = onPingMirrors,
+                        enabled = !mirrorPing.testing,
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        Icon(Icons.Outlined.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (mirrorPing.testing) "Test en cours…" else "Tester les miroirs")
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    MirrorLatencyChips(mirrorPing)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onPingMirrors, enabled = !mirrorPing.testing) {
+                        Icon(Icons.Outlined.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Ping")
+                    }
+                }
             }
         }
         mirrorPing.fastestLabel?.let { rec ->
@@ -812,4 +809,34 @@ fun DownloadProgressBlock(state: UpdateState.Downloading) {
             color = MaterialTheme.colorScheme.primary,
         )
     }
+}
+
+@Composable
+private fun MirrorLatencyChips(mirrorPing: MirrorPingResult) {
+    AtlasChip(
+        text = when {
+            mirrorPing.testing -> "CDN 1 : test…"
+            mirrorPing.cdn1Online == true -> "CDN 1 : ${mirrorPing.cdn1Ms} ms"
+            mirrorPing.cdn1Online == false -> "CDN 1 : indisponible"
+            else -> "CDN 1 : prêt"
+        },
+        tone = when (mirrorPing.cdn1Online) {
+            true -> AtlasTone.POSITIVE
+            false -> AtlasTone.WARNING
+            null -> AtlasTone.NEUTRAL
+        },
+    )
+    AtlasChip(
+        text = when {
+            mirrorPing.testing -> "GitHub : test…"
+            mirrorPing.githubOnline == true -> "GitHub : ${mirrorPing.githubMs} ms"
+            mirrorPing.githubOnline == false -> "GitHub : indisponible"
+            else -> "GitHub : prêt"
+        },
+        tone = when (mirrorPing.githubOnline) {
+            true -> AtlasTone.POSITIVE
+            false -> AtlasTone.WARNING
+            null -> AtlasTone.NEUTRAL
+        },
+    )
 }

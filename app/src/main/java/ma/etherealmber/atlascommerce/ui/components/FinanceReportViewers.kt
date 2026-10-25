@@ -1,9 +1,13 @@
 package ma.etherealmber.atlascommerce.ui.components
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import android.print.PrintAttributes
+import android.print.PrintManager
+import android.widget.Toast
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -11,6 +15,8 @@ import ma.etherealmber.atlascommerce.BuildConfig
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,14 +25,19 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.ZoomIn
+import androidx.compose.material.icons.outlined.ZoomOut
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,10 +46,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
@@ -56,6 +71,8 @@ fun FinancePdfViewerDialog(
     onSave: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
 ) {
+    BackHandler(onBack = onDismiss)
+    var zoom by remember(file.absolutePath) { mutableStateOf(1f) }
     val loadResult by produceState<Result<PdfRenderSession>?>(null, file.absolutePath) {
         value = withContext(Dispatchers.IO) { runCatching { PdfRenderSession.open(file) } }
     }
@@ -74,11 +91,11 @@ fun FinancePdfViewerDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, contentDescription = "Fermer le rapport") }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, contentDescription = "Retour au rapport précédent") }
                     Column(Modifier.weight(1f)) {
-                        Text("Rapport PDF", style = MaterialTheme.typography.titleMedium)
+                        Text("Rapport mensuel · PDF", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            text = session?.let { "${it.pageCount} page${if (it.pageCount > 1) "s" else ""}" } ?: "Lecture sécurisée sur cet appareil",
+                            text = session?.let { "${it.pageCount} page${if (it.pageCount > 1) "s" else ""} · lecture privée" } ?: "Ouverture du document…",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -86,6 +103,23 @@ fun FinancePdfViewerDialog(
                     if (onShare != null) IconButton(onClick = onShare) { Icon(Icons.Outlined.Share, contentDescription = "Partager le PDF") }
                     if (onSave != null) IconButton(onClick = onSave) { Icon(Icons.Outlined.FileDownload, contentDescription = "Enregistrer une copie") }
                     if (onDelete != null) IconButton(onClick = onDelete) { Icon(Icons.Outlined.DeleteOutline, contentDescription = "Supprimer le PDF temporaire") }
+                }
+                if (session != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow).padding(horizontal = 12.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        Text("Zoom", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(onClick = { zoom = (zoom - 0.25f).coerceAtLeast(1f) }, enabled = zoom > 1f) {
+                            Icon(Icons.Outlined.ZoomOut, contentDescription = "Réduire le zoom")
+                        }
+                        Text("${(zoom * 100).toInt()}%", style = MaterialTheme.typography.labelLarge)
+                        IconButton(onClick = { zoom = (zoom + 0.25f).coerceAtMost(3f) }, enabled = zoom < 3f) {
+                            Icon(Icons.Outlined.ZoomIn, contentDescription = "Agrandir le PDF")
+                        }
+                    }
                 }
                 when {
                     loadResult == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -97,7 +131,7 @@ fun FinancePdfViewerDialog(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         items(session.dimensions.indices.toList(), key = { "page-$it" }) { index ->
-                            PdfPage(session = session, pageIndex = index)
+                            PdfPage(session = session, pageIndex = index, zoom = zoom)
                         }
                     }
                 }
@@ -107,33 +141,33 @@ fun FinancePdfViewerDialog(
 }
 
 @Composable
-private fun PdfPage(session: PdfRenderSession, pageIndex: Int) {
-    BoxWithPdfWidth(session = session, pageIndex = pageIndex)
-}
-
-@Composable
-private fun BoxWithPdfWidth(session: PdfRenderSession, pageIndex: Int) {
+private fun PdfPage(session: PdfRenderSession, pageIndex: Int, zoom: Float) {
     androidx.compose.foundation.layout.BoxWithConstraints(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-        contentAlignment = Alignment.Center,
     ) {
         val density = androidx.compose.ui.platform.LocalDensity.current
-        val widthPx = with(density) { maxWidth.roundToPx().coerceIn(1, 1800) }
+        val pageWidth = maxWidth * zoom
+        val widthPx = with(density) { pageWidth.roundToPx().coerceIn(1, 2600) }
         val bitmap by produceState<Bitmap?>(null, session, pageIndex, widthPx) {
             value = withContext(Dispatchers.IO) { runCatching { session.render(pageIndex, widthPx) }.getOrNull() }
         }
         val size = session.dimensions[pageIndex]
-        if (bitmap == null) {
-            Box(Modifier.fillMaxWidth().aspectRatio(size.first.toFloat() / size.second.coerceAtLeast(1)), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            bitmap?.let { renderedBitmap ->
-                Image(
-                    bitmap = renderedBitmap.asImageBitmap(),
-                    contentDescription = "Page ${pageIndex + 1} du rapport",
-                    modifier = Modifier.fillMaxWidth().aspectRatio(size.first.toFloat() / size.second.coerceAtLeast(1)),
-                )
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            if (bitmap == null) {
+                Box(Modifier.width(pageWidth).aspectRatio(size.first.toFloat() / size.second.coerceAtLeast(1)), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                bitmap?.let { renderedBitmap ->
+                    Image(
+                        bitmap = renderedBitmap.asImageBitmap(),
+                        contentDescription = "Page ${pageIndex + 1} du rapport, zoom ${(zoom * 100).toInt()} pour cent",
+                        modifier = Modifier.width(pageWidth).aspectRatio(size.first.toFloat() / size.second.coerceAtLeast(1)),
+                    )
+                }
             }
         }
     }
@@ -196,11 +230,29 @@ private class PdfRenderSession private constructor(
 }
 
 @Composable
-fun CombinedReportWebViewDialog(url: String, onDismiss: () -> Unit) {
+fun CombinedReportWebViewDialog(
+    url: String,
+    onDismiss: () -> Unit,
+    selectedSections: List<String> = FinanceReportSection.entries.map { it.key },
+) {
     BackHandler(onBack = onDismiss)
-    val uri = Uri.parse(url)
-    val permittedScheme = uri.scheme == "https" || (BuildConfig.ALLOW_CLEARTEXT && uri.scheme == "http")
-    val permittedHost = uri.host?.lowercase().orEmpty()
+    val context = LocalContext.current
+    val originUri = Uri.parse(url)
+    val permittedScheme = originUri.scheme == "https" || (BuildConfig.ALLOW_CLEARTEXT && originUri.scheme == "http")
+    val permittedHost = originUri.host?.lowercase().orEmpty()
+    val sections = FinanceReportSection.entries.filter { it.key in selectedSections }
+    val showSummary = sections.size == FinanceReportSection.entries.size && originUri.getQueryParameter("period") != "custom"
+    val tabKeys = (if (showSummary) listOf("summary") else emptyList()) + sections.map { it.key }
+    var activeKey by remember(url, selectedSections) {
+        mutableStateOf(if (showSummary) "summary" else sections.firstOrNull()?.key ?: "summary")
+    }
+    val activeSection = sections.firstOrNull { it.key == activeKey }
+    val activeTitle = if (activeKey == "summary") "Synthèse" else activeSection?.label ?: "Rapport"
+    val activeUrl = remember(url, activeKey, activeSection) {
+        if (activeKey == "summary" || activeSection == null) url else reportSectionUrl(originUri, activeSection)
+    }
+    var webView by remember(url) { mutableStateOf<WebView?>(null) }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
@@ -211,12 +263,32 @@ fun CombinedReportWebViewDialog(url: String, onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, contentDescription = "Fermer le rapport") }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, contentDescription = "Retour à la page précédente") }
                     Column(Modifier.weight(1f)) {
-                        Text("Rapport combiné", style = MaterialTheme.typography.titleMedium)
-                        Text("Consultation sécurisée dans Atlas", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Rapports · $activeTitle", style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                        Text("${FinanceReportSelection(period = originUri.getQueryParameter("period") ?: "month", from = originUri.getQueryParameter("from"), to = originUri.getQueryParameter("to")).shortLabel} · consultation sécurisée", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    }
+                    IconButton(onClick = { printReport(context, webView, activeTitle) }, enabled = webView != null) {
+                        Icon(Icons.Outlined.Print, contentDescription = "Imprimer ou enregistrer en PDF")
                     }
                 }
+                if (tabKeys.size > 1) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow).horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        tabKeys.forEach { key ->
+                            val label = if (key == "summary") "Synthèse" else sections.firstOrNull { it.key == key }?.label.orEmpty()
+                            FilterChip(selected = key == activeKey, onClick = { activeKey = key }, label = { Text(label, maxLines = 1) })
+                        }
+                    }
+                }
+                Text(
+                    "Utilisez le bouton d'impression Atlas pour enregistrer en PDF. Retour ferme le rapport et vous ramène à l'écran précédent.",
+                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 14.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 if (!permittedScheme || permittedHost.isBlank()) {
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Text("Lien de rapport non sécurisé refusé.", color = MaterialTheme.colorScheme.error)
@@ -224,8 +296,9 @@ fun CombinedReportWebViewDialog(url: String, onDismiss: () -> Unit) {
                 } else {
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
-                        factory = { context ->
-                            WebView(context).apply {
+                        factory = { viewContext ->
+                            WebView(viewContext).apply {
+                                webView = this
                                 settings.javaScriptEnabled = false
                                 settings.domStorageEnabled = false
                                 settings.allowFileAccess = false
@@ -236,27 +309,53 @@ fun CombinedReportWebViewDialog(url: String, onDismiss: () -> Unit) {
                                 webViewClient = object : WebViewClient() {
                                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                                         val destination = request.url
-                                        val destinationPort = destination.port.takeIf { it > 0 } ?: 443
-                                        val expectedPort = uri.port.takeIf { it > 0 } ?: 443
-                                        val sameOrigin = destination.scheme == uri.scheme &&
+                                        val destinationPort = destination.port.takeIf { it > 0 } ?: if (destination.scheme == "https") 443 else 80
+                                        val expectedPort = originUri.port.takeIf { it > 0 } ?: if (originUri.scheme == "https") 443 else 80
+                                        val sameOrigin = destination.scheme == originUri.scheme &&
                                             destination.host?.equals(permittedHost, ignoreCase = true) == true &&
                                             destinationPort == expectedPort
                                         return !sameOrigin
                                     }
                                 }
-                                loadUrl(url)
+                                loadUrl(activeUrl)
                             }
                         },
-                        onRelease = { webView ->
-                            webView.stopLoading()
-                            webView.loadUrl("about:blank")
-                            webView.clearHistory()
-                            webView.clearCache(true)
-                            webView.destroy()
+                        update = { view ->
+                            webView = view
+                            if (view.url != activeUrl) view.loadUrl(activeUrl)
+                        },
+                        onRelease = { view ->
+                            webView = null
+                            view.stopLoading()
+                            view.loadUrl("about:blank")
+                            view.clearHistory()
+                            view.clearCache(true)
+                            view.destroy()
                         },
                     )
                 }
             }
         }
     }
+}
+
+private fun reportSectionUrl(origin: Uri, section: FinanceReportSection): String {
+    val prefix = origin.path.orEmpty().substringBeforeLast('/', "/api/reports")
+    val builder = origin.buildUpon().encodedPath("$prefix/${section.path}").clearQuery().fragment(null)
+    origin.queryParameterNames
+        .filterNot { it == "sections" }
+        .forEach { name -> origin.getQueryParameters(name).forEach { value -> builder.appendQueryParameter(name, value) } }
+    return builder.build().toString()
+}
+
+private fun printReport(context: Context, webView: WebView?, title: String) {
+    val view = webView ?: return
+    runCatching {
+        val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
+        printManager.print(
+            "Atlas-${title.replace(Regex("[^A-Za-z0-9_-]"), "-")}",
+            view.createPrintDocumentAdapter(title),
+            PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build(),
+        )
+    }.onFailure { Toast.makeText(context, "Impossible d'ouvrir l'impression : ${it.message.orEmpty()}", Toast.LENGTH_LONG).show() }
 }
