@@ -87,6 +87,57 @@ data class ReportLinkTicketDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class WebAuthnCapabilitiesDto(
+    val enabled: Boolean = false,
+    val android: WebAuthnAndroidCapabilityDto? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnAndroidCapabilityDto(
+    val enabled: Boolean = false,
+    @Json(name = "package") val packageName: String? = null,
+)
+
+fun WebAuthnCapabilitiesDto.supportsAndroid(packageName: String): Boolean =
+    enabled && android?.enabled == true && android.packageName == packageName
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnLoginOptionsRequest(
+    val username: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnRegistrationOptionsRequest(
+    val fingerprint: String,
+    @Json(name = "device_type") val deviceType: String = "platform",
+)
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnOptionsResponse(
+    override val success: Boolean = false,
+    val options: Map<String, Any?> = emptyMap(),
+    override val error: String? = null,
+    override val code: String? = null,
+) : ma.etherealmber.atlascommerce.core.net.ApiStatus
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnCredentialVerifyRequest(
+    val credential: Map<String, Any?>,
+    val fingerprint: String,
+    @Json(name = "device_type") val deviceType: String? = null,
+    @Json(name = "device_label") val deviceLabel: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class WebAuthnRegistrationVerifyResponse(
+    override val success: Boolean = false,
+    val message: String? = null,
+    val label: String? = null,
+    override val error: String? = null,
+    override val code: String? = null,
+) : ma.etherealmber.atlascommerce.core.net.ApiStatus
+
+@JsonClass(generateAdapter = true)
 data class LoginRequest(
     val username: String,
     val password: String,

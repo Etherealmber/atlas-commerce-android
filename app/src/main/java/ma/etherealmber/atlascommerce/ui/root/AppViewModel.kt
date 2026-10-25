@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce.ui.root
 import android.content.Context
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.diagnostics.CompressedReportAttachment
@@ -34,6 +37,7 @@ import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
+import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyCredentials
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.server.ServerSelection
@@ -47,6 +51,7 @@ import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
+import ma.etherealmber.atlascommerce.data.model.supportsAndroid
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import ma.etherealmber.atlascommerce.di.ProbeClient
@@ -167,9 +172,16 @@ class AppViewModel @Inject constructor(
     private val _cachedProductCount = MutableStateFlow(0)
     val cachedProductCount: StateFlow<Int> = _cachedProductCount.asStateFlow()
 
+    private val _androidPasskeysAvailable = MutableStateFlow(false)
+    val androidPasskeysAvailable: StateFlow<Boolean> = _androidPasskeysAvailable.asStateFlow()
+
+    private val _registeringPasskey = MutableStateFlow(false)
+    val registeringPasskey: StateFlow<Boolean> = _registeringPasskey.asStateFlow()
+
     init {
         observeSessionExpiry()
         observeServerChanges()
+        observePasskeyCapabilities()
         observeActiveSessionDevices()
         checkUpdatesOnceServerReady()
     }
@@ -197,6 +209,89 @@ class AppViewModel @Inject constructor(
                     updateManager.checkForUpdate(manual = false)
                 }
                 previous = next
+            }
+        }
+    }
+
+    private fun observePasskeyCapabilities() {
+        viewModelScope.launch {
+            serverConfig.selection.collectLatest { selection ->
+                _androidPasskeysAvailable.value = false
+                val selectedBase = selection?.baseUrl ?: return@collectLatest
+                val result = authRepository.webAuthnCapabilities()
+                val currentBase = serverConfig.selection.value?.baseUrl
+                if (currentBase != null && currentBase.equals(selectedBase, ignoreCase = true)) {
+                    val capability = (result as? ApiResult.Success)?.data
+                    _androidPasskeysAvailable.value = capability?.supportsAndroid(BuildConfig.APPLICATION_ID) == true
+                }
+            }
+        }
+    }
+
+    fun refreshPasskeyCapability() {
+        val selectedBase = serverConfig.selection.value?.baseUrl ?: run {
+            _androidPasskeysAvailable.value = false
+            return
+        }
+        viewModelScope.launch {
+            val result = authRepository.webAuthnCapabilities()
+            val currentBase = serverConfig.selection.value?.baseUrl
+            if (currentBase != null && currentBase.equals(selectedBase, ignoreCase = true)) {
+                val capability = (result as? ApiResult.Success)?.data
+                _androidPasskeysAvailable.value = capability?.supportsAndroid(BuildConfig.APPLICATION_ID) == true
+            }
+        }
+    }
+
+    fun registerAndroidPasskey(context: Context, onDone: (String) -> Unit) {
+        if (!_androidPasskeysAvailable.value) {
+            onDone("Les passkeys Android ne sont pas activées pour le serveur sélectionné.")
+            return
+        }
+        if (_registeringPasskey.value) return
+        viewModelScope.launch {
+            _registeringPasskey.value = true
+            try {
+                when (val capabilityResult = authRepository.webAuthnCapabilities()) {
+                    is ApiResult.Failure -> {
+                        _androidPasskeysAvailable.value = false
+                        onDone("Impossible de vérifier les passkeys du serveur sélectionné : ${capabilityResult.message}")
+                        return@launch
+                    }
+                    is ApiResult.Success -> {
+                        if (!capabilityResult.data.supportsAndroid(BuildConfig.APPLICATION_ID)) {
+                            _androidPasskeysAvailable.value = false
+                            onDone("Les passkeys Android ne sont plus activées pour le serveur sélectionné.")
+                            return@launch
+                        }
+                    }
+                }
+                when (val options = authRepository.webAuthnRegistrationOptions(deviceIdentity.fingerprint)) {
+                    is ApiResult.Failure -> onDone(options.message)
+                    is ApiResult.Success -> {
+                        val credentialJson = AndroidPasskeyCredentials.create(context, options.data)
+                        val label = listOf("Android", android.os.Build.MANUFACTURER, android.os.Build.MODEL)
+                            .filter { it.isNotBlank() }
+                            .distinct()
+                            .joinToString(" ")
+                        when (
+                            val result = authRepository.verifyWebAuthnRegistration(
+                                credentialJson = credentialJson,
+                                fingerprint = deviceIdentity.fingerprint,
+                                deviceLabel = label,
+                            )
+                        ) {
+                            is ApiResult.Failure -> onDone(result.message)
+                            is ApiResult.Success -> onDone(result.data)
+                        }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                onDone("Enregistrement passkey annulé ou indisponible. Vérifiez l'association Android du serveur et réessayez.")
+            } finally {
+                _registeringPasskey.value = false
             }
         }
     }
@@ -291,9 +386,7 @@ class AppViewModel @Inject constructor(
         updateManager.installApk(context)
 
     fun onAppResumed(context: Context) {
-        if (autoCheckUpdates.value) {
-            updateManager.onAppResumed(context)
-        }
+        updateManager.onAppResumed(context, autoCheck = autoCheckUpdates.value)
         if (sessionManager.state.value is SessionState.Active) {
             viewModelScope.launch {
                 sessionManager.refreshProfile()

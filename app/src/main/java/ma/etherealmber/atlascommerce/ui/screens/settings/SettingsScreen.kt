@@ -2,12 +2,14 @@ package ma.etherealmber.atlascommerce.ui.screens.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.spring
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -38,6 +40,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Language
@@ -608,6 +611,8 @@ fun SettingsScreen(
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
+    val androidPasskeysAvailable by appViewModel.androidPasskeysAvailable.collectAsStateWithLifecycle()
+    val registeringPasskey by appViewModel.registeringPasskey.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
     var showReleaseHistoryDialog by remember { mutableStateOf(false) }
     var showClearReportsDialog by remember { mutableStateOf(false) }
@@ -731,7 +736,8 @@ fun SettingsScreen(
         )
     }
 
-    LaunchedEffect(user.scopeIdentity) {
+    LaunchedEffect(user.scopeIdentity, serverSelection?.baseUrl) {
+        appViewModel.refreshPasskeyCapability()
         appViewModel.loadDevices()
         appViewModel.refreshAgentPolicy()
         appViewModel.refreshCachedProductCount()
@@ -742,6 +748,7 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
+            .animateContentSize(spring(dampingRatio = 0.9f, stiffness = 420f))
             .padding(
                 start = density.screenPadding,
                 end = density.screenPadding,
@@ -796,26 +803,30 @@ fun SettingsScreen(
         }
 
         // 2. Live Atlas Agent IA Quota Bars & Limit Countdown
-        AgentQuotaCard(
-            policy = agentPolicy,
-            onRefresh = appViewModel::refreshAgentPolicy,
-        )
+        AtlasEntrance(delayMillis = 45, offsetY = 8.dp) {
+            AgentQuotaCard(
+                policy = agentPolicy,
+                onRefresh = appViewModel::refreshAgentPolicy,
+            )
+        }
 
         // 3. Updates, Fast Parallel Download, Latest Release Tracking & Changelog
-        SettingsUpdateCard(
-            state = updateState,
-            selectedSource = updateDownloadSource,
-            mirrorPing = mirrorPing,
-            onSelectSource = appViewModel::setUpdateDownloadSource,
-            onPingMirrors = appViewModel::pingUpdateMirrors,
-            onCheck = { appViewModel.checkForUpdate(manual = true) },
-            onDownload = onStartUpdateDownload,
-            onInstall = {
-                if (!appViewModel.installDownloadedUpdate(context)) {
-                    onToast("Impossible d'ouvrir l'installateur sur cet appareil.")
-                }
-            },
-        )
+        AtlasEntrance(delayMillis = 90, offsetY = 8.dp) {
+            SettingsUpdateCard(
+                state = updateState,
+                selectedSource = updateDownloadSource,
+                mirrorPing = mirrorPing,
+                onSelectSource = appViewModel::setUpdateDownloadSource,
+                onPingMirrors = appViewModel::pingUpdateMirrors,
+                onCheck = { appViewModel.checkForUpdate(manual = true) },
+                onDownload = onStartUpdateDownload,
+                onInstall = {
+                    if (!appViewModel.installDownloadedUpdate(context)) {
+                        onToast("Impossible d'ouvrir l'installateur sur cet appareil.")
+                    }
+                },
+            )
+        }
 
         AtlasCard {
             SettingsToggleRow(
@@ -1023,6 +1034,42 @@ fun SettingsScreen(
             }
         }
 
+        AnimatedVisibility(
+            visible = androidPasskeysAvailable,
+            enter = if (animationsEnabled) fadeIn() + expandVertically() else EnterTransition.None,
+            exit = if (animationsEnabled) fadeOut() + shrinkVertically() else ExitTransition.None,
+        ) {
+            AtlasEntrance(delayMillis = 30, offsetY = 8.dp) {
+                AtlasCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Outlined.Fingerprint,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Passkey Android", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Ajoutez une connexion biométrique vérifiée sur le serveur sélectionné.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    AtlasOutlinedButton(
+                        text = if (registeringPasskey) "Enregistrement en cours…" else "Enregistrer une passkey",
+                        onClick = { appViewModel.registerAndroidPasskey(context, onToast) },
+                        icon = Icons.Outlined.Fingerprint,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !registeringPasskey,
+                    )
+                }
+            }
+        }
+
         // 6. Security, License & About
         AtlasCard(padding = 4.dp) {
             SettingsRow(
@@ -1096,7 +1143,9 @@ fun SettingsScreen(
                 text = "${AppDetails.NAME} ${AppDetails.VERSION_NAME} (build ${AppDetails.VERSION_CODE})",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable(onClick = onBuildVersionTap),
+                modifier = Modifier
+                    .clickable(onClick = onBuildVersionTap)
+                    .padding(vertical = 8.dp),
             )
             Text(
                 text = "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER} · Licence ${AppDetails.LICENSE_NAME}",
@@ -1117,6 +1166,7 @@ private fun SettingsToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .animateContentSize(spring(dampingRatio = 0.9f, stiffness = 520f))
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
