@@ -56,6 +56,35 @@ data class ReleaseChangelogEntry(
     val htmlUrl: String? = null,
 )
 
+internal fun formatReleaseNotesForDisplay(rawBody: String, tagName: String): String {
+    val lines = rawBody.lineSequence()
+        .map(String::trim)
+        .filter { line ->
+            line.isNotEmpty() &&
+                !line.startsWith("## ") &&
+                !line.startsWith("### ") &&
+                !line.startsWith("- **SHA-256", ignoreCase = true) &&
+                !line.startsWith("- **Téléchargement", ignoreCase = true) &&
+                !line.startsWith("- **Miroir", ignoreCase = true) &&
+                !line.startsWith("**Comparatif", ignoreCase = true)
+        }
+        .map { line ->
+            line.removePrefix("- ").removePrefix("* ")
+                .replace(Regex("\\[([^]]+)]\\([^)]+\\)"), "$1")
+                .replace("**", "")
+                .replace("__", "")
+                .replace("`", "")
+                .replace(Regex("[ \\t]+"), " ")
+                .trim()
+                .let { if (it.startsWith("•")) it else "• $it" }
+        }
+        .filter { it != "•" }
+        .take(6)
+        .toList()
+    return lines.takeIf { it.isNotEmpty() }?.joinToString("\n")
+        ?: "• Mise à jour $tagName — optimisations et correctifs."
+}
+
 data class UpdateInfo(
     val versionCode: Int,
     val versionName: String,
@@ -75,7 +104,7 @@ data class UpdateInfo(
 
     /**
      * Minimal, concise summary shown in update banners while full release history
-     * lives directly inside Paramètres → Nouveautés des versions.
+     * is available in the Paramètres → Nouveautés des versions dialog.
      */
     val effectiveNotes: String
         get() {

@@ -167,6 +167,13 @@ class MarkdownParserTest {
         assertFalse(Roles.canCreateProductDirectly("magasinier"))
         assertFalse(Roles.canCreateProductDirectly("user"))
 
+        // The new finance/payroll/report surface is strictly owner/admin-only.
+        assertTrue(Roles.canViewFinancials("owner"))
+        assertTrue(Roles.canViewFinancials("admin"))
+        assertFalse(Roles.canViewFinancials("secretaire"))
+        assertFalse(Roles.canViewFinancials("stock"))
+        assertFalse(Roles.canViewFinancials("user"))
+
         // 2. Bottom navigation bar adapts strictly by role
         assertEquals(
             listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.SALE, MainTab.AGENT),

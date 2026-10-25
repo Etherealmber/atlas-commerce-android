@@ -243,7 +243,17 @@ class AgentViewModel @Inject constructor(
 
         viewModelScope.launch {
             val startedMs = System.currentTimeMillis()
-            when (val res = commerceRepository.assistChat(clean, threadId = activeId)) {
+            val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return@launch
+            val requestScope = activeUser.scopeIdentity
+            val result = commerceRepository.assistChat(
+                clean,
+                role = activeUser.role,
+                username = activeUser.username,
+                threadId = activeId,
+            )
+            val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (requestScope != currentScope) return@launch
+            when (val res = result) {
                 is ApiResult.Failure -> {
                     // Refresh quota right away in case server returned 429 / quota reached
                     val refreshedPolicy = (commerceRepository.agentPolicy() as? ApiResult.Success)?.data

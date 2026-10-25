@@ -65,7 +65,7 @@ public class BuildSupportTest {
         Path srcDir = zipExtractDir.resolve("app/src");
         Path validMain = srcDir.resolve("main/java/ma/etherealmber/atlascommerce/MainActivity.kt");
         Path stalePush = srcDir.resolve(
-            "main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt"
+            "main/java/ma/etherealmber/atlascommerce/legacy/OldPushService.kt"
         );
         Path staleBus = srcDir.resolve(
             "main/java/ma/etherealmber/atlascommerce/DisplayPrefsBus.kt"
@@ -74,7 +74,7 @@ public class BuildSupportTest {
         Files.createDirectories(validMain.getParent());
         Files.createDirectories(stalePush.getParent());
         Files.writeString(validMain, "class MainActivity\n", StandardCharsets.UTF_8);
-        Files.writeString(stalePush, "class AtlasFirebaseMessagingService\n", StandardCharsets.UTF_8);
+        Files.writeString(stalePush, "class OldPushService\n", StandardCharsets.UTF_8);
         Files.writeString(staleBus, "object DisplayPrefsBus\n", StandardCharsets.UTF_8);
 
         Path quarantineDir = zipExtractDir.resolve(".atlas-1.0.4-quarantine");
@@ -88,7 +88,7 @@ public class BuildSupportTest {
         assertFalse(Files.exists(staleBus));
         assertFalse(Files.exists(stalePush.getParent()));
         assertTrue(Files.exists(quarantineDir.resolve(
-            "main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt"
+            "main/java/ma/etherealmber/atlascommerce/legacy/OldPushService.kt"
         )));
     }
 
@@ -101,14 +101,14 @@ public class BuildSupportTest {
         Path tracked = srcDir.resolve("main/java/ma/etherealmber/atlascommerce/MainActivity.kt");
         Path staged = srcDir.resolve("main/java/ma/etherealmber/atlascommerce/NewFeature.kt");
         Path untrackedPush = srcDir.resolve(
-            "main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt"
+            "main/java/ma/etherealmber/atlascommerce/legacy/OldPushService.kt"
         );
 
         Files.createDirectories(tracked.getParent());
         Files.createDirectories(untrackedPush.getParent());
         Files.writeString(tracked, "class MainActivity\n", StandardCharsets.UTF_8);
         Files.writeString(staged, "class NewFeature\n", StandardCharsets.UTF_8);
-        Files.writeString(untrackedPush, "class AtlasFirebaseMessagingService\n", StandardCharsets.UTF_8);
+        Files.writeString(untrackedPush, "class OldPushService\n", StandardCharsets.UTF_8);
 
         runGit(repo, "add", "app/src/main/java/ma/etherealmber/atlascommerce/MainActivity.kt");
         runGit(repo, "-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-m", "init");
@@ -120,7 +120,7 @@ public class BuildSupportTest {
         );
 
         assertEquals(
-            List.of("main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt"),
+            List.of("main/java/ma/etherealmber/atlascommerce/legacy/OldPushService.kt"),
             moved
         );
         assertTrue(Files.exists(tracked));
@@ -128,7 +128,7 @@ public class BuildSupportTest {
         assertFalse(Files.exists(untrackedPush));
         assertFalse(Files.exists(untrackedPush.getParent()));
         assertTrue(Files.exists(quarantineDir.resolve(
-            "main/java/ma/etherealmber/atlascommerce/push/AtlasFirebaseMessagingService.kt"
+            "main/java/ma/etherealmber/atlascommerce/legacy/OldPushService.kt"
         )));
     }
 

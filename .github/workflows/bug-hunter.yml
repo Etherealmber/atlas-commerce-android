@@ -54,7 +54,6 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '9.8.2'
           cache-read-only: true
 
       - name: Run Gradle Unit Tests, Release KSP & Android Lint XML
@@ -65,12 +64,12 @@ jobs:
           : > "$RUNNER_TEMP/audit-gradle.log"
           tail -f "$RUNNER_TEMP/audit-gradle.log" &
           TAIL_PID=$!
-          gradle :buildSrc:test :app:testDebugUnitTest :app:kspReleaseKotlin :app:lintDebug \
+          ./gradlew :buildSrc:test :app:testDebugUnitTest :app:kspReleaseKotlin :app:lintDebug \
             --build-cache --console=plain --stacktrace >> "$RUNNER_TEMP/audit-gradle.log" 2>&1
           RC=$?
           sleep 1
           kill "$TAIL_PID" 2>/dev/null || true
-          gradle --stop >/dev/null 2>&1 || true
+          ./gradlew --stop >/dev/null 2>&1 || true
           exit $RC
 
       - name: Analyze Codebase, Backend API Parity, Lint XML & Live Release Mirrors -> Sync GitHub Issues
@@ -159,9 +158,9 @@ jobs:
           # ------------------------------------------------------------------
           code_hazards = []
           src_files = [f for f in sorted(glob.glob("app/src/**/*", recursive=True)) if os.path.isfile(f)]
-          if len(src_files) != 83:
+          if len(src_files) != 86:
               code_hazards.append(
-                  f"- **Source file count drift**: found `{len(src_files)}` files under `app/src/` (expected `83` for `LegacySourceQuarantine` Windows pull compatibility)."
+                  f"- **Source file count drift**: found `{len(src_files)}` files under `app/src/` (expected `86` for `LegacySourceQuarantine` Windows pull compatibility)."
               )
 
           for kt in sorted(glob.glob("app/src/main/**/*.kt", recursive=True)):

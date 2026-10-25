@@ -17,5 +17,7 @@
 /local.properties
 ci-logs/
 /.atlas-1.0.4-quarantine/
+# FCM bridge: per-deployment Firebase config — never commit the real file.
+app/google-services.json
 !app/google-services.json.example
 keystore.properties

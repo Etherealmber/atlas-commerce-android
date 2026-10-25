@@ -61,6 +61,16 @@
             </intent-filter>
         </activity>
 
+        <!-- v1.2 FCM bridge: worker pushes (assist approvals, finance reminders,
+             stock alerts) arrive here; channel "atlas_assist" created in AtlasApp. -->
+        <service
+            android:name=".push.AtlasFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
