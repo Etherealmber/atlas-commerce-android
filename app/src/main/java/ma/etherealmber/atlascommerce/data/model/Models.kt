@@ -102,21 +102,37 @@ data class WebAuthnAndroidCapabilityDto(
 )
 
 /**
- * Require one server-advertised signing-certificate origin and the selected Worker web origin to
- * match this installed build. The request may use an explicit web origin only with the declared
- * CREDENTIAL_MANAGER_SET_ORIGIN permission; the backend still checks package and crossOrigin.
+ * Gate Android passkeys on the selected server's explicit capability, matching app package, and
+ * an allowed origin. Prefer the exact installed signing-certificate origin when available (check
+ * both current SHA-256 and legacy SHA-1 forms). This app also passes the selected HTTPS web origin
+ * to Credential Manager; on that path the backend requires crossOrigin plus androidPackageName,
+ * so an upload/debug signing certificate mismatch must not hide an otherwise configured feature.
  */
 fun WebAuthnCapabilitiesDto.supportsAndroid(
     packageName: String,
     signingOrigins: Set<String>,
     selectedServerOrigin: String?,
-): Boolean =
-    enabled &&
-        android?.enabled == true &&
-        android.packageName == packageName &&
-        listOfNotNull(android.origin, android.originLegacy).any { it in signingOrigins } &&
-        !selectedServerOrigin.isNullOrBlank() &&
-        selectedServerOrigin in origins
+): Boolean {
+    val androidCapability = android ?: return false
+    val advertisedAndroidOrigins = listOfNotNull(androidCapability.origin, androidCapability.originLegacy)
+        .filter { it.isNotBlank() }
+    val hasMatchingInstalledSigningOrigin = advertisedAndroidOrigins.any { it in signingOrigins }
+    val hasAllowedSelectedWebOrigin = !selectedServerOrigin.isNullOrBlank() && selectedServerOrigin in origins
+
+    val packageBoundWebOriginSupported =
+        hasAllowedSelectedWebOrigin && androidCapability.packageName == packageName
+    val originRouteSupported = if (hasMatchingInstalledSigningOrigin) {
+        hasAllowedSelectedWebOrigin
+    } else {
+        packageBoundWebOriginSupported
+    }
+
+    return enabled &&
+        androidCapability.enabled &&
+        androidCapability.packageName == packageName &&
+        advertisedAndroidOrigins.isNotEmpty() &&
+        originRouteSupported
+}
 
 @JsonClass(generateAdapter = true)
 data class WebAuthnLoginOptionsRequest(

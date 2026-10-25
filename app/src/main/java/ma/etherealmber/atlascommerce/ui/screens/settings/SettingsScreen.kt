@@ -1052,31 +1052,31 @@ fun SettingsScreen(
             }
         }
 
-        AnimatedVisibility(
-            visible = androidPasskeysAvailable,
-            enter = if (animationsEnabled) fadeIn() + expandVertically() else EnterTransition.None,
-            exit = if (animationsEnabled) fadeOut() + shrinkVertically() else ExitTransition.None,
-        ) {
-            AtlasEntrance(delayMillis = 30, offsetY = 8.dp) {
-                AtlasCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.Fingerprint,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
+        AtlasEntrance(delayMillis = 30, offsetY = 8.dp) {
+            AtlasCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Fingerprint,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Passkey Android", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (androidPasskeysAvailable) {
+                                "Disponibles sur ce serveur. L'inscription reste manuelle : aucune passkey n'est créée automatiquement."
+                            } else {
+                                "Configuration Android non confirmée par le serveur sélectionné. L'inscription reste masquée tant que le serveur ne l'annonce pas comme disponible."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Passkey Android", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "Passkey prête à tester une fois, si ce serveur l'autorise. L'inscription reste manuelle : aucune passkey n'est créée automatiquement.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
                     }
-                    Spacer(Modifier.height(10.dp))
+                }
+                Spacer(Modifier.height(10.dp))
+                if (androidPasskeysAvailable) {
                     AtlasOutlinedButton(
                         text = if (registeringPasskey) "Enregistrement en cours…" else "Enregistrer une passkey",
                         onClick = { appViewModel.registerAndroidPasskey(context, onToast) },
@@ -1084,6 +1084,15 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !registeringPasskey,
                     )
+                } else {
+                    TextButton(
+                        onClick = appViewModel::refreshPasskeyCapability,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Vérifier à nouveau")
+                    }
                 }
             }
         }
