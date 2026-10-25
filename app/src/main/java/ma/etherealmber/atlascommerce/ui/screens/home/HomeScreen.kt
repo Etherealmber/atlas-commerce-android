@@ -65,9 +65,11 @@ import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
+import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
 import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
 import ma.etherealmber.atlascommerce.ui.components.AtlasOfflineBanner
 import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
