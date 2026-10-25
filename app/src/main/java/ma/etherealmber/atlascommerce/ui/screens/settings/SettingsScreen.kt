@@ -606,6 +606,7 @@ fun SettingsScreen(
     val devices by appViewModel.devices.collectAsStateWithLifecycle()
     val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
+    val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
     var showReleaseHistoryDialog by remember { mutableStateOf(false) }
