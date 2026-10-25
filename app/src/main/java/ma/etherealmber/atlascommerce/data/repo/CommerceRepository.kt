@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.time.LocalDate
 import kotlin.coroutines.cancellation.CancellationException
 import ma.etherealmber.atlascommerce.core.RoleTarget
 import ma.etherealmber.atlascommerce.core.Roles
@@ -99,11 +100,26 @@ class CommerceRepository @Inject constructor(
     ): ApiResult<FinanceStatementDto> =
         runner.envelope { apiProvider.api().financeStatement(period, page, pageSize) }
 
-    /** Opens the selected-month combined report using a short-lived HMAC ticket. */
-    suspend fun createCombinedReportUrl(period: String = "month"): ApiResult<String> {
-        if (period != "month" && !period.matches(Regex("\\d{4}-(0[1-9]|1[0-2])"))) {
-            return ApiResult.Failure("BAD_PERIOD", "Période invalide — format attendu AAAA-MM.")
+    /** Create a private, short-lived HMAC report link for a selected period; no session JWT enters the URL. */
+    suspend fun createCombinedReportUrl(
+        period: String = "month",
+        from: String? = null,
+        to: String? = null,
+        sections: List<String> = emptyList(),
+    ): ApiResult<String> {
+        val supportedPeriods = setOf("month", "3m", "6m", "9m", "12m", "24m", "36m", "48m", "year", "ytd", "custom")
+        if (period !in supportedPeriods) return ApiResult.Failure("BAD_PERIOD", "Période de rapport invalide.")
+        val datePattern = Regex("\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])")
+        val validCustomRange = runCatching {
+            from != null && to != null && datePattern.matches(from) && datePattern.matches(to) &&
+                !LocalDate.parse(to).isBefore(LocalDate.parse(from))
+        }.getOrDefault(false)
+        if (period == "custom" && !validCustomRange) {
+            return ApiResult.Failure("BAD_PERIOD", "La période personnalisée doit comporter deux dates valides, dans l'ordre.")
         }
+        val validSections = setOf("balance", "stock", "receivables", "payables", "employees", "aging", "tva")
+        val chosenSections = sections.filter { it in validSections }.distinct()
+        if (chosenSections.isEmpty()) return ApiResult.Failure("BAD_REPORT_SELECTION", "Sélectionnez au moins une rubrique.")
         return when (val result = runner.envelope { apiProvider.api().reportLinkTicket() }) {
             is ApiResult.Failure -> result
             is ApiResult.Success -> {
@@ -120,7 +136,13 @@ class CommerceRepository @Inject constructor(
                         .appendPath("combined")
                         .appendQueryParameter("rt", ticket.rt)
                         .appendQueryParameter("period", period)
-                        .appendQueryParameter("sections", "balance,stock,receivables,payables,employees")
+                        .appendQueryParameter("sections", chosenSections.joinToString(","))
+                        .apply {
+                            if (period == "custom") {
+                                appendQueryParameter("from", from.orEmpty())
+                                appendQueryParameter("to", to.orEmpty())
+                            }
+                        }
                         .build()
                         .toString()
                     ApiResult.Success(url)

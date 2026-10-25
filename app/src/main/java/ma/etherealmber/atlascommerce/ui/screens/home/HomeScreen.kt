@@ -86,6 +86,9 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasStatTile
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.CombinedReportWebViewDialog
 import ma.etherealmber.atlascommerce.ui.components.FinancePdfViewerDialog
+import ma.etherealmber.atlascommerce.ui.components.FinanceReportActionsDialog
+import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelection
+import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelectionDialog
 import ma.etherealmber.atlascommerce.ui.components.StatusChip
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
@@ -106,19 +109,33 @@ fun HomeScreen(
     var showReportActions by remember { mutableStateOf(false) }
     var pdfViewerFile by remember { mutableStateOf<java.io.File?>(null) }
     var combinedReportUrl by remember { mutableStateOf<String?>(null) }
+    var reportSelection by remember { mutableStateOf(FinanceReportSelection()) }
+    var showReportSelection by remember { mutableStateOf(false) }
     var showCombinedReportConfirm by remember { mutableStateOf(false) }
+
+    if (showReportSelection) {
+        FinanceReportSelectionDialog(
+            initial = reportSelection,
+            onDismiss = { showReportSelection = false },
+            onGenerate = { selection ->
+                reportSelection = selection
+                showReportSelection = false
+                showCombinedReportConfirm = true
+            },
+        )
+    }
 
     if (showCombinedReportConfirm) {
         AlertDialog(
             onDismissRequest = { showCombinedReportConfirm = false },
             title = { Text("Ouvrir le pack de rapports ?") },
             text = {
-                Text("Le rapport combiné sera affiché dans Atlas via un ticket temporaire (30 minutes). Ne partagez pas le lien ni l'écran pendant sa validité.")
+                Text("${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. Atlas ouvrira les rubriques choisies avec un ticket temporaire de 30 minutes. Ne partagez pas le lien ni l'écran.")
             },
             confirmButton = {
                 TextButton(onClick = {
                     showCombinedReportConfirm = false
-                    viewModel.createCombinedReportUrl { result ->
+                    viewModel.createCombinedReportUrl(reportSelection.period, reportSelection.from, reportSelection.to, reportSelection.sectionKeys) { result ->
                         when (result) {
                             is ApiResult.Failure -> onToast(result.message)
                             is ApiResult.Success -> combinedReportUrl = result.data
@@ -130,7 +147,7 @@ fun HomeScreen(
         )
     }
     combinedReportUrl?.let { url ->
-        CombinedReportWebViewDialog(url = url, onDismiss = { combinedReportUrl = null })
+        CombinedReportWebViewDialog(url = url, selectedSections = reportSelection.sectionKeys, onDismiss = { combinedReportUrl = null })
     }
     val saveReportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf"),
@@ -148,41 +165,37 @@ fun HomeScreen(
     }
 
     pendingReportFile?.takeIf { showReportActions }?.let { reportFile ->
-        AlertDialog(
-            onDismissRequest = { showReportActions = false },
-            title = { Text("Rapport téléchargé") },
-            text = { Text("Le PDF est conservé en privé sur cet appareil pendant 7 jours maximum.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showReportActions = false
-                    pdfViewerFile = reportFile
-                    pendingReportFile = null
-                }) { Text("Lire dans Atlas") }
+        FinanceReportActionsDialog(
+            fileName = reportFile.name,
+            onDismiss = { showReportActions = false },
+            onRead = {
+                showReportActions = false
+                pdfViewerFile = reportFile
+                pendingReportFile = null
             },
-            dismissButton = {
-                Column(horizontalAlignment = Alignment.End) {
-                    TextButton(onClick = {
-                        showReportActions = false
-                        runCatching {
-                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", reportFile)
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "application/pdf"
-                                putExtra(Intent.EXTRA_STREAM, uri)
-                                clipData = ClipData.newUri(context.contentResolver, reportFile.name, uri)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            context.startActivity(Intent.createChooser(shareIntent, "Partager le rapport PDF"))
-                        }.onFailure { onToast("Impossible de partager le PDF : ${it.message.orEmpty()}") }
-                        pendingReportFile = null
-                    }) { Text("Partager") }
-                    TextButton(onClick = { saveReportLauncher.launch(reportFile.name) }) { Text("Enregistrer une copie…") }
-                    TextButton(onClick = {
-                        showReportActions = false
-                        reportFile.delete()
-                        pendingReportFile = null
-                        onToast("Rapport temporaire supprimé.")
-                    }) { Text("Supprimer") }
-                }
+            onShare = {
+                showReportActions = false
+                runCatching {
+                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", reportFile)
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/pdf"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        clipData = ClipData.newUri(context.contentResolver, reportFile.name, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "Partager le rapport PDF"))
+                }.onFailure { onToast("Impossible de partager le PDF : ${it.message.orEmpty()}") }
+                pendingReportFile = null
+            },
+            onSave = {
+                showReportActions = false
+                saveReportLauncher.launch(reportFile.name)
+            },
+            onDelete = {
+                showReportActions = false
+                reportFile.delete()
+                pendingReportFile = null
+                onToast("Rapport temporaire supprimé.")
             },
         )
     }
@@ -245,7 +258,7 @@ fun HomeScreen(
                     }
                 }
             },
-            onOpenCombinedReport = { showCombinedReportConfirm = true },
+            onOpenCombinedReport = { showReportSelection = true },
         )
     }
 }
@@ -359,9 +372,7 @@ private fun HomeContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = state.settings?.companyName?.takeIf { it.isNotBlank() }
-                        ?.let { "Espace ${Roles.label(user.role)} · $it" }
-                        ?: "Espace ${Roles.label(user.role)}",
+                    text = "Résumé du jour",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -686,7 +697,7 @@ private fun FinanceAdminCard(
             icon = Icons.Outlined.ReceiptLong,
         )
         Text(
-            "Le pack web utilise le mois courant défini par le serveur. Le PDF ci-dessus respecte le mois sélectionné.",
+            "Choisissez les rubriques et la période : mois, année en cours, derniers mois ou dates personnalisées. Le PDF bancaire reste mensuel.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

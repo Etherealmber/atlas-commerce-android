@@ -266,7 +266,13 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun createCombinedReportUrl(onResult: (ApiResult<String>) -> Unit) {
+    fun createCombinedReportUrl(
+        period: String,
+        from: String?,
+        to: String?,
+        sections: List<String>,
+        onResult: (ApiResult<String>) -> Unit,
+    ) {
         val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
         if (activeUser == null || !Roles.isAdmin(activeUser.role)) {
             onResult(ApiResult.Failure("FIN_FORBIDDEN", "Réservé aux administrateurs (owner/admin)."))
@@ -275,7 +281,7 @@ class HomeViewModel @Inject constructor(
         val requestedScope = activeUser.scopeIdentity
         viewModelScope.launch {
             _state.update { it.copy(reportGenerating = true) }
-            val result = commerceRepository.createCombinedReportUrl()
+            val result = commerceRepository.createCombinedReportUrl(period, from, to, sections)
             _state.update { it.copy(reportGenerating = false) }
             val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
             if (currentScope != requestedScope) {
