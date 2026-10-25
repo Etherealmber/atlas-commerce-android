@@ -1,6 +1,13 @@
 package ma.etherealmber.atlascommerce.ui.screens.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -57,6 +64,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -597,8 +606,57 @@ fun SettingsScreen(
     val devices by appViewModel.devices.collectAsStateWithLifecycle()
     val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
+    val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
     var showReleaseHistoryDialog by remember { mutableStateOf(false) }
+    var showClearReportsDialog by remember { mutableStateOf(false) }
+    var showClearLocalDataDialog by remember { mutableStateOf(false) }
+    var buildTapCount by remember { mutableIntStateOf(0) }
+    var lastBuildTapAt by remember { mutableLongStateOf(0L) }
+
+    val onBuildVersionTap: () -> Unit = {
+        val now = System.currentTimeMillis()
+        if (now - lastBuildTapAt > 2_000L) buildTapCount = 0
+        lastBuildTapAt = now
+        buildTapCount += 1
+        if (buildTapCount >= 7) {
+            buildTapCount = 0
+            appViewModel.setDeveloperModeEnabled(true)
+            onToast("Mode développeur activé. Désactivez-le depuis ce panneau.")
+        }
+    }
+
+    if (showClearReportsDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearReportsDialog = false },
+            title = { Text("Supprimer les PDF temporaires ?") },
+            text = { Text("Les rapports téléchargés dans le cache privé de cette application seront supprimés de cet appareil. Les copies déjà enregistrées ou partagées ailleurs ne seront pas touchées.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearReportsDialog = false
+                    appViewModel.clearFinanceReportCache(onToast)
+                }) { Text("Supprimer") }
+            },
+            dismissButton = { TextButton(onClick = { showClearReportsDialog = false }) { Text("Annuler") } },
+        )
+    }
+
+    if (showClearLocalDataDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearLocalDataDialog = false },
+            title = { Text("Effacer les données locales ?") },
+            text = {
+                Text("Cette action déconnecte ce compte et supprime les sessions mémorisées, serveurs enregistrés, préférences, cache hors ligne, journaux et PDF temporaires de cet appareil. Elle ne supprime aucune vente, facture ni donnée d'entreprise sur le serveur.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearLocalDataDialog = false
+                    appViewModel.clearAllLocalAppData(onToast)
+                }) { Text("Effacer de cet appareil") }
+            },
+            dismissButton = { TextButton(onClick = { showClearLocalDataDialog = false }) { Text("Annuler") } },
+        )
+    }
 
     if (showReleaseHistoryDialog) {
         AlertDialog(
@@ -924,6 +982,44 @@ fun SettingsScreen(
                 subtitle = "Relancer la présentation animée d'Atlas Commerce",
                 onClick = { appViewModel.replayOnboarding() },
             )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            SettingsRow(
+                icon = Icons.Outlined.DeleteOutline,
+                title = "Supprimer les PDF temporaires",
+                subtitle = "Les rapports privés sont purgés automatiquement après 7 jours.",
+                onClick = { showClearReportsDialog = true },
+            )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            SettingsRow(
+                icon = Icons.Outlined.DeleteOutline,
+                title = "Effacer toutes les données locales",
+                subtitle = "Déconnecte le compte et efface les données stockées sur cet appareil uniquement.",
+                onClick = { showClearLocalDataDialog = true },
+            )
+        }
+
+        AnimatedVisibility(
+            visible = developerModeEnabled,
+            enter = if (animationsEnabled) fadeIn() + expandVertically() else EnterTransition.None,
+            exit = if (animationsEnabled) fadeOut() + shrinkVertically() else ExitTransition.None,
+        ) {
+            AtlasCard {
+                SettingsToggleRow(
+                    title = "Mode développeur",
+                    subtitle = "Actif. Affiche des détails de diagnostic non secrets.",
+                    checked = true,
+                    onCheckedChange = appViewModel::setDeveloperModeEnabled,
+                )
+                AtlasDivider(Modifier.padding(vertical = 8.dp))
+                AtlasInfoRow("Serveur sélectionné", serverSelection?.let { ServerUrl.display(it.baseUrl) } ?: "Aucun")
+                AtlasInfoRow("Version Android", "${AppDetails.VERSION_NAME} · build ${AppDetails.VERSION_CODE}")
+                AtlasInfoRow("Identifiant appareil", appViewModel.deviceShortId)
+                Text(
+                    "Les jetons, mots de passe et clés d'accès ne sont jamais affichés ici.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         // 6. Security, License & About
@@ -999,6 +1095,7 @@ fun SettingsScreen(
                 text = "${AppDetails.NAME} ${AppDetails.VERSION_NAME} (build ${AppDetails.VERSION_CODE})",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.clickable(onClick = onBuildVersionTap),
             )
             Text(
                 text = "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER} · Licence ${AppDetails.LICENSE_NAME}",

@@ -252,6 +252,7 @@ class HomeViewModel @Inject constructor(
                 File(cacheDirectory, "finance"),
                 scopeCacheKey(requestedScope),
             ).apply { mkdirs() }
+            ma.etherealmber.atlascommerce.data.FinanceReportCache.pruneAccount(directory)
             val destination = File(directory, "rapport-mensuel-$period.pdf")
             val result = commerceRepository.downloadFinanceReport(period, destination)
             _state.update { it.copy(reportGenerating = false) }
@@ -259,6 +260,26 @@ class HomeViewModel @Inject constructor(
             if (currentScope != requestedScope) {
                 (result as? ApiResult.Success)?.data?.delete()
                 onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Relancez le téléchargement avec le bon compte."))
+            } else {
+                onResult(result)
+            }
+        }
+    }
+
+    fun createCombinedReportUrl(onResult: (ApiResult<String>) -> Unit) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+        if (activeUser == null || !Roles.isAdmin(activeUser.role)) {
+            onResult(ApiResult.Failure("FIN_FORBIDDEN", "Réservé aux administrateurs (owner/admin)."))
+            return
+        }
+        val requestedScope = activeUser.scopeIdentity
+        viewModelScope.launch {
+            _state.update { it.copy(reportGenerating = true) }
+            val result = commerceRepository.createCombinedReportUrl()
+            _state.update { it.copy(reportGenerating = false) }
+            val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (currentScope != requestedScope) {
+                onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Relancez l'ouverture avec le bon compte."))
             } else {
                 onResult(result)
             }

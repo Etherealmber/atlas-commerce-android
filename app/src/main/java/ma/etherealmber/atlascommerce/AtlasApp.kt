@@ -13,6 +13,7 @@ class AtlasApp : Application() {
     override fun onCreate() {
         super.onCreate()
         ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.installCrashBreadcrumbHandler(this)
+        ma.etherealmber.atlascommerce.data.FinanceReportCache.pruneExpired(java.io.File(cacheDir, "finance"))
         ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
             tag = "AtlasApp",
             message = "Application started (${ma.etherealmber.atlascommerce.core.AppDetails.VERSION_NAME} build ${ma.etherealmber.atlascommerce.core.AppDetails.VERSION_CODE})",

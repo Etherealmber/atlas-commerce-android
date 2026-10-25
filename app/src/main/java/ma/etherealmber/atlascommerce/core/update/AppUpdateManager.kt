@@ -166,6 +166,17 @@ class AppUpdateManager internal constructor(
             _state.value is UpdateState.Downloading || downloadJob?.isActive == true
         }
 
+    /** Clear the cached update package only when no transfer is in progress. */
+    fun clearCachedUpdateFiles(): Boolean = synchronized(lock) {
+        if (isDownloadingLocked()) return@synchronized false
+        runCatching { updatesDirProvider().deleteRecursively() }.getOrDefault(false)
+        if (_state.value is UpdateState.ReadyToInstall || _state.value is UpdateState.Error || _state.value is UpdateState.Available) {
+            _state.value = UpdateState.Idle
+        }
+        notifier.cancel()
+        true
+    }
+
     private fun defaultOfflineChangelog(): List<ReleaseChangelogEntry> = listOf(
         ReleaseChangelogEntry(
             tagName = "v$currentVersionName",
@@ -486,7 +497,7 @@ class AppUpdateManager internal constructor(
     /**
      * Starts downloading the available update APK if no download is currently running.
      */
-    fun startDownload(overrideInfo: UpdateInfo? = null) {
+    fun startDownload(overrideInfo: UpdateInfo? = null, fromSettings: Boolean = false) {
         val infoToDownload: UpdateInfo
         synchronized(lock) {
             if (isDownloadingLocked()) {
@@ -500,12 +511,12 @@ class AppUpdateManager internal constructor(
             } ?: return
 
             infoToDownload = candidate
-            hideActiveDownloadInForeground = false
+            hideActiveDownloadInForeground = fromSettings && !infoToDownload.mandatory
             _state.value = UpdateState.Downloading(
                 info = infoToDownload,
                 bytesRead = 0L,
                 totalBytes = -1L,
-                hiddenInForeground = false,
+                hiddenInForeground = hideActiveDownloadInForeground,
             )
             notifier.showStarting(infoToDownload)
             downloadJob = scope.launch(ioDispatcher) {

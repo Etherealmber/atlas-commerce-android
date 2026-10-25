@@ -81,6 +81,12 @@ data class GitHubReleaseDto(
 // ---------------------------------------------------------------------------
 
 @JsonClass(generateAdapter = true)
+data class ReportLinkTicketDto(
+    val rt: String = "",
+    @Json(name = "expires_in") val expiresIn: Int = 0,
+)
+
+@JsonClass(generateAdapter = true)
 data class LoginRequest(
     val username: String,
     val password: String,

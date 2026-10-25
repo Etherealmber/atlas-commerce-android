@@ -2,6 +2,9 @@ package ma.etherealmber.atlascommerce.ui.screens.home
 
 import android.content.ClipData
 import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +30,7 @@ import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -97,6 +101,110 @@ fun HomeScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val dashboard = state.dashboard
     val context = LocalContext.current
+    var pendingReportFile by remember { mutableStateOf<java.io.File?>(null) }
+    var showReportActions by remember { mutableStateOf(false) }
+    var showCombinedReportConfirm by remember { mutableStateOf(false) }
+
+    if (showCombinedReportConfirm) {
+        AlertDialog(
+            onDismissRequest = { showCombinedReportConfirm = false },
+            title = { Text("Ouvrir le pack de rapports ?") },
+            text = {
+                Text("Le serveur ouvrira son rapport combiné dans le navigateur. Un ticket d'accès temporaire (30 minutes) sera ajouté au lien : ne partagez pas l'URL. Cette page utilise la période courante du serveur.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showCombinedReportConfirm = false
+                    viewModel.createCombinedReportUrl { result ->
+                        when (result) {
+                            is ApiResult.Failure -> onToast(result.message)
+                            is ApiResult.Success -> runCatching {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(result.data))
+                                context.startActivity(Intent.createChooser(intent, "Ouvrir les rapports"))
+                            }.onFailure { onToast("Aucun navigateur disponible : ${it.message.orEmpty()}") }
+                        }
+                    }
+                }) { Text("Continuer") }
+            },
+            dismissButton = { TextButton(onClick = { showCombinedReportConfirm = false }) { Text("Annuler") } },
+        )
+    }
+    val saveReportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf"),
+    ) { destinationUri ->
+        val file = pendingReportFile
+        if (destinationUri != null && file != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(destinationUri, "wt")?.use { output ->
+                    file.inputStream().buffered().use { input -> input.copyTo(output) }
+                } ?: error("Impossible d'écrire le fichier choisi.")
+            }.onSuccess { onToast("Copie PDF enregistrée.") }
+                .onFailure { onToast("Enregistrement impossible : ${it.message.orEmpty()}") }
+        }
+        pendingReportFile = null
+    }
+
+    if (showReportActions && pendingReportFile != null) {
+        val reportFile = pendingReportFile!!
+        AlertDialog(
+            onDismissRequest = { showReportActions = false },
+            title = { Text("Rapport téléchargé") },
+            text = {
+                Text("Le PDF est conservé en privé sur cet appareil pendant 7 jours maximum. Choisissez quoi en faire.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showReportActions = false
+                    runCatching {
+                        val uri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            reportFile,
+                        )
+                        val openIntent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, "application/pdf")
+                            clipData = ClipData.newUri(context.contentResolver, reportFile.name, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(openIntent, "Ouvrir le rapport PDF"))
+                    }.onFailure { onToast("Aucune application ne peut ouvrir ce PDF : ${it.message.orEmpty()}") }
+                    pendingReportFile = null
+                }) { Text("Ouvrir") }
+            },
+            dismissButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = {
+                        showReportActions = false
+                        runCatching {
+                            val uri = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                reportFile,
+                            )
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/pdf"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                clipData = ClipData.newUri(context.contentResolver, reportFile.name, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Partager le rapport PDF"))
+                        }.onFailure { onToast("Impossible de partager le PDF : ${it.message.orEmpty()}") }
+                        pendingReportFile = null
+                    }) { Text("Partager") }
+                    TextButton(onClick = {
+                        showReportActions = false
+                        saveReportLauncher.launch(reportFile.name)
+                    }) { Text("Enregistrer une copie…") }
+                    TextButton(onClick = {
+                        showReportActions = false
+                        reportFile.delete()
+                        pendingReportFile = null
+                        onToast("Rapport temporaire supprimé.")
+                    }) { Text("Supprimer") }
+                }
+            },
+        )
+    }
 
     LaunchedEffect(state.offline) {
         if (state.offline) onToast("Hors ligne — dernières données affichées.")
@@ -129,26 +237,14 @@ fun HomeScreen(
                 viewModel.downloadFinanceReport(context.cacheDir, period) { result ->
                     when (result) {
                         is ApiResult.Failure -> onToast(result.message)
-                        is ApiResult.Success -> runCatching {
-                            val uri = FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.fileprovider",
-                                result.data,
-                            )
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "application/pdf"
-                                putExtra(Intent.EXTRA_STREAM, uri)
-                                clipData = ClipData.newUri(context.contentResolver, result.data.name, uri)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            context.startActivity(
-                                Intent.createChooser(shareIntent, "Partager le rapport mensuel")
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                            )
-                        }.onFailure { onToast("PDF téléchargé, mais impossible de l'ouvrir : ${it.message.orEmpty()}") }
+                        is ApiResult.Success -> {
+                            pendingReportFile = result.data
+                            showReportActions = true
+                        }
                     }
                 }
             },
+            onOpenCombinedReport = { showCombinedReportConfirm = true },
         )
     }
 }
@@ -232,6 +328,7 @@ private fun HomeContent(
     onLoadMorePayroll: () -> Unit,
     onSelectFinancePeriod: (String) -> Unit,
     onExportFinanceReport: (String) -> Unit,
+    onOpenCombinedReport: () -> Unit,
 ) {
     val density = Atlas.density
     val canViewInvoices = Roles.canCreateDocuments(user.role)
@@ -443,6 +540,7 @@ private fun HomeContent(
                     onSelectPeriod = onSelectFinancePeriod,
                     onLoadMorePayroll = onLoadMorePayroll,
                     onExportReport = onExportFinanceReport,
+                    onOpenCombinedReport = onOpenCombinedReport,
                 )
             }
         }
@@ -522,6 +620,7 @@ private fun FinanceAdminCard(
     onSelectPeriod: (String) -> Unit,
     onLoadMorePayroll: () -> Unit,
     onExportReport: (String) -> Unit,
+    onOpenCombinedReport: () -> Unit,
 ) {
     val financeTimezone = summary?.timezone?.takeIf { it.isNotBlank() } ?: "Africa/Casablanca"
     val currentFinancePeriod = financeCurrentPeriod(financeTimezone)
@@ -571,11 +670,24 @@ private fun FinanceAdminCard(
         )
         Spacer(Modifier.height(8.dp))
         AtlasOutlinedButton(
-            text = if (reportGenerating) "Préparation du relevé…" else "Solde & mouvements · ${financeMonthLabel(activePeriod)}",
+            text = if (reportGenerating) "Préparation du relevé…" else "Télécharger le PDF · ${financeMonthLabel(activePeriod)}",
             onClick = { onExportReport(activePeriod) },
             enabled = !reportGenerating && !loading,
             modifier = Modifier.fillMaxWidth(),
             icon = Icons.Outlined.Description,
+        )
+        Spacer(Modifier.height(6.dp))
+        AtlasOutlinedButton(
+            text = "Pack rapports détaillés · ouvrir le navigateur",
+            onClick = onOpenCombinedReport,
+            enabled = !reportGenerating && !loading,
+            modifier = Modifier.fillMaxWidth(),
+            icon = Icons.Outlined.ReceiptLong,
+        )
+        Text(
+            "Le pack web utilise le mois courant défini par le serveur. Le PDF ci-dessus respecte le mois sélectionné.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (summary != null) {
             Spacer(Modifier.height(10.dp))

@@ -2,6 +2,10 @@ package ma.etherealmber.atlascommerce.ui.root
 
 import android.content.Context
 import android.net.Uri
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -58,6 +62,7 @@ import javax.inject.Inject
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class AppViewModel @Inject constructor(
+    @ApplicationContext private val applicationContext: Context,
     private val preferences: AtlasPreferences,
     private val serverConfig: ServerConfig,
     private val sessionManager: SessionManager,
@@ -85,6 +90,9 @@ class AppViewModel @Inject constructor(
 
     val animationsEnabled: StateFlow<Boolean> = preferences.animationsEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val developerModeEnabled: StateFlow<Boolean> = preferences.developerModeEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val autoOpenCamera: StateFlow<Boolean> = preferences.autoOpenCamera
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -224,8 +232,8 @@ class AppViewModel @Inject constructor(
         updateManager.checkForUpdate(manual = manual)
     }
 
-    fun startUpdateDownload() {
-        updateManager.startDownload()
+    fun startUpdateDownload(fromSettings: Boolean = false) {
+        updateManager.startDownload(fromSettings = fromSettings)
     }
 
     fun setUpdateDownloadSource(source: UpdateDownloadSource) {
@@ -453,6 +461,40 @@ class AppViewModel @Inject constructor(
 
     fun setAnimationsEnabled(enabled: Boolean) {
         viewModelScope.launch { preferences.setAnimationsEnabled(enabled) }
+    }
+
+    fun setDeveloperModeEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setDeveloperModeEnabled(enabled) }
+    }
+
+    fun clearFinanceReportCache(onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            val removed = withContext(Dispatchers.IO) {
+                val directory = File(applicationContext.cacheDir, "finance")
+                val count = directory.walkTopDown().count { it.isFile && it.extension.equals("pdf", true) }
+                directory.deleteRecursively()
+                count
+            }
+            onDone(if (removed == 0) "Aucun rapport PDF temporaire à supprimer." else "$removed rapport(s) PDF temporaire(s) supprimé(s).")
+        }
+    }
+
+    /** Clears local app data only; this does not delete company records from the server. */
+    fun clearAllLocalAppData(onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            val updateFilesCleared = updateManager.clearCachedUpdateFiles()
+            sessionManager.signOut()
+            serverConfig.clear()
+            preferences.clearAllLocalPreferences()
+            offlineCache.clearAll()
+            withContext(Dispatchers.IO) {
+                File(applicationContext.cacheDir, "finance").deleteRecursively()
+                File(applicationContext.cacheDir, "diagnostics").deleteRecursively()
+                File(applicationContext.filesDir, "atlas-cache").deleteRecursively()
+            }
+            val updateNote = if (updateFilesCleared) "" else " Le téléchargement de mise à jour actif est conservé jusqu'à sa fin."
+            onDone("Données locales supprimées.$updateNote Les données de l'entreprise sur le serveur n'ont pas été modifiées.")
+        }
     }
 
     fun setAutoOpenCamera(enabled: Boolean) {

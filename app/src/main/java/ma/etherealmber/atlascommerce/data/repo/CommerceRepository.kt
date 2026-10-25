@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.data.repo
 
+import android.net.Uri
 import com.squareup.moshi.Moshi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -79,6 +80,36 @@ class CommerceRepository @Inject constructor(
 
     suspend fun financeMonthly(period: String? = null): ApiResult<FinanceMonthlyDto> =
         runner.envelope { apiProvider.api().financeMonthly(period) }
+
+    /**
+     * Opens the server's printable combined report using its short-lived HMAC ticket.
+     * This existing web report currently supports relative periods (e.g. `month`),
+     * not an arbitrary YYYY-MM month selection.
+     */
+    suspend fun createCombinedReportUrl(): ApiResult<String> =
+        when (val result = runner.envelope { apiProvider.api().reportLinkTicket() }) {
+            is ApiResult.Failure -> result
+            is ApiResult.Success -> {
+                val ticket = result.data
+                if (ticket.expiresIn !in 1..1800 ||
+                    !ticket.rt.matches(Regex("\\d{9,}\\.[A-Za-z0-9_-]{20,}"))
+                ) {
+                    ApiResult.Failure("INVALID_REPORT_TICKET", "Le serveur n'a pas fourni de lien temporaire valide.")
+                } else {
+                    val url = Uri.parse(apiProvider.baseUrl())
+                        .buildUpon()
+                        .appendPath("api")
+                        .appendPath("reports")
+                        .appendPath("combined")
+                        .appendQueryParameter("rt", ticket.rt)
+                        .appendQueryParameter("period", "month")
+                        .appendQueryParameter("sections", "balance,stock,receivables,payables,employees")
+                        .build()
+                        .toString()
+                    ApiResult.Success(url)
+                }
+            }
+        }
 
     suspend fun employeePayroll(
         period: String,

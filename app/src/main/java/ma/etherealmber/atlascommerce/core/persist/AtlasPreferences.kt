@@ -69,6 +69,7 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         val THEME = stringPreferencesKey("theme_mode")
         val DENSITY = stringPreferencesKey("density_mode")
         val ANIMATIONS_ENABLED = booleanPreferencesKey("animations_enabled")
+        val DEVELOPER_MODE_ENABLED = booleanPreferencesKey("developer_mode_enabled")
         val AUTO_OPEN_CAMERA = booleanPreferencesKey("auto_open_camera")
         val SCAN_HAPTIC = booleanPreferencesKey("scan_haptic_enabled")
         val SCAN_SOUND = booleanPreferencesKey("scan_sound_enabled")
@@ -161,6 +162,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
 
     val animationsEnabled: Flow<Boolean> = safeData
         .map { it.safeBoolean(Keys.ANIMATIONS_ENABLED.name) ?: true }
+        .distinctUntilChanged()
+
+    val developerModeEnabled: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.DEVELOPER_MODE_ENABLED.name) ?: false }
         .distinctUntilChanged()
 
     /** Strictly false by default so entering Scan / Scan Device never starts camera immediately. */
@@ -305,6 +310,15 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
 
     suspend fun setAnimationsEnabled(enabled: Boolean) {
         safeEdit { prefs -> prefs.putClean(Keys.ANIMATIONS_ENABLED, enabled) }
+    }
+
+    suspend fun setDeveloperModeEnabled(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.DEVELOPER_MODE_ENABLED, enabled) }
+    }
+
+    /** Removes all on-device preferences, saved accounts, server choices, and sessions. */
+    suspend fun clearAllLocalPreferences() {
+        safeEdit { prefs -> prefs.clear() }
     }
 
     suspend fun setAutoOpenCamera(enabled: Boolean) {
