@@ -95,8 +95,8 @@ class CommerceRepository @Inject constructor(
         runner.envelope { apiProvider.api().financeStatement(period, page, pageSize) }
 
     /** Opens the selected-month combined report using a short-lived HMAC ticket. */
-    suspend fun createCombinedReportUrl(period: String): ApiResult<String> {
-        if (!period.matches(Regex("\\d{4}-(0[1-9]|1[0-2])"))) {
+    suspend fun createCombinedReportUrl(period: String = "month"): ApiResult<String> {
+        if (period != "month" && !period.matches(Regex("\\d{4}-(0[1-9]|1[0-2])"))) {
             return ApiResult.Failure("BAD_PERIOD", "Période invalide — format attendu AAAA-MM.")
         }
         return when (val result = runner.envelope { apiProvider.api().reportLinkTicket() }) {
