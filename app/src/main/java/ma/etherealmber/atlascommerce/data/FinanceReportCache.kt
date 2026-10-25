@@ -27,7 +27,7 @@ object FinanceReportCache {
         if (!directory.exists()) return
         val reports = directory.listFiles()
             ?.filter { it.isFile && it.extension.equals("pdf", ignoreCase = true) }
-            ?.sortedByDescending(File::lastModified)
+            ?.sortedByDescending { it.lastModified() }
             .orEmpty()
         reports.forEachIndexed { index, file ->
             val expired = nowMs - file.lastModified() > retentionMs

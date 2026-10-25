@@ -45,7 +45,7 @@ class FinanceReportCacheTest {
             FinanceReportCache.pruneAccount(root, now)
 
             assertFalse(files.last().exists())
-            assertTrue(files.take(8).all(File::exists))
+            assertTrue(files.take(8).all { it.exists() })
         } finally {
             root.deleteRecursively()
         }
