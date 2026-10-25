@@ -2,9 +2,9 @@ package ma.etherealmber.atlascommerce.ui.screens.home
 
 import android.content.ClipData
 import android.content.Intent
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -27,6 +27,8 @@ import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -36,12 +38,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -51,6 +53,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.time.YearMonth
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.format.AtlasFormat
@@ -60,7 +66,6 @@ import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
-import ma.etherealmber.atlascommerce.data.model.MonthlyPointDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
@@ -119,8 +124,9 @@ fun HomeScreen(
             onOpenScan = onOpenScan,
             onOpenNotifications = onOpenNotifications,
             onLoadMorePayroll = viewModel::loadMorePayroll,
-            onExportFinanceReport = {
-                viewModel.downloadFinanceReport(context.cacheDir) { result ->
+            onSelectFinancePeriod = viewModel::selectFinancePeriod,
+            onExportFinanceReport = { period ->
+                viewModel.downloadFinanceReport(context.cacheDir, period) { result ->
                     when (result) {
                         is ApiResult.Failure -> onToast(result.message)
                         is ApiResult.Success -> runCatching {
@@ -224,7 +230,8 @@ private fun HomeContent(
     onOpenScan: () -> Unit,
     onOpenNotifications: () -> Unit,
     onLoadMorePayroll: () -> Unit,
-    onExportFinanceReport: () -> Unit,
+    onSelectFinancePeriod: (String) -> Unit,
+    onExportFinanceReport: (String) -> Unit,
 ) {
     val density = Atlas.density
     val canViewInvoices = Roles.canCreateDocuments(user.role)
@@ -431,7 +438,9 @@ private fun HomeContent(
                     error = state.financeError,
                     reportGenerating = state.reportGenerating,
                     payrollLoadingMore = state.payrollLoadingMore,
+                    selectedPeriod = state.selectedFinancePeriod,
                     onRefresh = onRefresh,
+                    onSelectPeriod = onSelectFinancePeriod,
                     onLoadMorePayroll = onLoadMorePayroll,
                     onExportReport = onExportFinanceReport,
                 )
@@ -452,19 +461,6 @@ private fun HomeContent(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                }
-            }
-        }
-
-        if (canDisplayFinance && dashboard.monthlySeries.size >= 2) {
-            item {
-                AtlasCard {
-                    AtlasSectionHeader(
-                        title = "Tendance",
-                        subtitle = "Ventes et dépenses des derniers mois",
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    MonthlyChart(dashboard.monthlySeries.takeLast(6))
                 }
             }
         }
@@ -521,16 +517,21 @@ private fun FinanceAdminCard(
     error: String?,
     reportGenerating: Boolean,
     payrollLoadingMore: Boolean,
+    selectedPeriod: String?,
     onRefresh: () -> Unit,
+    onSelectPeriod: (String) -> Unit,
     onLoadMorePayroll: () -> Unit,
-    onExportReport: () -> Unit,
+    onExportReport: (String) -> Unit,
 ) {
+    val financeTimezone = summary?.timezone?.takeIf { it.isNotBlank() } ?: "Africa/Casablanca"
+    val currentFinancePeriod = financeCurrentPeriod(financeTimezone)
+    val activePeriod = selectedPeriod ?: summary?.period ?: currentFinancePeriod
     AtlasCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Finance & équipe", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text("Solde & mouvements", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(
-                    text = summary?.let { "Rapport ${it.period} · ${it.timezone}" } ?: "Données administrateur",
+                    text = summary?.timezone?.takeIf { it.isNotBlank() }?.let { "Relevé mensuel · $it" } ?: "Relevé mensuel",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -543,10 +544,39 @@ private fun FinanceAdminCard(
                 }
             }
         }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Période du relevé", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    if (activePeriod == currentFinancePeriod) "Le mois en cours est disponible avant clôture." else "Consultez un mois passé ou en cours.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            FinancePeriodPicker(period = activePeriod, timezone = financeTimezone, onSelect = onSelectPeriod)
+        }
         if (error != null) {
             Spacer(Modifier.height(8.dp))
             Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
+        Spacer(Modifier.height(8.dp))
+        AtlasDivider()
+        Text("Rapports PDF", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Relevé bancaire du mois sélectionné, y compris le mois en cours.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        AtlasOutlinedButton(
+            text = if (reportGenerating) "Préparation du relevé…" else "Solde & mouvements · ${financeMonthLabel(activePeriod)}",
+            onClick = { onExportReport(activePeriod) },
+            enabled = !reportGenerating && !loading,
+            modifier = Modifier.fillMaxWidth(),
+            icon = Icons.Outlined.Description,
+        )
         if (summary != null) {
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -584,7 +614,7 @@ private fun FinanceAdminCard(
             }
             Spacer(Modifier.height(10.dp))
             AtlasDivider()
-            AtlasInfoRow("Ventes encaissées", AtlasFormat.money(summary.salesReceived, summary.currency))
+            AtlasInfoRow("Recettes encaissées", AtlasFormat.money(summary.salesReceived, summary.currency))
             AtlasInfoRow("Dépenses (remboursements inclus)", AtlasFormat.money(summary.expenses, summary.currency))
             AtlasInfoRow("Remboursements", AtlasFormat.money(summary.refunds, summary.currency))
             AtlasInfoRow("Salaires versés ce mois", AtlasFormat.money(summary.payrollPaid, summary.currency))
@@ -669,18 +699,15 @@ private fun FinanceAdminCard(
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            AtlasOutlinedButton(
-                text = if (reportGenerating) "Préparation du PDF…" else "Exporter le rapport PDF",
-                onClick = onExportReport,
-                enabled = !reportGenerating && !loading,
-                modifier = Modifier.fillMaxWidth(),
-                icon = Icons.Outlined.Description,
-            )
             summary.reconciliation.asOfDate?.let { date ->
                 Spacer(Modifier.height(4.dp))
+                val currentMonth = activePeriod == currentFinancePeriod
                 Text(
-                    "Données au ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}",
+                    text = if (currentMonth) {
+                        "Mois en cours · arrêté au ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}"
+                    } else {
+                        "Période ${financeMonthLabel(activePeriod)} · données au ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}"
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -691,6 +718,50 @@ private fun FinanceAdminCard(
         }
     }
 }
+
+@Composable
+private fun FinancePeriodPicker(
+    period: String,
+    timezone: String,
+    onSelect: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val currentPeriod = financeCurrentPeriod(timezone)
+    Box {
+        TextButton(onClick = { expanded = true }) {
+            Text(financeMonthLabel(period))
+            Text("  ▾")
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            val currentMonth = YearMonth.parse(currentPeriod)
+            for (offset in 0L..35L) {
+                val option = currentMonth.minusMonths(offset).toString()
+                DropdownMenuItem(
+                    text = { Text(financeMonthLabel(option)) },
+                    onClick = {
+                        expanded = false
+                        onSelect(option)
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun financeCurrentPeriod(timezone: String): String = runCatching {
+    YearMonth.now(ZoneId.of(timezone)).toString()
+}.getOrElse {
+    YearMonth.now(ZoneId.of("Africa/Casablanca")).toString()
+}
+
+private fun financeMonthLabel(period: String): String = runCatching {
+    YearMonth.parse(period)
+        .format(DateTimeFormatter.ofPattern("LLLL yyyy", Locale.FRENCH))
+        .replaceFirstChar { it.uppercase() }
+}.getOrDefault(period)
 
 @Composable
 private fun FinanceObligationsList(
@@ -832,75 +903,6 @@ private fun HeroPill(text: String) {
             color = Color.White,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             maxLines = 1,
-        )
-    }
-}
-
-@Composable
-private fun MonthlyChart(points: List<MonthlyPointDto>) {
-    val salesColor = MaterialTheme.colorScheme.primary
-    val expenseColor = Atlas.palette.danger.copy(alpha = 0.45f)
-    Column {
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(96.dp),
-        ) {
-            if (points.isEmpty()) return@Canvas
-            val maxValue = points.maxOf { maxOf(it.sales, it.expenses) }.coerceAtLeast(1.0)
-            val slot = size.width / points.size
-            val barWidth = (slot * 0.26f).coerceAtLeast(2f)
-            val gap = 2.dp.toPx()
-            points.forEachIndexed { index, point ->
-                val center = slot * index + slot / 2f
-                val salesHeight = ((point.sales / maxValue).toFloat() * size.height).coerceAtLeast(0f)
-                val expenseHeight = ((point.expenses / maxValue).toFloat() * size.height).coerceAtLeast(0f)
-                val radius = CornerRadius(barWidth / 2f, barWidth / 2f)
-                drawRoundRect(
-                    color = expenseColor,
-                    topLeft = Offset(center - barWidth - gap / 2f, size.height - expenseHeight),
-                    size = Size(barWidth, expenseHeight),
-                    cornerRadius = radius,
-                )
-                drawRoundRect(
-                    color = salesColor,
-                    topLeft = Offset(center + gap / 2f, size.height - salesHeight),
-                    size = Size(barWidth, salesHeight),
-                    cornerRadius = radius,
-                )
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        Row(modifier = Modifier.fillMaxWidth()) {
-            points.forEach { point ->
-                Text(
-                    text = point.label.take(3),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            LegendDot(color = salesColor, label = "Ventes")
-            LegendDot(color = expenseColor, label = "Dépenses")
-        }
-    }
-}
-
-@Composable
-private fun LegendDot(color: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Surface(color = color, shape = RoundedCornerShape(3.dp)) {
-            Spacer(Modifier.size(8.dp))
-        }
-        Spacer(Modifier.width(5.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
