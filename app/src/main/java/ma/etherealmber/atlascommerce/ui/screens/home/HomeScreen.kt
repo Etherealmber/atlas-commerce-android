@@ -144,8 +144,7 @@ fun HomeScreen(
         pendingReportFile = null
     }
 
-    if (showReportActions && pendingReportFile != null) {
-        val reportFile = pendingReportFile!!
+    pendingReportFile?.takeIf { showReportActions }?.let { reportFile ->
         AlertDialog(
             onDismissRequest = { showReportActions = false },
             title = { Text("Rapport téléchargé") },
