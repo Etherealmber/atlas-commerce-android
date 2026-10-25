@@ -372,9 +372,7 @@ private fun HomeContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = state.settings?.companyName?.takeIf { it.isNotBlank() }
-                        ?.let { "Espace ${Roles.label(user.role)} · $it" }
-                        ?: "Espace ${Roles.label(user.role)}",
+                    text = "Résumé du jour",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
