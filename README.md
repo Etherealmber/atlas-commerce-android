@@ -1,5 +1,8 @@
 <div align="center">
-  <img src="app/src/main/assets/logo-light.svg" alt="Atlas Commerce" width="96" height="96" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="app/src/main/assets/logo-dark.png" />
+    <img src="app/src/main/assets/logo-light.png" alt="Atlas Commerce" width="234" height="76" />
+  </picture>
   <h1>Atlas Commerce — Android</h1>
   <p><strong>Official Native Android Companion for <a href="https://github.com/Etherealmber/atlas-commerce">Atlas Commerce Web</a></strong><br/>Stock · POS &amp; Receipts · Invoicing · Barcode &amp; PC QR Scanner · Atlas Agent AI</p>
 
@@ -65,7 +68,7 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
 5. **Check Cloudflare Bot Fight / WAF Rules on Custom Domains 🛡️**
    - If you enabled aggressive Cloudflare *Super Bot Fight Mode* on your custom domain, allow requests carrying path `/api/*` so mobile API calls and automated release uploads are never challenged by HTML CAPTCHA pages.
 6. **Passkey button missing or verification rejected 🔑**
-   - Passkeys default to disabled. Check the selected server's `GET /api/auth/webauthn/status`, the exact Android package and Play signing fingerprint, `/.well-known/assetlinks.json`, and the physical-build origin comparison in the [setup guide](docs/SETUP.md#5-optional-android-passkeys--keep-disabled-until-the-full-smoke-test-passes). Do not bypass exact-origin checks.
+   - Passkeys default to disabled. Check the selected server's `GET /api/auth/webauthn/status`, Android package, advertised SHA-256/SHA-1 signing origins, and allowlisted server origin. Credential Manager may use the package-bound explicit web-origin flow; the backend still verifies `crossOrigin` and the Android package. Follow the [staging/device setup guide](docs/SETUP.md#5-optional-android-passkeys--keep-disabled-until-the-full-smoke-test-passes). Do not bypass server-side verification.
 7. **Crash reports not appearing 🐞**
    - Firebase is optional and automatic upload is off until the user opts in under Settings. Confirm the correct `google-services.json` is installed in the build, Crashlytics is enabled in Firebase Console, and the test install has opted in. See [Firebase setup](docs/SETUP.md#4-optional-push-notifications-and-automatic-crash-reports-firebase).
 
@@ -79,10 +82,12 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
   - Grounded on live sales, stock deficits, unpaid balances, and pending mobile actions; shares exact conversation threads with the Web app via `/api/admin/agent/threads` and displays real-time token quota bars.
 - **Clean `Mon profil` vs `⚙️ Paramètres` Split**:
   - Tap your top-bar **Avatar** for **Mon profil** (Account & UI/POS/Scanner customizations) and tap **⚙️** in the top-right corner for **Paramètres** (PC QR pairing & devices, live AI quota bars, dual-mirror OTA APK updates, saved servers, and cache controls).
+- **Theme-aware Atlas identity and navigation**:
+  - The supplied Atlas wordmark switches foreground contrast with the app's light/dark theme, the Android launcher exposes a themed monochrome icon where supported, and the phone navigation centers a raised Scan action while preserving the tablet navigation rail.
 - **Camera Privacy & Explicit Controls**:
   - Camera hardware stays completely off when opening *Scan* or *QR PC* until you tap start, unbinds immediately upon leaving the screen, and lets you cancel (`Annuler`) any scanned code at any time.
 - **Server-gated Android passkeys**:
-  - Credential Manager registration/login are available only when the selected Worker confirms global and Android enablement, the exact package and signing origin, and the selected server origin. Login sessions are created only after server-side cryptographic verification; password/OTP stays available as fallback.
+  - Credential Manager registration/login are available only when the selected Worker confirms global and Android enablement, the exact app package, advertised Android origin metadata, and an allowlisted server origin. The app can use the package-bound explicit web-origin route when an upload/debug signing key differs; the Worker still enforces `crossOrigin`, package, and WebAuthn verification. Password/OTP stays available as fallback.
 - **Automatic crash reporting is optional and consent-based**:
   - Firebase Crashlytics uploads crash reports automatically only after the user opts in under Settings. It is off by default; builds without Firebase configuration continue to work without push or automatic crash uploads.
 - **Temporary finance reports and local-data controls**:
