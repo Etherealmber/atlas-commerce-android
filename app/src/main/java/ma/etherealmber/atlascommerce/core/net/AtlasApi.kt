@@ -23,6 +23,7 @@ import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.HealthDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
+import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.LoginRequest
 import ma.etherealmber.atlascommerce.data.model.LoginResponse
@@ -261,6 +262,13 @@ interface AtlasApi {
     suspend fun clients(): ApiEnvelope<List<ClientDto>>
 
     // Admin-only finance APIs: the worker re-validates the active owner/admin role.
+    @GET("api/admin/finance/statement")
+    suspend fun financeStatement(
+        @Query("period") period: String,
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 50,
+    ): ApiEnvelope<FinanceStatementDto>
+
     @GET("api/admin/finance/monthly")
     suspend fun financeMonthly(
         @Query("period") period: String? = null,

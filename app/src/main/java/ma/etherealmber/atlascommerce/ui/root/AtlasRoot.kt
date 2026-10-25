@@ -433,7 +433,9 @@ private fun AtlasGate(
             }
 
             if (bootSplashFinished && onboardingDone && serverLoaded && !mandatoryBlocking) {
-                if (baseStage != RootStage.SHELL || overlay != null) {
+                if ((baseStage != RootStage.SHELL || overlay != null) &&
+                    !(baseStage == RootStage.SHELL && savedShellTab == MainTab.SETTINGS.name)
+                ) {
                     UpdateMiniProgressBall(
                         state = updateState,
                         onClick = viewModel::showUpdateDownloadBanner,
@@ -443,7 +445,7 @@ private fun AtlasGate(
                             .padding(top = 12.dp, end = 14.dp),
                     )
                 }
-                AppUpdateBanner(
+                if (!(baseStage == RootStage.SHELL && savedShellTab == MainTab.SETTINGS.name)) AppUpdateBanner(
                     state = updateState,
                     onDownload = startDownloadWithNotificationPermission,
                     onInstall = triggerInstall,

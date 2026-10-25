@@ -28,6 +28,7 @@ import ma.etherealmber.atlascommerce.push.DeviceTokenRequest
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
+import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
 import ma.etherealmber.atlascommerce.data.model.HealthDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
@@ -75,6 +76,25 @@ class AppUpdateManagerTest {
     fun tearDown() {
         scope.cancel()
         tempDir.deleteRecursively()
+    }
+
+    @Test
+    fun downloadParallelismIsSourceSpecific() {
+        val manager = AppUpdateManager(
+            updatesDirProvider = { tempDir },
+            baseUrlProvider = { "https://example.invalid" },
+            currentVersionCode = 1,
+            currentVersionName = "1.0",
+            probeClient = client,
+            downloadClient = client,
+            moshi = moshi,
+            notifier = RecordingNotifier(),
+            scope = scope,
+        )
+        assertEquals(6, manager.connectionsForSource("GitHub"))
+        assertEquals(6, manager.connectionsForSource("github"))
+        assertEquals(4, manager.connectionsForSource("CDN 1"))
+        assertEquals(4, manager.connectionsForSource(null))
     }
 
     @Test
@@ -126,6 +146,12 @@ class AppUpdateManagerTest {
         assertEquals("Africa/Casablanca", finance?.timezone)
         assertEquals(3000.0, finance?.receivables?.documents?.firstOrNull()?.remaining ?: 0.0, 0.0)
         assertEquals(9000.0, finance?.payroll?.totalDue ?: 0.0, 0.0)
+
+        val statement = moshi.adapter(FinanceStatementDto::class.java).fromJson(
+            """{"period":"2026-10","timezone":"Africa/Casablanca","currency":"MAD","as_of":"2026-10-25","status":"open","opening_balance":1000,"closing_balance":1250,"totals":{"credits":500,"debits":250,"net":250},"reconciliation":{"opening":1000,"credits":500,"debits":250,"closing":1250,"balanced":true,"rule":"opening + credits - debits = closing"},"page":1,"page_size":50,"total":1,"has_more":false,"rows":[{"id":12,"source":"invoice_payments","type":"sale","label":"Encaissement F-2026-1","ref":"F-2026-1","debit":0,"credit":250,"ts":"2026-10-10","running_balance":1250}]}""",
+        )
+        assertEquals(1250.0, statement?.rows?.firstOrNull()?.runningBalance ?: 0.0, 0.0)
+        assertTrue(statement?.reconciliation?.balanced == true)
 
         val payroll = moshi.adapter(PayrollPageDto::class.java).fromJson(
             """{"period":"2026-10","as_of":"2026-10-25","timezone":"Africa/Casablanca","currency":"MAD","totals":{"amount_due":4500,"unpaid_count":2,"count":5},"page":1,"page_size":50,"total":5,"has_more":false,"rows":[{"employee_id":12,"display_name":"Karim Ben","amount_due":1500,"pay_period":{"from":"2026-10-01","to":"2026-10-31"},"due_date":"2026-10-31","status":"unpaid","last_payment":{"amount":500,"paid_at":"2026-10-10","period_label":"Acompte octobre"}}]}""",

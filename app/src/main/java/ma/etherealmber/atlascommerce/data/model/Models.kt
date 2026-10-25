@@ -368,6 +368,54 @@ data class FinanceMonthlyDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class FinanceStatementDto(
+    val period: String = "",
+    val timezone: String = "",
+    val currency: String = "MAD",
+    @Json(name = "as_of") val asOf: String = "",
+    val status: String = "open",
+    @Json(name = "opening_balance") val openingBalance: Double = 0.0,
+    @Json(name = "closing_balance") val closingBalance: Double = 0.0,
+    val totals: FinanceStatementTotalsDto = FinanceStatementTotalsDto(),
+    val reconciliation: FinanceStatementReconciliationDto = FinanceStatementReconciliationDto(),
+    val page: Int = 1,
+    @Json(name = "page_size") val pageSize: Int = 50,
+    val total: Int = 0,
+    @Json(name = "has_more") val hasMore: Boolean = false,
+    val rows: List<FinanceStatementRowDto> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class FinanceStatementTotalsDto(
+    val credits: Double = 0.0,
+    val debits: Double = 0.0,
+    val net: Double = 0.0,
+)
+
+@JsonClass(generateAdapter = true)
+data class FinanceStatementReconciliationDto(
+    val opening: Double = 0.0,
+    val credits: Double = 0.0,
+    val debits: Double = 0.0,
+    val closing: Double = 0.0,
+    val balanced: Boolean = false,
+    val rule: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class FinanceStatementRowDto(
+    val id: Long = 0,
+    val source: String = "",
+    val type: String = "",
+    val label: String = "",
+    val ref: String = "",
+    val debit: Double = 0.0,
+    val credit: Double = 0.0,
+    val ts: String = "",
+    @Json(name = "running_balance") val runningBalance: Double = 0.0,
+)
+
+@JsonClass(generateAdapter = true)
 data class FinanceOutstandingBucketDto(
     @Json(name = "total_outstanding") val totalOutstanding: Double = 0.0,
     @Json(name = "total_overdue") val totalOverdue: Double = 0.0,

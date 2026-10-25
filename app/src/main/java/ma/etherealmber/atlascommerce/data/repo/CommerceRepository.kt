@@ -37,6 +37,7 @@ import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
+import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionDto
@@ -80,6 +81,13 @@ class CommerceRepository @Inject constructor(
 
     suspend fun financeMonthly(period: String? = null): ApiResult<FinanceMonthlyDto> =
         runner.envelope { apiProvider.api().financeMonthly(period) }
+
+    suspend fun financeStatement(
+        period: String,
+        page: Int = 1,
+        pageSize: Int = 50,
+    ): ApiResult<FinanceStatementDto> =
+        runner.envelope { apiProvider.api().financeStatement(period, page, pageSize) }
 
     /**
      * Opens the server's printable combined report using its short-lived HMAC ticket.
