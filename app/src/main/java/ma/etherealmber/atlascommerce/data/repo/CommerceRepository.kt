@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
@@ -33,10 +34,14 @@ import ma.etherealmber.atlascommerce.data.model.CloseProductRequestBody
 import ma.etherealmber.atlascommerce.data.model.CompanySettingsDto
 import ma.etherealmber.atlascommerce.data.model.CompleteMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.CreateMobileActionRequest
+import ma.etherealmber.atlascommerce.data.model.CreateFinanceEntryRequest
+import ma.etherealmber.atlascommerce.data.model.FinanceEntryDto
+import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
+import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionDto
@@ -81,13 +86,25 @@ class CommerceRepository @Inject constructor(
     suspend fun financeMonthly(period: String? = null): ApiResult<FinanceMonthlyDto> =
         runner.envelope { apiProvider.api().financeMonthly(period) }
 
-    /**
-     * Opens the server's printable combined report using its short-lived HMAC ticket.
-     * This existing web report currently supports relative periods (e.g. `month`),
-     * not an arbitrary YYYY-MM month selection.
-     */
-    suspend fun createCombinedReportUrl(): ApiResult<String> =
-        when (val result = runner.envelope { apiProvider.api().reportLinkTicket() }) {
+    suspend fun financePeriod(period: String): ApiResult<FinancePeriodDto> =
+        runner.envelope { apiProvider.api().financePeriod(period) }
+
+    suspend fun createFinanceEntry(request: CreateFinanceEntryRequest): ApiResult<FinanceEntryDto> =
+        runner.envelope { apiProvider.api().createFinanceEntry(request) }
+
+    suspend fun financeStatement(
+        period: String,
+        page: Int = 1,
+        pageSize: Int = 50,
+    ): ApiResult<FinanceStatementDto> =
+        runner.envelope { apiProvider.api().financeStatement(period, page, pageSize) }
+
+    /** Opens the selected-month combined report using a short-lived HMAC ticket. */
+    suspend fun createCombinedReportUrl(period: String = "month"): ApiResult<String> {
+        if (period != "month" && !period.matches(Regex("\\d{4}-(0[1-9]|1[0-2])"))) {
+            return ApiResult.Failure("BAD_PERIOD", "Période invalide — format attendu AAAA-MM.")
+        }
+        return when (val result = runner.envelope { apiProvider.api().reportLinkTicket() }) {
             is ApiResult.Failure -> result
             is ApiResult.Success -> {
                 val ticket = result.data
@@ -102,7 +119,7 @@ class CommerceRepository @Inject constructor(
                         .appendPath("reports")
                         .appendPath("combined")
                         .appendQueryParameter("rt", ticket.rt)
-                        .appendQueryParameter("period", "month")
+                        .appendQueryParameter("period", period)
                         .appendQueryParameter("sections", "balance,stock,receivables,payables,employees")
                         .build()
                         .toString()
@@ -110,6 +127,7 @@ class CommerceRepository @Inject constructor(
                 }
             }
         }
+    }
 
     suspend fun employeePayroll(
         period: String,
@@ -503,28 +521,11 @@ class CommerceRepository @Inject constructor(
         role: String? = Roles.USER,
         username: String? = null,
         threadId: String = "live",
+        images: List<String> = emptyList(),
+        documents: List<String> = emptyList(),
     ): ApiResult<AssistChatResponseDto> {
         val cleanQuestion = message.trim()
-        val isGreeting = Regex(
-            "^(bonjour|bonsoir|salut|hello|hi|hey|coucou|salam|bonne\\s*(journée|soirée)|merci)[\\s!.?]*$",
-            RegexOption.IGNORE_CASE,
-        ).matches(cleanQuestion)
-
-        val outboundPrompt = if (isGreeting) {
-            cleanQuestion
-        } else {
-            val snapshot = runCatching { buildLiveBusinessSnapshot(cleanQuestion, role, username) }.getOrDefault("")
-            if (snapshot.isBlank()) {
-                cleanQuestion
-            } else {
-                buildString {
-                    appendLine("RÈGLE STRICTE : Appuie-toi UNIQUEMENT sur les données réelles en direct de la boutique ci-dessous. N'invente JAMAIS aucun chiffre, stock, prix, facture ou client.")
-                    appendLine(snapshot)
-                    appendLine("Réponds clairement et naturellement en français (tableaux ou listes claires si pertinent) sans mentionner ce bloc technique.")
-                    append("Question de l'utilisateur : $cleanQuestion")
-                }.take(2450)
-            }
-        }
+        val outboundPrompt = buildAssistOutboundPrompt(cleanQuestion, role, username)
 
         return runner.envelope {
             apiProvider.api().assistChat(
@@ -532,9 +533,119 @@ class CommerceRepository @Inject constructor(
                     message = outboundPrompt,
                     userMessage = cleanQuestion,
                     threadId = threadId,
+                    images = images.take(4),
+                    documents = documents.take(2),
                 ),
             )
         }
+    }
+
+    /** Real SSE tokens from the worker; older servers transparently fall back to JSON chat. */
+    suspend fun assistChatStream(
+        message: String,
+        role: String? = Roles.USER,
+        username: String? = null,
+        threadId: String = "live",
+        images: List<String> = emptyList(),
+        documents: List<String> = emptyList(),
+        onToken: (String) -> Unit,
+    ): ApiResult<AssistChatResponseDto> {
+        val cleanQuestion = message.trim()
+        if (cleanQuestion.isBlank()) return ApiResult.Failure("EMPTY_MESSAGE", "Message vide.")
+        val request = AssistChatRequest(
+            message = buildAssistOutboundPrompt(cleanQuestion, role, username),
+            userMessage = cleanQuestion,
+            threadId = threadId,
+            images = images.take(4),
+            documents = documents.take(2),
+        )
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = apiProvider.api().assistChatStream(request)
+                if (response.code() == 404) {
+                    response.errorBody()?.close()
+                    val fallback = assistChat(cleanQuestion, role, username, threadId, images, documents)
+                    if (fallback is ApiResult.Success) onToken(fallback.data.reply)
+                    return@withContext fallback
+                }
+                if (!response.isSuccessful) {
+                    val raw = response.errorBody()?.use { it.string() }.orEmpty()
+                    val payload = runCatching { moshi.adapter(ApiErrorPayload::class.java).fromJson(raw) }.getOrNull()
+                    return@withContext ApiResult.Failure(
+                        code = payload?.code ?: "HTTP_${response.code()}",
+                        message = payload?.error ?: payload?.message ?: "Atlas Agent indisponible (${response.code()}).",
+                        httpStatus = response.code(),
+                    )
+                }
+                val body = response.body() ?: return@withContext ApiResult.Failure("EMPTY_STREAM", "Le serveur n'a pas ouvert le flux Atlas Agent.")
+                var eventName = ""
+                val dataLines = mutableListOf<String>()
+                var completed: AssistChatResponseDto? = null
+                var streamFailure: ApiResult.Failure? = null
+                fun dispatchFrame() {
+                    val payload = dataLines.joinToString("\n")
+                    dataLines.clear()
+                    when (eventName) {
+                        "token" -> {
+                            val token = runCatching { JSONObject(payload).optString("t") }.getOrDefault("")
+                            if (token.isNotEmpty()) onToken(token)
+                        }
+                        "done" -> {
+                            val json = runCatching { JSONObject(payload) }.getOrNull()
+                            if (json != null) completed = AssistChatResponseDto(
+                                reply = json.optString("reply"),
+                                model = json.optString("model").takeIf { it.isNotBlank() },
+                                provider = json.optString("provider").takeIf { it.isNotBlank() },
+                            )
+                        }
+                        "error" -> {
+                            val json = runCatching { JSONObject(payload) }.getOrNull()
+                            streamFailure = ApiResult.Failure(
+                                code = json?.optString("code")?.takeIf { it.isNotBlank() } ?: "STREAM_ERROR",
+                                message = json?.optString("error")?.takeIf { it.isNotBlank() } ?: "Erreur du flux Atlas Agent.",
+                            )
+                        }
+                    }
+                    eventName = ""
+                }
+                body.byteStream().bufferedReader(Charsets.UTF_8).use { reader ->
+                    while (true) {
+                        val line = reader.readLine() ?: break
+                        when {
+                            line.isBlank() -> dispatchFrame()
+                            line.startsWith("event:") -> eventName = line.substringAfter(':').trim()
+                            line.startsWith("data:") -> dataLines += line.substringAfter(':').trimStart()
+                        }
+                    }
+                    if (dataLines.isNotEmpty()) dispatchFrame()
+                }
+                streamFailure?.let { return@withContext it }
+                completed?.let { return@withContext ApiResult.Success(it) }
+                ApiResult.Failure("STREAM_INCOMPLETE", "Le flux Atlas Agent s'est terminé sans réponse complète.")
+            } catch (c: CancellationException) {
+                throw c
+            } catch (e: IOException) {
+                ApiResult.Failure(ApiRunner.CODE_NETWORK, e.message ?: "Connexion au flux Atlas Agent interrompue.")
+            } catch (t: Throwable) {
+                ApiResult.Failure("STREAM_ERROR", t.message ?: "Impossible de lire la réponse Atlas Agent.")
+            }
+        }
+    }
+
+    private suspend fun buildAssistOutboundPrompt(cleanQuestion: String, role: String?, username: String?): String {
+        val isGreeting = Regex(
+            "^(bonjour|bonsoir|salut|hello|hi|hey|coucou|salam|bonne\\s*(journée|soirée)|merci)[\\s!.?]*$",
+            RegexOption.IGNORE_CASE,
+        ).matches(cleanQuestion)
+        if (isGreeting) return cleanQuestion
+        val snapshot = runCatching { buildLiveBusinessSnapshot(cleanQuestion, role, username) }.getOrDefault("")
+        if (snapshot.isBlank()) return cleanQuestion
+        return buildString {
+            appendLine("RÈGLE STRICTE : Appuie-toi UNIQUEMENT sur les données réelles en direct de la boutique ci-dessous. N'invente JAMAIS aucun chiffre, stock, prix, facture ou client.")
+            appendLine(snapshot)
+            appendLine("Réponds clairement et naturellement en français (tableaux ou listes claires si pertinent) sans mentionner ce bloc technique.")
+            append("Question de l'utilisateur : $cleanQuestion")
+        }.take(2450)
     }
 
     private suspend fun buildLiveBusinessSnapshot(userQuestion: String, role: String?, username: String?): String = coroutineScope {

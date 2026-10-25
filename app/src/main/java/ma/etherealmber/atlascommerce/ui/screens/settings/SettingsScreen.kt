@@ -1070,7 +1070,7 @@ fun SettingsScreen(
                         Column(Modifier.weight(1f)) {
                             Text("Passkey Android", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                             Text(
-                                "Ajoutez une connexion biométrique vérifiée sur le serveur sélectionné.",
+                                "Passkey prête à tester une fois, si ce serveur l'autorise. L'inscription reste manuelle : aucune passkey n'est créée automatiquement.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

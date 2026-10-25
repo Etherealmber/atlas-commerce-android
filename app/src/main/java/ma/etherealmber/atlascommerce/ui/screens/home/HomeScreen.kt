@@ -2,7 +2,6 @@ package ma.etherealmber.atlascommerce.ui.screens.home
 
 import android.content.ClipData
 import android.content.Intent
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -85,6 +84,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasStatTile
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
+import ma.etherealmber.atlascommerce.ui.components.CombinedReportWebViewDialog
+import ma.etherealmber.atlascommerce.ui.components.FinancePdfViewerDialog
 import ma.etherealmber.atlascommerce.ui.components.StatusChip
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
@@ -103,6 +104,8 @@ fun HomeScreen(
     val context = LocalContext.current
     var pendingReportFile by remember { mutableStateOf<java.io.File?>(null) }
     var showReportActions by remember { mutableStateOf(false) }
+    var pdfViewerFile by remember { mutableStateOf<java.io.File?>(null) }
+    var combinedReportUrl by remember { mutableStateOf<String?>(null) }
     var showCombinedReportConfirm by remember { mutableStateOf(false) }
 
     if (showCombinedReportConfirm) {
@@ -110,7 +113,7 @@ fun HomeScreen(
             onDismissRequest = { showCombinedReportConfirm = false },
             title = { Text("Ouvrir le pack de rapports ?") },
             text = {
-                Text("Le serveur ouvrira son rapport combiné dans le navigateur. Un ticket d'accès temporaire (30 minutes) sera ajouté au lien : ne partagez pas l'URL. Cette page utilise la période courante du serveur.")
+                Text("Le rapport combiné sera affiché dans Atlas via un ticket temporaire (30 minutes). Ne partagez pas le lien ni l'écran pendant sa validité.")
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -118,16 +121,16 @@ fun HomeScreen(
                     viewModel.createCombinedReportUrl { result ->
                         when (result) {
                             is ApiResult.Failure -> onToast(result.message)
-                            is ApiResult.Success -> runCatching {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(result.data))
-                                context.startActivity(Intent.createChooser(intent, "Ouvrir les rapports"))
-                            }.onFailure { onToast("Aucun navigateur disponible : ${it.message.orEmpty()}") }
+                            is ApiResult.Success -> combinedReportUrl = result.data
                         }
                     }
                 }) { Text("Continuer") }
             },
             dismissButton = { TextButton(onClick = { showCombinedReportConfirm = false }) { Text("Annuler") } },
         )
+    }
+    combinedReportUrl?.let { url ->
+        CombinedReportWebViewDialog(url = url, onDismiss = { combinedReportUrl = null })
     }
     val saveReportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf"),
@@ -148,38 +151,20 @@ fun HomeScreen(
         AlertDialog(
             onDismissRequest = { showReportActions = false },
             title = { Text("Rapport téléchargé") },
-            text = {
-                Text("Le PDF est conservé en privé sur cet appareil pendant 7 jours maximum. Choisissez quoi en faire.")
-            },
+            text = { Text("Le PDF est conservé en privé sur cet appareil pendant 7 jours maximum.") },
             confirmButton = {
                 TextButton(onClick = {
                     showReportActions = false
-                    runCatching {
-                        val uri = FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            reportFile,
-                        )
-                        val openIntent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, "application/pdf")
-                            clipData = ClipData.newUri(context.contentResolver, reportFile.name, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        context.startActivity(Intent.createChooser(openIntent, "Ouvrir le rapport PDF"))
-                    }.onFailure { onToast("Aucune application ne peut ouvrir ce PDF : ${it.message.orEmpty()}") }
+                    pdfViewerFile = reportFile
                     pendingReportFile = null
-                }) { Text("Ouvrir") }
+                }) { Text("Lire dans Atlas") }
             },
             dismissButton = {
                 Column(horizontalAlignment = Alignment.End) {
                     TextButton(onClick = {
                         showReportActions = false
                         runCatching {
-                            val uri = FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.fileprovider",
-                                reportFile,
-                            )
+                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", reportFile)
                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                 type = "application/pdf"
                                 putExtra(Intent.EXTRA_STREAM, uri)
@@ -190,10 +175,7 @@ fun HomeScreen(
                         }.onFailure { onToast("Impossible de partager le PDF : ${it.message.orEmpty()}") }
                         pendingReportFile = null
                     }) { Text("Partager") }
-                    TextButton(onClick = {
-                        showReportActions = false
-                        saveReportLauncher.launch(reportFile.name)
-                    }) { Text("Enregistrer une copie…") }
+                    TextButton(onClick = { saveReportLauncher.launch(reportFile.name) }) { Text("Enregistrer une copie…") }
                     TextButton(onClick = {
                         showReportActions = false
                         reportFile.delete()
@@ -202,6 +184,26 @@ fun HomeScreen(
                     }) { Text("Supprimer") }
                 }
             },
+        )
+    }
+    pdfViewerFile?.let { reportFile ->
+        FinancePdfViewerDialog(
+            file = reportFile,
+            onDismiss = { pdfViewerFile = null },
+            onShare = {
+                runCatching {
+                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", reportFile)
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/pdf"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        clipData = ClipData.newUri(context.contentResolver, reportFile.name, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "Partager le rapport PDF"))
+                }.onFailure { onToast("Impossible de partager le PDF : ${it.message.orEmpty()}") }
+            },
+            onSave = { pendingReportFile = reportFile; saveReportLauncher.launch(reportFile.name) },
+            onDelete = { reportFile.delete(); pdfViewerFile = null; onToast("Rapport temporaire supprimé.") },
         )
     }
 
@@ -677,7 +679,7 @@ private fun FinanceAdminCard(
         )
         Spacer(Modifier.height(6.dp))
         AtlasOutlinedButton(
-            text = "Pack rapports détaillés · ouvrir le navigateur",
+            text = "Pack rapports détaillés · ouvrir dans Atlas",
             onClick = onOpenCombinedReport,
             enabled = !reportGenerating && !loading,
             modifier = Modifier.fillMaxWidth(),

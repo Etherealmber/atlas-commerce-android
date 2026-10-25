@@ -19,10 +19,14 @@ import ma.etherealmber.atlascommerce.data.model.CompleteMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.CreateMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
+import ma.etherealmber.atlascommerce.data.model.CreateFinanceEntryRequest
+import ma.etherealmber.atlascommerce.data.model.FinanceEntryDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.HealthDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
+import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
+import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.LoginRequest
 import ma.etherealmber.atlascommerce.data.model.LoginResponse
@@ -252,6 +256,10 @@ interface AtlasApi {
     @POST("api/assist/chat")
     suspend fun assistChat(@Body body: AssistChatRequest): ApiEnvelope<AssistChatResponseDto>
 
+    @Streaming
+    @POST("api/assist/chat/stream")
+    suspend fun assistChatStream(@Body body: AssistChatRequest): Response<ResponseBody>
+
     @POST("api/assist/approve")
     suspend fun assistApprove(@Body body: AssistApproveRequest): ApiEnvelope<AssistApproveDto>
 
@@ -261,10 +269,23 @@ interface AtlasApi {
     suspend fun clients(): ApiEnvelope<List<ClientDto>>
 
     // Admin-only finance APIs: the worker re-validates the active owner/admin role.
+    @GET("api/admin/finance/statement")
+    suspend fun financeStatement(
+        @Query("period") period: String,
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 50,
+    ): ApiEnvelope<FinanceStatementDto>
+
     @GET("api/admin/finance/monthly")
     suspend fun financeMonthly(
         @Query("period") period: String? = null,
     ): ApiEnvelope<FinanceMonthlyDto>
+
+    @GET("api/admin/finance/period")
+    suspend fun financePeriod(@Query("period") period: String): ApiEnvelope<FinancePeriodDto>
+
+    @POST("api/expenses")
+    suspend fun createFinanceEntry(@Body body: CreateFinanceEntryRequest): ApiEnvelope<FinanceEntryDto>
 
     @GET("api/admin/employees/payroll")
     suspend fun employeePayroll(

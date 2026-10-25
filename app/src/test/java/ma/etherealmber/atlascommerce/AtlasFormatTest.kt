@@ -137,9 +137,11 @@ class MarkdownParserTest {
             MainTab.BottomBarTabs.contains(MainTab.SETTINGS),
         )
         assertEquals(
-            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.SALE, MainTab.AGENT),
+            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.AGENT),
             MainTab.BottomBarTabs,
         )
+        assertFalse("Vente must stay in the top quick menu, not the bottom bar", MainTab.BottomBarTabs.contains(MainTab.SALE))
+        assertTrue("Balance replaces Vente in the bottom bar", MainTab.BottomBarTabs.contains(MainTab.BALANCE))
         assertFalse(
             "ScanViewModel camera must stay closed by default",
             ScanViewModel.UiState().cameraEnabled,
@@ -174,21 +176,21 @@ class MarkdownParserTest {
         assertFalse(Roles.canViewFinancials("stock"))
         assertFalse(Roles.canViewFinancials("user"))
 
-        // 2. Bottom navigation bar adapts strictly by role
+        // 2. Balance replaces Vente in bottom navigation for every role; finance data stays server-authorized
         assertEquals(
-            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.SALE, MainTab.AGENT),
+            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.AGENT),
             MainTab.bottomTabsForRole("admin"),
         )
         assertEquals(
-            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.SALE, MainTab.AGENT),
+            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.AGENT),
             MainTab.bottomTabsForRole("secretaire"),
         )
         assertEquals(
-            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.AGENT),
+            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.AGENT),
             MainTab.bottomTabsForRole("stock"),
         )
         assertEquals(
-            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.AGENT),
+            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.AGENT),
             MainTab.bottomTabsForRole("user"),
         )
 

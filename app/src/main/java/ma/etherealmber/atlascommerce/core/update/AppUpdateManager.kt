@@ -196,7 +196,7 @@ class AppUpdateManager internal constructor(
             title = "Atlas Commerce v$currentVersionName (build $currentVersionCode)",
             isLatest = true,
             notes = buildString {
-                appendLine("• Téléchargement accéléré multi-connexions (4 flux HTTP Range parallèles).")
+                appendLine("• Téléchargement multi-connexions adapté à la source : CDN 1 et GitHub Releases.")
                 appendLine("• Suivi direct de la dernière version publiée sur GitHub Releases & CDN 1.")
                 appendLine("• Journal complet des versions intégré dans Paramètres et notes JSON allégées.")
                 append("• Licence MIT © 2026 Etherealmber & navigation persistante entre sous-écrans.")
@@ -625,8 +625,8 @@ class AppUpdateManager internal constructor(
     }
 
     /**
-     * Fast multi-instance parallel HTTP `Range` downloader (`PARALLEL_CONNECTIONS` concurrent
-     * TCP/TLS streams writing directly to disjoint file offsets via positioned `FileChannel`),
+     * Parallel HTTP `Range` downloader using source-tuned connection counts (4 for the CDN path,
+     * 6 for GitHub release assets), with concurrent TCP/TLS streams writing disjoint file offsets,
      * with zero-overhead single-stream reuse whenever the server replies `200 OK` without `Range`.
      */
     private suspend fun downloadFromUrl(
@@ -663,7 +663,7 @@ class AppUpdateManager internal constructor(
                     sourceLabel = sourceLabel,
                     partFile = partFile,
                     totalBytes = totalBytes,
-                    connections = PARALLEL_CONNECTIONS,
+                    connections = connectionsForSource(sourceLabel),
                 )
                 return
             }
@@ -680,6 +680,13 @@ class AppUpdateManager internal constructor(
             streamOpenResponse(info, sourceLabel, partFile, fullResponse)
         }
     }
+
+    /**
+     * Cloudflare's published R2 limits do not specify a per-client GET/range concurrency ceiling;
+     * keep the CDN/custom-domain path at four streams and use two extra ranges for GitHub assets.
+     */
+    internal fun connectionsForSource(sourceLabel: String?): Int =
+        if (sourceLabel.equals("GitHub", ignoreCase = true)) GITHUB_PARALLEL_CONNECTIONS else PARALLEL_CONNECTIONS
 
     internal fun parseTotalBytesFromContentRange(headerValue: String?): Long? {
         if (headerValue.isNullOrBlank()) return null
@@ -1165,6 +1172,7 @@ class AppUpdateManager internal constructor(
 
     private companion object {
         const val PARALLEL_CONNECTIONS = 4
+        const val GITHUB_PARALLEL_CONNECTIONS = 6
         const val MAX_PARALLEL_CONNECTIONS = 8
         const val MAX_SEGMENT_RETRIES = 2
         const val MIN_PARALLEL_BYTES = 16 * 1024L

@@ -2,8 +2,12 @@ package ma.etherealmber.atlascommerce.ui.shell
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
@@ -22,6 +25,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ShoppingCart
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
@@ -31,6 +35,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
@@ -62,6 +69,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
 import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
 import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentScreen
+import ma.etherealmber.atlascommerce.ui.screens.balance.BalanceScreen
 import ma.etherealmber.atlascommerce.ui.screens.home.HomeScreen
 import ma.etherealmber.atlascommerce.ui.screens.products.ProductsScreen
 import ma.etherealmber.atlascommerce.ui.screens.sale.SaleScreen
@@ -74,6 +82,7 @@ enum class MainTab(val label: String, val icon: ImageVector) {
     PRODUCTS("Produits", Icons.Outlined.Inventory2),
     SCAN("Scan", Icons.Outlined.QrCodeScanner),
     SALE("Vente", Icons.Outlined.ShoppingCart),
+    BALANCE("Balance", Icons.Outlined.AccountBalanceWallet),
     AGENT("Agent", Icons.Outlined.AutoAwesome),
     PROFILE("Mon profil", Icons.Outlined.Person),
     SETTINGS("Paramètres", Icons.Outlined.Settings),
@@ -85,15 +94,10 @@ enum class MainTab(val label: String, val icon: ImageVector) {
          * tapping the Top Bar Avatar opens `PROFILE` (Account + Customizations ONLY),
          * and the top-right Settings icon inside `PROFILE` opens `SETTINGS`.
          */
-        val BottomBarTabs = listOf(HOME, PRODUCTS, SCAN, SALE, AGENT)
+        val BottomBarTabs = listOf(HOME, PRODUCTS, SCAN, BALANCE, AGENT)
 
-        /** Filters bottom navigation items strictly according to the signed-in user's role. */
-        fun bottomTabsForRole(role: String?): List<MainTab> =
-            if (Roles.canCreateDocuments(role)) {
-                BottomBarTabs
-            } else {
-                listOf(HOME, PRODUCTS, SCAN, AGENT)
-            }
+        /** Balance is always in navigation; financial figures remain server-authorized. */
+        fun bottomTabsForRole(@Suppress("UNUSED_PARAMETER") role: String?): List<MainTab> = BottomBarTabs
     }
 }
 
@@ -192,7 +196,10 @@ fun MainShell(
         }
     }
 
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val useRail = maxWidth >= 600.dp
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AtlasTopBar(
@@ -206,11 +213,11 @@ fun MainShell(
                 actions = {
                     val hasHiddenDownload =
                         (updateState as? UpdateState.Downloading)?.let { it.hiddenInForeground && !it.info.mandatory } == true
-                    UpdateMiniProgressBall(
+                    if (tab != MainTab.SETTINGS) UpdateMiniProgressBall(
                         state = updateState,
                         onClick = onShowUpdateProgress,
                     )
-                    if (hasHiddenDownload) {
+                    if (hasHiddenDownload && tab != MainTab.SETTINGS) {
                         Spacer(Modifier.width(6.dp))
                     }
                     when (tab) {
@@ -231,8 +238,9 @@ fun MainShell(
                         else -> {
                             TopBarQuickActionsMenu(
                                 notificationCount = notificationCount,
+                                showSale = Roles.canCreateDocuments(user.role),
                                 onOpenNotifications = onOpenNotifications,
-                                onOpenQrDevice = { onOpenQrDevice(null) },
+                                onOpenSale = { switchTab(MainTab.SALE) },
                             )
                             Spacer(Modifier.width(6.dp))
                             AtlasAvatar(
@@ -250,9 +258,9 @@ fun MainShell(
             )
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 2.dp,
+            if (!useRail) NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                tonalElevation = 5.dp,
             ) {
                 roleTabs.forEach { item ->
                     NavigationBarItem(
@@ -261,10 +269,10 @@ fun MainShell(
                         icon = {
                             if (item == MainTab.SALE && cartCount > 0) {
                                 BadgedBox(badge = { Badge { Text(cartCount.toString()) } }) {
-                                    Icon(item.icon, contentDescription = item.label)
+                                    AnimatedTabIcon(item.icon, item.label, selected = tab == item)
                                 }
                             } else {
-                                Icon(item.icon, contentDescription = item.label)
+                                AnimatedTabIcon(item.icon, item.label, selected = tab == item)
                             }
                         },
                         label = {
@@ -281,14 +289,33 @@ fun MainShell(
             }
         },
     ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+        if (useRail) {
+            NavigationRail(modifier = Modifier.align(Alignment.CenterStart), containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+                roleTabs.forEach { item ->
+                    NavigationRailItem(
+                        selected = tab == item,
+                        onClick = { switchTab(item) },
+                        icon = {
+                            if (item == MainTab.SALE && cartCount > 0) {
+                                BadgedBox(badge = { Badge { Text(cartCount.toString()) } }) { AnimatedTabIcon(item.icon, item.label, selected = tab == item) }
+                            } else AnimatedTabIcon(item.icon, item.label, selected = tab == item)
+                        },
+                        label = { Text(item.label, style = MaterialTheme.typography.labelSmall, maxLines = 1) },
+                    )
+                }
+            }
+            VerticalDivider(modifier = Modifier.align(Alignment.CenterStart).padding(start = 79.dp).fillMaxHeight(), color = MaterialTheme.colorScheme.outlineVariant)
+        }
         AtlasPageTransition(
             targetState = tab,
             indexSelector = { it.ordinal },
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(start = if (useRail) 80.dp else 0.dp),
         ) { currentTab ->
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                Box(Modifier.widthIn(max = if (useRail) 1200.dp else 840.dp).fillMaxSize()) {
                 when (currentTab) {
                     MainTab.HOME -> HomeScreen(
                         user = user,
@@ -332,6 +359,8 @@ fun MainShell(
                         onToast = onToast,
                     )
 
+                    MainTab.BALANCE -> BalanceScreen(onToast = onToast)
+
                     MainTab.SETTINGS -> SettingsScreen(
                         user = user,
                         onChangeServer = onChangeServer,
@@ -344,21 +373,39 @@ fun MainShell(
                         onToast = onToast,
                     )
                 }
+                }
             }
         }
+        }
     }
+    }
+}
+
+@Composable
+private fun AnimatedTabIcon(icon: ImageVector, label: String, selected: Boolean) {
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1.12f else 1f,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 520f),
+        label = "nav-icon-$label",
+    )
+    Icon(
+        imageVector = icon,
+        contentDescription = label,
+        modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+    )
 }
 
 /**
  * Compact small-arrow dropdown trigger positioned directly next to the Top Bar
  * Profile Avatar, housing Notifications (with unread badge count) and QR Login
- * on another device.
+ * and the permitted Vente quick action. Device pairing stays in Settings/Scan.
  */
 @Composable
 private fun TopBarQuickActionsMenu(
     notificationCount: Int,
+    showSale: Boolean,
     onOpenNotifications: () -> Unit,
-    onOpenQrDevice: () -> Unit,
+    onOpenSale: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val arrowRotation by animateFloatAsState(
@@ -387,7 +434,7 @@ private fun TopBarQuickActionsMenu(
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     Icon(
                         imageVector = Icons.Outlined.KeyboardArrowDown,
-                        contentDescription = "Menu rapide (Notifications et appareils)",
+                        contentDescription = "Menu rapide (Notifications et Vente)",
                         tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier
                             .size(20.dp)
@@ -436,33 +483,19 @@ private fun TopBarQuickActionsMenu(
                     onOpenNotifications()
                 },
             )
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp))
-            DropdownMenuItem(
-                text = {
-                    Column {
-                        Text(
-                            text = "Connecter un appareil",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        Text(
-                            text = "Connexion QR sur PC / autre poste",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Devices,
-                        contentDescription = null,
-                    )
-                },
-                onClick = {
-                    expanded = false
-                    onOpenQrDevice()
-                },
-            )
+            if (showSale) {
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp))
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text("Vente", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                            Text("Nouvelle vente / caisse", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    },
+                    leadingIcon = { Icon(Icons.Outlined.ShoppingCart, contentDescription = null) },
+                    onClick = { expanded = false; onOpenSale() },
+                )
+            }
         }
     }
 }
