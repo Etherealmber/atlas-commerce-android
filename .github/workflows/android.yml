@@ -227,21 +227,43 @@ jobs:
           IS_RELEASE_RUN: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
         run: |
           readarray -t URL_ARGS < <(python3 -c 'import json,os; d=json.load(open(os.path.join(os.environ["RUNNER_TEMP"],"resolved-urls.json"))); print("-PoverrideRepoUrl=" + d["repo_url"]); print("-PoverrideCdnUrl=" + d["cdn_url"]); print("-PoverrideDownloadUrl=" + d["download_url"])')
-
+          GRADLE_LOG="$RUNNER_TEMP/gradle-build.log"
+          set +e
           if [ "$IS_RELEASE_RUN" = "true" ]; then
             ./gradlew :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease \
               "-PoverrideVersionName=${VER_NAME}" \
               "-PoverrideVersionCode=${VER_CODE}" \
               "${URL_ARGS[@]}" \
-              --build-cache --console=plain --stacktrace
+              --build-cache --console=plain --stacktrace 2>&1 | tee "$GRADLE_LOG"
+            GRADLE_RC=${PIPESTATUS[0]}
           else
             ./gradlew :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:kspReleaseKotlin :app:lintDebug \
               "-PoverrideVersionName=${VER_NAME}" \
               "-PoverrideVersionCode=${VER_CODE}" \
               "${URL_ARGS[@]}" \
-              --build-cache --console=plain --stacktrace
+              --build-cache --console=plain --stacktrace 2>&1 | tee "$GRADLE_LOG"
+            GRADLE_RC=${PIPESTATUS[0]}
           fi
           ./gradlew --stop || true
+          if [ "$GRADLE_RC" -ne 0 ]; then
+            python3 - "$GRADLE_LOG" "$GITHUB_STEP_SUMMARY" <<'PY'
+          import re, sys
+          from pathlib import Path
+
+          lines = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace").splitlines()
+          patterns = re.compile(r"(^e: |^w: |FAILURE:|What went wrong:|Execution failed for task|Caused by:|Unresolved reference|Compilation error|No matching variant|Could not resolve|Could not find|FAILED$|error:)", re.I)
+          selected = [line for line in lines if patterns.search(line)]
+          if not selected:
+              selected = lines[-80:]
+          else:
+              selected = selected[-100:]
+          with open(sys.argv[2], "a", encoding="utf-8") as summary:
+              summary.write("## Gradle failure details\n\n```text\n")
+              summary.write("\n".join(selected))
+              summary.write("\n```\n")
+          PY
+          fi
+          exit "$GRADLE_RC"
 
       - name: Clean temporary signing files & prepare single release APK
         if: always()
