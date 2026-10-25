@@ -3,8 +3,12 @@ package ma.etherealmber.atlascommerce.ui.screens.agent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.AddComment
+import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
@@ -45,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -89,7 +96,16 @@ fun AgentScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val density = Atlas.density
+    val scope = rememberCoroutineScope()
     var showHistoryDialog by remember { mutableStateOf(false) }
+    val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            readAgentAttachment(context, uri).fold(
+                onSuccess = viewModel::addAttachment,
+                onFailure = { error -> onToast(error.message ?: "Impossible de lire le fichier.") },
+            )
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.notices.collect { msg -> onToast(msg) }
@@ -163,6 +179,20 @@ fun AgentScreen(
                     Text("Fermer")
                 }
             },
+        )
+    }
+
+    if (state.sensitiveConfirmation) {
+        AlertDialog(
+            onDismissRequest = viewModel::cancelSensitivePrompt,
+            title = { Text("Vérifiez avant d'envoyer") },
+            text = {
+                Text(
+                    "Atlas Agent peut se tromper. Les questions sensibles (gouvernement, santé, identité, sécurité ou données financières privées) et les fichiers joints seront transmis au serveur Atlas et au fournisseur IA configuré. N'envoyez pas de mots de passe, secrets ou données personnelles inutiles. Vérifiez les réponses auprès d'une source officielle.",
+                )
+            },
+            confirmButton = { TextButton(onClick = viewModel::confirmSensitivePrompt) { Text("Envoyer quand même") } },
+            dismissButton = { TextButton(onClick = viewModel::cancelSensitivePrompt) { Text("Annuler") } },
         )
     }
 
@@ -252,6 +282,22 @@ fun AgentScreen(
                             AgentQuotaBarsContent(policy = policy, compact = true)
                         }
 
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        ) {
+                            Row(Modifier.padding(10.dp), verticalAlignment = Alignment.Top) {
+                                Icon(Icons.Outlined.HourglassBottom, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.tertiary)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "L'IA peut se tromper. Vérifiez les faits importants auprès d'une source officielle et évitez les données sensibles.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                )
+                            }
+                        }
+
                         if (state.messages.isEmpty() && !quotaLocked) {
                             Spacer(Modifier.height(10.dp))
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -323,11 +369,15 @@ fun AgentScreen(
                         AtlasTypingDots()
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            text = "Atlas Agent vérifie vos données en direct…",
+                            text = if (state.attachments.isNotEmpty()) "Atlas Agent lit les fichiers et analyse…" else "Atlas Agent vérifie vos données en direct…",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(0.42f).padding(start = 4.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                 }
             }
 
@@ -343,42 +393,59 @@ fun AgentScreen(
 
         Surface(
             color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 2.dp,
+            tonalElevation = 3.dp,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = density.screenPadding, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = density.screenPadding, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                AtlasTextField(
-                    value = state.input,
-                    onValueChange = viewModel::onInputChange,
-                    label = if (quotaLocked) {
-                        "Quota IA atteint — réinitialisation automatique…"
-                    } else {
-                        "Poser une question à Atlas Agent…"
-                    },
-                    placeholder = "Ex. Résumé des ventes et impayés du jour",
-                    imeAction = ImeAction.Send,
-                    enabled = !state.sending && !quotaLocked,
-                    onDone = { viewModel.sendPrompt() },
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                IconButton(
-                    onClick = { viewModel.sendPrompt() },
-                    enabled = state.input.isNotBlank() && !state.sending && !quotaLocked,
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.Send,
-                        contentDescription = "Envoyer",
-                        tint = if (quotaLocked) {
-                            MaterialTheme.colorScheme.outline
+                if (state.attachments.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        state.attachments.forEachIndexed { index, attachment ->
+                            AssistChip(
+                                onClick = { viewModel.removeAttachment(index) },
+                                label = { Text(attachment.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                leadingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Retirer ${attachment.name}", modifier = Modifier.size(16.dp)) },
+                                enabled = !state.sending,
+                            )
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { attachmentPicker.launch(arrayOf("image/*", "application/pdf")) },
+                        enabled = !state.sending && !quotaLocked && state.attachments.sumOf { it.imageDataUrls.size } < 4,
+                    ) {
+                        Icon(Icons.Outlined.AttachFile, contentDescription = "Joindre une image ou un PDF", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    AtlasTextField(
+                        value = state.input,
+                        onValueChange = viewModel::onInputChange,
+                        label = if (quotaLocked) {
+                            "Quota IA atteint — réinitialisation automatique…"
                         } else {
-                            MaterialTheme.colorScheme.primary
+                            "Poser une question à Atlas Agent…"
                         },
+                        placeholder = "Ex. Résumé des ventes et impayés du jour",
+                        imeAction = ImeAction.Send,
+                        enabled = !state.sending && !quotaLocked,
+                        onDone = { viewModel.sendPrompt() },
+                        modifier = Modifier.weight(1f),
                     )
+                    Spacer(Modifier.width(6.dp))
+                    IconButton(
+                        onClick = { viewModel.sendPrompt() },
+                        enabled = (state.input.isNotBlank() || state.attachments.isNotEmpty()) && !state.sending && !quotaLocked,
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.Send,
+                            contentDescription = "Envoyer",
+                            tint = if (quotaLocked) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
         }
@@ -662,6 +729,14 @@ private fun ChatBubbleRow(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
+                    if (message.attachmentNames.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "📎 ${message.attachmentNames.joinToString()}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                        )
+                    }
                 } else {
                     AtlasMarkdown(
                         markdown = message.text,

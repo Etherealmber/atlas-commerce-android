@@ -2,6 +2,7 @@ package ma.etherealmber.atlascommerce.ui.shell
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -258,8 +259,8 @@ fun MainShell(
         },
         bottomBar = {
             if (!useRail) NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 2.dp,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                tonalElevation = 5.dp,
             ) {
                 roleTabs.forEach { item ->
                     NavigationBarItem(
@@ -268,10 +269,10 @@ fun MainShell(
                         icon = {
                             if (item == MainTab.SALE && cartCount > 0) {
                                 BadgedBox(badge = { Badge { Text(cartCount.toString()) } }) {
-                                    Icon(item.icon, contentDescription = item.label)
+                                    AnimatedTabIcon(item.icon, item.label, selected = tab == item)
                                 }
                             } else {
-                                Icon(item.icon, contentDescription = item.label)
+                                AnimatedTabIcon(item.icon, item.label, selected = tab == item)
                             }
                         },
                         label = {
@@ -290,15 +291,15 @@ fun MainShell(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
         if (useRail) {
-            NavigationRail(modifier = Modifier.align(Alignment.CenterStart), containerColor = MaterialTheme.colorScheme.surface) {
+            NavigationRail(modifier = Modifier.align(Alignment.CenterStart), containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
                 roleTabs.forEach { item ->
                     NavigationRailItem(
                         selected = tab == item,
                         onClick = { switchTab(item) },
                         icon = {
                             if (item == MainTab.SALE && cartCount > 0) {
-                                BadgedBox(badge = { Badge { Text(cartCount.toString()) } }) { Icon(item.icon, contentDescription = item.label) }
-                            } else Icon(item.icon, contentDescription = item.label)
+                                BadgedBox(badge = { Badge { Text(cartCount.toString()) } }) { AnimatedTabIcon(item.icon, item.label, selected = tab == item) }
+                            } else AnimatedTabIcon(item.icon, item.label, selected = tab == item)
                         },
                         label = { Text(item.label, style = MaterialTheme.typography.labelSmall, maxLines = 1) },
                     )
@@ -378,6 +379,20 @@ fun MainShell(
         }
     }
     }
+}
+
+@Composable
+private fun AnimatedTabIcon(icon: ImageVector, label: String, selected: Boolean) {
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1.12f else 1f,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 520f),
+        label = "nav-icon-$label",
+    )
+    Icon(
+        imageVector = icon,
+        contentDescription = label,
+        modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+    )
 }
 
 /**

@@ -416,6 +416,33 @@ data class FinanceStatementRowDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class CreateFinanceEntryRequest(
+    val category: String,
+    val description: String,
+    val amount: Double,
+    @Json(name = "payment_method") val paymentMethod: String,
+    @Json(name = "expense_date") val expenseDate: String,
+    @Json(name = "vendor_name") val vendorName: String = "",
+    val reference: String = "",
+    val notes: String = "",
+    @Json(name = "entry_type") val entryType: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class FinanceEntryDto(
+    val id: Long = 0,
+    val category: String = "",
+    val description: String = "",
+    val amount: Double = 0.0,
+    @Json(name = "payment_method") val paymentMethod: String = "cash",
+    @Json(name = "expense_date") val expenseDate: String = "",
+    @Json(name = "vendor_name") val vendorName: String? = null,
+    val reference: String? = null,
+    val notes: String? = null,
+    @Json(name = "entry_type") val entryType: String = "expense",
+)
+
+@JsonClass(generateAdapter = true)
 data class FinanceOutstandingBucketDto(
     @Json(name = "total_outstanding") val totalOutstanding: Double = 0.0,
     @Json(name = "total_overdue") val totalOverdue: Double = 0.0,
@@ -726,6 +753,7 @@ data class AssistChatRequest(
     @Json(name = "page_path") val pagePath: String? = "/agent",
     @Json(name = "page_title") val pageTitle: String? = "Atlas Agent",
     val source: String = "android",
+    val images: List<String> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)

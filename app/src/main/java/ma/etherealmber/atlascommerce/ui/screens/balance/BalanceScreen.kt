@@ -12,13 +12,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.animation.animateFloatAsState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Description
@@ -34,6 +40,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -50,12 +58,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.data.model.CreateFinanceEntryRequest
 import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
@@ -83,6 +94,10 @@ fun BalanceScreen(
     var pendingPdfFile by remember { mutableStateOf<File?>(null) }
     var combinedUrl by remember { mutableStateOf<String?>(null) }
     var confirmCombined by remember { mutableStateOf(false) }
+    var showEntryDialog by remember { mutableStateOf(false) }
+    var entryKind by remember { mutableStateOf(EntryKind.EXPENSE) }
+    var movementFilter by remember { mutableStateOf("Toutes les écritures") }
+    var movementSearch by remember { mutableStateOf("") }
 
     val savePdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         val file = pendingPdfFile
@@ -104,12 +119,14 @@ fun BalanceScreen(
             confirmButton = {
                 TextButton(onClick = {
                     confirmCombined = false
-                    viewModel.createCombinedReportUrl { result ->
-                        when (result) {
-                            is ApiResult.Success -> combinedUrl = result.data
-                            is ApiResult.Failure -> onToast(result.message)
+                    state.selectedPeriod?.let { period ->
+                        viewModel.createCombinedReportUrl(period) { result ->
+                            when (result) {
+                                is ApiResult.Success -> combinedUrl = result.data
+                                is ApiResult.Failure -> onToast(result.message)
+                            }
                         }
-                    }
+                    } ?: onToast("Sélectionnez un mois avant d'ouvrir le rapport.")
                 }) { Text("Continuer") }
             },
             dismissButton = { TextButton(onClick = { confirmCombined = false }) { Text("Annuler") } },
@@ -147,6 +164,25 @@ fun BalanceScreen(
         )
     }
 
+    if (showEntryDialog && state.isAdmin) {
+        NewEntryDialog(
+            initialKind = entryKind,
+            saving = state.savingEntry,
+            onDismiss = { if (!state.savingEntry) showEntryDialog = false },
+            onSave = { request ->
+                viewModel.createEntry(request) { result ->
+                    when (result) {
+                        is ApiResult.Success -> {
+                            showEntryDialog = false
+                            onToast("Écriture enregistrée dans la balance.")
+                        }
+                        is ApiResult.Failure -> onToast(result.message)
+                    }
+                }
+            },
+        )
+    }
+
     if (!state.isAdmin) {
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             Text("Les soldes et relevés financiers sont réservés aux rôles owner/admin.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -174,6 +210,31 @@ fun BalanceScreen(
             IconButton(onClick = viewModel::refresh, enabled = !state.refreshing) {
                 if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
                 else Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les soldes")
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            EntryKind.entries.forEach { kind ->
+                val open = {
+                    entryKind = kind
+                    showEntryDialog = true
+                }
+                if (kind == EntryKind.EXPENSE) {
+                    Button(onClick = open) {
+                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.width(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(kind.quickLabel)
+                    }
+                } else {
+                    OutlinedButton(onClick = open) {
+                        Icon(kind.icon, contentDescription = null, modifier = Modifier.width(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(kind.quickLabel)
+                    }
+                }
             }
         }
         TabRow(selectedTabIndex = section.ordinal) {
@@ -209,6 +270,26 @@ fun BalanceScreen(
                                     compact = maxWidth < 600.dp,
                                 )
                             }
+                            item(key = "flow-panels") {
+                                val outflows = listOf(
+                                    "Dépenses" to finance.expenses,
+                                    "Fournisseurs" to finance.supplierPaid,
+                                    "Paie" to finance.payrollPaid,
+                                    "Remboursements" to finance.refunds,
+                                )
+                                val totals = state.statement?.totals
+                                if (maxWidth < 600.dp) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        FinanceFlowCard("Sorties par type", outflows, finance.currency)
+                                        FinanceFlowCard("Entrées et sorties", listOf("Entrées" to (totals?.credits ?: 0.0), "Sorties" to (totals?.debits ?: 0.0)), finance.currency)
+                                    }
+                                } else {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        FinanceFlowCard("Sorties par type", outflows, finance.currency, Modifier.weight(1f))
+                                        FinanceFlowCard("Entrées et sorties", listOf("Entrées" to (totals?.credits ?: 0.0), "Sorties" to (totals?.debits ?: 0.0)), finance.currency, Modifier.weight(1f))
+                                    }
+                                }
+                            }
                             item(key = "reconcile") {
                                 ReconciliationNotice(
                                     balanced = state.statement?.reconciliation?.balanced,
@@ -217,10 +298,53 @@ fun BalanceScreen(
                                 )
                             }
                         }
-                        if (state.rows.isEmpty() && !state.loading) {
-                            item(key = "empty-movements") { EmptyPanel("Aucun mouvement pour cette période.") }
+                        item(key = "movement-filters") {
+                            if (maxWidth < 480.dp) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    EntryDropdown("Filtrer", movementFilter, listOf("Toutes les écritures", "Entrées", "Sorties", "Dépenses")) { movementFilter = it }
+                                    OutlinedTextField(
+                                        value = movementSearch,
+                                        onValueChange = { movementSearch = it },
+                                        label = { Text("Rechercher") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                }
+                            } else {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.weight(1f)) {
+                                        EntryDropdown("Filtrer", movementFilter, listOf("Toutes les écritures", "Entrées", "Sorties", "Dépenses")) { movementFilter = it }
+                                    }
+                                    OutlinedTextField(
+                                        value = movementSearch,
+                                        onValueChange = { movementSearch = it },
+                                        label = { Text("Rechercher") },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1.4f),
+                                    )
+                                }
+                            }
+                        }
+                        item(key = "movement-heading") {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("Transactions récentes", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                Text("Derniers mouvements de trésorerie · ${state.statement?.pageSize ?: 50} par page", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        val filteredRows = state.rows.filter { row ->
+                            val matchesFilter = when (movementFilter) {
+                                "Entrées" -> row.credit > 0.0
+                                "Sorties" -> row.debit > 0.0
+                                "Dépenses" -> row.type.equals("expense", ignoreCase = true)
+                                else -> true
+                            }
+                            val term = movementSearch.trim()
+                            matchesFilter && (term.isBlank() || listOf(row.label, row.ref, row.type, row.ts).any { it.contains(term, ignoreCase = true) })
+                        }
+                        if (filteredRows.isEmpty() && !state.loading) {
+                            item(key = "empty-movements") { EmptyPanel(if (state.rows.isEmpty()) "Aucun mouvement pour cette période." else "Aucun mouvement ne correspond à ce filtre.") }
                         } else {
-                            items(state.rows, key = { "${it.source}-${it.id}" }) { row ->
+                            items(filteredRows, key = { "${it.source}-${it.id}" }) { row ->
                                 StatementRowCard(row = row, currency = state.statement?.currency ?: "MAD")
                             }
                         }
@@ -306,7 +430,7 @@ fun BalanceScreen(
                         item(key = "combined-report") {
                             ReportActionCard(
                                 title = "Pack de rapports combiné",
-                                description = "Pack du mois courant : balance, stock, créances clients et fournisseurs, et paie. Ouvert dans le lecteur intégré.",
+                                description = "Pack pour ${state.selectedPeriod ?: "le mois sélectionné"} : balance, stock, créances clients et fournisseurs, et paie. Ouvert dans le lecteur intégré.",
                                 icon = { Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null) },
                                 actionLabel = if (state.reportGenerating) "Préparation…" else "Ouvrir dans Atlas",
                                 enabled = !state.reportGenerating,
@@ -381,6 +505,37 @@ private fun SummaryAmountCard(title: String, amount: Double, currency: String, s
             }
             Text(formatMoney(amount, currency), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun FinanceFlowCard(
+    title: String,
+    rows: List<Pair<String, Double>>,
+    currency: String,
+    modifier: Modifier = Modifier,
+) {
+    val largest = rows.maxOfOrNull { it.second.coerceAtLeast(0.0) } ?: 0.0
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            rows.forEach { (label, amount) ->
+                val target = if (largest > 0.0) (amount / largest).toFloat().coerceIn(0f, 1f) else 0f
+                val fraction by animateFloatAsState(targetValue = target, label = "flow-$label")
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(formatMoney(amount, currency), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
+                    }
+                    LinearProgressIndicator(
+                        progress = { fraction },
+                        modifier = Modifier.fillMaxWidth().height(6.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    )
+                }
+            }
         }
     }
 }
@@ -463,6 +618,165 @@ private fun ReportActionCard(title: String, description: String, icon: @Composab
 private fun EmptyPanel(message: String) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.medium) {
         Text(message, modifier = Modifier.fillMaxWidth().padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private enum class EntryKind(
+    val apiType: String,
+    val label: String,
+    val quickLabel: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val categories: List<String>,
+) {
+    EXPENSE("expense", "Dépense", "+ Dépense", Icons.Outlined.ArrowUpward, listOf("Loyer", "Transport", "Fournitures", "Salaires", "Taxes", "Autre dépense")),
+    INCOME("income", "Recette", "+ Recette", Icons.Outlined.ArrowDownward, listOf("Vente divers", "Prestation de service", "Remboursement", "Subvention", "Intérêts", "Autre recette")),
+    OWNER_CONTRIB("owner_contrib", "Apport propriétaire", "+ Apport", Icons.Outlined.AccountBalanceWallet, listOf("Apport en capital", "Apport en compte courant", "Autre apport")),
+    OWNER_DRAW("owner_draw", "Prélèvement propriétaire", "+ Prélèvement", Icons.Outlined.ArrowUpward, listOf("Prélèvement personnel", "Dividende", "Remboursement associé", "Autre prélèvement")),
+}
+
+@Composable
+private fun NewEntryDialog(
+    initialKind: EntryKind,
+    saving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (CreateFinanceEntryRequest) -> Unit,
+) {
+    var kind by remember(initialKind) { mutableStateOf(initialKind) }
+    var category by remember(initialKind) { mutableStateOf(initialKind.categories.first()) }
+    var description by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var date by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
+    var payment by remember { mutableStateOf("cash") }
+    var vendor by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    var step by remember { mutableStateOf(0) }
+
+    val parsedAmount = amount.replace(',', '.').toDoubleOrNull()
+    val validDate = runCatching { java.time.LocalDate.parse(date).toString() == date }.getOrDefault(false)
+    val canSave = !saving && description.isNotBlank() && parsedAmount != null && parsedAmount > 0.0 && validDate
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nouvelle écriture — ${kind.label}", fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    if (step == 0) "Étape 1/2 · Type et libellé" else "Étape 2/2 · Montant et règlement",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                if (step == 0) {
+                    EntryDropdown("Type", kind.label, EntryKind.entries.map { it.label }) { label ->
+                        EntryKind.entries.firstOrNull { it.label == label }?.let { selected ->
+                            kind = selected
+                            category = selected.categories.first()
+                        }
+                    }
+                    EntryDropdown("Catégorie", category, kind.categories) { category = it }
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Libellé *") },
+                        placeholder = { Text("Ex. Loyer entrepôt octobre") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (description.isBlank()) Text("La description est obligatoire.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                } else {
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch == '.' || ch == ',' } },
+                        label = { Text("Montant *") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = date,
+                        onValueChange = { date = it.take(10) },
+                        label = { Text("Date (AAAA-MM-JJ)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = !validDate,
+                    )
+                    EntryDropdown(
+                        "Mode de paiement",
+                        when (payment) { "bank" -> "Banque / virement"; "card" -> "Carte"; "cheque" -> "Chèque"; else -> "Espèces (caisse)" },
+                        listOf("Espèces (caisse)", "Banque / virement", "Carte", "Chèque"),
+                    ) { label -> payment = when (label) { "Banque / virement" -> "bank"; "Carte" -> "card"; "Chèque" -> "cheque"; else -> "cash" } }
+                    OutlinedTextField(
+                        value = vendor,
+                        onValueChange = { vendor = it },
+                        label = { Text("Bénéficiaire / fournisseur (facultatif)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("Notes (facultatif)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                    )
+                    if (parsedAmount == null || parsedAmount <= 0.0) Text("Saisissez un montant supérieur à zéro.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                    if (!validDate) Text("La date doit être une date valide au format AAAA-MM-JJ.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        },
+        confirmButton = {
+            if (step == 0) {
+                Button(onClick = { if (description.isNotBlank()) step = 1 }, enabled = description.isNotBlank() && !saving) { Text("Continuer") }
+            } else {
+                Button(
+                    onClick = {
+                        val value = parsedAmount ?: return@Button
+                        onSave(
+                            CreateFinanceEntryRequest(
+                                category = category,
+                                description = description.trim(),
+                                amount = value,
+                                paymentMethod = payment,
+                                expenseDate = date,
+                                vendorName = vendor.trim(),
+                                notes = notes.trim(),
+                                entryType = kind.apiType,
+                            ),
+                        )
+                    },
+                    enabled = canSave,
+                ) {
+                    if (saving) CircularProgressIndicator(Modifier.width(18.dp), strokeWidth = 2.dp)
+                    else Text("Enregistrer")
+                }
+            }
+        },
+        dismissButton = {
+            Row {
+                if (step == 1) TextButton(onClick = { step = 0 }, enabled = !saving) { Text("Retour") }
+                TextButton(onClick = onDismiss, enabled = !saving) { Text("Annuler") }
+            }
+        },
+    )
+}
+
+@Composable
+private fun EntryDropdown(label: String, selected: String, options: List<String>, onSelect: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box {
+            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(selected, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Icon(Icons.Outlined.ExpandMore, contentDescription = "Choisir $label")
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                options.forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { expanded = false; onSelect(option) }) }
+            }
+        }
     }
 }
 

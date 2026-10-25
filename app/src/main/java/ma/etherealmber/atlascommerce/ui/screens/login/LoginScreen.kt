@@ -1,5 +1,12 @@
 package ma.etherealmber.atlascommerce.ui.screens.login
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -83,6 +90,7 @@ fun LoginScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
             .verticalScroll(rememberScrollState())
+            .animateContentSize()
             .padding(horizontal = density.screenPadding, vertical = density.sectionGap),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -120,7 +128,8 @@ fun LoginScreen(
 
         Spacer(Modifier.height(density.sectionGap))
 
-        if (state.step == LoginViewModel.Step.CREDENTIALS) {
+        AnimatedContent(targetState = state.step, label = "login-step-transition") { activeStep ->
+        if (activeStep == LoginViewModel.Step.CREDENTIALS) {
             if (savedAccounts.isNotEmpty()) {
                 SavedAccountsCard(
                     accounts = savedAccounts,
@@ -167,13 +176,20 @@ fun LoginScreen(
                 onBack = viewModel::backToCredentials,
             )
         }
+        }
 
-        if (!state.error.isNullOrBlank()) {
-            Spacer(Modifier.height(12.dp))
-            AtlasErrorCard(
-                title = if (state.step == LoginViewModel.Step.OTP) "Code refusé" else "Connexion refusée",
-                message = state.error.orEmpty(),
-            )
+        AnimatedVisibility(
+            visible = !state.error.isNullOrBlank(),
+            enter = fadeIn() + slideInVertically { it / 4 },
+            exit = fadeOut() + slideOutVertically { it / 4 },
+        ) {
+            if (!state.error.isNullOrBlank()) {
+                Spacer(Modifier.height(12.dp))
+                AtlasErrorCard(
+                    title = if (state.step == LoginViewModel.Step.OTP) "Code refusé" else "Connexion refusée",
+                    message = state.error.orEmpty(),
+                )
+            }
         }
 
         Spacer(Modifier.height(density.sectionGap))

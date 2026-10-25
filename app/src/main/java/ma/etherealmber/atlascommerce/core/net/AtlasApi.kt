@@ -19,6 +19,8 @@ import ma.etherealmber.atlascommerce.data.model.CompleteMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.CreateMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
+import ma.etherealmber.atlascommerce.data.model.CreateFinanceEntryRequest
+import ma.etherealmber.atlascommerce.data.model.FinanceEntryDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.HealthDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
@@ -273,6 +275,9 @@ interface AtlasApi {
     suspend fun financeMonthly(
         @Query("period") period: String? = null,
     ): ApiEnvelope<FinanceMonthlyDto>
+
+    @POST("api/expenses")
+    suspend fun createFinanceEntry(@Body body: CreateFinanceEntryRequest): ApiEnvelope<FinanceEntryDto>
 
     @GET("api/admin/employees/payroll")
     suspend fun employeePayroll(

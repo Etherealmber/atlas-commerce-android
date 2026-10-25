@@ -33,6 +33,8 @@ import ma.etherealmber.atlascommerce.data.model.CloseProductRequestBody
 import ma.etherealmber.atlascommerce.data.model.CompanySettingsDto
 import ma.etherealmber.atlascommerce.data.model.CompleteMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.CreateMobileActionRequest
+import ma.etherealmber.atlascommerce.data.model.CreateFinanceEntryRequest
+import ma.etherealmber.atlascommerce.data.model.FinanceEntryDto
 import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
@@ -82,6 +84,9 @@ class CommerceRepository @Inject constructor(
     suspend fun financeMonthly(period: String? = null): ApiResult<FinanceMonthlyDto> =
         runner.envelope { apiProvider.api().financeMonthly(period) }
 
+    suspend fun createFinanceEntry(request: CreateFinanceEntryRequest): ApiResult<FinanceEntryDto> =
+        runner.envelope { apiProvider.api().createFinanceEntry(request) }
+
     suspend fun financeStatement(
         period: String,
         page: Int = 1,
@@ -89,13 +94,12 @@ class CommerceRepository @Inject constructor(
     ): ApiResult<FinanceStatementDto> =
         runner.envelope { apiProvider.api().financeStatement(period, page, pageSize) }
 
-    /**
-     * Opens the server's printable combined report using its short-lived HMAC ticket.
-     * This existing web report currently supports relative periods (e.g. `month`),
-     * not an arbitrary YYYY-MM month selection.
-     */
-    suspend fun createCombinedReportUrl(): ApiResult<String> =
-        when (val result = runner.envelope { apiProvider.api().reportLinkTicket() }) {
+    /** Opens the selected-month combined report using a short-lived HMAC ticket. */
+    suspend fun createCombinedReportUrl(period: String): ApiResult<String> {
+        if (!period.matches(Regex("\\d{4}-(0[1-9]|1[0-2])"))) {
+            return ApiResult.Failure("BAD_PERIOD", "Période invalide — format attendu AAAA-MM.")
+        }
+        return when (val result = runner.envelope { apiProvider.api().reportLinkTicket() }) {
             is ApiResult.Failure -> result
             is ApiResult.Success -> {
                 val ticket = result.data
@@ -110,7 +114,7 @@ class CommerceRepository @Inject constructor(
                         .appendPath("reports")
                         .appendPath("combined")
                         .appendQueryParameter("rt", ticket.rt)
-                        .appendQueryParameter("period", "month")
+                        .appendQueryParameter("period", period)
                         .appendQueryParameter("sections", "balance,stock,receivables,payables,employees")
                         .build()
                         .toString()
@@ -118,6 +122,7 @@ class CommerceRepository @Inject constructor(
                 }
             }
         }
+    }
 
     suspend fun employeePayroll(
         period: String,
@@ -511,6 +516,7 @@ class CommerceRepository @Inject constructor(
         role: String? = Roles.USER,
         username: String? = null,
         threadId: String = "live",
+        images: List<String> = emptyList(),
     ): ApiResult<AssistChatResponseDto> {
         val cleanQuestion = message.trim()
         val isGreeting = Regex(
@@ -540,6 +546,7 @@ class CommerceRepository @Inject constructor(
                     message = outboundPrompt,
                     userMessage = cleanQuestion,
                     threadId = threadId,
+                    images = images.take(4),
                 ),
             )
         }

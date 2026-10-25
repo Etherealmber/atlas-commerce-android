@@ -16,6 +16,8 @@ import java.io.File
 import java.security.MessageDigest
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
+import ma.etherealmber.atlascommerce.data.model.CreateFinanceEntryRequest
+import ma.etherealmber.atlascommerce.data.model.FinanceEntryDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
@@ -37,6 +39,7 @@ class BalanceViewModel @Inject constructor(
         val rows: List<FinanceStatementRowDto> = emptyList(),
         val loadingMore: Boolean = false,
         val reportGenerating: Boolean = false,
+        val savingEntry: Boolean = false,
         val error: String? = null,
     )
 
@@ -65,6 +68,36 @@ class BalanceViewModel @Inject constructor(
         if (!period.matches(Regex("\\d{4}-(0[1-9]|1[0-2])"))) return
         if (_state.value.selectedPeriod == period && _state.value.finance?.period == period) return
         load(period, initial = true)
+    }
+
+    fun createEntry(request: CreateFinanceEntryRequest, onResult: (ApiResult<FinanceEntryDto>) -> Unit) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+        if (activeUser == null || !Roles.isAdmin(activeUser.role)) {
+            onResult(ApiResult.Failure("FIN_FORBIDDEN", "Réservé aux administrateurs (owner/admin)."))
+            return
+        }
+        if (_state.value.savingEntry) return
+        val scopeIdentity = activeUser.scopeIdentity
+        viewModelScope.launch {
+            _state.update { it.copy(savingEntry = true, error = null) }
+            val result = repository.createFinanceEntry(request)
+            val sameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
+            _state.update { it.copy(savingEntry = false) }
+            if (!sameScope) {
+                onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Vérifiez l'écriture avant de la renvoyer."))
+                return@launch
+            }
+            when (result) {
+                is ApiResult.Success -> {
+                    onResult(result)
+                    load(_state.value.selectedPeriod, initial = false)
+                }
+                is ApiResult.Failure -> {
+                    _state.update { it.copy(error = result.message) }
+                    onResult(result)
+                }
+            }
+        }
     }
 
     fun loadMore() {
@@ -117,7 +150,7 @@ class BalanceViewModel @Inject constructor(
         }
     }
 
-    fun createCombinedReportUrl(onResult: (ApiResult<String>) -> Unit) {
+    fun createCombinedReportUrl(period: String, onResult: (ApiResult<String>) -> Unit) {
         val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
         if (activeUser == null || !Roles.isAdmin(activeUser.role)) {
             onResult(ApiResult.Failure("FIN_FORBIDDEN", "Réservé aux administrateurs (owner/admin)."))
@@ -126,7 +159,7 @@ class BalanceViewModel @Inject constructor(
         val scopeIdentity = activeUser.scopeIdentity
         viewModelScope.launch {
             _state.update { it.copy(reportGenerating = true) }
-            val result = repository.createCombinedReportUrl()
+            val result = repository.createCombinedReportUrl(period)
             _state.update { it.copy(reportGenerating = false) }
             val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
             if (!stillSameScope) onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Relancez l'ouverture avec le bon compte."))
