@@ -19,12 +19,17 @@ import java.util.Calendar
 import ma.etherealmber.atlascommerce.core.net.ApiErrorPayload
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
 import ma.etherealmber.atlascommerce.core.update.UpdateFormatter
+import ma.etherealmber.atlascommerce.core.update.formatReleaseNotesForDisplay
 import ma.etherealmber.atlascommerce.core.update.UpdateInfo
 import ma.etherealmber.atlascommerce.core.update.UpdateNotifier
 import ma.etherealmber.atlascommerce.core.update.UpdateState
+import ma.etherealmber.atlascommerce.push.DeviceTokenAckDto
+import ma.etherealmber.atlascommerce.push.DeviceTokenRequest
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
+import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.HealthDto
+import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import okhttp3.OkHttpClient
 import org.junit.After
@@ -73,6 +78,26 @@ class AppUpdateManagerTest {
     }
 
     @Test
+    fun releaseNotesStripRawMarkdownAndKeepReadableBullets() {
+        val rendered = formatReleaseNotesForDisplay(
+            """## Atlas Commerce 1.1.1
+                |• Set version 1.1.1 (111) [skip ci]
+                |• **Version :** `v1.1.1` (`versionCode = 111`)
+                |• **Taille :** `27.83 Mo`
+            """.trimMargin(),
+            "v1.1.1",
+        )
+        assertEquals(
+            "• Set version 1.1.1 (111) [skip ci]\n" +
+                "• Version : v1.1.1 (versionCode = 111)\n" +
+                "• Taille : 27.83 Mo",
+            rendered,
+        )
+        assertFalse(rendered.contains("**"))
+        assertFalse(rendered.contains('`'))
+    }
+
+    @Test
     fun moshiAdaptersRoundTripCoreAndModelDtos() {
         val errorAdapter = moshi.adapter(ApiErrorPayload::class.java)
         val parsedError = errorAdapter.fromJson("""{"success":false,"code":"AUTH_EXPIRED","error":"Session expirée"}""")
@@ -94,6 +119,28 @@ class AppUpdateManagerTest {
 
         val dashboardAdapter = moshi.adapter(DashboardDto::class.java)
         assertNotNull(dashboardAdapter.fromJson("""{"currency":"MAD","productCount":42}"""))
+
+        val finance = moshi.adapter(FinanceMonthlyDto::class.java).fromJson(
+            """{"period":"2026-09","timezone":"Africa/Casablanca","currency":"MAD","opening_balance":48210.5,"closing_balance":51060.25,"sales_received":18500,"refunds":650,"expenses":9200.25,"payroll_paid":6000,"supplier_paid":2200,"receivables":{"total_outstanding":12400,"total_overdue":3100,"count":1,"truncated":false,"documents":[{"id":142,"number":"F-2026-0142","party":"Client Alpha","total":5000,"paid":2000,"remaining":3000,"due_date":"2026-09-15","state":"overdue"}]},"payables":{"total_outstanding":0,"total_overdue":0,"count":0,"truncated":false,"documents":[]},"payroll":{"total_due":9000,"employees":3},"reconciliation":{"source":"d1-live","generated_at":"2026-10-01T07:35:12.480Z","rules":"docs/api-finance.md#calculation-rules","as_of_date":"2026-09-30"}}""",
+        )
+        assertEquals("Africa/Casablanca", finance?.timezone)
+        assertEquals(3000.0, finance?.receivables?.documents?.firstOrNull()?.remaining ?: 0.0, 0.0)
+        assertEquals(9000.0, finance?.payroll?.totalDue ?: 0.0, 0.0)
+
+        val payroll = moshi.adapter(PayrollPageDto::class.java).fromJson(
+            """{"period":"2026-10","as_of":"2026-10-25","timezone":"Africa/Casablanca","currency":"MAD","totals":{"amount_due":4500,"unpaid_count":2,"count":5},"page":1,"page_size":50,"total":5,"has_more":false,"rows":[{"employee_id":12,"display_name":"Karim Ben","amount_due":1500,"pay_period":{"from":"2026-10-01","to":"2026-10-31"},"due_date":"2026-10-31","status":"unpaid","last_payment":{"amount":500,"paid_at":"2026-10-10","period_label":"Acompte octobre"}}]}""",
+        )
+        assertEquals("Karim Ben", payroll?.rows?.firstOrNull()?.displayName)
+        assertEquals("Acompte octobre", payroll?.rows?.firstOrNull()?.lastPayment?.periodLabel)
+
+        val deviceTokenJson = moshi.adapter(DeviceTokenRequest::class.java)
+            .toJson(DeviceTokenRequest(token = "fcm-test-token"))
+        assertTrue(deviceTokenJson.contains("\"token\":\"fcm-test-token\""))
+        assertTrue(deviceTokenJson.contains("\"platform\":\"android\""))
+        assertTrue(
+            moshi.adapter(DeviceTokenAckDto::class.java)
+                .fromJson("""{"registered":true}""")?.registered == true,
+        )
 
         val productAdapter = moshi.adapter(ProductDto::class.java)
         val product = productAdapter.fromJson("""{"id":9,"name":"Marbre Blanc","price":320.0,"stock_quantity":12.5}""")

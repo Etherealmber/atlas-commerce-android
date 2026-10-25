@@ -127,6 +127,14 @@ android {
     }
 }
 
+// FCM bridge (v1.2): the google-services plugin runs ONLY when the Firebase
+// project config is present (google-services.json is a per-deployment secret —
+// never committed). Without it the app still builds and runs; push registration
+// no-ops (see PushTokenRegistrar.firebaseConfigured()).
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
@@ -160,6 +168,12 @@ dependencies {
     ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.3.0")
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // FCM push bridge (v1.2) — worker pushes via FCM HTTP v1; the device token
+    // is registered with POST /api/assist/device-token after each sign-in.
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     implementation("com.google.dagger:hilt-android:2.59")
     ksp("com.google.dagger:hilt-compiler:2.59")

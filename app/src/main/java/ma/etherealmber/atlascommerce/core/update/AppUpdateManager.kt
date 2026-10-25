@@ -207,7 +207,7 @@ class AppUpdateManager internal constructor(
                 val entries = parsed
                     .filter { !it.draft && it.tagName.isNotBlank() }
                     .mapIndexed { idx, rel ->
-                        val cleanedBody = cleanReleaseBody(rel.body.orEmpty(), rel.tagName)
+                        val cleanedBody = formatReleaseNotesForDisplay(rel.body.orEmpty(), rel.tagName)
                         ReleaseChangelogEntry(
                             tagName = rel.tagName.trim(),
                             title = rel.name?.trim()?.takeIf { it.isNotEmpty() }
@@ -231,32 +231,6 @@ class AppUpdateManager internal constructor(
         }
     }
 
-    private fun cleanReleaseBody(rawBody: String, tagName: String): String {
-        val lines = rawBody.lineSequence()
-            .map { it.trim() }
-            .filter { line ->
-                line.isNotEmpty() &&
-                    !line.startsWith("## ") &&
-                    !line.startsWith("### ") &&
-                    !line.startsWith("- **SHA-256", ignoreCase = true) &&
-                    !line.startsWith("- **Téléchargement", ignoreCase = true) &&
-                    !line.startsWith("- **Miroir", ignoreCase = true) &&
-                    !line.startsWith("**Comparatif", ignoreCase = true)
-            }
-            .map { line ->
-                line
-                    .removePrefix("- ")
-                    .removePrefix("* ")
-                    .let { if (it.startsWith("•")) it else "• $it" }
-            }
-            .take(6)
-            .toList()
-        return if (lines.isNotEmpty()) {
-            lines.joinToString("\n")
-        } else {
-            "• Mise à jour $tagName — optimisations et correctifs."
-        }
-    }
 
     /**
      * Measures real HTTPS latency in `ms` to both `CDN 1` and `GitHub Releases` in parallel.

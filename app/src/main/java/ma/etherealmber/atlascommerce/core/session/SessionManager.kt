@@ -9,8 +9,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
@@ -74,6 +76,7 @@ class SessionManager @Inject constructor(
     private val deviceIdentity: DeviceIdentity,
     private val cartStore: CartStore,
     private val offlineCache: OfflineCache,
+    private val pushTokens: ma.etherealmber.atlascommerce.push.PushTokenRegistrar,
     @ApplicationScope private val scope: CoroutineScope,
 ) {
 
@@ -95,6 +98,14 @@ class SessionManager @Inject constructor(
 
     init {
         scope.launch { restore() }
+        // v1.2 FCM bridge — (re)register the device push token with the worker
+        // whenever a session becomes active (restore, password login, QR pairing).
+        scope.launch {
+            state
+                .map { (it as? SessionState.Active)?.user?.scopeIdentity }
+                .distinctUntilChanged()
+                .collect { identity -> if (identity != null) pushTokens.onSessionActive() }
+        }
     }
 
     private suspend fun restore() {

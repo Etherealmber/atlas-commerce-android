@@ -272,6 +272,108 @@ data class DashboardDto(
 }
 
 // ---------------------------------------------------------------------------
+// Admin finance, payables & employee payroll (server-authorized endpoints)
+// ---------------------------------------------------------------------------
+
+@JsonClass(generateAdapter = true)
+data class FinanceMonthlyDto(
+    val period: String = "",
+    val timezone: String = "",
+    val currency: String = "MAD",
+    @Json(name = "opening_balance") val openingBalance: Double = 0.0,
+    @Json(name = "closing_balance") val closingBalance: Double = 0.0,
+    @Json(name = "sales_received") val salesReceived: Double = 0.0,
+    val refunds: Double = 0.0,
+    val expenses: Double = 0.0,
+    @Json(name = "payroll_paid") val payrollPaid: Double = 0.0,
+    @Json(name = "supplier_paid") val supplierPaid: Double = 0.0,
+    val receivables: FinanceOutstandingBucketDto = FinanceOutstandingBucketDto(),
+    val payables: FinanceOutstandingBucketDto = FinanceOutstandingBucketDto(),
+    val payroll: FinancePayrollBucketDto = FinancePayrollBucketDto(),
+    val reconciliation: FinanceReconciliationDto = FinanceReconciliationDto(),
+)
+
+@JsonClass(generateAdapter = true)
+data class FinanceOutstandingBucketDto(
+    @Json(name = "total_outstanding") val totalOutstanding: Double = 0.0,
+    @Json(name = "total_overdue") val totalOverdue: Double = 0.0,
+    val count: Int = 0,
+    val truncated: Boolean = false,
+    val documents: List<FinanceOutstandingDocumentDto> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class FinanceOutstandingDocumentDto(
+    val id: Long = 0,
+    val number: String = "",
+    val party: String = "",
+    val total: Double = 0.0,
+    val paid: Double = 0.0,
+    val remaining: Double = 0.0,
+    @Json(name = "due_date") val dueDate: String? = null,
+    val state: String = "unpaid",
+)
+
+@JsonClass(generateAdapter = true)
+data class FinancePayrollBucketDto(
+    @Json(name = "total_due") val totalDue: Double = 0.0,
+    val employees: Int = 0,
+)
+
+@JsonClass(generateAdapter = true)
+data class FinanceReconciliationDto(
+    val source: String = "",
+    @Json(name = "generated_at") val generatedAt: String = "",
+    val rules: String = "",
+    @Json(name = "as_of_date") val asOfDate: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class PayrollPageDto(
+    val period: String = "",
+    @Json(name = "as_of") val asOf: String = "",
+    val timezone: String = "",
+    val currency: String = "MAD",
+    val totals: PayrollTotalsDto = PayrollTotalsDto(),
+    val page: Int = 1,
+    @Json(name = "page_size") val pageSize: Int = 50,
+    val total: Int = 0,
+    @Json(name = "has_more") val hasMore: Boolean = false,
+    val rows: List<PayrollRowDto> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class PayrollTotalsDto(
+    @Json(name = "amount_due") val amountDue: Double = 0.0,
+    @Json(name = "unpaid_count") val unpaidCount: Int = 0,
+    val count: Int = 0,
+)
+
+@JsonClass(generateAdapter = true)
+data class PayrollRowDto(
+    @Json(name = "employee_id") val employeeId: Long = 0,
+    @Json(name = "display_name") val displayName: String = "",
+    @Json(name = "amount_due") val amountDue: Double = 0.0,
+    @Json(name = "pay_period") val payPeriod: PayrollPeriodDto = PayrollPeriodDto(),
+    @Json(name = "due_date") val dueDate: String? = null,
+    val status: String = "unpaid",
+    @Json(name = "last_payment") val lastPayment: PayrollLastPaymentDto? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class PayrollPeriodDto(
+    val from: String = "",
+    val to: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class PayrollLastPaymentDto(
+    val amount: Double = 0.0,
+    @Json(name = "paid_at") val paidAt: String = "",
+    @Json(name = "period_label") val periodLabel: String = "",
+)
+
+// ---------------------------------------------------------------------------
 // Products, scan requests & needed items
 // ---------------------------------------------------------------------------
 

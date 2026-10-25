@@ -1,11 +1,17 @@
 package ma.etherealmber.atlascommerce.data.repo
 
 import com.squareup.moshi.Moshi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.IOException
+import kotlin.coroutines.cancellation.CancellationException
 import ma.etherealmber.atlascommerce.core.RoleTarget
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.format.AtlasFormat
+import ma.etherealmber.atlascommerce.core.net.ApiErrorPayload
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
@@ -29,7 +35,9 @@ import ma.etherealmber.atlascommerce.data.model.CreateMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
+import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
+import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionMetaDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionStatsDto
@@ -68,6 +76,86 @@ class CommerceRepository @Inject constructor(
 
     suspend fun invoices(kind: String = "all"): ApiResult<List<InvoiceDto>> =
         runner.envelope { apiProvider.api().invoices(kind) }
+
+    suspend fun financeMonthly(period: String? = null): ApiResult<FinanceMonthlyDto> =
+        runner.envelope { apiProvider.api().financeMonthly(period) }
+
+    suspend fun employeePayroll(
+        period: String,
+        page: Int = 1,
+        pageSize: Int = 50,
+        dueBefore: String? = null,
+    ): ApiResult<PayrollPageDto> = runner.envelope {
+        apiProvider.api().employeePayroll(
+            period = period,
+            page = page,
+            pageSize = pageSize,
+            dueBefore = dueBefore,
+        )
+    }
+
+    /** Streams an authenticated PDF response into app-private cache (never a public URL). */
+    suspend fun downloadFinanceReport(period: String, destination: File): ApiResult<File> {
+        if (!period.matches(Regex("\\d{4}-(0[1-9]|1[0-2])"))) {
+            return ApiResult.Failure("BAD_PERIOD", "Période invalide — format attendu AAAA-MM.")
+        }
+        return try {
+            val response = apiProvider.api().financeMonthlyPdf(period)
+            if (!response.isSuccessful) {
+                val rawError = response.errorBody()?.string()
+                val payload = rawError?.let {
+                    runCatching { moshi.adapter(ApiErrorPayload::class.java).fromJson(it) }.getOrNull()
+                }
+                val code = payload?.code ?: "HTTP_${response.code()}"
+                val message = if (code == "FIN_FORBIDDEN") {
+                    "Réservé aux administrateurs (owner/admin)."
+                } else {
+                    payload?.error ?: payload?.message ?: "Téléchargement du rapport refusé (${response.code()})."
+                }
+                ApiResult.Failure(code, message, response.code())
+            } else {
+                val body = response.body()
+                val contentType = body?.contentType()?.let { "${it.type}/${it.subtype}" }
+                if (body == null || !contentType.equals("application/pdf", ignoreCase = true)) {
+                    body?.close()
+                    ApiResult.Failure("INVALID_PDF", "Le serveur n'a pas renvoyé un rapport PDF valide.")
+                } else {
+                    withContext(Dispatchers.IO) {
+                        destination.parentFile?.mkdirs()
+                        try {
+                            body.byteStream().buffered().use { input ->
+                                input.mark(5)
+                                val header = ByteArray(5)
+                                val headerLength = input.read(header)
+                                input.reset()
+                                if (headerLength != 5 || !header.contentEquals("%PDF-".toByteArray(Charsets.US_ASCII))) {
+                                    destination.delete()
+                                    ApiResult.Failure("INVALID_PDF", "Le fichier reçu n'est pas un PDF valide.")
+                                } else {
+                                    destination.outputStream().buffered().use { output -> input.copyTo(output) }
+                                    if (destination.length() < 8L) {
+                                        destination.delete()
+                                        ApiResult.Failure("INVALID_PDF", "Le rapport PDF reçu est vide ou incomplet.")
+                                    } else {
+                                        ApiResult.Success(destination)
+                                    }
+                                }
+                            }
+                        } catch (t: Throwable) {
+                            destination.delete()
+                            throw t
+                        }
+                    }
+                }
+            }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (e: IOException) {
+            ApiResult.Failure(ApiRunner.CODE_NETWORK, "Téléchargement du rapport interrompu. Vérifiez votre connexion et réessayez.")
+        } catch (t: Throwable) {
+            ApiResult.Failure(ApiRunner.CODE_UNKNOWN, t.message?.takeIf { it.isNotBlank() } ?: "Impossible de télécharger le rapport PDF.")
+        }
+    }
 
     suspend fun products(query: String? = null, limit: Int = 300): ApiResult<List<ProductDto>> {
         val result = runner.envelope {
@@ -381,6 +469,8 @@ class CommerceRepository @Inject constructor(
      */
     suspend fun assistChat(
         message: String,
+        role: String? = Roles.USER,
+        username: String? = null,
         threadId: String = "live",
     ): ApiResult<AssistChatResponseDto> {
         val cleanQuestion = message.trim()
@@ -392,7 +482,7 @@ class CommerceRepository @Inject constructor(
         val outboundPrompt = if (isGreeting) {
             cleanQuestion
         } else {
-            val snapshot = runCatching { buildLiveBusinessSnapshot(cleanQuestion) }.getOrDefault("")
+            val snapshot = runCatching { buildLiveBusinessSnapshot(cleanQuestion, role, username) }.getOrDefault("")
             if (snapshot.isBlank()) {
                 cleanQuestion
             } else {
@@ -416,47 +506,61 @@ class CommerceRepository @Inject constructor(
         }
     }
 
-    private suspend fun buildLiveBusinessSnapshot(userQuestion: String): String = coroutineScope {
+    private suspend fun buildLiveBusinessSnapshot(userQuestion: String, role: String?, username: String?): String = coroutineScope {
+        val isAdmin = Roles.isAdmin(role)
+        val canViewClientsAndInvoices = Roles.canCreateDocuments(role)
         val dashDef = async { runCatching { dashboard() }.getOrNull() }
+        val financeDef = if (isAdmin) async { runCatching { financeMonthly() }.getOrNull() } else null
         val prodsDef = async { runCatching { products(query = null, limit = 250) }.getOrNull() }
-        val clientsDef = async { runCatching { clients() }.getOrNull() }
+        val clientsDef = if (canViewClientsAndInvoices) async { runCatching { clients() }.getOrNull() } else null
         val actsDef = async { runCatching { mobileActions(status = "pending") }.getOrNull() }
         val alertsDef = async { runCatching { alerts() }.getOrNull() }
 
         val dash = (dashDef.await() as? ApiResult.Success)?.data
+        val finance = (financeDef?.await() as? ApiResult.Success)?.data
         val prods = (prodsDef.await() as? ApiResult.Success)?.data
             ?: runCatching { cachedProducts() }.getOrDefault(emptyList())
-        val cliList = (clientsDef.await() as? ApiResult.Success)?.data.orEmpty()
+        val cliList = (clientsDef?.await() as? ApiResult.Success)?.data.orEmpty()
         val pendingActions = (actsDef.await() as? ApiResult.Success)?.data.orEmpty()
-        val activeAlerts = (alertsDef.await() as? ApiResult.Success)?.data.orEmpty()
+            .filter { Roles.isActionVisibleForUser(role, username, it) }
+        val activeAlerts = Roles.filterAlertsForRole(
+            role,
+            (alertsDef.await() as? ApiResult.Success)?.data.orEmpty(),
+        )
 
-        val cur = dash?.activeCurrency ?: "MAD"
+        val cur = finance?.currency?.takeIf { it.isNotBlank() } ?: dash?.activeCurrency ?: "MAD"
         val sb = StringBuilder()
         sb.appendLine("[DONNÉES TEMPS RÉEL ATLAS COMMERCE]")
         if (dash != null) {
-            sb.appendLine(
-                "KPIs : Produits=${dash.productCount}, Clients=${cliList.size}, " +
-                    "StockBas=${dash.lowStockCount}, ValeurStock=${AtlasFormat.money(dash.stockValue, cur)}, " +
-                    "SoldeActuel=${AtlasFormat.money(dash.currentBalance, cur)}, " +
-                    "VentesEncaissées=${AtlasFormat.money(dash.salesReceived, cur)}, " +
-                    "Dépenses=${AtlasFormat.money(dash.expensesTotal, cur)}, " +
-                    "ImpayésClients=${dash.unpaidSales.count} factures (${AtlasFormat.money(dash.unpaidSales.total, cur)}, retard=${AtlasFormat.money(dash.unpaidSales.overdue, cur)})",
-            )
-            if (dash.monthlySeries.isNotEmpty()) {
+            val permittedKpis = buildList {
+                add("Produits=${dash.productCount}")
+                add("StockBas=${dash.lowStockCount}")
+                if (canViewClientsAndInvoices) add("Clients=${cliList.size}")
+                if (isAdmin && finance != null) {
+                    add("SoldeClôture=${AtlasFormat.money(finance.closingBalance, finance.currency)}")
+                    add("VentesEncaissées=${AtlasFormat.money(finance.salesReceived, finance.currency)}")
+                    add("Dépenses=${AtlasFormat.money(finance.expenses, finance.currency)}")
+                    add("ÀRecevoir=${AtlasFormat.money(finance.receivables.totalOutstanding, finance.currency)}")
+                    add("ÀPayerFournisseurs=${AtlasFormat.money(finance.payables.totalOutstanding, finance.currency)}")
+                    add("PaieÀVerser=${AtlasFormat.money(finance.payroll.totalDue, finance.currency)}")
+                }
+            }
+            sb.appendLine("KPIs : ${permittedKpis.joinToString()}")
+            if (isAdmin && finance != null && dash.monthlySeries.isNotEmpty()) {
                 sb.appendLine(
                     "Mensuel : " + dash.monthlySeries.takeLast(3).joinToString(" | ") { m ->
                         "${m.label.ifBlank { m.key }}: ventes=${AtlasFormat.money(m.sales, cur)}, dépenses=${AtlasFormat.money(m.expenses, cur)}, profit=${AtlasFormat.money(m.profit, cur)}"
                     },
                 )
             }
-            if (dash.unpaidInvoiceList.isNotEmpty()) {
+            if (canViewClientsAndInvoices && dash.unpaidInvoiceList.isNotEmpty()) {
                 sb.appendLine(
                     "FacturesImpayées : " + dash.unpaidInvoiceList.take(5).joinToString(" | ") { inv ->
                         "${inv.number ?: "#${inv.id}"} (${inv.clientName ?: "Client"}: reste=${AtlasFormat.money(inv.remaining, cur)})"
                     },
                 )
             }
-            if (dash.recentInvoices.isNotEmpty()) {
+            if (canViewClientsAndInvoices && dash.recentInvoices.isNotEmpty()) {
                 sb.appendLine(
                     "FacturesRécentes : " + dash.recentInvoices.take(5).joinToString(" | ") { inv ->
                         "${inv.number ?: "#${inv.id}"} (${inv.clientName ?: "Client"}: ${AtlasFormat.money(inv.total, cur)}, ${inv.status ?: "-"})"
@@ -467,7 +571,7 @@ class CommerceRepository @Inject constructor(
         val tokens = userQuestion.lowercase()
             .split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.length >= 3 }
-        if (cliList.isNotEmpty() && tokens.isNotEmpty()) {
+        if (canViewClientsAndInvoices && cliList.isNotEmpty() && tokens.isNotEmpty()) {
             val matchedClients = cliList.filter { c ->
                 val hay = "${c.name} ${c.phone.orEmpty()} ${c.ice.orEmpty()}".lowercase()
                 tokens.any { hay.contains(it) }

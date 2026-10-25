@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -597,6 +598,70 @@ fun SettingsScreen(
     val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
+    var showReleaseHistoryDialog by remember { mutableStateOf(false) }
+
+    if (showReleaseHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showReleaseHistoryDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Historique des versions", modifier = Modifier.weight(1f))
+                    if (releaseChangelogLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        IconButton(onClick = appViewModel::refreshReleaseChangelog) {
+                            Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser l'historique")
+                        }
+                    }
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 480.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (releaseChangelog.isEmpty() && releaseChangelogLoading) {
+                        CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                    } else if (releaseChangelog.isEmpty()) {
+                        Text(
+                            "Aucune version publiée n'est disponible pour le moment.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    releaseChangelog.forEach { entry ->
+                        AtlasCard(padding = 12.dp) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    text = entry.title,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (entry.isLatest) AtlasChip(text = "Dernière", tone = AtlasTone.POSITIVE)
+                                entry.publishedAt?.let { AtlasChip(text = it, tone = AtlasTone.NEUTRAL) }
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = entry.notes,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showReleaseHistoryDialog = false }) { Text("Fermer") }
+            },
+        )
+    }
 
     if (showProblemReportDialog) {
         ProblemReportDialog(
@@ -716,52 +781,26 @@ fun SettingsScreen(
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f).clickable { showReleaseHistoryDialog = true }) {
                     Text(
                         text = "Nouveautés des versions",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "Historique complet des changements publiés",
+                        text = "Ouvrir l'historique complet des changements publiés",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                TextButton(onClick = { showReleaseHistoryDialog = true }) {
+                    Text("Voir")
                 }
                 IconButton(
                     onClick = appViewModel::refreshReleaseChangelog,
                     enabled = !releaseChangelogLoading,
                 ) {
                     Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser l'historique des versions")
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            releaseChangelog.take(5).forEachIndexed { idx, entry ->
-                if (idx > 0) AtlasDivider(Modifier.padding(vertical = 8.dp))
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            text = entry.title,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (entry.isLatest) {
-                            AtlasChip(text = "Dernière", tone = AtlasTone.POSITIVE)
-                        }
-                        entry.publishedAt?.let { date ->
-                            AtlasChip(text = date, tone = AtlasTone.NEUTRAL)
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = entry.notes,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
         }

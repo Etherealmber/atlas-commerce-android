@@ -22,6 +22,8 @@ import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.HealthDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
+import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
+import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.LoginRequest
 import ma.etherealmber.atlascommerce.data.model.LoginResponse
 import ma.etherealmber.atlascommerce.data.model.MeDto
@@ -43,6 +45,10 @@ import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
 import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.data.model.VerifyLinkRequest
+import ma.etherealmber.atlascommerce.push.DeviceTokenAckDto
+import ma.etherealmber.atlascommerce.push.DeviceTokenRequest
+import okhttp3.ResponseBody
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -50,6 +56,7 @@ import retrofit2.http.Header
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
+import retrofit2.http.Streaming
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -63,6 +70,10 @@ interface AtlasApi {
 
     @GET("api/health")
     suspend fun health(): ApiEnvelope<HealthDto>
+
+    // --- Push (FCM) device-token registration ---
+    @POST("api/assist/device-token")
+    suspend fun registerDeviceToken(@Body body: DeviceTokenRequest): ApiEnvelope<DeviceTokenAckDto>
 
     @GET("api/app/android-update")
     suspend fun androidUpdate(
@@ -226,6 +237,26 @@ interface AtlasApi {
 
     @GET("api/clients")
     suspend fun clients(): ApiEnvelope<List<ClientDto>>
+
+    // Admin-only finance APIs: the worker re-validates the active owner/admin role.
+    @GET("api/admin/finance/monthly")
+    suspend fun financeMonthly(
+        @Query("period") period: String? = null,
+    ): ApiEnvelope<FinanceMonthlyDto>
+
+    @GET("api/admin/employees/payroll")
+    suspend fun employeePayroll(
+        @Query("period") period: String,
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 50,
+        @Query("due_before") dueBefore: String? = null,
+    ): ApiEnvelope<PayrollPageDto>
+
+    @Streaming
+    @GET("api/admin/finance/monthly/report.pdf")
+    suspend fun financeMonthlyPdf(
+        @Query("period") period: String,
+    ): Response<ResponseBody>
 
     @GET("api/invoices")
     suspend fun invoices(@Query("kind") kind: String = "all"): ApiEnvelope<List<InvoiceDto>>

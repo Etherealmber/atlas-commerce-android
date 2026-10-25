@@ -41,6 +41,19 @@ class AtlasApp : Application() {
                     enableVibration(false)
                 },
             )
+            // v1.2 FCM bridge — the worker targets channel_id "atlas_assist" on
+            // every HTTP v1 push; without this channel Android drops them.
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    ASSIST_CHANNEL_ID,
+                    "Assistant & notifications serveur",
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = "Notifications push envoyées par le serveur Atlas (agent, paie, stock)"
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                    setShowBadge(true)
+                },
+            )
             nm.createNotificationChannel(
                 NotificationChannel(
                     ALERTS_CHANNEL_ID,
@@ -57,6 +70,7 @@ class AtlasApp : Application() {
 
     companion object {
         const val UPDATE_CHANNEL_ID = "atlas_updates_v2"
+        const val ASSIST_CHANNEL_ID = "atlas_assist"
         const val ALERTS_CHANNEL_ID = "atlas_role_alerts_v2"
         const val EXTRA_OPEN_NOTIFICATIONS = "atlas_open_notifications"
         const val EXTRA_OPEN_SETTINGS = "atlas_open_settings"

@@ -1979,9 +1979,108 @@ private val AtlasOnboardingSlides = listOf(
  * Always displays "Atlas Commerce" in the header for clear branding & UI test visibility.
  */
 @Composable
+private fun AtlasDemoPreviewScreen(
+    onContinue: () -> Unit,
+    onSkip: () -> Unit,
+) {
+    var adminPreview by remember { mutableStateOf(true) }
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AtlasMark(size = 34.dp)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Atlas Commerce", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Aperçu interactif · mode démo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick = onSkip) { Text("Passer") }
+            }
+            AtlasCard {
+                AtlasChip("DÉMO — DONNÉES FICTIVES", tone = AtlasTone.INFO)
+                Spacer(Modifier.height(8.dp))
+                Text("Découvrez votre espace avant de connecter votre serveur.", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Tout ce qui apparaît ici est un exemple local : aucune connexion réseau, aucune écriture et aucun envoi à votre base de données.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AtlasOutlinedButton(
+                    text = "Admin",
+                    onClick = { adminPreview = true },
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.AdminPanelSettings,
+                )
+                AtlasOutlinedButton(
+                    text = "Employé",
+                    onClick = { adminPreview = false },
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.Inventory2,
+                )
+            }
+            if (adminPreview) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AtlasStatTile("À recevoir", "8 450 DH", modifier = Modifier.weight(1f), hint = "3 clients", tone = AtlasTone.INFO)
+                    AtlasStatTile("À payer", "5 200 DH", modifier = Modifier.weight(1f), hint = "fournisseurs + paie", tone = AtlasTone.WARNING)
+                }
+                AtlasCard {
+                    Text("Tableau de bord Admin", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    AtlasDivider(Modifier.padding(vertical = 8.dp))
+                    AtlasInfoRow("Salaire équipe à verser", "12 600 DH")
+                    AtlasInfoRow("Client Atlas BTP · échéance 2 nov.", "3 200 DH")
+                    AtlasInfoRow("Facture fournisseur · échéance 3 nov.", "1 450 DH")
+                    AtlasInfoRow("Rapport mensuel", "Prêt à exporter en PDF")
+                }
+                AtlasCard {
+                    AtlasChip("RAPPORT MENSUEL", tone = AtlasTone.POSITIVE)
+                    Spacer(Modifier.height(6.dp))
+                    Text("À suivre cette semaine", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text("• Client Atlas BTP doit régler 3 200 DH.\n• Client Marbre Plus a payé sa facture.\n• Facture fournisseur de 1 450 DH à payer.\n• Paie de l’équipe à préparer avant le 3.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AtlasStatTile("Mon salaire", "4 200 DH", modifier = Modifier.weight(1f), hint = "Exemple uniquement", tone = AtlasTone.INFO)
+                    AtlasStatTile("Prochaine paie", "3 nov.", modifier = Modifier.weight(1f), hint = "Dans 9 jours", tone = AtlasTone.POSITIVE)
+                }
+                AtlasCard {
+                    Text("Mon espace Employé", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    AtlasDivider(Modifier.padding(vertical = 8.dp))
+                    AtlasInfoRow("Statut de la paie", "À venir")
+                    AtlasInfoRow("Mes tâches", "2 à traiter")
+                    Spacer(Modifier.height(6.dp))
+                    Text("Les employés ne voient que leurs propres informations. Les montants affichés ici sont fictifs.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            AtlasButton(text = "Continuer vers la présentation", onClick = onContinue, modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.RocketLaunch)
+            TextButton(onClick = onSkip, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Text("Ignorer et configurer mon serveur")
+            }
+        }
+    }
+}
+
+@Composable
 fun AtlasWelcomeOnboardingScreen(
     onComplete: () -> Unit,
 ) {
+    var showDemo by remember { mutableStateOf(true) }
+    if (showDemo) {
+        AtlasDemoPreviewScreen(
+            onContinue = { showDemo = false },
+            onSkip = onComplete,
+        )
+        return
+    }
     var step by remember { mutableStateOf(0) }
     val total = AtlasOnboardingSlides.size
 

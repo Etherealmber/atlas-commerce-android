@@ -103,8 +103,8 @@ object Roles {
     fun canCreateDocuments(role: String?): Boolean =
         normalize(role) in setOf(OWNER, ADMIN, SECRETARY)
 
-    /** Treasury & receivables visibility on Home dashboard. */
-    fun canViewFinancials(role: String?): Boolean = canCreateDocuments(role)
+    /** Authoritative treasury, payroll and admin-report UI is owner/admin-only. */
+    fun canViewFinancials(role: String?): Boolean = isAdmin(role)
 
     /** Which role audiences this user can send notifications to. */
     fun sendableTargets(role: String?): List<RoleTarget> = when (normalize(role)) {
