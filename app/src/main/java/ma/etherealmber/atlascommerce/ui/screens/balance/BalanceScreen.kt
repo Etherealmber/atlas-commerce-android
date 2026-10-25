@@ -246,8 +246,9 @@ fun BalanceScreen(
                                 subtitle = "${bucket?.count ?: 0} document(s) · ${formatMoney(bucket?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} en retard",
                             )
                         }
-                        if (bucket?.documents.isNullOrEmpty()) item(key = "no-receivables") { EmptyPanel("Aucune créance client ouverte pour cette période.") }
-                        else items(bucket!!.documents, key = { "receivable-${it.id}" }) { document ->
+                        val receivableDocuments = bucket?.documents.orEmpty()
+                        if (receivableDocuments.isEmpty()) item(key = "no-receivables") { EmptyPanel("Aucune créance client ouverte pour cette période.") }
+                        else items(receivableDocuments, key = { "receivable-${it.id}" }) { document ->
                             ReceivableCard(document, state.finance?.currency ?: "MAD")
                         }
                         if (bucket?.truncated == true) item(key = "truncated") { Text("Liste partielle : le serveur limite les documents affichés.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
@@ -262,8 +263,9 @@ fun BalanceScreen(
                                 subtitle = "${payables?.count ?: 0} document(s) · ${formatMoney(payables?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} en retard",
                             )
                         }
-                        if (payables?.documents.isNullOrEmpty()) item(key = "no-payables") { EmptyPanel("Aucune dette fournisseur ouverte pour cette période.") }
-                        else items(payables!!.documents, key = { "payable-${it.id}" }) { document ->
+                        val payableDocuments = payables?.documents.orEmpty()
+                        if (payableDocuments.isEmpty()) item(key = "no-payables") { EmptyPanel("Aucune dette fournisseur ouverte pour cette période.") }
+                        else items(payableDocuments, key = { "payable-${it.id}" }) { document ->
                             ReceivableCard(document, state.finance?.currency ?: "MAD")
                         }
                         item(key = "payroll-due") {

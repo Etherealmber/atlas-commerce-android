@@ -128,11 +128,13 @@ private fun BoxWithPdfWidth(session: PdfRenderSession, pageIndex: Int) {
                 CircularProgressIndicator()
             }
         } else {
-            Image(
-                bitmap = bitmap!!.asImageBitmap(),
-                contentDescription = "Page ${pageIndex + 1} du rapport",
-                modifier = Modifier.fillMaxWidth().aspectRatio(size.first.toFloat() / size.second.coerceAtLeast(1)),
-            )
+            bitmap?.let { renderedBitmap ->
+                Image(
+                    bitmap = renderedBitmap.asImageBitmap(),
+                    contentDescription = "Page ${pageIndex + 1} du rapport",
+                    modifier = Modifier.fillMaxWidth().aspectRatio(size.first.toFloat() / size.second.coerceAtLeast(1)),
+                )
+            }
         }
     }
 }
