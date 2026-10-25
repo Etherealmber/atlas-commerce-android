@@ -162,7 +162,7 @@ jobs:
         run: |
           if [ -z "$GOOGLE_SERVICES_JSON_BASE64" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Firebase push disabled::GOOGLE_SERVICES_JSON_BASE64 is not configured; this build will no-op push registration."
+            echo "::warning title=Firebase integrations disabled::GOOGLE_SERVICES_JSON_BASE64 is not configured; push registration and automatic Crashlytics reports are unavailable in this build."
             exit 0
           fi
           python3 - <<'PY'

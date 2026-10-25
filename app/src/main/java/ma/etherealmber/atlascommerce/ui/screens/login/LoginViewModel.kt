@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,8 +18,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyCredentials
+import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyOrigin
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
@@ -35,6 +38,7 @@ class LoginViewModel @Inject constructor(
     private val preferences: AtlasPreferences,
     private val authRepository: AuthRepository,
     private val deviceIdentity: DeviceIdentity,
+    @ApplicationContext private val applicationContext: Context,
 ) : ViewModel() {
 
     enum class Step { CREDENTIALS, OTP }
@@ -78,7 +82,11 @@ class LoginViewModel @Inject constructor(
                     if (currentBaseUrl != null && currentBaseUrl.equals(selectedServer.baseUrl, ignoreCase = true)) {
                         val capabilities = (result as? ApiResult.Success)?.data
                         _state.update {
-                            it.copy(passkeyAvailable = capabilities?.supportsAndroid(BuildConfig.APPLICATION_ID) == true)
+                            it.copy(passkeyAvailable = capabilities?.supportsAndroid(
+                                BuildConfig.APPLICATION_ID,
+                                AndroidPasskeyOrigin.forInstalledApp(applicationContext),
+                                ServerUrl.origin(selectedServer.baseUrl),
+                            ) == true)
                         }
                     }
                 }
@@ -132,11 +140,12 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null, info = null) }
             try {
-                val capabilityResult = authRepository.webAuthnCapabilities()
-                val supportsAndroid = (capabilityResult as? ApiResult.Success)
-                    ?.data
-                    ?.supportsAndroid(BuildConfig.APPLICATION_ID) == true
-                if (!supportsAndroid) {
+                val selectedServerOrigin = ServerUrl.origin(serverConfig.selection.value?.baseUrl)
+                if (selectedServerOrigin == null) {
+                    _state.update { it.copy(loading = false, passkeyAvailable = false, error = "L'origine du serveur sélectionné est invalide.") }
+                    return@launch
+                }
+                if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
                     _state.update {
                         it.copy(
                             loading = false,
@@ -149,7 +158,13 @@ class LoginViewModel @Inject constructor(
                 when (val options = authRepository.webAuthnLoginOptions(current.username.trim().ifBlank { null })) {
                     is ApiResult.Failure -> _state.update { it.copy(loading = false, error = options.message) }
                     is ApiResult.Success -> {
-                        val credentialJson = AndroidPasskeyCredentials.authenticate(context, options.data)
+                        if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
+                            _state.update {
+                                it.copy(loading = false, passkeyAvailable = false, error = "Les passkeys Android ne sont plus disponibles sur ce serveur.")
+                            }
+                            return@launch
+                        }
+                        val credentialJson = AndroidPasskeyCredentials.authenticate(context, options.data, selectedServerOrigin)
                         when (val verified = authRepository.verifyWebAuthnLogin(credentialJson, deviceIdentity.fingerprint)) {
                             is ApiResult.Failure -> _state.update { it.copy(loading = false, error = verified.message) }
                             is ApiResult.Success -> when (val signedIn = sessionManager.signInWithPasskey(verified.data)) {
@@ -172,6 +187,17 @@ class LoginViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+
+    private suspend fun supportsSelectedServerPasskeyOrigin(origin: String): Boolean {
+        if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != origin) return false
+        val capability = (authRepository.webAuthnCapabilities() as? ApiResult.Success)?.data ?: return false
+        return capability.supportsAndroid(
+            BuildConfig.APPLICATION_ID,
+            AndroidPasskeyOrigin.forInstalledApp(applicationContext),
+            origin,
+        )
     }
 
     fun submit() {

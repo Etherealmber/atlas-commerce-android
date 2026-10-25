@@ -611,6 +611,8 @@ fun SettingsScreen(
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
+    val automaticCrashReportsEnabled by appViewModel.automaticCrashReportsEnabled.collectAsStateWithLifecycle()
+    val automaticCrashReportsAvailable = appViewModel.automaticCrashReportsAvailable
     val androidPasskeysAvailable by appViewModel.androidPasskeysAvailable.collectAsStateWithLifecycle()
     val registeringPasskey by appViewModel.registeringPasskey.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
@@ -987,6 +989,22 @@ fun SettingsScreen(
                 checked = autoCheckUpdates,
                 onCheckedChange = appViewModel::setAutoCheckUpdates,
             )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            if (automaticCrashReportsAvailable) {
+                SettingsToggleRow(
+                    title = "Envoyer automatiquement les rapports de plantage",
+                    subtitle = "Envoi opt-in à Firebase Crashlytics, sans jetons, mots de passe ni données commerciales jointes.",
+                    checked = automaticCrashReportsEnabled,
+                    onCheckedChange = { appViewModel.setAutomaticCrashReportsEnabled(it, onToast) },
+                )
+            } else {
+                SettingsRow(
+                    icon = Icons.Outlined.BugReport,
+                    title = "Rapports automatiques de plantage",
+                    subtitle = "Indisponible : cette version n'est pas configurée avec Firebase Crashlytics.",
+                    onClick = { onToast("L'administrateur doit configurer Firebase Crashlytics pour cette version.") },
+                )
+            }
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsRow(
                 icon = Icons.Outlined.AutoAwesomeMotion,

@@ -28,6 +28,7 @@ import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.diagnostics.CompressedReportAttachment
+import ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent
 import ma.etherealmber.atlascommerce.core.diagnostics.DeviceDiagnosticSnapshot
 import ma.etherealmber.atlascommerce.core.diagnostics.DiagnosticReporter
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
@@ -38,7 +39,9 @@ import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyCredentials
+import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyOrigin
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
+import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.server.ServerSelection
 import ma.etherealmber.atlascommerce.core.session.SessionManager
@@ -98,6 +101,12 @@ class AppViewModel @Inject constructor(
 
     val developerModeEnabled: StateFlow<Boolean> = preferences.developerModeEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val _automaticCrashReportsEnabled = MutableStateFlow(
+        CrashReportConsent.isConfigured(applicationContext) && CrashReportConsent.isEnabled(applicationContext),
+    )
+    val automaticCrashReportsEnabled: StateFlow<Boolean> = _automaticCrashReportsEnabled.asStateFlow()
+    val automaticCrashReportsAvailable: Boolean = CrashReportConsent.isConfigured(applicationContext)
 
     val autoOpenCamera: StateFlow<Boolean> = preferences.autoOpenCamera
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -222,10 +231,24 @@ class AppViewModel @Inject constructor(
                 val currentBase = serverConfig.selection.value?.baseUrl
                 if (currentBase != null && currentBase.equals(selectedBase, ignoreCase = true)) {
                     val capability = (result as? ApiResult.Success)?.data
-                    _androidPasskeysAvailable.value = capability?.supportsAndroid(BuildConfig.APPLICATION_ID) == true
+                    _androidPasskeysAvailable.value = capability?.supportsAndroid(
+                        BuildConfig.APPLICATION_ID,
+                        AndroidPasskeyOrigin.forInstalledApp(applicationContext),
+                        ServerUrl.origin(selectedBase),
+                    ) == true
                 }
             }
         }
+    }
+
+    private suspend fun supportsSelectedServerPasskeyOrigin(origin: String): Boolean {
+        if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != origin) return false
+        val capability = (authRepository.webAuthnCapabilities() as? ApiResult.Success)?.data ?: return false
+        return capability.supportsAndroid(
+            BuildConfig.APPLICATION_ID,
+            AndroidPasskeyOrigin.forInstalledApp(applicationContext),
+            origin,
+        )
     }
 
     fun refreshPasskeyCapability() {
@@ -238,7 +261,11 @@ class AppViewModel @Inject constructor(
             val currentBase = serverConfig.selection.value?.baseUrl
             if (currentBase != null && currentBase.equals(selectedBase, ignoreCase = true)) {
                 val capability = (result as? ApiResult.Success)?.data
-                _androidPasskeysAvailable.value = capability?.supportsAndroid(BuildConfig.APPLICATION_ID) == true
+                _androidPasskeysAvailable.value = capability?.supportsAndroid(
+                    BuildConfig.APPLICATION_ID,
+                    AndroidPasskeyOrigin.forInstalledApp(applicationContext),
+                    ServerUrl.origin(selectedBase),
+                ) == true
             }
         }
     }
@@ -252,6 +279,12 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             _registeringPasskey.value = true
             try {
+                val selectedServerOrigin = ServerUrl.origin(serverConfig.selection.value?.baseUrl)
+                if (selectedServerOrigin == null) {
+                    _androidPasskeysAvailable.value = false
+                    onDone("L'origine du serveur sélectionné est invalide.")
+                    return@launch
+                }
                 when (val capabilityResult = authRepository.webAuthnCapabilities()) {
                     is ApiResult.Failure -> {
                         _androidPasskeysAvailable.value = false
@@ -259,7 +292,13 @@ class AppViewModel @Inject constructor(
                         return@launch
                     }
                     is ApiResult.Success -> {
-                        if (!capabilityResult.data.supportsAndroid(BuildConfig.APPLICATION_ID)) {
+                        if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != selectedServerOrigin ||
+                            !capabilityResult.data.supportsAndroid(
+                                BuildConfig.APPLICATION_ID,
+                                AndroidPasskeyOrigin.forInstalledApp(applicationContext),
+                                selectedServerOrigin,
+                            )
+                        ) {
                             _androidPasskeysAvailable.value = false
                             onDone("Les passkeys Android ne sont plus activées pour le serveur sélectionné.")
                             return@launch
@@ -269,7 +308,12 @@ class AppViewModel @Inject constructor(
                 when (val options = authRepository.webAuthnRegistrationOptions(deviceIdentity.fingerprint)) {
                     is ApiResult.Failure -> onDone(options.message)
                     is ApiResult.Success -> {
-                        val credentialJson = AndroidPasskeyCredentials.create(context, options.data)
+                        if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
+                            _androidPasskeysAvailable.value = false
+                            onDone("Les passkeys Android ne sont plus disponibles sur ce serveur.")
+                            return@launch
+                        }
+                        val credentialJson = AndroidPasskeyCredentials.create(context, options.data, selectedServerOrigin)
                         val label = listOf("Android", android.os.Build.MANUFACTURER, android.os.Build.MODEL)
                             .filter { it.isNotBlank() }
                             .distinct()
@@ -558,6 +602,18 @@ class AppViewModel @Inject constructor(
 
     fun setDeveloperModeEnabled(enabled: Boolean) {
         viewModelScope.launch { preferences.setDeveloperModeEnabled(enabled) }
+    }
+
+    fun setAutomaticCrashReportsEnabled(enabled: Boolean, onDone: (String) -> Unit) {
+        if (!CrashReportConsent.setEnabled(applicationContext, enabled)) {
+            onDone("Rapports automatiques indisponibles : Firebase Crashlytics n'est pas configuré pour cette version.")
+            return
+        }
+        _automaticCrashReportsEnabled.value = enabled
+        onDone(
+            if (enabled) "Rapports de plantage activés. Les prochains plantages seront envoyés automatiquement à Firebase Crashlytics."
+            else "Envoi automatique des rapports de plantage désactivé.",
+        )
     }
 
     fun clearFinanceReportCache(onDone: (String) -> Unit) {

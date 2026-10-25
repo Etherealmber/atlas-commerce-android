@@ -8,13 +8,14 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential
 
-/** Thin Android Credential Manager bridge. It returns only the signed WebAuthn response JSON. */
+/** Credential Manager bridge using only the selected Worker's origin; returns signed WebAuthn JSON. */
 object AndroidPasskeyCredentials {
-    suspend fun authenticate(context: Context, requestJson: String): String {
+    suspend fun authenticate(context: Context, requestJson: String, origin: String): String {
         val result = CredentialManager.create(context).getCredential(
             context = context,
             request = GetCredentialRequest(
                 credentialOptions = listOf(GetPublicKeyCredentialOption(requestJson)),
+                origin = origin,
             ),
         )
         val credential = result.credential as? PublicKeyCredential
@@ -22,12 +23,13 @@ object AndroidPasskeyCredentials {
         return credential.authenticationResponseJson
     }
 
-    suspend fun create(context: Context, requestJson: String): String {
+    suspend fun create(context: Context, requestJson: String, origin: String): String {
         val result = CredentialManager.create(context).createCredential(
             context = context,
             request = CreatePublicKeyCredentialRequest(
                 requestJson = requestJson,
                 preferImmediatelyAvailableCredentials = false,
+                origin = origin,
             ),
         )
         val credential = result as? CreatePublicKeyCredentialResponse

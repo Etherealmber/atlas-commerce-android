@@ -51,6 +51,13 @@ class ServerUrlTest {
     }
 
     @Test
+    fun `origin removes paths and default ports but keeps non-default ports`() {
+        assertEquals("https://example.com", ServerUrl.origin("https://example.com:443/api"))
+        assertEquals("http://localhost:8787", ServerUrl.origin("http://localhost:8787/api"))
+        assertNull(ServerUrl.origin("not a valid server"))
+    }
+
+    @Test
     fun `display hides the scheme`() {
         assertEquals("stock.afmarbre.com", ServerUrl.display("https://stock.afmarbre.com"))
         assertEquals("10.0.2.2:8787", ServerUrl.display("http://10.0.2.2:8787/"))

@@ -89,6 +89,7 @@ data class ReportLinkTicketDto(
 @JsonClass(generateAdapter = true)
 data class WebAuthnCapabilitiesDto(
     val enabled: Boolean = false,
+    val origins: List<String> = emptyList(),
     val android: WebAuthnAndroidCapabilityDto? = null,
 )
 
@@ -96,10 +97,26 @@ data class WebAuthnCapabilitiesDto(
 data class WebAuthnAndroidCapabilityDto(
     val enabled: Boolean = false,
     @Json(name = "package") val packageName: String? = null,
+    val origin: String? = null,
 )
 
-fun WebAuthnCapabilitiesDto.supportsAndroid(packageName: String): Boolean =
-    enabled && android?.enabled == true && android.packageName == packageName
+/**
+ * Require both the native signing-certificate origin and selected Worker web origin to match
+ * server-advertised values. The request may use an explicit web origin only with the declared
+ * CREDENTIAL_MANAGER_SET_ORIGIN permission; the backend still checks package and crossOrigin.
+ */
+fun WebAuthnCapabilitiesDto.supportsAndroid(
+    packageName: String,
+    signingOrigins: Set<String>,
+    selectedServerOrigin: String?,
+): Boolean =
+    enabled &&
+        android?.enabled == true &&
+        android.packageName == packageName &&
+        !android.origin.isNullOrBlank() &&
+        android.origin in signingOrigins &&
+        !selectedServerOrigin.isNullOrBlank() &&
+        selectedServerOrigin in origins
 
 @JsonClass(generateAdapter = true)
 data class WebAuthnLoginOptionsRequest(
