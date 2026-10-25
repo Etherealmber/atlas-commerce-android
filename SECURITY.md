@@ -46,8 +46,9 @@ and are not supported for production use.
 ### Passkeys / WebAuthn
 
 - Passkey UI is fail-closed and scoped to the selected Worker. It requires `data.enabled`,
-  `data.android.enabled`, the exact application ID, the server's exact accepted signing origin to
-  match the installed APK certificate, and the selected web origin to be listed in `data.origins`.
+  `data.android.enabled`, the exact application ID, at least one server-advertised SHA-256 or legacy
+  SHA-1 signing origin to exactly match the installed APK certificate, and the selected web origin
+  to be listed in `data.origins`.
 - Android uses Credential Manager with the server challenge and selected HTTPS origin; the request
   uses `CREDENTIAL_MANAGER_SET_ORIGIN` so the Worker can validate the web origin, `crossOrigin`,
   and Android package together. The server performs cryptographic registration/assertion verification;

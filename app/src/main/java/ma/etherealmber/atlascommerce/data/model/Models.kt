@@ -98,11 +98,12 @@ data class WebAuthnAndroidCapabilityDto(
     val enabled: Boolean = false,
     @Json(name = "package") val packageName: String? = null,
     val origin: String? = null,
+    @Json(name = "origin_legacy") val originLegacy: String? = null,
 )
 
 /**
- * Require both the native signing-certificate origin and selected Worker web origin to match
- * server-advertised values. The request may use an explicit web origin only with the declared
+ * Require one server-advertised signing-certificate origin and the selected Worker web origin to
+ * match this installed build. The request may use an explicit web origin only with the declared
  * CREDENTIAL_MANAGER_SET_ORIGIN permission; the backend still checks package and crossOrigin.
  */
 fun WebAuthnCapabilitiesDto.supportsAndroid(
@@ -113,8 +114,7 @@ fun WebAuthnCapabilitiesDto.supportsAndroid(
     enabled &&
         android?.enabled == true &&
         android.packageName == packageName &&
-        !android.origin.isNullOrBlank() &&
-        android.origin in signingOrigins &&
+        listOfNotNull(android.origin, android.originLegacy).any { it in signingOrigins } &&
         !selectedServerOrigin.isNullOrBlank() &&
         selectedServerOrigin in origins
 

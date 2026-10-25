@@ -36,8 +36,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
   reste au premier plan, puis une notification est publiée si l'app passe en arrière-plan. Le retour
   dans l'app efface l'alerte redondante sans annuler ni redémarrer le téléchargement.
 - **Compatibilité Credential Manager / WebAuthn explicitement vérifiée** : le statut du Worker expose
-  l'origine Android acceptée; l'app la compare à l'origine calculée depuis le certificat installé et
-  ne montre pas l'option si package, origine ou allowlist ne correspondent pas.
+  l'origine Android SHA-256 et, en option, l'origine legacy SHA-1; l'app compare ces valeurs au
+  certificat installé et ne montre pas l'option si package, origine ou allowlist ne correspondent pas.
 
 ## [1.0.7] — 2026-10-22
 
