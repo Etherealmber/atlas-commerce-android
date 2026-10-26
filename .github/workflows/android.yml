@@ -331,6 +331,34 @@ jobs:
           path: app/build/reports/lint-results-debug.html
           if-no-files-found: ignore
 
+  android9-startup-smoke:
+    name: Android 9 (API 28) cold-start smoke test
+    needs: build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Start API 28 emulator and verify app reaches onboarding
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          target: default
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -camera-back none
+          script: ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain --stacktrace
+
   publish-release:
     name: Publish signed APK to GitHub Releases & CDN 1
     needs: [build]
