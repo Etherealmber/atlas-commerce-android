@@ -463,8 +463,9 @@ private fun AtlasFloatingBottomBar(
             shape = RoundedCornerShape(26.dp),
             color = barColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
-            tonalElevation = 1.dp,
-            shadowElevation = 10.dp,
+            border = null,
+            tonalElevation = 0.dp,
+            shadowElevation = 4.dp,
         ) {
             Row(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
@@ -521,10 +522,10 @@ private fun AtlasFloatingBottomBar(
                 containerColor = fabContainerColor,
                 contentColor = fabContentColor,
                 elevation = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = 8.dp,
-                    pressedElevation = 12.dp,
-                    focusedElevation = 9.dp,
-                    hoveredElevation = 9.dp,
+                    defaultElevation = 4.dp,
+                    pressedElevation = 7.dp,
+                    focusedElevation = 5.dp,
+                    hoveredElevation = 5.dp,
                 ),
             ) {
                 Icon(centerTab.icon, contentDescription = centerTab.label, modifier = Modifier.size(25.dp))

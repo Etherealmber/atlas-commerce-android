@@ -330,7 +330,10 @@ class AppViewModel @Inject constructor(
                         onDone("${AtlasLogBuffer.sanitize(options.message)} [${options.code}${options.httpStatus?.let { " · HTTP $it" } ?: ""}]")
                     }
                     is ApiResult.Success -> {
-                        AtlasLogBuffer.log("PASSKEY", "Registration options received; challenge JSON is intentionally not logged")
+                        AtlasLogBuffer.log(
+                            "PASSKEY",
+                            "Registration options received; challenge and user data are not logged; ${AndroidPasskeyCredentials.registrationOptionsSummary(options.data)}",
+                        )
                         if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
                             _androidPasskeysAvailable.value = false
                             onDone("Les passkeys Android ne sont plus disponibles sur ce serveur.")
@@ -367,7 +370,7 @@ class AppViewModel @Inject constructor(
             } catch (error: CreateCredentialNoCreateOptionException) {
                 AtlasLogBuffer.log(
                     "PASSKEY",
-                    "Credential Manager has no eligible provider after registration options were received; no credential was created",
+                    "Credential Manager has no eligible provider after registration options were received; exceptionType=${error.type}; no credential was created",
                     "ERROR",
                 )
                 onDone(

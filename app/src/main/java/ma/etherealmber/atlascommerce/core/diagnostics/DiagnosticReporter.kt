@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.Roles
 import java.io.ByteArrayOutputStream
@@ -96,6 +97,17 @@ object AtlasLogBuffer {
         withContext(Dispatchers.IO) { captureDiagnosticLogs(context, maxChars) }
 
     fun captureDiagnosticLogs(context: Context, maxChars: Int = 16_000): String {
+        val deviceSection = buildString {
+            appendLine("=== APP / DEVICE ===")
+            appendLine("App: ${AppDetails.NAME} ${AppDetails.VERSION_NAME} (versionCode ${AppDetails.VERSION_CODE})")
+            appendLine("Package/build: ${context.packageName} · ${BuildConfig.BUILD_TYPE}")
+            appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL} · brand=${Build.BRAND} · device=${Build.DEVICE}")
+            appendLine("Android: ${Build.VERSION.RELEASE ?: "?"} · API ${Build.VERSION.SDK_INT} · securityPatch=${Build.VERSION.SECURITY_PATCH}")
+            appendLine("ABI: ${Build.SUPPORTED_ABIS.firstOrNull() ?: "?"}")
+            appendLine("IP/MAC/serial/unique device identifiers: not collected in this section")
+            appendLine()
+        }
+
         val crashFile = File(File(context.cacheDir, "diagnostics"), CRASH_FILE_NAME)
         val crashText = if (crashFile.isFile) {
             runCatching { crashFile.readText(Charsets.UTF_8).trim() }.getOrDefault("")
@@ -110,7 +122,7 @@ object AtlasLogBuffer {
         // Keep structured events ahead of verbose logcat so passkey stages and HTTP status
         // details survive the final size limit even on very chatty devices.
         val ringSection = if (ring.isEmpty()) "" else ringHeader + ringBody.takeLast(8_500) + "\n\n"
-        val essentials = crashSection + ringSection
+        val essentials = deviceSection + crashSection + ringSection
 
         // Android does not grant apps access to other processes' logcat without privileged
         // permissions. Capture our process only; structured app events above carry auth details.
