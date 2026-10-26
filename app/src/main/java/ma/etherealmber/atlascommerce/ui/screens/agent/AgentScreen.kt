@@ -11,6 +11,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -196,276 +197,284 @@ fun AgentScreen(
         )
     }
 
-    Column(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .imePadding(),
     ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            contentPadding = PaddingValues(
-                start = density.screenPadding,
-                end = density.screenPadding,
-                top = density.cardMargin,
-                bottom = 16.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(density.itemGap),
-        ) {
-            item(key = "agent_header") {
-                AtlasEntrance {
-                    AtlasCard {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Outlined.AutoAwesome,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp),
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = "Atlas Agent IA",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Text(
-                                    text = state.activeThreadTitle.takeIf { it.isNotBlank() }
-                                        ?: state.status?.model?.let { "Modèle actif : $it" }
-                                        ?: "Données réelles synchronisées en direct",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            AtlasChip(
-                                text = when {
-                                    quotaLocked -> "Quota atteint"
-                                    state.status?.configured == false -> "Veille"
-                                    else -> "En ligne"
-                                },
-                                tone = when {
-                                    quotaLocked -> AtlasTone.DANGER
-                                    state.status?.configured == false -> AtlasTone.WARNING
-                                    else -> AtlasTone.POSITIVE
-                                },
-                            )
-                            IconButton(onClick = { showHistoryDialog = true }) {
+        // The dock takes a fixed slice of phone height. Compact the chat composer when
+        // the remaining viewport is short (especially while the keyboard is open).
+        val compactComposer = maxHeight < 600.dp
+        Column(Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentPadding = PaddingValues(
+                    start = density.screenPadding,
+                    end = density.screenPadding,
+                    top = density.cardMargin,
+                    bottom = if (compactComposer) 8.dp else 16.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(density.itemGap),
+            ) {
+                item(key = "agent_header") {
+                    AtlasEntrance {
+                        AtlasCard {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    Icons.Outlined.History,
-                                    contentDescription = "Historique Web & Mobile",
+                                    imageVector = Icons.Outlined.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp),
                                 )
-                            }
-                            IconButton(
-                                onClick = {
-                                    viewModel.startNewConversation()
-                                    onToast("Nouvelle discussion prête.")
-                                },
-                            ) {
-                                Icon(
-                                    Icons.Outlined.AddComment,
-                                    contentDescription = "Nouvelle discussion",
-                                )
-                            }
-                            IconButton(onClick = { viewModel.refreshContext() }) {
-                                Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser")
-                            }
-                        }
-
-                        // Real-time quota progress bar right inside Atlas Agent!
-                        state.policy?.let { policy ->
-                            Spacer(Modifier.height(10.dp))
-                            AtlasDivider()
-                            Spacer(Modifier.height(10.dp))
-                            AgentQuotaBarsContent(policy = policy, compact = true)
-                        }
-
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                        ) {
-                            Row(Modifier.padding(10.dp), verticalAlignment = Alignment.Top) {
-                                Icon(Icons.Outlined.HourglassBottom, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.tertiary)
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "L'IA peut se tromper. Vérifiez les faits importants auprès d'une source officielle et évitez les données sensibles.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                )
-                            }
-                        }
-
-                        if (state.messages.isEmpty() && !quotaLocked) {
-                            Spacer(Modifier.height(10.dp))
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                QuickPrompts.forEach { prompt ->
-                                    AssistChip(
-                                        onClick = { viewModel.sendPrompt(prompt) },
-                                        label = { Text(prompt, style = MaterialTheme.typography.bodySmall) },
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Atlas Agent IA",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold,
                                     )
+                                    Text(
+                                        text = state.activeThreadTitle.takeIf { it.isNotBlank() }
+                                            ?: state.status?.model?.let { "Modèle actif : $it" }
+                                            ?: "Données réelles synchronisées en direct",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                AtlasChip(
+                                    text = when {
+                                        quotaLocked -> "Quota atteint"
+                                        state.status?.configured == false -> "Veille"
+                                        else -> "En ligne"
+                                    },
+                                    tone = when {
+                                        quotaLocked -> AtlasTone.DANGER
+                                        state.status?.configured == false -> AtlasTone.WARNING
+                                        else -> AtlasTone.POSITIVE
+                                    },
+                                )
+                                IconButton(onClick = { showHistoryDialog = true }) {
+                                    Icon(
+                                        Icons.Outlined.History,
+                                        contentDescription = "Historique Web & Mobile",
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        viewModel.startNewConversation()
+                                        onToast("Nouvelle discussion prête.")
+                                    },
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.AddComment,
+                                        contentDescription = "Nouvelle discussion",
+                                    )
+                                }
+                                IconButton(onClick = { viewModel.refreshContext() }) {
+                                    Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser")
+                                }
+                            }
+
+                            // Real-time quota progress bar right inside Atlas Agent!
+                            state.policy?.let { policy ->
+                                Spacer(Modifier.height(10.dp))
+                                AtlasDivider()
+                                Spacer(Modifier.height(10.dp))
+                                AgentQuotaBarsContent(policy = policy, compact = true)
+                            }
+
+                            Surface(
+                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                            ) {
+                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.Top) {
+                                    Icon(Icons.Outlined.HourglassBottom, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.tertiary)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "L'IA peut se tromper. Vérifiez les faits importants auprès d'une source officielle et évitez les données sensibles.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    )
+                                }
+                            }
+
+                            if (state.messages.isEmpty() && !quotaLocked) {
+                                Spacer(Modifier.height(10.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    QuickPrompts.forEach { prompt ->
+                                        AssistChip(
+                                            onClick = { viewModel.sendPrompt(prompt) },
+                                            label = { Text(prompt, style = MaterialTheme.typography.bodySmall) },
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            if (state.messages.isEmpty() && state.nextActions.isNotEmpty() && !quotaLocked) {
-                item(key = "agent_suggestions_hdr") {
-                    AtlasSectionHeader(title = "Actions suggérées par l'IA")
-                }
-                items(
-                    items = state.nextActions,
-                    key = { "suggestion_${it.title}_${it.priority}" },
-                ) { item ->
-                    AtlasCard(
-                        onClick = { viewModel.sendPrompt("Aide-moi sur : ${item.title} (${item.detail})") },
-                        padding = 12.dp,
-                    ) {
-                        Text(
-                            text = item.title,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        if (item.detail.isNotBlank()) {
-                            Spacer(Modifier.height(2.dp))
+                if (state.messages.isEmpty() && state.nextActions.isNotEmpty() && !quotaLocked) {
+                    item(key = "agent_suggestions_hdr") {
+                        AtlasSectionHeader(title = "Actions suggérées par l'IA")
+                    }
+                    items(
+                        items = state.nextActions,
+                        key = { "suggestion_${it.title}_${it.priority}" },
+                    ) { item ->
+                        AtlasCard(
+                            onClick = { viewModel.sendPrompt("Aide-moi sur : ${item.title} (${item.detail})") },
+                            padding = 12.dp,
+                        ) {
                             Text(
-                                text = item.detail,
+                                text = item.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            if (item.detail.isNotBlank()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = item.detail,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                items(state.messages, key = { it.id }) { msg ->
+                    AtlasEntrance(offsetY = 10.dp) {
+                        ChatBubbleRow(
+                            message = msg,
+                            approvingId = state.approvingId,
+                            onCopy = {
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                cm?.setPrimaryClip(ClipData.newPlainText("Atlas Agent", msg.text))
+                                onToast("Réponse copiée.")
+                            },
+                            onApprove = { proposalId -> viewModel.approveProposal(msg.id, proposalId) },
+                        )
+                    }
+                }
+
+                if (state.streamingReply.isNotBlank()) {
+                    item(key = "agent_streaming_reply") {
+                        AtlasEntrance(offsetY = 8.dp) {
+                            ChatBubbleRow(
+                                message = AgentViewModel.ChatMessage(fromUser = false, text = state.streamingReply),
+                                approvingId = state.approvingId,
+                                onCopy = {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    cm?.setPrimaryClip(ClipData.newPlainText("Atlas Agent", state.streamingReply))
+                                    onToast("Réponse copiée.")
+                                },
+                                onApprove = {},
+                            )
+                        }
+                    }
+                }
+
+                if (state.sending) {
+                    item(key = "agent_typing") {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AtlasTypingDots()
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = when {
+                                    state.streamingReply.isNotBlank() -> "Atlas Agent rédige sa réponse…"
+                                    state.attachments.isNotEmpty() -> "Atlas Agent extrait les documents et analyse…"
+                                    else -> "Atlas Agent vérifie vos données en direct…"
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(0.42f).padding(start = 4.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
-            }
 
-            items(state.messages, key = { it.id }) { msg ->
-                AtlasEntrance(offsetY = 10.dp) {
-                    ChatBubbleRow(
-                        message = msg,
-                        approvingId = state.approvingId,
-                        onCopy = {
-                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                            cm?.setPrimaryClip(ClipData.newPlainText("Atlas Agent", msg.text))
-                            onToast("Réponse copiée.")
-                        },
-                        onApprove = { proposalId -> viewModel.approveProposal(msg.id, proposalId) },
-                    )
-                }
-            }
-
-            if (state.streamingReply.isNotBlank()) {
-                item(key = "agent_streaming_reply") {
-                    AtlasEntrance(offsetY = 8.dp) {
-                        ChatBubbleRow(
-                            message = AgentViewModel.ChatMessage(fromUser = false, text = state.streamingReply),
-                            approvingId = state.approvingId,
-                            onCopy = {
-                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                cm?.setPrimaryClip(ClipData.newPlainText("Atlas Agent", state.streamingReply))
-                                onToast("Réponse copiée.")
-                            },
-                            onApprove = {},
+                if (!state.error.isNullOrBlank()) {
+                    item(key = "agent_err") {
+                        AtlasErrorCard(
+                            title = "Réponse IA indisponible",
+                            message = state.error.orEmpty(),
                         )
                     }
                 }
             }
 
-            if (state.sending) {
-                item(key = "agent_typing") {
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        AtlasTypingDots()
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = when {
-                                state.streamingReply.isNotBlank() -> "Atlas Agent rédige sa réponse…"
-                                state.attachments.isNotEmpty() -> "Atlas Agent extrait les documents et analyse…"
-                                else -> "Atlas Agent vérifie vos données en direct…"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(0.42f).padding(start = 4.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-
-            if (!state.error.isNullOrBlank()) {
-                item(key = "agent_err") {
-                    AtlasErrorCard(
-                        title = "Réponse IA indisponible",
-                        message = state.error.orEmpty(),
-                    )
-                }
-            }
-        }
-
-        Surface(
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 3.dp,
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = density.screenPadding, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp,
             ) {
-                if (state.attachments.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        state.attachments.forEachIndexed { index, attachment ->
-                            AssistChip(
-                                onClick = { viewModel.removeAttachment(index) },
-                                label = { Text(attachment.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                leadingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Retirer ${attachment.name}", modifier = Modifier.size(16.dp)) },
-                                enabled = !state.sending,
-                            )
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(
+                        horizontal = density.screenPadding,
+                        vertical = if (compactComposer) 4.dp else 8.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (state.attachments.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            state.attachments.forEachIndexed { index, attachment ->
+                                AssistChip(
+                                    onClick = { viewModel.removeAttachment(index) },
+                                    label = { Text(attachment.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    leadingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Retirer ${attachment.name}", modifier = Modifier.size(16.dp)) },
+                                    enabled = !state.sending,
+                                )
+                            }
                         }
                     }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = { attachmentPicker.launch(arrayOf("image/*", "application/pdf", "text/plain", "text/csv", "text/markdown", "application/json")) },
-                        enabled = !state.sending && !quotaLocked && (state.attachments.sumOf { it.imageDataUrls.size } < 4 || state.attachments.sumOf { it.documentDataUrls.size } < 2),
-                    ) {
-                        Icon(Icons.Outlined.AttachFile, contentDescription = "Joindre un fichier ou une image", tint = MaterialTheme.colorScheme.primary)
-                    }
-                    AtlasTextField(
-                        value = state.input,
-                        onValueChange = viewModel::onInputChange,
-                        label = if (quotaLocked) {
-                            "Quota IA atteint — réinitialisation automatique…"
-                        } else {
-                            "Poser une question à Atlas Agent…"
-                        },
-                        placeholder = "Ex. Résumé des ventes et impayés du jour",
-                        imeAction = ImeAction.Send,
-                        enabled = !state.sending && !quotaLocked,
-                        onDone = { viewModel.sendPrompt() },
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    IconButton(
-                        onClick = { viewModel.sendPrompt() },
-                        enabled = (state.input.isNotBlank() || state.attachments.isNotEmpty()) && !state.sending && !quotaLocked,
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.Send,
-                            contentDescription = "Envoyer",
-                            tint = if (quotaLocked) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { attachmentPicker.launch(arrayOf("image/*", "application/pdf", "text/plain", "text/csv", "text/markdown", "application/json")) },
+                            enabled = !state.sending && !quotaLocked && (state.attachments.sumOf { it.imageDataUrls.size } < 4 || state.attachments.sumOf { it.documentDataUrls.size } < 2),
+                        ) {
+                            Icon(Icons.Outlined.AttachFile, contentDescription = "Joindre un fichier ou une image", tint = MaterialTheme.colorScheme.primary)
+                        }
+                        AtlasTextField(
+                            value = state.input,
+                            onValueChange = viewModel::onInputChange,
+                            label = if (quotaLocked) {
+                                "Quota IA atteint — réinitialisation automatique…"
+                            } else {
+                                "Poser une question à Atlas Agent…"
+                            },
+                            placeholder = "Ex. Résumé des ventes et impayés du jour",
+                            imeAction = ImeAction.Send,
+                            enabled = !state.sending && !quotaLocked,
+                            onDone = { viewModel.sendPrompt() },
+                            modifier = Modifier.weight(1f),
                         )
+                        Spacer(Modifier.width(6.dp))
+                        IconButton(
+                            onClick = { viewModel.sendPrompt() },
+                            enabled = (state.input.isNotBlank() || state.attachments.isNotEmpty()) && !state.sending && !quotaLocked,
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.Send,
+                                contentDescription = "Envoyer",
+                                tint = if (quotaLocked) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 }
             }
