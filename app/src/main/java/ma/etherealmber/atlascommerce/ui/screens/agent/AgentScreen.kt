@@ -6,7 +6,16 @@ import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -27,6 +36,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
@@ -58,6 +68,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -81,6 +92,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.AtlasTypingDots
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import java.text.NumberFormat
 import java.time.Duration
@@ -121,6 +133,23 @@ fun AgentScreen(
     }
 
     val quotaLocked = state.policy?.isExhausted == true
+    val conversationListState = rememberLazyListState()
+
+    LaunchedEffect(state.activeThreadId, state.messages.size, state.loadingThread) {
+        if (state.loadingThread) return@LaunchedEffect
+        withFrameNanos { }
+        val lastIndex = conversationListState.layoutInfo.totalItemsCount - 1
+        if (lastIndex >= 0) conversationListState.animateScrollToItem(lastIndex)
+    }
+    LaunchedEffect(state.streamingReply.length) {
+        if (state.streamingReply.isBlank()) return@LaunchedEffect
+        withFrameNanos { }
+        val layout = conversationListState.layoutInfo
+        val lastVisibleIndex = layout.visibleItemsInfo.lastOrNull()?.index ?: -1
+        if (layout.totalItemsCount > 0 && lastVisibleIndex >= layout.totalItemsCount - 2) {
+            conversationListState.scrollToItem(layout.totalItemsCount - 1)
+        }
+    }
 
     if (showHistoryDialog) {
         AlertDialog(
@@ -215,6 +244,7 @@ fun AgentScreen(
         val compactComposer = maxHeight < 600.dp
         Column(Modifier.fillMaxSize()) {
             LazyColumn(
+                state = conversationListState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
@@ -230,12 +260,7 @@ fun AgentScreen(
                     AtlasEntrance {
                         AtlasCard {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Outlined.AutoAwesome,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(22.dp),
-                                )
+                                AtlasAgentMascot(Modifier.size(42.dp))
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(
@@ -245,8 +270,7 @@ fun AgentScreen(
                                     )
                                     Text(
                                         text = state.activeThreadTitle.takeIf { it.isNotBlank() }
-                                            ?: state.status?.model?.let { "Modèle actif : $it" }
-                                            ?: "Données réelles synchronisées en direct",
+                                            ?: "Votre assistant pour le stock et les ventes",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
@@ -533,6 +557,63 @@ fun AgentScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AtlasAgentMascot(modifier: Modifier = Modifier) {
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val transition = rememberInfiniteTransition(label = "atlas-agent-mascot")
+    val bob by transition.animateFloat(
+        initialValue = -1.5f,
+        targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1_700, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "atlas-agent-mascot-bob",
+    )
+    val tilt by transition.animateFloat(
+        initialValue = -2f,
+        targetValue = 2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2_300, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "atlas-agent-mascot-tilt",
+    )
+    val onMascot = MaterialTheme.colorScheme.onPrimary
+
+    Box(
+        modifier = modifier
+            .graphicsLayer {
+                translationY = if (motionEnabled) bob else 0f
+                rotationZ = if (motionEnabled) tilt else 0f
+            }
+            .clip(CircleShape)
+            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Box(Modifier.size(4.dp).clip(CircleShape).background(onMascot))
+                Box(Modifier.size(4.dp).clip(CircleShape).background(onMascot))
+            }
+            Box(
+                Modifier
+                    .padding(top = 1.dp)
+                    .width(12.dp)
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
+                    .background(onMascot),
+            )
+        }
+        Icon(
+            imageVector = Icons.Outlined.AutoAwesome,
+            contentDescription = null,
+            tint = onMascot.copy(alpha = 0.9f),
+            modifier = Modifier.align(Alignment.TopEnd).padding(5.dp).size(11.dp),
+        )
     }
 }
 

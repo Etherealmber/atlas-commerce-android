@@ -191,7 +191,7 @@ fun ProfileScreen(
                     ) {
                         AtlasAvatar(
                             avatarUrl = user.avatarUrl,
-                            label = user.displayName,
+                            label = user.username,
                             size = 64.dp,
                             serverBaseUrl = serverSelection?.baseUrl,
                             onClick = {
@@ -229,7 +229,7 @@ fun ProfileScreen(
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = user.displayName,
+                            text = "Mon compte",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -238,8 +238,6 @@ fun ProfileScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Spacer(Modifier.height(4.dp))
-                        AtlasChip(text = Roles.label(user.role), tone = AtlasTone.INFO)
                     }
                     IconButton(
                         onClick = {

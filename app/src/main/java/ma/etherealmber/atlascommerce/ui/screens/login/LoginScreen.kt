@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -25,6 +27,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -45,6 +49,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -127,11 +134,7 @@ fun LoginScreen(
             }
             Spacer(Modifier.height(if (compact) 4.dp else 10.dp))
             AtlasEntrance(delayMillis = 40) {
-                Text(
-                    text = AppDetails.TAGLINE,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                LoginWelcomeBanner(compact = compact)
             }
             Spacer(Modifier.height(verticalGap))
             AtlasServerChip(host = host, onClick = onChangeServer)
@@ -254,6 +257,59 @@ fun LoginScreen(
                 TextButton(onClick = onCheckUpdates) { Text("Mises à jour") }
             }
             Spacer(Modifier.height(if (compact) 4.dp else 18.dp))
+        }
+    }
+}
+
+@Composable
+private fun LoginWelcomeBanner(compact: Boolean) {
+    val palette = Atlas.palette
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(if (compact) 76.dp else 96.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Brush.linearGradient(listOf(palette.heroStart, palette.heroEnd))),
+    ) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .offset(x = 18.dp, y = (-20).dp)
+                .size(if (compact) 94.dp else 124.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = (-36).dp, y = 22.dp)
+                .size(if (compact) 54.dp else 72.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.34f)),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-30).dp, y = 20.dp)
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.78f)),
+        )
+        Column(
+            modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = "Content de vous revoir",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+            )
+            Text(
+                text = "Connectez-vous à votre espace sécurisé.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.82f),
+            )
         }
     }
 }
