@@ -2,14 +2,9 @@ name: Android CI
 
 on:
   push:
-    branches: ['main']
+    # Build only for deliberate version-tag releases; PRs still receive full CI.
+    # Merging a PR to main no longer starts another Android build automatically.
     tags: ['v*']
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/workflows/issue-bot.yml'
-      - '.github/workflows/bug-hunter.yml'
   pull_request:
     branches: ['main']
     paths-ignore:

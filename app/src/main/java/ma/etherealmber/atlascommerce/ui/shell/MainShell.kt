@@ -376,7 +376,9 @@ private fun AtlasFloatingBottomBar(
     val centerIndex = centerTab?.let(tabs::indexOf) ?: -1
     val leftTabs = if (centerIndex >= 0) tabs.take(centerIndex) else tabs
     val rightTabs = if (centerIndex >= 0) tabs.drop(centerIndex + 1) else emptyList()
-    val barColor = MaterialTheme.colorScheme.surfaceContainerLow
+    // Keep the floating dock visually light while letting the page surface show through.
+    // Text and icons remain fully opaque for contrast in both themes.
+    val barColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.82f)
 
     Box(
         modifier = Modifier
