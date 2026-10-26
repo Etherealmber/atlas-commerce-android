@@ -133,7 +133,7 @@ fun DeveloperDiagnosticsScreen(
                     when {
                         !CrashReportConsent.isConfigured(context) -> "Non configurés"
                         CrashReportConsent.isEnabled(context) -> "Activés avec consentement"
-                        else -> "Désactivés — le diagnostic local reste disponible",
+                        else -> "Désactivés — le diagnostic local reste disponible"
                     },
                 )
                 Spacer(Modifier.height(6.dp))
