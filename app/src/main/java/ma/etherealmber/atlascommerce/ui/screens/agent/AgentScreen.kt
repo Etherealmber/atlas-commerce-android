@@ -35,7 +35,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,6 +53,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.HourglassBottom
@@ -68,6 +74,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -90,6 +97,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdown
+import ma.etherealmber.atlascommerce.ui.components.AtlasMark
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
@@ -138,32 +146,49 @@ fun AgentScreen(
 
     val quotaLocked = state.policy?.isExhausted == true
     val conversationListState = rememberLazyListState()
-
-    // The screen stays composed behind other tabs. Reopening it must therefore
-    // explicitly restore the conversation tail, not rely on first composition.
-    LaunchedEffect(isActive, state.activeThreadId, state.messages.size, state.loadingThread) {
-        if (!isActive || state.loadingThread) return@LaunchedEffect
-        val itemCount = androidx.compose.runtime.snapshotFlow {
-            conversationListState.layoutInfo.totalItemsCount
-        }.first { it > 0 }
-        withFrameNanos { }
-        val lastIndex = itemCount - 1
-        conversationListState.scrollToItem(lastIndex)
-        withFrameNanos { }
-        val layout = conversationListState.layoutInfo
-        val lastItem = layout.visibleItemsInfo.firstOrNull { it.index == lastIndex }
-        val viewportSize = (layout.viewportEndOffset - layout.viewportStartOffset).coerceAtLeast(1)
-        val finalItemOverflow = ((lastItem?.size ?: 0) - viewportSize).coerceAtLeast(0)
-        conversationListState.animateScrollToItem(lastIndex, scrollOffset = finalItemOverflow)
-    }
-    LaunchedEffect(state.streamingReply.length) {
-        if (state.streamingReply.isBlank()) return@LaunchedEffect
-        withFrameNanos { }
-        val layout = conversationListState.layoutInfo
-        val lastVisibleIndex = layout.visibleItemsInfo.lastOrNull()?.index ?: -1
-        if (layout.totalItemsCount > 0 && lastVisibleIndex >= layout.totalItemsCount - 2) {
-            conversationListState.scrollToItem(layout.totalItemsCount - 1)
+    var userScrolledUp by remember(state.activeThreadId) { mutableStateOf(false) }
+    val conversationScrollConnection = remember(conversationListState) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y != 0f) {
+                    userScrolledUp = true
+                }
+                return Offset.Zero
+            }
         }
+    }
+
+    // Once the user manually reaches the tail again, resume following new tokens.
+    LaunchedEffect(conversationListState, state.activeThreadId) {
+        snapshotFlow {
+            !conversationListState.isScrollInProgress && !conversationListState.canScrollForward
+        }.collect { atEnd ->
+            if (atEnd) userScrolledUp = false
+        }
+    }
+    // The screen remains composed behind other tabs. Reopening or loading a thread
+    // lands directly on its latest turn, not through intermediate/random messages.
+    LaunchedEffect(isActive, state.activeThreadId, state.loadingThread) {
+        if (!isActive || state.loadingThread) return@LaunchedEffect
+        userScrolledUp = false
+        if (state.messages.isEmpty()) {
+            conversationListState.scrollToItem(0)
+        } else {
+            conversationListState.scrollToConversationEnd()
+        }
+    }
+    // New user turns always become visible. A completed assistant turn only
+    // follows automatically if the user hasn't deliberately scrolled upward.
+    LaunchedEffect(isActive, state.messages.size, state.sending) {
+        if (!isActive || state.loadingThread || state.messages.isEmpty()) return@LaunchedEffect
+        if (state.messages.lastOrNull()?.fromUser == true) userScrolledUp = false
+        if (!userScrolledUp) conversationListState.scrollToConversationEnd()
+    }
+    // Keep the latest streamed text visible unless the user chooses to inspect
+    // earlier messages; then pause auto-follow until they return to the bottom.
+    LaunchedEffect(isActive, state.streamingReply.length) {
+        if (!isActive || state.streamingReply.isBlank() || userScrolledUp) return@LaunchedEffect
+        conversationListState.scrollToConversationEnd()
     }
 
     if (showHistoryDialog) {
@@ -262,7 +287,8 @@ fun AgentScreen(
                 state = conversationListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .weight(1f)
+                    .nestedScroll(conversationScrollConnection),
                 contentPadding = PaddingValues(
                     start = density.screenPadding,
                     end = density.screenPadding,
@@ -369,7 +395,19 @@ fun AgentScreen(
                                 )
                             }
 
-                            if (state.messages.isEmpty() && !quotaLocked) {
+                            if (state.loadingThread) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Text("Chargement de la discussion…", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+
+                            if (state.messages.isEmpty() && !state.loadingThread && !quotaLocked) {
                                 Spacer(Modifier.height(8.dp))
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     QuickPrompts.forEach { prompt ->
@@ -384,7 +422,7 @@ fun AgentScreen(
                     }
                 }
 
-                if (state.messages.isEmpty() && state.nextActions.isNotEmpty() && !quotaLocked) {
+                if (state.messages.isEmpty() && !state.loadingThread && state.nextActions.isNotEmpty() && !quotaLocked) {
                     item(key = "agent_suggestions_hdr") {
                         AtlasSectionHeader(title = "Actions suggérées par l'IA")
                     }
@@ -440,35 +478,20 @@ fun AgentScreen(
                                     onToast("Réponse copiée.")
                                 },
                                 onApprove = {},
+                                isStreaming = state.sending,
                             )
                         }
                     }
                 }
 
-                if (state.sending) {
+                if (state.sending && state.streamingReply.isBlank()) {
                     item(key = "agent_typing") {
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            AtlasTypingDots()
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = when {
-                                    state.streamingReply.isNotBlank() -> "Atlas Agent rédige sa réponse…"
-                                    state.attachments.isNotEmpty() -> "Atlas Agent extrait les documents et analyse…"
-                                    else -> "Atlas Agent vérifie vos données en direct…"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth(0.42f).padding(start = 4.dp),
-                            color = MaterialTheme.colorScheme.primary,
+                        AgentTypingIndicator(
+                            label = if (state.attachments.isNotEmpty()) {
+                                "Analyse des pièces jointes…"
+                            } else {
+                                "Atlas Agent réfléchit…"
+                            },
                         )
                     }
                 }
@@ -525,7 +548,7 @@ fun AgentScreen(
                                             onClick = { viewModel.removeAttachment(index) },
                                             label = { Text(attachment.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                             leadingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Retirer ${attachment.name}", modifier = Modifier.size(16.dp)) },
-                                            enabled = !state.sending,
+                                            enabled = !state.sending && !state.loadingThread,
                                         )
                                     }
                                 }
@@ -533,7 +556,7 @@ fun AgentScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 IconButton(
                                     onClick = { attachmentPicker.launch(arrayOf("image/*", "application/pdf", "text/plain", "text/csv", "text/markdown", "application/json")) },
-                                    enabled = !state.sending && !quotaLocked && (state.attachments.sumOf { it.imageDataUrls.size } < 4 || state.attachments.sumOf { it.documentDataUrls.size } < 2),
+                                    enabled = !state.sending && !state.loadingThread && !quotaLocked && (state.attachments.sumOf { it.imageDataUrls.size } < 4 || state.attachments.sumOf { it.documentDataUrls.size } < 2),
                                 ) {
                                     Icon(Icons.Outlined.AttachFile, contentDescription = "Joindre un fichier ou une image", tint = MaterialTheme.colorScheme.primary)
                                 }
@@ -543,7 +566,7 @@ fun AgentScreen(
                                     label = if (quotaLocked) "Quota IA atteint — réinitialisation automatique…" else "Message à Atlas Agent",
                                     placeholder = "Écrivez votre question…",
                                     imeAction = ImeAction.Send,
-                                    enabled = !state.sending && !quotaLocked,
+                                    enabled = !state.sending && !state.loadingThread && !quotaLocked,
                                     onDone = { viewModel.sendPrompt() },
                                     singleLine = false,
                                     modifier = Modifier.weight(1f).heightIn(min = 58.dp, max = if (compactComposer) 92.dp else 132.dp),
@@ -551,7 +574,7 @@ fun AgentScreen(
                                 Spacer(Modifier.width(6.dp))
                                 IconButton(
                                     onClick = { viewModel.sendPrompt() },
-                                    enabled = (state.input.isNotBlank() || state.attachments.isNotEmpty()) && !state.sending && !quotaLocked,
+                                    enabled = (state.input.isNotBlank() || state.attachments.isNotEmpty()) && !state.sending && !state.loadingThread && !quotaLocked,
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Outlined.Send,
@@ -902,113 +925,231 @@ private fun ChatBubbleRow(
     approvingId: String?,
     onCopy: () -> Unit,
     onApprove: (String) -> Unit,
+    isStreaming: Boolean = false,
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (message.fromUser) Alignment.End else Alignment.Start,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(if (message.fromUser) 0.85f else 0.98f)
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    if (message.fromUser) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerHigh
-                    },
-                )
-                .animateContentSize()
-                .padding(14.dp),
-        ) {
-            Column {
-                if (message.fromUser) {
-                    Text(
-                        text = message.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                    if (message.attachmentNames.isNotEmpty()) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "📎 ${message.attachmentNames.joinToString()}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
-                        )
-                    }
-                } else {
-                    AtlasMarkdown(
-                        markdown = message.text,
-                        textColor = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
+    val isUser = message.fromUser
+    val userGreen = Atlas.palette.positiveSoft
+    val userInk = Atlas.palette.positive
 
-                if (message.tools.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        message.tools.take(3).forEach { tool ->
-                            AtlasChip(
-                                text = tool.name,
-                                tone = if (tool.ok) AtlasTone.INFO else AtlasTone.WARNING,
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+    ) {
+        if (!isUser) {
+            AgentAvatar(isUser = false)
+            Spacer(Modifier.width(8.dp))
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
+        ) {
+            Text(
+                text = if (isUser) "Vous" else "Atlas Agent",
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isUser) userInk else MaterialTheme.colorScheme.primary,
+            )
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(if (isUser) 0.88f else 1f)
+                    .animateContentSize(),
+                shape = RoundedCornerShape(
+                    topStart = 16.dp,
+                    topEnd = 16.dp,
+                    bottomEnd = if (isUser) 5.dp else 16.dp,
+                    bottomStart = if (isUser) 16.dp else 5.dp,
+                ),
+                color = if (isUser) userGreen else MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    if (isUser) {
+                        Text(
+                            text = message.text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = userInk,
+                        )
+                        if (message.attachmentNames.isNotEmpty()) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "📎 ${message.attachmentNames.joinToString()}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = userInk,
                             )
                         }
+                    } else {
+                        AtlasMarkdown(
+                            markdown = message.text,
+                            textColor = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
-                }
 
-                message.proposals.forEach { prop ->
-                    val pid = prop.proposalId.orEmpty()
-                    if (pid.isNotBlank()) {
-                        val approved = pid in message.approvedIds
+                    if (message.tools.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
-                        AtlasCard(padding = 10.dp) {
-                            Text(
-                                text = prop.title ?: "Action proposée",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            if (!prop.summary.isNullOrBlank()) {
-                                Text(
-                                    text = prop.summary,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            message.tools.take(3).forEach { tool ->
+                                AtlasChip(
+                                    text = tool.name,
+                                    tone = if (tool.ok) AtlasTone.INFO else AtlasTone.WARNING,
                                 )
                             }
-                            Spacer(Modifier.height(6.dp))
-                            if (approved) {
-                                AtlasChip(
-                                    text = "Approuvée",
-                                    tone = AtlasTone.POSITIVE,
-                                    icon = Icons.Outlined.CheckCircle,
+                        }
+                    }
+
+                    message.proposals.forEach { proposal ->
+                        val proposalId = proposal.proposalId.orEmpty()
+                        if (proposalId.isNotBlank()) {
+                            val approved = proposalId in message.approvedIds
+                            Spacer(Modifier.height(8.dp))
+                            AtlasCard(padding = 10.dp) {
+                                Text(
+                                    text = proposal.title ?: "Action proposée",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
                                 )
-                            } else {
-                                TextButton(
-                                    onClick = { onApprove(pid) },
-                                    enabled = approvingId == null,
-                                ) {
-                                    Text("Approuver et exécuter")
+                                if (!proposal.summary.isNullOrBlank()) {
+                                    Text(
+                                        text = proposal.summary,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                if (approved) {
+                                    AtlasChip(
+                                        text = "Approuvée",
+                                        tone = AtlasTone.POSITIVE,
+                                        icon = Icons.Outlined.CheckCircle,
+                                    )
+                                } else {
+                                    TextButton(
+                                        onClick = { onApprove(proposalId) },
+                                        enabled = approvingId == null,
+                                    ) {
+                                        Text("Approuver et exécuter")
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                if (!message.fromUser) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        TextButton(onClick = onCopy) {
-                            Icon(
-                                imageVector = Icons.Outlined.ContentCopy,
-                                contentDescription = "Copier la réponse",
-                                modifier = Modifier.size(14.dp),
+                    if (isStreaming) {
+                        Row(
+                            modifier = Modifier.padding(top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AtlasTypingDots()
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "Réponse en cours…",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            Spacer(Modifier.width(4.dp))
-                            Text("Copier", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+
+                    if (!isUser) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(onClick = onCopy) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ContentCopy,
+                                    contentDescription = "Copier la réponse",
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text("Copier", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
                 }
             }
         }
+        if (isUser) {
+            Spacer(Modifier.width(8.dp))
+            AgentAvatar(isUser = true)
+        }
     }
+}
+
+@Composable
+private fun AgentAvatar(isUser: Boolean) {
+    Surface(
+        modifier = Modifier.size(32.dp),
+        shape = CircleShape,
+        color = if (isUser) Atlas.palette.positiveSoft else MaterialTheme.colorScheme.primaryContainer,
+        contentColor = if (isUser) Atlas.palette.positive else MaterialTheme.colorScheme.onPrimaryContainer,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            if (isUser) {
+                Icon(
+                    imageVector = Icons.Outlined.Person,
+                    contentDescription = "Message de l'utilisateur",
+                    modifier = Modifier.size(19.dp),
+                )
+            } else {
+                AtlasMark(size = 19.dp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentTypingIndicator(label: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+    ) {
+        AgentAvatar(isUser = false)
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = "Atlas Agent",
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AtlasTypingDots()
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth(0.34f)
+                    .padding(start = 4.dp, top = 5.dp),
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+private suspend fun LazyListState.scrollToConversationEnd() {
+    snapshotFlow { layoutInfo.totalItemsCount }.first { it > 0 }
+    withFrameNanos { }
+    val lastIndex = layoutInfo.totalItemsCount - 1
+    if (lastIndex < 0) return
+    scrollToItem(lastIndex)
+    withFrameNanos { }
+    val finalIndex = (layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+    val lastItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == finalIndex }
+    val viewportSize = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).coerceAtLeast(1)
+    val overflow = ((lastItem?.size ?: 0) - viewportSize).coerceAtLeast(0)
+    scrollToItem(finalIndex, scrollOffset = overflow)
 }

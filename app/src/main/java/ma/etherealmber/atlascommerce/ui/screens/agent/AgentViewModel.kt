@@ -15,7 +15,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
@@ -28,6 +30,7 @@ import ma.etherealmber.atlascommerce.data.model.AssistToolTraceDto
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import java.text.Normalizer
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 @HiltViewModel
@@ -75,6 +78,8 @@ class AgentViewModel @Inject constructor(
     val state: StateFlow<UiState> = _state.asStateFlow()
     private var pendingSensitivePrompt: String? = null
     private var pendingSensitiveAttachments: List<AgentAttachment> = emptyList()
+    @Volatile private var activeSendRequestId: String? = null
+    @Volatile private var activeThreadLoadId: String? = null
 
     private val _notices = MutableSharedFlow<String>(
         extraBufferCapacity = 4,
@@ -88,6 +93,8 @@ class AgentViewModel @Inject constructor(
                 .map { st -> (st as? SessionState.Active)?.user?.scopeIdentity }
                 .distinctUntilChanged()
                 .collect { identity ->
+                    activeSendRequestId = null
+                    activeThreadLoadId = null
                     _state.value = UiState(activeThreadId = newWebCompatibleThreadId())
                     if (identity != null) {
                         refreshContext(loadLatestRemoteThread = true)
@@ -98,6 +105,8 @@ class AgentViewModel @Inject constructor(
 
     /** Starts a fresh conversation using the exact web `t-<base36>` thread ID format. */
     fun startNewConversation() {
+        activeSendRequestId = null
+        activeThreadLoadId = null
         val freshId = newWebCompatibleThreadId()
         pendingSensitivePrompt = null
         pendingSensitiveAttachments = emptyList()
@@ -111,6 +120,7 @@ class AgentViewModel @Inject constructor(
                 sensitiveConfirmation = false,
                 error = null,
                 sending = false,
+                loadingThread = false,
             )
         }
     }
@@ -131,42 +141,59 @@ class AgentViewModel @Inject constructor(
         if (summary.id.isBlank()) return
         pendingSensitivePrompt = null
         pendingSensitiveAttachments = emptyList()
+        activeSendRequestId = null
+        val loadId = UUID.randomUUID().toString()
+        activeThreadLoadId = loadId
+        _state.update {
+            it.copy(
+                activeThreadId = summary.id,
+                activeThreadTitle = summary.title,
+                messages = emptyList(),
+                loadingThread = true,
+                sending = false,
+                attachments = emptyList(),
+                streamingReply = "",
+                sensitiveConfirmation = false,
+                error = null,
+            )
+        }
         viewModelScope.launch {
-            _state.update {
-                it.copy(
-                    activeThreadId = summary.id,
-                    activeThreadTitle = summary.title,
-                    loadingThread = true,
-                    attachments = emptyList(),
-                    streamingReply = "",
-                    sensitiveConfirmation = false,
-                    error = null,
+            val detail = try {
+                commerceRepository.getAgentThread(summary.id)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                AtlasLogBuffer.log(
+                    "AGENT",
+                    "Thread load failed: ${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(180)}",
+                    "ERROR",
                 )
+                ApiResult.Failure("THREAD_LOAD_FAILED", "Impossible de charger cette discussion. Vérifiez la connexion puis réessayez.")
             }
-            when (val detail = commerceRepository.getAgentThread(summary.id)) {
+            if (activeThreadLoadId != loadId || _state.value.activeThreadId != summary.id) return@launch
+            when (detail) {
                 is ApiResult.Failure -> {
-                    _state.update {
-                        it.copy(
-                            loadingThread = false,
-                            error = detail.message,
-                        )
+                    _state.update { current ->
+                        if (activeThreadLoadId != loadId || current.activeThreadId != summary.id) current
+                        else current.copy(loadingThread = false, error = detail.message)
                     }
                 }
 
                 is ApiResult.Success -> {
                     val mapped = detail.data.messages
                         .filter { it.text.isNotBlank() && (it.role == "user" || it.role == "assistant") }
-                        .map { m ->
+                        .map { message ->
                             ChatMessage(
-                                fromUser = m.role == "user",
-                                text = m.text,
-                                ms = m.ms,
+                                fromUser = message.role == "user",
+                                text = message.text,
+                                ms = message.ms,
                             )
                         }
-                    _state.update {
-                        it.copy(
+                    _state.update { current ->
+                        if (activeThreadLoadId != loadId || current.activeThreadId != summary.id) current
+                        else current.copy(
                             loadingThread = false,
-                            activeThreadTitle = detail.data.title?.takeIf { t -> t.isNotBlank() } ?: summary.title,
+                            activeThreadTitle = detail.data.title?.takeIf { it.isNotBlank() } ?: summary.title,
                             messages = mapped,
                         )
                     }
@@ -177,18 +204,27 @@ class AgentViewModel @Inject constructor(
 
     fun deleteThread(threadId: String) {
         if (threadId.isBlank()) return
-        viewModelScope.launch {
-            commerceRepository.deleteAgentThread(threadId)
-            val remaining = _state.value.threads.filterNot { it.id == threadId }
-            val deletingActive = _state.value.activeThreadId == threadId
-            _state.update {
-                it.copy(
-                    threads = remaining,
-                    activeThreadId = if (deletingActive) newWebCompatibleThreadId() else it.activeThreadId,
-                    activeThreadTitle = if (deletingActive) "" else it.activeThreadTitle,
-                    messages = if (deletingActive) emptyList() else it.messages,
+        val deletingActive = _state.value.activeThreadId == threadId
+        val replacementThreadId = if (deletingActive) newWebCompatibleThreadId() else null
+        if (deletingActive) {
+            activeSendRequestId = null
+            activeThreadLoadId = null
+            _state.update { current ->
+                if (current.activeThreadId != threadId) current
+                else current.copy(
+                    activeThreadId = replacementThreadId.orEmpty(),
+                    activeThreadTitle = "",
+                    messages = emptyList(),
+                    sending = false,
+                    loadingThread = false,
+                    streamingReply = "",
+                    error = null,
                 )
             }
+        }
+        viewModelScope.launch {
+            commerceRepository.deleteAgentThread(threadId)
+            _state.update { current -> current.copy(threads = current.threads.filterNot { it.id == threadId }) }
             _notices.tryEmit("Discussion supprimée.")
         }
     }
@@ -272,7 +308,7 @@ class AgentViewModel @Inject constructor(
         val typed = prompt.trim()
         val clean = typed.ifBlank { if (attachments.isNotEmpty()) "Lis les fichiers joints et résume les informations importantes." else "" }
         val snapshot = _state.value
-        if (clean.isBlank() || snapshot.sending) return
+        if (clean.isBlank() || snapshot.sending || snapshot.loadingThread) return
         if (!sensitiveConfirmed && (requiresSensitiveConfirmation(clean) || attachments.isNotEmpty())) {
             pendingSensitivePrompt = clean
             pendingSensitiveAttachments = attachments
@@ -301,6 +337,8 @@ class AgentViewModel @Inject constructor(
         }
 
         val activeId = snapshot.activeThreadId
+        val requestId = UUID.randomUUID().toString()
+        activeSendRequestId = requestId
         val resolvedTitle = snapshot.activeThreadTitle.ifBlank { clean.take(48) }
         val userBubble = ChatMessage(
             fromUser = true,
@@ -308,6 +346,8 @@ class AgentViewModel @Inject constructor(
             attachmentNames = attachments.map { it.name },
         )
 
+        AtlasLogBuffer.log("AGENT", "Chat request started")
+        val firstTokenLogged = AtomicBoolean(false)
         _state.update {
             it.copy(
                 input = if (typed == it.input) "" else it.input,
@@ -321,71 +361,99 @@ class AgentViewModel @Inject constructor(
 
         viewModelScope.launch {
             val startedMs = System.currentTimeMillis()
-            val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return@launch
+            val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+            if (activeUser == null) {
+                finishSendWithError(requestId, activeId, "Votre session a expiré. Reconnectez-vous puis réessayez.")
+                return@launch
+            }
             val requestScope = activeUser.scopeIdentity
-            val result = commerceRepository.assistChatStream(
-                message = clean,
-                role = activeUser.role,
-                username = activeUser.username,
-                threadId = activeId,
-                images = attachments.flatMap { it.imageDataUrls }.take(4),
-                documents = attachments.flatMap { it.documentDataUrls }.take(2),
-                onToken = { delta ->
-                    _state.update { current ->
-                        if (current.sending && current.activeThreadId == activeId) current.copy(streamingReply = current.streamingReply + delta) else current
-                    }
-                },
-            )
+            val result = try {
+                commerceRepository.assistChatStream(
+                    message = clean,
+                    role = activeUser.role,
+                    username = activeUser.username,
+                    threadId = activeId,
+                    images = attachments.flatMap { it.imageDataUrls }.take(4),
+                    documents = attachments.flatMap { it.documentDataUrls }.take(2),
+                    onToken = { delta ->
+                        if (firstTokenLogged.compareAndSet(false, true)) {
+                            AtlasLogBuffer.log("AGENT", "First response token received")
+                        }
+                        _state.update { current ->
+                            if (activeSendRequestId == requestId && current.sending && current.activeThreadId == activeId) {
+                                current.copy(streamingReply = current.streamingReply + delta)
+                            } else current
+                        }
+                    },
+                )
+            } catch (cancelled: CancellationException) {
+                finishSendWithError(requestId, activeId, "Réponse interrompue. Vous pouvez réessayer.")
+                throw cancelled
+            } catch (error: Exception) {
+                AtlasLogBuffer.log(
+                    "AGENT",
+                    "Chat request failed: ${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(180)}",
+                    "ERROR",
+                )
+                finishSendWithError(requestId, activeId, "Atlas Agent n'a pas pu terminer la réponse. Vérifiez la connexion puis réessayez.")
+                return@launch
+            }
+
             val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
-            if (requestScope != currentScope) return@launch
-            when (val res = result) {
+            if (requestScope != currentScope) {
+                finishSendWithError(requestId, activeId, "La session a changé pendant la réponse. Réessayez.")
+                return@launch
+            }
+            if (!isCurrentSend(requestId, activeId)) {
+                AtlasLogBuffer.log("AGENT", "Discarded response for an inactive conversation")
+                return@launch
+            }
+            when (result) {
                 is ApiResult.Failure -> {
-                    // Refresh quota right away in case server returned 429 / quota reached
+                    AtlasLogBuffer.log("AGENT", "Chat request failed: ${result.code}", "ERROR")
+                    // Refresh quota right away in case server returned 429 / quota reached.
                     val refreshedPolicy = (commerceRepository.agentPolicy() as? ApiResult.Success)?.data
-                    _state.update {
-                        it.copy(
-                            sending = false,
-                            streamingReply = "",
-                            policy = refreshedPolicy ?: it.policy,
-                            error = res.message,
-                        )
-                    }
+                    finishSendWithError(requestId, activeId, result.message, refreshedPolicy)
                 }
 
                 is ApiResult.Success -> {
                     val elapsedMs = (System.currentTimeMillis() - startedMs).coerceAtLeast(1L)
-                    val replyText = res.data.reply.ifBlank { "Analyse terminée." }
+                    AtlasLogBuffer.log("AGENT", "Chat response completed in ${elapsedMs}ms")
+                    val replyText = result.data.reply.ifBlank { "Analyse terminée." }
                     val replyBubble = ChatMessage(
                         fromUser = false,
                         text = replyText,
                         ms = elapsedMs,
-                        tools = res.data.toolTrace,
-                        proposals = res.data.proposals,
+                        tools = result.data.toolTrace,
+                        proposals = result.data.proposals,
                     )
+                    if (!isCurrentSend(requestId, activeId)) return@launch
                     val allMessages = _state.value.messages + replyBubble
                     val summaryEntry = AgentThreadSummaryDto(
                         id = activeId,
                         title = resolvedTitle,
                         messageCount = allMessages.size,
                     )
-                    _state.update { cur ->
-                        cur.copy(
+                    activeSendRequestId = null
+                    _state.update { current ->
+                        if (current.activeThreadId != activeId) current
+                        else current.copy(
                             sending = false,
                             streamingReply = "",
                             attachments = emptyList(),
                             messages = allMessages,
-                            threads = listOf(summaryEntry) + cur.threads.filterNot { it.id == activeId },
+                            threads = listOf(summaryEntry) + current.threads.filterNot { it.id == activeId },
                         )
                     }
 
-                    // Persist exact web-compatible R2 thread (`t-...`) with clean user/assistant turns
-                    val r2Messages = allMessages.map { m ->
+                    // Persist only the response for the conversation that still owns this request.
+                    val r2Messages = allMessages.map { message ->
                         AgentThreadMessageDto(
-                            role = if (m.fromUser) "user" else "assistant",
-                            text = if (m.fromUser && m.attachmentNames.isNotEmpty()) {
-                                "${m.text}\n\n📎 ${m.attachmentNames.joinToString()}"
-                            } else m.text,
-                            ms = m.ms,
+                            role = if (message.fromUser) "user" else "assistant",
+                            text = if (message.fromUser && message.attachmentNames.isNotEmpty()) {
+                                "${message.text}\n\n📎 ${message.attachmentNames.joinToString()}"
+                            } else message.text,
+                            ms = message.ms,
                         )
                     }
                     runCatching {
@@ -396,13 +464,35 @@ class AgentViewModel @Inject constructor(
                         )
                     }
 
-                    // Immediately refresh live token quota counter
+                    // Immediately refresh live token quota counter.
                     val updatedPolicy = (commerceRepository.agentPolicy() as? ApiResult.Success)?.data
-                    if (updatedPolicy != null) {
+                    if (updatedPolicy != null && requestScope == (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity) {
                         _state.update { it.copy(policy = updatedPolicy) }
                     }
                 }
             }
+        }
+    }
+
+    private fun isCurrentSend(requestId: String, threadId: String): Boolean =
+        activeSendRequestId == requestId && _state.value.activeThreadId == threadId
+
+    private fun finishSendWithError(
+        requestId: String,
+        threadId: String,
+        message: String,
+        updatedPolicy: AgentPolicyDto? = null,
+    ) {
+        if (!isCurrentSend(requestId, threadId)) return
+        activeSendRequestId = null
+        _state.update { current ->
+            if (current.activeThreadId != threadId) current
+            else current.copy(
+                sending = false,
+                streamingReply = "",
+                policy = updatedPolicy ?: current.policy,
+                error = message,
+            )
         }
     }
 
