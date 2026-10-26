@@ -18,12 +18,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.Roles
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintWriter
@@ -41,26 +35,36 @@ import java.util.TimeZone
  * before retaining any line in memory or writing crash breadcrumbs.
  */
 object AtlasLogBuffer {
-    private const val MAX_ENTRIES = 240
+    private const val MAX_ENTRIES = 600
     private const val CRASH_FILE_NAME = "last_crash.txt"
     private val entries = ArrayDeque<String>(MAX_ENTRIES)
 
     private val bearerRegex = Regex("(?i)(Bearer\\s+)[A-Za-z0-9._~+/=-]+")
-    private val secretParamRegex = Regex("(?i)((?:token|otp|sig|password|secret|key|authorization)\\s*[=:]\\s*)[^\\s&\",}]+")
+    private val secretParamRegex = Regex(
+        "(?i)((?:access[_-]?token|refresh[_-]?token|token|otp|sig(?:nature)?|password|passphrase|secret|api[_-]?key|authorization|cookie|set-cookie|(?<![A-Za-z0-9_])rt(?![A-Za-z0-9_])|ticket|hmac|challenge)\\s*[=:]\\s*)[^\\s&\\\",}]+",
+    )
+    private val jwtRegex = Regex("(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}")
+    private val githubTokenRegex = Regex("\\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\\b")
     private val emailRegex = Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
+    private val lowSignalPlatformNoise = listOf(
+        Regex("EGL_BAD_MATCH", RegexOption.IGNORE_CASE),
+        Regex("Unable to match the desired swap behavior", RegexOption.IGNORE_CASE),
+        Regex("queryAndSetGLESMaxVersion", RegexOption.IGNORE_CASE),
+        Regex("avc: denied.*fastpipe", RegexOption.IGNORE_CASE),
+    )
 
     fun sanitize(raw: String): String =
         raw.replace(bearerRegex, "$1[REDACTED]")
             .replace(secretParamRegex, "$1[REDACTED]")
+            .replace(jwtRegex, "[REDACTED_JWT]")
+            .replace(githubTokenRegex, "[REDACTED_GITHUB_TOKEN]")
             .replace(emailRegex, "[REDACTED_EMAIL]")
 
     fun log(tag: String, message: String, level: String = "INFO") {
         val stamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
         val line = "$stamp [$level/$tag] ${sanitize(message.trim())}"
         synchronized(entries) {
-            if (entries.size >= MAX_ENTRIES) {
-                entries.removeFirst()
-            }
+            if (entries.size >= MAX_ENTRIES) entries.removeFirst()
             entries.addLast(line)
         }
     }
@@ -80,7 +84,7 @@ object AtlasLogBuffer {
                 }.format(Date())
                 val text = buildString {
                     appendLine("[$stamp] Uncaught exception on thread '${thread.name}':")
-                    append(sanitize(sw.toString()).take(6_000))
+                    append(sanitize(sw.toString()).take(8_000))
                 }
                 crashFile.writeText(text, Charsets.UTF_8)
             }
@@ -88,45 +92,53 @@ object AtlasLogBuffer {
         }
     }
 
-    fun captureDiagnosticLogs(context: Context, maxChars: Int = 9_000): String {
-        val sections = StringBuilder()
+    suspend fun captureDiagnosticLogsAsync(context: Context, maxChars: Int = 16_000): String =
+        withContext(Dispatchers.IO) { captureDiagnosticLogs(context, maxChars) }
 
-        // 1. Previous uncaught crash trace if present
+    fun captureDiagnosticLogs(context: Context, maxChars: Int = 16_000): String {
         val crashFile = File(File(context.cacheDir, "diagnostics"), CRASH_FILE_NAME)
-        if (crashFile.isFile) {
-            val crashText = runCatching { crashFile.readText(Charsets.UTF_8).trim() }.getOrDefault("")
-            if (crashText.isNotEmpty()) {
-                sections.appendLine("=== LAST CRASH TRACE ===")
-                sections.appendLine(sanitize(crashText).take(2_800))
-                sections.appendLine()
-            }
-        }
+        val crashText = if (crashFile.isFile) {
+            runCatching { crashFile.readText(Charsets.UTF_8).trim() }.getOrDefault("")
+        } else ""
+        val crashSection = crashText.takeIf(String::isNotEmpty)?.let {
+            "=== LAST CRASH TRACE ===\n${sanitize(it).takeLast(4_000)}\n\n"
+        }.orEmpty()
 
-        // 2. Structured in-app breadcrumbs & HTTP telemetry
         val ring = recentEntries()
-        if (ring.isNotEmpty()) {
-            sections.appendLine("=== IN-APP BREADCRUMBS (${ring.size}) ===")
-            ring.takeLast(90).forEach { sections.appendLine(it) }
-            sections.appendLine()
-        }
+        val ringHeader = "=== APP EVENTS / NETWORK / AUTH (${ring.size}) ===\n"
+        val ringBody = ring.takeLast(260).joinToString("\n") { sanitize(it) }
+        // Keep structured events ahead of verbose logcat so passkey stages and HTTP status
+        // details survive the final size limit even on very chatty devices.
+        val ringSection = if (ring.isEmpty()) "" else ringHeader + ringBody.takeLast(8_500) + "\n\n"
+        val essentials = crashSection + ringSection
 
-        // 3. Own-PID Android kernel logcat (requires ZERO extra permissions on Android)
-        val pidLogs = runCatching {
-            val pid = Process.myPid().toString()
-            val proc = ProcessBuilder("logcat", "-d", "-v", "time", "-t", "90", "--pid=$pid")
+        // Android does not grant apps access to other processes' logcat without privileged
+        // permissions. Capture our process only; structured app events above carry auth details.
+        val pid = Process.myPid()
+        val pidLogResult = runCatching {
+            val proc = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "500", "--pid=$pid")
                 .redirectErrorStream(true)
                 .start()
             val out = proc.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
             proc.waitFor()
-            sanitize(out.trim())
-        }.getOrDefault("")
-
-        if (pidLogs.isNotEmpty()) {
-            sections.appendLine("=== ANDROID LOGCAT (PID ${Process.myPid()}) ===")
-            pidLogs.lineSequence().toList().takeLast(80).forEach { sections.appendLine(it) }
+            out
+        }.fold(
+            onSuccess = { it },
+            onFailure = { "Logcat capture unavailable (${it.javaClass.simpleName}: ${sanitize(it.message.orEmpty()).take(160)})" },
+        )
+        val logLines = pidLogResult.lineSequence().filter(String::isNotBlank).toList()
+        val (noiseLines, usefulLines) = logLines.partition { line ->
+            lowSignalPlatformNoise.any { it.containsMatchIn(line) }
         }
+        val noiseSection = if (noiseLines.isEmpty()) "" else
+            "\n=== PLATFORM NOISE ===\n${noiseLines.size} avertissements graphiques/fastpipe à faible signal omis; ils ne sont pas des erreurs passkey.\n"
+        val logHeader = if (usefulLines.isEmpty()) "" else
+            "\n=== ANDROID LOGCAT (APP PID $pid · ${usefulLines.size} lignes) ===\n"
+        val logBody = usefulLines.takeLast(300).joinToString("\n") { sanitize(it) }
+        val logBudget = (maxChars - essentials.length - noiseSection.length - logHeader.length).coerceAtLeast(0)
+        val logcatSection = logHeader + logBody.takeLast(logBudget)
 
-        val combined = sections.toString().trim()
+        val combined = sanitize(essentials + logcatSection + noiseSection).trim()
         return if (combined.length <= maxChars) combined else combined.takeLast(maxChars)
     }
 }
@@ -170,8 +182,8 @@ data class DeviceDiagnosticSnapshot(
 )
 
 /**
- * Handles up-to-3 screenshot attachments with guaranteed `<= 1 MB` compression,
- * device/OS/display telemetry collection, and GitHub `@atlas-bot` report generation.
+ * Handles local screenshot compression, privacy-safe device diagnostics, report-text creation,
+ * and temporary sharing. User reports are submitted through the authenticated Atlas Worker API.
  */
 object DiagnosticReporter {
     const val MAX_ATTACHMENTS = 3
@@ -377,7 +389,7 @@ object DiagnosticReporter {
 
             appendLine()
             appendLine("<details>")
-            appendLine("<summary>📋 Journaux système, réseau & traces capturés (${trimmedLogs.lines().size} lignes)</summary>")
+            appendLine("<summary>📋 Journaux Atlas, réseau & traces du processus (${trimmedLogs.lines().size} lignes)</summary>")
             appendLine()
             appendLine("```log")
             appendLine(trimmedLogs.ifBlank { "Aucune erreur récente enregistrée dans le tampon local." })
@@ -388,99 +400,37 @@ object DiagnosticReporter {
         }
     }
 
-    fun buildGitHubIssueUrl(
+    /**
+     * Builds the compact message accepted by the authenticated Worker report endpoint.
+     * The Worker caps messages at 2,000 UTF-16 characters; include recent sanitized logs
+     * after the human summary so the most useful failure context survives truncation.
+     */
+    fun buildUserReportMessage(
+        kind: String,
         category: String,
         title: String,
         description: String,
         stepsToReproduce: String,
         snapshot: DeviceDiagnosticSnapshot,
         logs: String,
-        attachments: List<CompressedReportAttachment>,
+        maxChars: Int = 2_000,
     ): String {
-        val cleanTitle = "[Diag][${snapshot.appVersion}] ${title.trim().ifEmpty { category }}"
-        // Keep query parameter under browser 7.5 KB URL limit so GitHub pre-fills 100% cleanly on mobile
-        val urlBody = buildMarkdownReport(
-            category = category,
-            title = title,
-            description = description,
-            stepsToReproduce = stepsToReproduce,
-            snapshot = snapshot,
-            logs = logs,
-            attachments = attachments,
-            maxLogsChars = 2_400,
-        )
-        return Uri.parse("${AppDetails.PROJECT_REPO.trimEnd('/')}/issues/new")
-            .buildUpon()
-            .appendQueryParameter("title", cleanTitle)
-            .appendQueryParameter("labels", "bug,diagnostic-report")
-            .appendQueryParameter("body", urlBody)
-            .build()
-            .toString()
-    }
-
-    /**
-     * Attempts direct automated submission to `<serverBase>/api/support/bug-report`
-     * (including up to 3 `<= 1 MB` compressed images) if supported by the connected Worker;
-     * returns the created GitHub Issue URL when answered by the server, or `null` to
-     * gracefully launch the pre-filled GitHub Issue + clipboard bundle.
-     */
-    suspend fun tryDirectServerRelay(
-        client: OkHttpClient,
-        serverBaseUrl: String?,
-        title: String,
-        category: String,
-        markdownBody: String,
-        snapshot: DeviceDiagnosticSnapshot,
-        logs: String,
-        attachments: List<CompressedReportAttachment>,
-    ): String? = withContext(Dispatchers.IO) {
-        val cleanBase = serverBaseUrl?.trim()?.trimEnd('/')?.takeIf { it.startsWith("https://") }
-            ?: return@withContext null
-        runCatching {
-            val imagesJson = JSONArray()
-            attachments.take(MAX_ATTACHMENTS).forEach { att ->
-                if (att.file.isFile && att.file.length() <= MAX_IMAGE_BYTES) {
-                    imagesJson.put(
-                        JSONObject().apply {
-                            put("name", att.fileName)
-                            put("sizeBytes", att.finalBytes)
-                            put("mimeType", if (att.fileName.endsWith(".png")) "image/png" else "image/jpeg")
-                            put(
-                                "base64",
-                                android.util.Base64.encodeToString(
-                                    att.file.readBytes(),
-                                    android.util.Base64.NO_WRAP,
-                                ),
-                            )
-                        },
-                    )
-                }
-            }
-            val payload = JSONObject().apply {
-                put("reportId", snapshot.reportId)
-                put("category", category)
-                put("title", "[Diag][${snapshot.appVersion}] $title")
-                put("deviceId", snapshot.maskedFingerprint)
-                put("appVersion", snapshot.appVersion)
-                put("versionCode", snapshot.versionCode)
-                put("device", snapshot.manufacturerModel)
-                put("android", snapshot.androidVersion)
-                put("screen", snapshot.screenMetrics)
-                put("markdown", markdownBody)
-                put("logs", logs)
-                put("attachments", imagesJson)
-            }
-            val req = Request.Builder()
-                .url("$cleanBase/api/support/bug-report")
-                .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .header("Accept", "application/json")
-                .build()
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@use null
-                val respJson = JSONObject(resp.body?.string().orEmpty())
-                respJson.optString("issueUrl").takeIf { it.startsWith("https://github.com/") }
-            }
-        }.getOrNull()
+        val summary = buildString {
+            appendLine("Type: ${kind.uppercase(Locale.ROOT)} · ${category.take(80)}")
+            appendLine("Titre: ${title.trim().ifBlank { category }.take(120)}")
+            if (description.isNotBlank()) appendLine("Description: ${description.trim().take(420)}")
+            if (stepsToReproduce.isNotBlank()) appendLine("Étapes: ${stepsToReproduce.trim().take(260)}")
+            appendLine("Appareil: ${snapshot.manufacturerModel.take(90)} · ${snapshot.androidVersion}")
+            appendLine("App: ${snapshot.appVersion} (${snapshot.versionCode}) · écran ${snapshot.screenOrigin.take(80)} · réseau ${snapshot.networkStatus.take(50)}")
+            appendLine("Référence locale: ${snapshot.reportId} · ID appareil masqué: ${snapshot.maskedFingerprint}")
+            appendLine("Journaux récents assainis:")
+            appendLine("```log")
+        }
+        val suffix = "\n```\n@atlas-bot merci d'analyser ces journaux et de proposer la cause racine et les étapes de correction."
+        if (summary.length + suffix.length >= maxChars) return (summary + suffix).take(maxChars)
+        val safeLogs = AtlasLogBuffer.sanitize(logs).ifBlank { "Aucun journal récent." }
+        val logBudget = maxChars - summary.length - suffix.length
+        return summary + safeLogs.takeLast(logBudget) + suffix
     }
 
     fun copyFullReportToClipboard(context: Context, fullMarkdown: String) {

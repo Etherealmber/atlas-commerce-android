@@ -27,10 +27,8 @@ import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
-import ma.etherealmber.atlascommerce.core.diagnostics.CompressedReportAttachment
+import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent
-import ma.etherealmber.atlascommerce.core.diagnostics.DeviceDiagnosticSnapshot
-import ma.etherealmber.atlascommerce.core.diagnostics.DiagnosticReporter
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.SessionEvents
@@ -54,12 +52,12 @@ import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
+import ma.etherealmber.atlascommerce.data.model.UserReportRequest
+import ma.etherealmber.atlascommerce.data.model.UserReportReceiptDto
 import ma.etherealmber.atlascommerce.data.model.supportsAndroid
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
-import ma.etherealmber.atlascommerce.di.ProbeClient
 import ma.etherealmber.atlascommerce.ui.components.AvatarBitmapCache
-import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 /**
@@ -81,7 +79,6 @@ class AppViewModel @Inject constructor(
     private val updateManager: AppUpdateManager,
     private val offlineCache: OfflineCache,
     private val deviceIdentity: DeviceIdentity,
-    @ProbeClient private val probeClient: OkHttpClient,
 ) : ViewModel() {
 
     val deviceShortId: String get() = deviceIdentity.shortId()
@@ -230,15 +227,35 @@ class AppViewModel @Inject constructor(
                 val result = authRepository.webAuthnCapabilities()
                 val currentBase = serverConfig.selection.value?.baseUrl
                 if (currentBase != null && currentBase.equals(selectedBase, ignoreCase = true)) {
-                    val capability = (result as? ApiResult.Success)?.data
-                    _androidPasskeysAvailable.value = capability?.supportsAndroid(
-                        BuildConfig.APPLICATION_ID,
-                        AndroidPasskeyOrigin.forInstalledApp(applicationContext),
-                        ServerUrl.origin(selectedBase),
-                    ) == true
+                    _androidPasskeysAvailable.value = recordPasskeyCapability("settings-observer", selectedBase, result)
                 }
             }
         }
+    }
+
+    private fun recordPasskeyCapability(
+        source: String,
+        selectedBase: String,
+        result: ApiResult<ma.etherealmber.atlascommerce.data.model.WebAuthnCapabilitiesDto>,
+    ): Boolean {
+        val capability = (result as? ApiResult.Success)?.data
+        val origin = ServerUrl.origin(selectedBase)
+        val android = capability?.android
+        val installedOrigins = AndroidPasskeyOrigin.forInstalledApp(applicationContext)
+        val advertisedOrigins = listOfNotNull(android?.origin, android?.originLegacy)
+        val available = capability?.supportsAndroid(BuildConfig.APPLICATION_ID, installedOrigins, origin) == true
+        when (result) {
+            is ApiResult.Success -> AtlasLogBuffer.log(
+                "PASSKEY",
+                "$source capability: enabled=${capability?.enabled}; androidEnabled=${android?.enabled}; packageMatch=${android?.packageName == BuildConfig.APPLICATION_ID}; selectedOriginAllowed=${origin != null && capability?.origins?.contains(origin) == true}; androidOriginConfigured=${advertisedOrigins.isNotEmpty()}; installedSigningOriginMatch=${advertisedOrigins.any(installedOrigins::contains)}; available=$available",
+            )
+            is ApiResult.Failure -> AtlasLogBuffer.log(
+                "PASSKEY",
+                "$source capability request failed: code=${result.code}; http=${result.httpStatus ?: "none"}; message=${result.message}",
+                "ERROR",
+            )
+        }
+        return available
     }
 
     private suspend fun supportsSelectedServerPasskeyOrigin(origin: String): Boolean {
@@ -260,26 +277,24 @@ class AppViewModel @Inject constructor(
             val result = authRepository.webAuthnCapabilities()
             val currentBase = serverConfig.selection.value?.baseUrl
             if (currentBase != null && currentBase.equals(selectedBase, ignoreCase = true)) {
-                val capability = (result as? ApiResult.Success)?.data
-                _androidPasskeysAvailable.value = capability?.supportsAndroid(
-                    BuildConfig.APPLICATION_ID,
-                    AndroidPasskeyOrigin.forInstalledApp(applicationContext),
-                    ServerUrl.origin(selectedBase),
-                ) == true
+                _androidPasskeysAvailable.value = recordPasskeyCapability("settings-refresh", selectedBase, result)
             }
         }
     }
 
     fun registerAndroidPasskey(context: Context, onDone: (String) -> Unit) {
         if (!_androidPasskeysAvailable.value) {
+            AtlasLogBuffer.log("PASSKEY", "Registration blocked because capability is unavailable", "WARN")
             onDone("Les passkeys Android ne sont pas activées pour le serveur sélectionné.")
             return
         }
         if (_registeringPasskey.value) return
         viewModelScope.launch {
             _registeringPasskey.value = true
+            AtlasLogBuffer.log("PASSKEY", "Registration flow started")
             try {
                 val selectedServerOrigin = ServerUrl.origin(serverConfig.selection.value?.baseUrl)
+                AtlasLogBuffer.log("PASSKEY", "Registration selected origin=${selectedServerOrigin ?: "invalid"}")
                 if (selectedServerOrigin == null) {
                     _androidPasskeysAvailable.value = false
                     onDone("L'origine du serveur sélectionné est invalide.")
@@ -287,11 +302,13 @@ class AppViewModel @Inject constructor(
                 }
                 when (val capabilityResult = authRepository.webAuthnCapabilities()) {
                     is ApiResult.Failure -> {
+                        AtlasLogBuffer.log("PASSKEY", "Registration capability failed: code=${capabilityResult.code}; http=${capabilityResult.httpStatus ?: "none"}; message=${capabilityResult.message}", "ERROR")
                         _androidPasskeysAvailable.value = false
-                        onDone("Impossible de vérifier les passkeys du serveur sélectionné : ${capabilityResult.message}")
+                        onDone("Impossible de vérifier les passkeys (${capabilityResult.code}${capabilityResult.httpStatus?.let { " · HTTP $it" } ?: ""}) : ${AtlasLogBuffer.sanitize(capabilityResult.message)}")
                         return@launch
                     }
                     is ApiResult.Success -> {
+                        recordPasskeyCapability("registration-check", serverConfig.selection.value?.baseUrl.orEmpty(), capabilityResult)
                         if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != selectedServerOrigin ||
                             !capabilityResult.data.supportsAndroid(
                                 BuildConfig.APPLICATION_ID,
@@ -305,15 +322,22 @@ class AppViewModel @Inject constructor(
                         }
                     }
                 }
+                AtlasLogBuffer.log("PASSKEY", "Requesting registration options")
                 when (val options = authRepository.webAuthnRegistrationOptions(deviceIdentity.fingerprint)) {
-                    is ApiResult.Failure -> onDone(options.message)
+                    is ApiResult.Failure -> {
+                        AtlasLogBuffer.log("PASSKEY", "registration-options failed: code=${options.code}; http=${options.httpStatus ?: "none"}; message=${options.message}", "ERROR")
+                        onDone("${AtlasLogBuffer.sanitize(options.message)} [${options.code}${options.httpStatus?.let { " · HTTP $it" } ?: ""}]")
+                    }
                     is ApiResult.Success -> {
+                        AtlasLogBuffer.log("PASSKEY", "Registration options received; challenge JSON is intentionally not logged")
                         if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
                             _androidPasskeysAvailable.value = false
                             onDone("Les passkeys Android ne sont plus disponibles sur ce serveur.")
                             return@launch
                         }
+                        AtlasLogBuffer.log("PASSKEY", "Opening Android Credential Manager for registration")
                         val credentialJson = AndroidPasskeyCredentials.create(context, options.data, selectedServerOrigin)
+                        AtlasLogBuffer.log("PASSKEY", "Credential Manager returned an attestation; sending it to selected Worker")
                         val label = listOf("Android", android.os.Build.MANUFACTURER, android.os.Build.MODEL)
                             .filter { it.isNotBlank() }
                             .distinct()
@@ -325,15 +349,24 @@ class AppViewModel @Inject constructor(
                                 deviceLabel = label,
                             )
                         ) {
-                            is ApiResult.Failure -> onDone(result.message)
-                            is ApiResult.Success -> onDone(result.data)
+                            is ApiResult.Failure -> {
+                                AtlasLogBuffer.log("PASSKEY", "registration-verify failed: code=${result.code}; http=${result.httpStatus ?: "none"}; message=${result.message}", "ERROR")
+                                onDone("${AtlasLogBuffer.sanitize(result.message)} [${result.code}${result.httpStatus?.let { " · HTTP $it" } ?: ""}]")
+                            }
+                            is ApiResult.Success -> {
+                                AtlasLogBuffer.log("PASSKEY", "Registration verified by Worker")
+                                onDone(result.data)
+                            }
                         }
                     }
                 }
             } catch (cancelled: CancellationException) {
+                AtlasLogBuffer.log("PASSKEY", "Registration coroutine cancelled")
                 throw cancelled
-            } catch (_: Exception) {
-                onDone("Enregistrement passkey annulé ou indisponible. Vérifiez l'association Android du serveur et réessayez.")
+            } catch (error: Exception) {
+                val detail = "${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(240)}"
+                AtlasLogBuffer.log("PASSKEY", "Registration failed in Credential Manager/client: $detail", "ERROR")
+                onDone("Enregistrement passkey échoué — $detail. Copiez les journaux du diagnostic pour l'administrateur.")
             } finally {
                 _registeringPasskey.value = false
             }
@@ -693,23 +726,34 @@ class AppViewModel @Inject constructor(
         updateManager.refreshChangelog()
     }
 
-    suspend fun trySubmitDiagnosticReport(
-        title: String,
-        category: String,
-        markdownBody: String,
-        snapshot: DeviceDiagnosticSnapshot,
-        logs: String,
-        attachments: List<CompressedReportAttachment>,
-    ): String? = DiagnosticReporter.tryDirectServerRelay(
-        client = probeClient,
-        serverBaseUrl = serverConfig.selection.value?.baseUrl,
-        title = title,
-        category = category,
-        markdownBody = markdownBody,
-        snapshot = snapshot,
-        logs = logs,
-        attachments = attachments,
-    )
+    suspend fun submitDiagnosticReport(
+        kind: String,
+        message: String,
+        page: String,
+        version: String,
+    ): ApiResult<UserReportReceiptDto> {
+        AtlasLogBuffer.log("REPORT", "Submitting authenticated user report: kind=$kind page=$page")
+        val result = authRepository.submitUserReport(
+            UserReportRequest(
+                kind = kind,
+                message = message,
+                page = page.take(200),
+                version = version.take(80),
+            ),
+        )
+        when (result) {
+            is ApiResult.Success -> AtlasLogBuffer.log(
+                "REPORT",
+                "Report accepted by Worker: reference=${result.data.reference ?: "none"} githubIssueCreated=${!result.data.issueUrl.isNullOrBlank()}",
+            )
+            is ApiResult.Failure -> AtlasLogBuffer.log(
+                "REPORT",
+                "Report submission failed: code=${result.code} http=${result.httpStatus ?: "none"} message=${result.message}",
+                "ERROR",
+            )
+        }
+        return result
+    }
 
     fun setRoleNotificationsEnabled(enabled: Boolean) {
         viewModelScope.launch { preferences.setRoleNotificationsEnabled(enabled) }

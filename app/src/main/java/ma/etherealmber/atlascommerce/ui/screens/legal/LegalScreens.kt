@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.legal
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,9 +31,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -61,6 +66,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.diagnostics.CompressedReportAttachment
 import ma.etherealmber.atlascommerce.core.diagnostics.DiagnosticReporter
@@ -88,6 +94,7 @@ private val DiagnosticCategories = listOf(
     "Mise à jour / Réseau",
     "Scan / Caméra",
     "Autre anomalie",
+    "Demande de fonctionnalité",
 )
 
 /**
@@ -96,8 +103,8 @@ private val DiagnosticCategories = listOf(
  *   Android SDK/model/screen DPI/fontScale, and version build automatically.
  * - Lets users attach up to **3 images** (`MAX_ATTACHMENTS = 3`), automatically downscaling
  *   and JPEG-compressing any image over `1 MB` down to `<= 1 MB` (`1,000,000` bytes).
- * - Sends directly via connected Worker relay or pre-filled GitHub `@atlas-bot` Issue
- *   (which analyzes logs, identifies root cause, proposes fixes, and generates a ready-to-copy AI prompt).
+ * - Sends through the authenticated Atlas Worker report queue; GitHub delivery is server-side,
+ *   so users never leave the app or need a GitHub login. Reports remain queued if GitHub delivery is unavailable.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -120,6 +127,8 @@ fun ProblemReportDialog(
     var showLogsPreview by remember { mutableStateOf(false) }
     var compressing by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
+    var loadingLogs by remember { mutableStateOf(true) }
+    var submitError by remember { mutableStateOf<String?>(null) }
     val attachments = remember { mutableStateListOf<CompressedReportAttachment>() }
 
     val snapshot = remember(screenOrigin, activeRole) {
@@ -133,7 +142,8 @@ fun ProblemReportDialog(
     }
 
     LaunchedEffect(Unit) {
-        logsPreview = AtlasLogBuffer.captureDiagnosticLogs(context)
+        logsPreview = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 16_000)
+        loadingLogs = false
     }
 
     val multiImagePicker = rememberLauncherForActivityResult(
@@ -183,7 +193,7 @@ fun ProblemReportDialog(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "Journaux + ID appareil + @atlas-bot IA",
+                        text = "Envoi via Atlas · sans connexion GitHub",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -328,45 +338,99 @@ fun ProblemReportDialog(
                     }
                 }
 
-                // Device ID & Live Captured Logs Summary
+                // Compact diagnostic summary with explicit copy/refresh controls.
                 Surface(
                     shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
                     border = BorderStroke(1.dp, Atlas.palette.cardBorder),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "Diagnostic auto inclus : ID ${snapshot.maskedFingerprint} · ${snapshot.appVersion} · ${snapshot.androidVersion}",
+                            text = "Diagnostics inclus · ID ${snapshot.maskedFingerprint}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "${snapshot.appVersion} · ${snapshot.androidVersion} · ${snapshot.manufacturerModel}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "${logsPreview.lines().size} lignes de journaux sanitisés prêtes",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            TextButton(onClick = { showLogsPreview = !showLogsPreview }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
                                 Text(
-                                    text = if (showLogsPreview) "Masquer logs" else "Voir logs",
+                                    text = if (loadingLogs) "Lecture des journaux…" else "${logsPreview.lineSequence().count()} lignes assainies",
                                     style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    text = "Aucun compte GitHub requis · journaux expurgés des secrets",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        loadingLogs = true
+                                        logsPreview = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 16_000)
+                                        loadingLogs = false
+                                    }
+                                },
+                                enabled = !submitting && !loadingLogs,
+                            ) {
+                                Icon(Icons.Outlined.Refresh, contentDescription = "Rafraîchir les journaux")
+                            }
+                            IconButton(
+                                onClick = {
+                                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                                    clipboard?.setPrimaryClip(ClipData.newPlainText("Journaux Atlas assainis", logsPreview))
+                                    onToast("Journaux assainis copiés.")
+                                },
+                                enabled = logsPreview.isNotBlank() && !loadingLogs,
+                            ) {
+                                Icon(Icons.Outlined.ContentCopy, contentDescription = "Copier les journaux")
+                            }
+                            TextButton(onClick = { showLogsPreview = !showLogsPreview }) {
+                                Text(if (showLogsPreview) "Masquer" else "Voir")
+                            }
                         }
+                        Text(
+                            "Atlas reçoit votre description, la version/appareil et jusqu'à 2 000 caractères de journaux expurgés (jetons, mots de passe et e-mails masqués). Les captures restent sur l'appareil; utilisez Partager pour les joindre manuellement.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         if (showLogsPreview) {
-                            AtlasDivider(Modifier.padding(vertical = 4.dp))
-                            Text(
-                                text = logsPreview.takeLast(1_400).ifBlank { "Aucun journal récent." },
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.surface,
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp),
+                            ) {
+                                Column(Modifier.verticalScroll(rememberScrollState()).padding(8.dp)) {
+                                    Text(
+                                        text = logsPreview.ifBlank { "Aucun journal récent." },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
+                    }
+                }
+
+                submitError?.let { error ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = error,
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
                     }
                 }
 
@@ -407,42 +471,49 @@ fun ProblemReportDialog(
                 onClick = {
                     scope.launch {
                         submitting = true
-                        val freshLogs = AtlasLogBuffer.captureDiagnosticLogs(context)
-                        val fullMarkdown = DiagnosticReporter.buildMarkdownReport(
-                            category = category,
-                            title = title.ifBlank { category },
-                            description = description,
-                            stepsToReproduce = steps,
-                            snapshot = snapshot,
-                            logs = freshLogs,
-                            attachments = attachments.toList(),
-                        )
-                        DiagnosticReporter.copyFullReportToClipboard(context, fullMarkdown)
-                        val relayedIssueUrl = appViewModel.trySubmitDiagnosticReport(
-                            title = title.ifBlank { category },
-                            category = category,
-                            markdownBody = fullMarkdown,
-                            snapshot = snapshot,
-                            logs = freshLogs,
-                            attachments = attachments.toList(),
-                        )
-                        submitting = false
-                        val targetUrl = relayedIssueUrl ?: DiagnosticReporter.buildGitHubIssueUrl(
-                            category = category,
-                            title = title,
-                            description = description,
-                            stepsToReproduce = steps,
-                            snapshot = snapshot,
-                            logs = freshLogs,
-                            attachments = attachments.toList(),
-                        )
-                        if (relayedIssueUrl != null) {
-                            onToast("Ticket GitHub créé avec journaux & captures !")
-                        } else {
-                            onToast("Rapport + journaux copiés et prêts pour @atlas-bot !")
+                        submitError = null
+                        val freshLogs = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 16_000)
+                        logsPreview = freshLogs
+                        val reportKind = when (category) {
+                            "Demande de fonctionnalité" -> "idea"
+                            "Autre anomalie" -> "other"
+                            else -> "bug"
                         }
-                        openExternal(context, targetUrl)
-                        onDismiss()
+                        val message = DiagnosticReporter.buildUserReportMessage(
+                            kind = reportKind,
+                            category = category,
+                            title = title.ifBlank { category },
+                            description = description,
+                            stepsToReproduce = steps,
+                            snapshot = snapshot,
+                            logs = freshLogs,
+                        )
+                        when (
+                            val result = appViewModel.submitDiagnosticReport(
+                                kind = reportKind,
+                                message = message,
+                                page = screenOrigin,
+                                version = "${snapshot.appVersion} (${snapshot.versionCode})",
+                            )
+                        ) {
+                            is ApiResult.Success -> {
+                                submitting = false
+                                val reference = result.data.reference?.takeIf { it.isNotBlank() }
+                                val created = !result.data.issueUrl.isNullOrBlank()
+                                onToast(
+                                    when {
+                                        created -> "Rapport transmis à Atlas · ${reference ?: "ticket créé"}. Aucun compte GitHub demandé."
+                                        reference != null -> "Rapport reçu par Atlas · référence $reference. Aucun compte GitHub demandé."
+                                        else -> "Rapport reçu par Atlas. Aucun compte GitHub demandé."
+                                    },
+                                )
+                                onDismiss()
+                            }
+                            is ApiResult.Failure -> {
+                                submitting = false
+                                submitError = "Envoi impossible (${result.code}${result.httpStatus?.let { " · HTTP $it" } ?: ""}) : ${AtlasLogBuffer.sanitize(result.message)}"
+                            }
+                        }
                     }
                 },
             )

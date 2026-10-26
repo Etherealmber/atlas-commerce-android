@@ -54,6 +54,7 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.MandatoryUpdateScreen
 import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrDeviceScreen
+import ma.etherealmber.atlascommerce.ui.screens.settings.DeveloperDiagnosticsScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.AboutScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.LicenseScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.SecurityScreen
@@ -73,6 +74,7 @@ private object Overlay {
     const val LICENSE = "license"
     const val SECURITY = "security"
     const val ABOUT = "about"
+    const val DEVELOPER = "developer"
 }
 
 private enum class RootStage(val rank: Int) {
@@ -360,6 +362,7 @@ private fun AtlasGate(
                                 onOpenLicense = { overlay = Overlay.LICENSE },
                                 onOpenSecurity = { overlay = Overlay.SECURITY },
                                 onOpenAbout = { overlay = Overlay.ABOUT },
+                                onOpenDeveloperTools = { overlay = Overlay.DEVELOPER },
                                 onSignOut = viewModel::signOut,
                                 onStartUpdateDownload = startSettingsDownloadWithNotificationPermission,
                             )
@@ -421,6 +424,12 @@ private fun AtlasGate(
                         Overlay.SECURITY -> SecurityScreen(onBack = { overlay = null })
 
                         Overlay.ABOUT -> AboutScreen(onBack = { overlay = null })
+
+                        Overlay.DEVELOPER -> DeveloperDiagnosticsScreen(
+                            onBack = { overlay = null },
+                            onToast = showToast,
+                            appViewModel = viewModel,
+                        )
                     }
                 }
             }

@@ -17,6 +17,8 @@ import ma.etherealmber.atlascommerce.data.model.QrCompleteRequest
 import ma.etherealmber.atlascommerce.data.model.QrSessionStatusDto
 import ma.etherealmber.atlascommerce.data.model.RevokeDeviceRequest
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
+import ma.etherealmber.atlascommerce.data.model.UserReportRequest
+import ma.etherealmber.atlascommerce.data.model.UserReportReceiptDto
 import ma.etherealmber.atlascommerce.data.model.VerifyLinkRequest
 import ma.etherealmber.atlascommerce.data.model.WebAuthnCapabilitiesDto
 import ma.etherealmber.atlascommerce.data.model.WebAuthnCredentialVerifyRequest
@@ -83,6 +85,9 @@ class AuthRepository @Inject constructor(
 
     suspend fun webAuthnCapabilities(): ApiResult<WebAuthnCapabilitiesDto> =
         runner.envelope { apiProvider.api().webAuthnStatus() }
+
+    suspend fun submitUserReport(request: UserReportRequest): ApiResult<UserReportReceiptDto> =
+        runner.envelope { apiProvider.api().submitUserReport(request) }
 
     suspend fun webAuthnLoginOptions(username: String?): ApiResult<String> =
         optionsJson(
