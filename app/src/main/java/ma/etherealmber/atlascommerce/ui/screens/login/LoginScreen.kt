@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.login
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -39,6 +41,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -103,6 +106,29 @@ fun LoginScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    state.passkeyError?.let { passkeyError ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissPasskeyError,
+            title = { Text("Connexion par passkey impossible") },
+            text = { Text(passkeyError) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissPasskeyError) { Text("Fermer") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.dismissPasskeyError()
+                        val credentialSettings = Intent("android.settings.PASSWORDS_AND_ACCOUNTS_SETTINGS")
+                        runCatching { context.startActivity(credentialSettings) }
+                            .onFailure {
+                                runCatching { context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
+                            }
+                    },
+                ) { Text("Paramètres Android") }
+            },
+        )
     }
 
     BoxWithConstraints(
