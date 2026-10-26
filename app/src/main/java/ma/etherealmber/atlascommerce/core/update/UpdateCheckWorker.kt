@@ -37,7 +37,8 @@ class UpdateCheckWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            val latest = MANIFEST_URLS.firstNotNullOfOrNull(::fetchManifest)
+            val latest = MANIFEST_URLS.mapNotNull(::fetchManifest)
+                .maxByOrNull { it.versionCode }
                 ?: return@withContext Result.retry()
             if (latest.versionCode <= BuildConfig.VERSION_CODE) return@withContext Result.success()
 
