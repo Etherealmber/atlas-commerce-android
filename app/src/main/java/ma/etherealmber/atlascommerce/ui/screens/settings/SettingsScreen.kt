@@ -626,7 +626,7 @@ fun SettingsScreen(
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     val automaticCrashReportsEnabled by appViewModel.automaticCrashReportsEnabled.collectAsStateWithLifecycle()
-    val automaticCrashReportsAvailable = appViewModel.automaticCrashReportsAvailable
+    val automaticCrashReportsAvailable by appViewModel.automaticCrashReportsAvailable.collectAsStateWithLifecycle()
     val androidPasskeysAvailable by appViewModel.androidPasskeysAvailable.collectAsStateWithLifecycle()
     val registeringPasskey by appViewModel.registeringPasskey.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }

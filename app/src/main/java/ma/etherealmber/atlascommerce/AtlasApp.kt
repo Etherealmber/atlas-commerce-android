@@ -6,19 +6,37 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 @HiltAndroidApp
 class AtlasApp : Application() {
 
+    private val startupIoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
-        ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent.applyStoredConsent(this)
         ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.installCrashBreadcrumbHandler(this)
-        ma.etherealmber.atlascommerce.data.FinanceReportCache.pruneExpired(java.io.File(cacheDir, "finance"))
         ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
             tag = "AtlasApp",
             message = "Application started (${ma.etherealmber.atlascommerce.core.AppDetails.VERSION_NAME} build ${ma.etherealmber.atlascommerce.core.AppDetails.VERSION_CODE})",
         )
+        // These involve disk/Firebase initialization. Keep them off the launch thread so a slow
+        // emulator or a large cached-report directory cannot hold Android on the splash screen.
+        startupIoScope.launch {
+            ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent.applyStoredConsent(this@AtlasApp)
+            runCatching {
+                ma.etherealmber.atlascommerce.data.FinanceReportCache.pruneExpired(java.io.File(cacheDir, "finance"))
+            }.onFailure { error ->
+                ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+                    tag = "AtlasApp",
+                    message = "Deferred finance cache cleanup failed: ${error.javaClass.simpleName}",
+                    level = "WARN",
+                )
+            }
+        }
         ensureNotificationChannels()
     }
 

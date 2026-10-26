@@ -102,11 +102,11 @@ class AppViewModel @Inject constructor(
     val developerModeEnabled: StateFlow<Boolean> = preferences.developerModeEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _automaticCrashReportsEnabled = MutableStateFlow(
-        CrashReportConsent.isConfigured(applicationContext) && CrashReportConsent.isEnabled(applicationContext),
-    )
+    private val _automaticCrashReportsEnabled = MutableStateFlow(false)
     val automaticCrashReportsEnabled: StateFlow<Boolean> = _automaticCrashReportsEnabled.asStateFlow()
-    val automaticCrashReportsAvailable: Boolean = CrashReportConsent.isConfigured(applicationContext)
+
+    private val _automaticCrashReportsAvailable = MutableStateFlow(false)
+    val automaticCrashReportsAvailable: StateFlow<Boolean> = _automaticCrashReportsAvailable.asStateFlow()
 
     val autoOpenCamera: StateFlow<Boolean> = preferences.autoOpenCamera
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -196,6 +196,11 @@ class AppViewModel @Inject constructor(
     }
 
     init {
+        viewModelScope.launch(Dispatchers.IO) {
+            val available = CrashReportConsent.isConfigured(applicationContext)
+            _automaticCrashReportsAvailable.value = available
+            _automaticCrashReportsEnabled.value = available && CrashReportConsent.isEnabled(applicationContext)
+        }
         observeSessionExpiry()
         observeServerChanges()
         observePasskeyCapabilities()
