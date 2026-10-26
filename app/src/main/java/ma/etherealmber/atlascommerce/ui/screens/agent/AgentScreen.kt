@@ -131,7 +131,7 @@ fun AgentScreen(
     val scope = rememberCoroutineScope()
     var showHistoryDialog by remember { mutableStateOf(false) }
     var composerExpanded by rememberSaveable { mutableStateOf(true) }
-    var showQuotaDetails by rememberSaveable { mutableStateOf(true) }
+    var showQuotaDetails by rememberSaveable { mutableStateOf(false) }
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             readAgentAttachment(context, uri).fold(
@@ -372,7 +372,7 @@ fun AgentScreen(
                                         modifier = Modifier.size(36.dp),
                                     ) {
                                         Icon(
-                                            imageVector = if (showQuotaDetails) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.Info,
+                                            imageVector = if (showQuotaDetails) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
                                             contentDescription = if (showQuotaDetails) "Masquer les détails du quota" else "Afficher les détails du quota",
                                             tint = MaterialTheme.colorScheme.primary,
                                         )
@@ -654,7 +654,7 @@ fun AgentScreen(
 }
 
 @Composable
-private fun AtlasAgentMascot(modifier: Modifier = Modifier) {
+fun AtlasAgentMascot(modifier: Modifier = Modifier) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val transition = rememberInfiniteTransition(label = "atlas-agent-mascot")
     val bob by transition.animateFloat(

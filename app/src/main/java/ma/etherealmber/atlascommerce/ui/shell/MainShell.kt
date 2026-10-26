@@ -50,6 +50,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
@@ -96,7 +97,10 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
 import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
+import ma.etherealmber.atlascommerce.ui.components.ShakeGestureEffect
+import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentScreen
+import ma.etherealmber.atlascommerce.ui.screens.agent.AtlasAgentMascot
 import ma.etherealmber.atlascommerce.ui.screens.legal.ProblemReportDialog
 import ma.etherealmber.atlascommerce.ui.screens.balance.BalanceScreen
 import ma.etherealmber.atlascommerce.ui.screens.home.HomeScreen
@@ -169,8 +173,10 @@ fun MainShell(
     onSignOut: () -> Unit,
     onStartUpdateDownload: () -> Unit = {},
     shellViewModel: ShellViewModel = hiltViewModel(),
+    appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val cartCount by shellViewModel.cartCount.collectAsStateWithLifecycle()
+    val shakeToReportEnabled by appViewModel.shakeToReportEnabled.collectAsStateWithLifecycle()
     val notificationCount by shellViewModel.notificationCount.collectAsStateWithLifecycle()
     val serverBaseUrl by shellViewModel.serverBaseUrl.collectAsStateWithLifecycle()
 
@@ -203,6 +209,51 @@ fun MainShell(
     }
     val scope = rememberCoroutineScope()
     var showProblemReportDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
+    var showShakeReportPrompt by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
+
+    val shakeDisabledMessage = atlasText(
+        "Raccourci secouer pour signaler désactivé.",
+        "Shake-to-report shortcut disabled.",
+        "تم تعطيل اختصار الهز للإبلاغ.",
+    )
+    ShakeGestureEffect(
+        enabled = isForeground && shakeToReportEnabled && !showProblemReportDialog && !showShakeReportPrompt,
+        onShake = { showShakeReportPrompt = true },
+    )
+
+    if (showShakeReportPrompt) {
+        AlertDialog(
+            onDismissRequest = { showShakeReportPrompt = false },
+            title = { Text(atlasText("Signaler un problème ?", "Report a problem?", "هل تريد الإبلاغ عن مشكلة؟")) },
+            text = {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(atlasText(
+                        "Le téléphone a été secoué. Rien ne sera envoyé sans votre confirmation dans le formulaire.",
+                        "Your phone was shaken. Nothing will be sent unless you confirm in the report form.",
+                        "تم هز الهاتف. لن يتم إرسال شيء حتى تؤكد ذلك في نموذج الإبلاغ.",
+                    ))
+                    TextButton(onClick = {
+                        showShakeReportPrompt = false
+                        appViewModel.setShakeToReportEnabled(false)
+                        scope.launch { snackbarHostState.showSnackbar(shakeDisabledMessage) }
+                    }) {
+                        Text(atlasText("Désactiver ce raccourci", "Disable this shortcut", "تعطيل هذا الاختصار"))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showShakeReportPrompt = false
+                    showProblemReportDialog = true
+                }) { Text(atlasText("Signaler", "Report", "إبلاغ")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showShakeReportPrompt = false }) {
+                    Text(atlasText("Pas maintenant", "Not now", "ليس الآن"))
+                }
+            },
+        )
+    }
 
     if (showProblemReportDialog) {
         ProblemReportDialog(
@@ -270,6 +321,9 @@ fun MainShell(
         topBar = {
             AtlasTopBar(
                 title = tab.localizedLabel(),
+                titleLeading = if (tab == MainTab.AGENT) {
+                    { AtlasAgentMascot(Modifier.size(28.dp)) }
+                } else null,
                 onBack = when (tab) {
                     MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
                     MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> ({ setTabName(lastBottomTabName) })
@@ -288,12 +342,24 @@ fun MainShell(
                     if (tab in BackStackTabs) IconButton(onClick = { showProblemReportDialog = true }) {
                         Icon(
                             imageVector = Icons.Outlined.BugReport,
-                            contentDescription = "Signaler un problème",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            contentDescription = atlasText("Signaler un problème", "Report a problem", "الإبلاغ عن مشكلة"),
+                            tint = MaterialTheme.colorScheme.primary,
                         )
                     }
                     when (tab) {
-                        MainTab.AGENT, MainTab.SALE, MainTab.SETTINGS -> Unit
+                        MainTab.AGENT -> {
+                            AtlasAvatar(
+                                avatarUrl = user.avatarUrl,
+                                label = user.username,
+                                size = 34.dp,
+                                serverBaseUrl = serverBaseUrl,
+                                borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                onClick = { switchTab(MainTab.PROFILE) },
+                            )
+                            Spacer(Modifier.width(8.dp))
+                        }
+
+                        MainTab.SALE, MainTab.SETTINGS -> Unit
 
                         MainTab.PROFILE -> {
                             IconButton(onClick = { switchTab(MainTab.SETTINGS) }) {

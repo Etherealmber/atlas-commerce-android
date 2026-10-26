@@ -637,6 +637,7 @@ fun SettingsScreen(
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val updateDownloadSource by appViewModel.updateDownloadSource.collectAsStateWithLifecycle()
     val appLanguage by appViewModel.appLanguage.collectAsStateWithLifecycle()
+    val shakeToReportEnabled by appViewModel.shakeToReportEnabled.collectAsStateWithLifecycle()
     val mirrorPing by appViewModel.mirrorPing.collectAsStateWithLifecycle()
     val releaseChangelog by appViewModel.releaseChangelog.collectAsStateWithLifecycle()
     val releaseChangelogLoading by appViewModel.releaseChangelogLoading.collectAsStateWithLifecycle()
@@ -815,6 +816,18 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+        AtlasCard {
+            SettingsToggleRow(
+                title = atlasText("Signaler un problème en secouant", "Shake to report a problem", "هز الهاتف للإبلاغ عن مشكلة"),
+                subtitle = atlasText(
+                    "Affiche une confirmation uniquement. Aucun rapport ni diagnostic n'est envoyé sans votre accord.",
+                    "Only opens a confirmation. No report or diagnostics are sent without your approval.",
+                    "يعرض طلب تأكيد فقط. لا يُرسل أي تقرير أو بيانات تشخيصية دون موافقتك.",
+                ),
+                checked = shakeToReportEnabled,
+                onCheckedChange = appViewModel::setShakeToReportEnabled,
+            )
         }
 
         // 1. Connected Devices & QR PC Pairing

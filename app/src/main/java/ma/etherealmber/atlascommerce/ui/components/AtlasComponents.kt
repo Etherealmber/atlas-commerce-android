@@ -3,7 +3,12 @@ package ma.etherealmber.atlascommerce.ui.components
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.media.AudioManager
+import android.os.SystemClock
 import android.media.ToneGenerator
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -98,11 +103,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -137,6 +144,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlin.math.sqrt
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.ui.i18n.AtlasLanguageSelector
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
@@ -580,26 +588,33 @@ fun AtlasTopBar(
     title: String,
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
+    titleLeading: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
         title = {
-            Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (!subtitle.isNullOrBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (titleLeading != null) {
+                    titleLeading()
+                    Spacer(Modifier.width(8.dp))
+                }
+                Column {
                     Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         },
@@ -820,6 +835,44 @@ fun AtlasBullet(text: String, modifier: Modifier = Modifier) {
 
 /** Global toggle allowing users to enable/reduce UI motion in Réglages. */
 val LocalAtlasAnimationsEnabled = compositionLocalOf { true }
+
+/** Foreground-only shake gesture; it only invokes a local prompt and never sends diagnostics. */
+@Composable
+fun ShakeGestureEffect(
+    enabled: Boolean,
+    onShake: () -> Unit,
+) {
+    val context = LocalContext.current
+    val currentOnShake by rememberUpdatedState(onShake)
+
+    DisposableEffect(context, enabled) {
+        val manager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val accelerometer = manager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        var lastTriggerAt = 0L
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent?) {
+                val values = event?.values ?: return
+                if (values.size < 3) return
+                val x = values[0] / SensorManager.GRAVITY_EARTH
+                val y = values[1] / SensorManager.GRAVITY_EARTH
+                val z = values[2] / SensorManager.GRAVITY_EARTH
+                val gForce = sqrt(x * x + y * y + z * z)
+                val now = SystemClock.elapsedRealtime()
+                if (gForce >= 2.7f && now - lastTriggerAt >= 1_800L) {
+                    lastTriggerAt = now
+                    currentOnShake()
+                }
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+        }
+        val registered = enabled && manager != null && accelerometer != null &&
+            manager.registerListener(listener, accelerometer, SensorManager.SENSOR_DELAY_UI)
+        onDispose {
+            if (registered) manager?.unregisterListener(listener)
+        }
+    }
+}
 
 /**
  * Staggered smooth entrance for landing screens, cards, and sections.

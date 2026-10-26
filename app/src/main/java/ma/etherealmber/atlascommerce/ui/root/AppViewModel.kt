@@ -115,6 +115,9 @@ class AppViewModel @Inject constructor(
     val autoOpenCamera: StateFlow<Boolean> = preferences.autoOpenCamera
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    val shakeToReportEnabled: StateFlow<Boolean> = preferences.shakeToReportEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     val scanHapticEnabled: StateFlow<Boolean> = preferences.scanHapticEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
@@ -732,6 +735,10 @@ class AppViewModel @Inject constructor(
 
     fun setAutoOpenCamera(enabled: Boolean) {
         viewModelScope.launch { preferences.setAutoOpenCamera(enabled) }
+    }
+
+    fun setShakeToReportEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setShakeToReportEnabled(enabled) }
     }
 
     fun setScanHapticEnabled(enabled: Boolean) {

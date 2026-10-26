@@ -73,6 +73,7 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         val ANIMATIONS_ENABLED = booleanPreferencesKey("animations_enabled")
         val DEVELOPER_MODE_ENABLED = booleanPreferencesKey("developer_mode_enabled")
         val AUTO_OPEN_CAMERA = booleanPreferencesKey("auto_open_camera")
+        val SHAKE_TO_REPORT = booleanPreferencesKey("shake_to_report_enabled")
         val SCAN_HAPTIC = booleanPreferencesKey("scan_haptic_enabled")
         val SCAN_SOUND = booleanPreferencesKey("scan_sound_enabled")
         val AUTO_ADD_CART_ON_SCAN = booleanPreferencesKey("auto_add_cart_on_scan")
@@ -177,6 +178,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
     /** Strictly false by default so entering Scan / Scan Device never starts camera immediately. */
     val autoOpenCamera: Flow<Boolean> = safeData
         .map { it.safeBoolean(Keys.AUTO_OPEN_CAMERA.name) ?: false }
+        .distinctUntilChanged()
+
+    val shakeToReportEnabled: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.SHAKE_TO_REPORT.name) ?: true }
         .distinctUntilChanged()
 
     val scanHapticEnabled: Flow<Boolean> = safeData
@@ -333,6 +338,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
 
     suspend fun setAutoOpenCamera(enabled: Boolean) {
         safeEdit { prefs -> prefs.putClean(Keys.AUTO_OPEN_CAMERA, enabled) }
+    }
+
+    suspend fun setShakeToReportEnabled(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.SHAKE_TO_REPORT, enabled) }
     }
 
     suspend fun setScanHapticEnabled(enabled: Boolean) {
