@@ -130,7 +130,7 @@ fun AgentScreen(
     val scope = rememberCoroutineScope()
     var showHistoryDialog by remember { mutableStateOf(false) }
     var composerExpanded by rememberSaveable { mutableStateOf(true) }
-    var showQuotaDetails by rememberSaveable { mutableStateOf(false) }
+    var showQuotaDetails by rememberSaveable { mutableStateOf(true) }
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             readAgentAttachment(context, uri).fold(
@@ -305,7 +305,7 @@ fun AgentScreen(
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        text = "Atlas Agent",
+                                        text = "Atlas Agent IA",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
@@ -337,13 +337,15 @@ fun AgentScreen(
                                 AtlasChip(
                                     text = when {
                                         quotaLocked -> "Quota atteint"
+                                        state.status?.configured == true -> "En ligne"
                                         state.status?.configured == false -> "En pause"
-                                        else -> "En ligne"
+                                        else -> "Vérification…"
                                     },
                                     tone = when {
                                         quotaLocked -> AtlasTone.DANGER
+                                        state.status?.configured == true -> AtlasTone.POSITIVE
                                         state.status?.configured == false -> AtlasTone.WARNING
-                                        else -> AtlasTone.POSITIVE
+                                        else -> AtlasTone.NEUTRAL
                                     },
                                 )
                                 Spacer(Modifier.width(8.dp))
@@ -378,21 +380,29 @@ fun AgentScreen(
                                     Spacer(Modifier.height(6.dp))
                                     AgentQuotaBarsContent(policy = policy, compact = true)
                                 }
-                                Text(
-                                    "L'IA peut se tromper. Vérifiez les informations importantes et évitez les données sensibles.",
-                                    modifier = Modifier.padding(top = 6.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            } else {
-                                Text(
-                                    "L'IA peut se tromper · vérifiez les informations importantes.",
-                                    modifier = Modifier.padding(top = 4.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
+                            }
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                color = Atlas.palette.warningSoft,
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(11.dp),
+                                    verticalAlignment = Alignment.Top,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Info,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = Atlas.palette.warning,
+                                    )
+                                    Spacer(Modifier.width(9.dp))
+                                    Text(
+                                        "L'IA peut se tromper. Vérifiez les faits importants et évitez les données sensibles.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
                             }
 
                             if (state.loadingThread) {
