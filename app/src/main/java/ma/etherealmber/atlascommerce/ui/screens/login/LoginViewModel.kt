@@ -241,7 +241,7 @@ class LoginViewModel @Inject constructor(
         val type = error.javaClass.simpleName
         return when {
             type.contains("NoCredential", ignoreCase = true) ->
-                "Aucune passkey n'a été trouvée pour ${ServerUrl.display(serverConfig.selection.value?.baseUrl)} sur cet appareil. " +
+                "Aucune passkey n'a été trouvée pour ${ServerUrl.display(serverConfig.selection.value?.baseUrl ?: "serveur sélectionné")} sur cet appareil. " +
                     "Si vous n'en avez pas encore, connectez-vous avec votre mot de passe puis enregistrez-en une dans Paramètres. " +
                     "Si vous en avez déjà une, activez le gestionnaire Android où elle est enregistrée."
             type.contains("ProviderConfiguration", ignoreCase = true) ||
