@@ -19,8 +19,17 @@ class Android9StartupSmokeTest {
     @Test
     fun coldStartLeavesSplashAndDisplaysFirstRunScreen() {
         val firstRunMarker = "Aperçu interactif · mode démo"
-        composeRule.waitUntil(timeoutMillis = 30_000L) {
-            composeRule.onAllNodesWithText(firstRunMarker).fetchSemanticsNodes().isNotEmpty()
+        try {
+            composeRule.waitUntil(timeoutMillis = 30_000L) {
+                composeRule.onAllNodesWithText(firstRunMarker).fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (error: Throwable) {
+            val visibleUi = runCatching { composeRule.onRoot(useUnmergedTree = true).printToString() }
+                .getOrDefault("<Compose semantics tree unavailable>")
+            throw AssertionError(
+                "Cold start did not reach the first-run screen within 30 seconds. Visible UI: $visibleUi",
+                error,
+            )
         }
         composeRule.onNodeWithText(firstRunMarker).assertExists()
     }
