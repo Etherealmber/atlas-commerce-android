@@ -1,11 +1,21 @@
 package ma.etherealmber.atlascommerce.ui.shell
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
@@ -16,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
@@ -81,6 +92,7 @@ import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
 import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentScreen
@@ -217,6 +229,16 @@ fun MainShell(
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val useRail = maxWidth >= 600.dp
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val floatingBarWidth by animateDpAsState(
+        targetValue = maxWidth,
+        animationSpec = if (motionEnabled) {
+            spring(dampingRatio = 0.86f, stiffness = 360f)
+        } else {
+            tween(0)
+        },
+        label = "floating-bottom-bar-width",
+    )
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
@@ -375,12 +397,40 @@ fun MainShell(
         }
         }
     }
-    if (!useRail && tab !in BackStackTabs) {
+    AnimatedVisibility(
+        visible = !useRail && tab !in BackStackTabs,
+        modifier = Modifier.align(Alignment.BottomCenter).width(floatingBarWidth),
+        enter = if (motionEnabled) {
+            fadeIn(tween(260, easing = FastOutSlowInEasing)) +
+                slideInVertically(
+                    animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f),
+                    initialOffsetY = { height -> height / 2 },
+                ) +
+                scaleIn(
+                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 460f),
+                    initialScale = 0.94f,
+                )
+        } else {
+            EnterTransition.None
+        },
+        exit = if (motionEnabled) {
+            fadeOut(tween(150, easing = FastOutSlowInEasing)) +
+                slideOutVertically(
+                    animationSpec = tween(190, easing = FastOutSlowInEasing),
+                    targetOffsetY = { height -> height / 3 },
+                ) +
+                scaleOut(
+                    animationSpec = tween(170, easing = FastOutSlowInEasing),
+                    targetScale = 0.97f,
+                )
+        } else {
+            ExitTransition.None
+        },
+    ) {
         AtlasFloatingBottomBar(
             tabs = roleTabs,
             selected = tab,
             onSelect = switchTab,
-            modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
     }
@@ -399,7 +449,7 @@ private fun AtlasFloatingBottomBar(
     val rightTabs = if (centerIndex >= 0) tabs.drop(centerIndex + 1) else emptyList()
     // Keep the pill translucent so page content remains visible beneath the floating controls.
     val barColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.74f)
-    val motionEnabled = ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled.current
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
 
     Box(
         modifier = modifier
@@ -445,8 +495,18 @@ private fun AtlasFloatingBottomBar(
         if (centerTab != null) {
             val fabScale by animateFloatAsState(
                 targetValue = if (!motionEnabled || selected == centerTab) 1f else 0.96f,
-                animationSpec = spring(dampingRatio = 0.68f, stiffness = 520f),
+                animationSpec = if (motionEnabled) spring(dampingRatio = 0.68f, stiffness = 520f) else tween(0),
                 label = "nav-fab-${centerTab.name}",
+            )
+            val fabContainerColor by animateColorAsState(
+                targetValue = if (selected == centerTab) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
+                animationSpec = tween(if (motionEnabled) 220 else 0, easing = FastOutSlowInEasing),
+                label = "nav-fab-color-${centerTab.name}",
+            )
+            val fabContentColor by animateColorAsState(
+                targetValue = if (selected == centerTab) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
+                animationSpec = tween(if (motionEnabled) 220 else 0, easing = FastOutSlowInEasing),
+                label = "nav-fab-content-color-${centerTab.name}",
             )
             FloatingActionButton(
                 onClick = { onSelect(centerTab) },
@@ -458,8 +518,8 @@ private fun AtlasFloatingBottomBar(
                         scaleY = if (motionEnabled) fabScale else 1f
                     },
                 shape = CircleShape,
-                containerColor = if (selected == centerTab) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-                contentColor = if (selected == centerTab) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
+                containerColor = fabContainerColor,
+                contentColor = fabContentColor,
                 elevation = FloatingActionButtonDefaults.elevation(
                     defaultElevation = 8.dp,
                     pressedElevation = 12.dp,
@@ -501,8 +561,13 @@ private fun FloatingBottomBarItem(
     )
     val iconScale by animateFloatAsState(
         targetValue = if (selected && motionEnabled) 1.12f else 1f,
-        animationSpec = spring(dampingRatio = 0.62f, stiffness = 520f),
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.62f, stiffness = 520f) else tween(0),
         label = "nav-icon-scale-${item.name}",
+    )
+    val iconOffset by animateDpAsState(
+        targetValue = if (selected && motionEnabled) (-2).dp else 0.dp,
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.72f, stiffness = 520f) else tween(0),
+        label = "nav-icon-offset-${item.name}",
     )
     Column(
         modifier = modifier
@@ -525,6 +590,7 @@ private fun FloatingBottomBarItem(
                 contentDescription = null,
                 tint = tint,
                 modifier = Modifier
+                    .offset(y = iconOffset)
                     .size(20.dp)
                     .graphicsLayer {
                         scaleX = if (motionEnabled) iconScale else 1f
