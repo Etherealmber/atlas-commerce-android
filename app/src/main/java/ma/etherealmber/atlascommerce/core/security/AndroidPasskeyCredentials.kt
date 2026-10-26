@@ -39,6 +39,10 @@ object AndroidPasskeyCredentials {
             "excludeCredentials=$excludedCount"
     }.getOrElse { "requestShape=parseFailed:${it.javaClass.simpleName}" }
 
+    fun registrationExcludedCredentialsCount(requestJson: String): Int = runCatching {
+        JSONObject(requestJson).optJSONArray("excludeCredentials")?.length() ?: 0
+    }.getOrDefault(0)
+
     suspend fun authenticate(context: Context, requestJson: String, origin: String): String {
         val result = CredentialManager.create(context).getCredential(
             context = context,

@@ -292,6 +292,7 @@ class AppViewModel @Inject constructor(
         if (_registeringPasskey.value) return
         viewModelScope.launch {
             _registeringPasskey.value = true
+            var excludedCredentialCount = 0
             AtlasLogBuffer.log("PASSKEY", "Registration flow started")
             try {
                 val selectedServerOrigin = ServerUrl.origin(serverConfig.selection.value?.baseUrl)
@@ -330,6 +331,7 @@ class AppViewModel @Inject constructor(
                         onDone("${AtlasLogBuffer.sanitize(options.message)} [${options.code}${options.httpStatus?.let { " · HTTP $it" } ?: ""}]")
                     }
                     is ApiResult.Success -> {
+                        excludedCredentialCount = AndroidPasskeyCredentials.registrationExcludedCredentialsCount(options.data)
                         AtlasLogBuffer.log(
                             "PASSKEY",
                             "Registration options received; challenge and user data are not logged; ${AndroidPasskeyCredentials.registrationOptionsSummary(options.data)}",
@@ -378,7 +380,12 @@ class AppViewModel @Inject constructor(
                     "Troubleshooting: configure Google Password Manager or another credential provider; enable screen lock; select the provider in Android Passwords, passkeys & accounts settings; verify Digital Asset Links for the selected origin. No passkey was registered.",
                     "INFO",
                 )
-                onDone("Aucun gestionnaire de passkey prêt. Configurez-en un dans les paramètres Android, puis réessayez. Aucune passkey créée.")
+                val existingKeyHint = if (excludedCredentialCount > 0) {
+                    "Le serveur signale déjà une passkey pour ce compte : essayez d'abord de vous connecter avec celle-ci. "
+                } else {
+                    ""
+                }
+                onDone("${existingKeyHint}Android n'a proposé aucun fournisseur de création prêt. Activez un gestionnaire de clés d'accès (par exemple Google Password Manager) et un verrouillage d'écran dans les paramètres Android, puis réessayez. Aucune nouvelle passkey n'a été créée.")
             } catch (error: Exception) {
                 val detail = "${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(240)}"
                 AtlasLogBuffer.log("PASSKEY", "Registration failed in Credential Manager/client: $detail", "ERROR")

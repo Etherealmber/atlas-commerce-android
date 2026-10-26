@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.settings
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -1062,7 +1064,7 @@ fun SettingsScreen(
                         Text("Passkey Android", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Text(
                             if (androidPasskeysAvailable) {
-                                "Disponibles sur ce serveur. L'inscription reste manuelle : aucune passkey n'est créée automatiquement."
+                                "Le serveur les autorise. La création exige aussi un gestionnaire Android compatible et un verrouillage d'écran."
                             } else {
                                 "Configuration Android non confirmée par le serveur sélectionné. L'inscription reste masquée tant que le serveur ne l'annonce pas comme disponible."
                             },
@@ -1080,6 +1082,22 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !registeringPasskey,
                     )
+                    TextButton(
+                        onClick = {
+                            val credentialSettings = Intent("android.settings.PASSWORDS_AND_ACCOUNTS_SETTINGS")
+                            val securitySettings = Intent(Settings.ACTION_SECURITY_SETTINGS)
+                            val openedCredentialSettings = runCatching { context.startActivity(credentialSettings) }.isSuccess
+                            if (!openedCredentialSettings) {
+                                runCatching { context.startActivity(securitySettings) }
+                                    .onFailure { onToast("Ouvrez Paramètres Android > Mots de passe et clés d'accès, puis choisissez un fournisseur.") }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Configurer le fournisseur Android")
+                    }
                 } else {
                     TextButton(
                         onClick = appViewModel::refreshPasskeyCapability,
