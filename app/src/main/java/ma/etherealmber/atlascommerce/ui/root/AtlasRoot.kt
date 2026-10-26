@@ -168,6 +168,7 @@ private fun AtlasGate(
     val onboardingDone by viewModel.onboardingDone.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val defaultStartTab by viewModel.defaultStartTab.collectAsStateWithLifecycle()
+    val autoCheckUpdates by viewModel.autoCheckUpdates.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -175,12 +176,25 @@ private fun AtlasGate(
     var overlay by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingQrToken by rememberSaveable { mutableStateOf<String?>(null) }
     var requestedTab by rememberSaveable { mutableStateOf<String?>(null) }
+    var notificationPermissionPrompted by rememberSaveable { mutableStateOf(false) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) {
             viewModel.repostUpdateNotification()
+        }
+    }
+
+    LaunchedEffect(session) {
+        if (session is SessionState.Active &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !notificationPermissionPrompted &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionPrompted = true
+            kotlinx.coroutines.delay(700)
+            runCatching { notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
         }
     }
 
@@ -204,6 +218,10 @@ private fun AtlasGate(
     val startSettingsDownloadWithNotificationPermission: () -> Unit = {
         requestNotificationPermissionIfNeeded()
         viewModel.startUpdateDownload(fromSettings = true)
+    }
+
+    LaunchedEffect(autoCheckUpdates) {
+        ma.etherealmber.atlascommerce.core.update.UpdateCheckWorkScheduler.setEnabled(context, autoCheckUpdates)
     }
 
     val triggerInstall: () -> Unit = {

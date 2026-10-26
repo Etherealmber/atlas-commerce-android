@@ -28,7 +28,8 @@ class MainActivity : ComponentActivity() {
         deepLinkQrToken = extractQrFromIntent(intent)
         deepLinkVerify = extractVerifyFromIntent(intent)
         deepLinkServerOrigin = extractVerifyOriginFromIntent(intent)
-        openNotificationsIntent = intent?.getBooleanExtra(AtlasApp.EXTRA_OPEN_NOTIFICATIONS, false) == true
+        openNotificationsIntent = intent?.getBooleanExtra(AtlasApp.EXTRA_OPEN_NOTIFICATIONS, false) == true ||
+            intent?.action == AtlasApp.ACTION_ASSIST_NOTIFICATION
         openSettingsIntent = intent?.getBooleanExtra(AtlasApp.EXTRA_OPEN_SETTINGS, false) == true
         enableEdgeToEdge()
         setContent {
@@ -59,7 +60,9 @@ class MainActivity : ComponentActivity() {
             deepLinkServerOrigin = extractVerifyOriginFromIntent(intent)
             deepLinkVerify = link
         }
-        if (intent.getBooleanExtra(AtlasApp.EXTRA_OPEN_NOTIFICATIONS, false)) {
+        if (intent.getBooleanExtra(AtlasApp.EXTRA_OPEN_NOTIFICATIONS, false) ||
+            intent.action == AtlasApp.ACTION_ASSIST_NOTIFICATION
+        ) {
             openNotificationsIntent = true
         }
         if (intent.getBooleanExtra(AtlasApp.EXTRA_OPEN_SETTINGS, false)) {

@@ -400,6 +400,19 @@ fun ProfileScreen(
                 checked = roleNotificationsEnabled,
                 onCheckedChange = appViewModel::setRoleNotificationsEnabled,
             )
+            TextButton(
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+                        )
+                    }.onFailure { onToast("Ouvrez Paramètres Android > Applications > Atlas Commerce > Notifications.") }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Autorisation et canaux de notification Android")
+            }
         }
 
         // 3. Camera & Barcode Customizations
@@ -992,7 +1005,7 @@ fun SettingsScreen(
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsToggleRow(
                 title = "Recherche automatique des mises à jour",
-                subtitle = "Vérifie silencieusement les nouvelles versions APK à l'ouverture.",
+                subtitle = "Vérifie à l'ouverture et environ toutes les 12 h en arrière-plan (selon les règles batterie d'Android)."
                 checked = autoCheckUpdates,
                 onCheckedChange = appViewModel::setAutoCheckUpdates,
             )

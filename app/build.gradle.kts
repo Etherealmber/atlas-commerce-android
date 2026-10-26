@@ -170,6 +170,7 @@ dependencies {
     ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.3.0")
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
 
     // FCM push bridge (v1.2) — worker pushes via FCM HTTP v1; the device token
     // is registered with POST /api/assist/device-token after each sign-in.
