@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.login
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -39,6 +41,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -94,7 +97,6 @@ fun LoginScreen(
     val server by viewModel.server.collectAsStateWithLifecycle()
     val savedAccounts by viewModel.savedAccounts.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val density = Atlas.density
     val host = server?.let { ServerUrl.display(it.baseUrl) } ?: "Serveur non sélectionné"
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -106,210 +108,300 @@ fun LoginScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    state.passkeyError?.let { passkeyError ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissPasskeyError,
+            title = { Text("Connexion par passkey impossible") },
+            text = { Text(passkeyError) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissPasskeyError) { Text("Fermer") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.dismissPasskeyError()
+                        val credentialSettings = Intent("android.settings.PASSWORDS_AND_ACCOUNTS_SETTINGS")
+                        runCatching { context.startActivity(credentialSettings) }
+                            .onFailure {
+                                runCatching { context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
+                            }
+                    },
+                ) { Text("Paramètres Android") }
+            },
+        )
+    }
+
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter,
     ) {
         val compact = maxWidth < 600.dp || maxHeight < 840.dp
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        val verticalGap = if (compact) 6.dp else 16.dp
-        Column(
-            modifier = Modifier
-                .widthIn(max = 520.dp)
-                .fillMaxWidth()
-                .fillMaxHeight()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .imePadding()
-                .then(if (keyboardVisible) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                .padding(horizontal = if (compact) 16.dp else density.screenPadding, vertical = if (compact) 6.dp else density.sectionGap),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Spacer(Modifier.height(if (compact) 4.dp else 18.dp))
-            AtlasEntrance(delayMillis = 0) {
-                AtlasBrandWordmark(
-                    modifier = Modifier.fillMaxWidth(),
-                    height = if (compact) 54.dp else 68.dp,
-                )
-            }
-            Spacer(Modifier.height(if (compact) 4.dp else 10.dp))
-            AtlasEntrance(delayMillis = 40) {
-                LoginWelcomeBanner(compact = compact)
-            }
-            Spacer(Modifier.height(verticalGap))
-            AtlasServerChip(host = host, onClick = onChangeServer)
-            Spacer(Modifier.height(if (compact) 8.dp else density.sectionGap))
+        val heroHeight = when {
+            keyboardVisible -> 104.dp
+            maxHeight < 680.dp -> maxHeight * 0.30f
+            else -> maxHeight * 0.36f
+        }
 
-            // Keep the credential and QR actions in normal column flow. AnimatedContent
-            // measured both login steps at once on some small devices, causing overlap.
-            if (state.step == LoginViewModel.Step.CREDENTIALS) {
-                if (savedAccounts.isNotEmpty()) {
-                    if (compact) {
-                        SavedAccountsCompact(
-                            accounts = savedAccounts,
-                            loading = state.loading,
-                            onSelect = viewModel::signInWithSavedAccount,
-                            onForget = viewModel::forgetSavedAccount,
-                        )
-                    } else {
-                        SavedAccountsCard(
-                            accounts = savedAccounts,
-                            serverBaseUrl = server?.baseUrl,
-                            loading = state.loading,
-                            onSelect = viewModel::signInWithSavedAccount,
-                            onForget = viewModel::forgetSavedAccount,
-                        )
-                    }
-                    Spacer(Modifier.height(if (compact) 4.dp else 12.dp))
-                }
-
-                CredentialsForm(
-                    state = state,
-                    onUsername = viewModel::onUsernameChange,
-                    onPassword = viewModel::onPasswordChange,
-                    onRememberChange = viewModel::onRememberAccountChange,
-                    onSubmit = viewModel::submit,
-                    compact = compact,
-                )
-                if (state.passkeyAvailable) {
-                    Spacer(Modifier.height(if (compact) 2.dp else 10.dp))
-                    if (compact) {
-                        TextButton(
-                            onClick = { viewModel.signInWithPasskey(context) },
-                            enabled = !state.loading,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Connexion avec une passkey")
-                        }
-                    } else {
-                        AtlasOutlinedButton(
-                            text = "Connexion avec une passkey",
-                            onClick = { viewModel.signInWithPasskey(context) },
-                            icon = Icons.Outlined.Fingerprint,
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = !state.loading,
-                        )
-                    }
-                }
-                if (compact) {
-                    TextButton(
-                        onClick = onOpenQrDevice,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Outlined.QrCode2, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Scanner un QR de connexion PC")
-                    }
-                } else {
-                    Spacer(Modifier.height(8.dp))
-                    AtlasOutlinedButton(
-                        text = "Scanner un QR de connexion PC",
-                        onClick = onOpenQrDevice,
-                        icon = Icons.Outlined.QrCode2,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            } else {
-                OtpForm(
-                    state = state,
-                    onOtp = viewModel::onOtpChange,
-                    onSubmit = viewModel::submit,
-                    onResend = viewModel::resendCode,
-                    onBack = viewModel::backToCredentials,
-                )
-            }
-
-            AnimatedVisibility(
-                visible = !state.error.isNullOrBlank(),
-                enter = fadeIn() + slideInVertically { it / 4 },
-                exit = fadeOut() + slideOutVertically { it / 4 },
+        Box(Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .widthIn(max = 520.dp)
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .imePadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (!state.error.isNullOrBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    AtlasErrorCard(
-                        title = if (state.step == LoginViewModel.Step.OTP) "Code refusé" else "Connexion refusée",
-                        message = state.error.orEmpty(),
+                LoginAtlasHero(
+                    compact = compact || keyboardVisible,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(heroHeight),
+                )
+
+                // The rounded sheet follows the reference layout while retaining
+                // the real Atlas credential, OTP, passkey, and QR flows.
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = if (compact) 20.dp else 28.dp, vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = if (state.step == LoginViewModel.Step.CREDENTIALS) "Bon retour" else "Vérification",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
                     )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = if (state.step == LoginViewModel.Step.CREDENTIALS) {
+                            "Connectez-vous à votre espace Atlas Commerce."
+                        } else {
+                            "Confirmez votre identité pour continuer."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    AtlasServerChip(
+                        host = host,
+                        onClick = onChangeServer,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
+
+                    if (state.step == LoginViewModel.Step.CREDENTIALS) {
+                        if (savedAccounts.isNotEmpty()) {
+                            if (compact) {
+                                SavedAccountsCompact(
+                                    accounts = savedAccounts,
+                                    loading = state.loading,
+                                    onSelect = viewModel::signInWithSavedAccount,
+                                    onForget = viewModel::forgetSavedAccount,
+                                )
+                            } else {
+                                SavedAccountsCard(
+                                    accounts = savedAccounts,
+                                    serverBaseUrl = server?.baseUrl,
+                                    loading = state.loading,
+                                    onSelect = viewModel::signInWithSavedAccount,
+                                    onForget = viewModel::forgetSavedAccount,
+                                )
+                            }
+                            Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
+                        }
+
+                        CredentialsForm(
+                            state = state,
+                            onUsername = viewModel::onUsernameChange,
+                            onPassword = viewModel::onPasswordChange,
+                            onRememberChange = viewModel::onRememberAccountChange,
+                            onSubmit = viewModel::submit,
+                            compact = compact,
+                        )
+                        if (state.passkeyAvailable) {
+                            Spacer(Modifier.height(4.dp))
+                            if (compact) {
+                                TextButton(
+                                    onClick = { viewModel.signInWithPasskey(context) },
+                                    enabled = !state.loading,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Connexion avec une passkey")
+                                }
+                            } else {
+                                AtlasOutlinedButton(
+                                    text = "Connexion avec une passkey",
+                                    onClick = { viewModel.signInWithPasskey(context) },
+                                    icon = Icons.Outlined.Fingerprint,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = !state.loading,
+                                )
+                            }
+                        }
+                        if (compact) {
+                            TextButton(
+                                onClick = onOpenQrDevice,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(Icons.Outlined.QrCode2, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Scanner un QR de connexion PC")
+                            }
+                        } else {
+                            Spacer(Modifier.height(4.dp))
+                            AtlasOutlinedButton(
+                                text = "Scanner un QR de connexion PC",
+                                onClick = onOpenQrDevice,
+                                icon = Icons.Outlined.QrCode2,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        Text(
+                            text = "Besoin d'un accès ? Contactez l'administrateur de votre espace Atlas.",
+                            modifier = Modifier.padding(top = 4.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        OtpForm(
+                            state = state,
+                            onOtp = viewModel::onOtpChange,
+                            onSubmit = viewModel::submit,
+                            onResend = viewModel::resendCode,
+                            onBack = viewModel::backToCredentials,
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = !state.error.isNullOrBlank(),
+                        enter = fadeIn() + slideInVertically { it / 4 },
+                        exit = fadeOut() + slideOutVertically { it / 4 },
+                    ) {
+                        if (!state.error.isNullOrBlank()) {
+                            Spacer(Modifier.height(8.dp))
+                            AtlasErrorCard(
+                                title = if (state.step == LoginViewModel.Step.OTP) "Code refusé" else "Connexion refusée",
+                                message = state.error.orEmpty(),
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Outlined.Shield,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = if (compact) "Session chiffrée · ${AppDetails.VERSION_NAME}" else "Sessions chiffrées et isolées par utilisateur · ${AppDetails.VERSION_NAME}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 0.dp else 4.dp)) {
+                        TextButton(onClick = onOpenSecurity) { Text("Sécurité") }
+                        TextButton(onClick = onOpenLicense) { Text("Licence") }
+                        TextButton(onClick = onCheckUpdates) { Text("Mises à jour") }
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
             }
-
-            Spacer(Modifier.height(if (compact) 2.dp else 10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.Shield,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = if (compact) "Session chiffrée · ${AppDetails.VERSION_NAME}" else "Sessions chiffrées et isolées par utilisateur · ${AppDetails.VERSION_NAME}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 0.dp else 4.dp)) {
-                TextButton(onClick = onOpenSecurity) { Text("Sécurité") }
-                TextButton(onClick = onOpenLicense) { Text("Licence") }
-                TextButton(onClick = onCheckUpdates) { Text("Mises à jour") }
-            }
-            Spacer(Modifier.height(if (compact) 4.dp else 18.dp))
         }
     }
 }
 
 @Composable
-private fun LoginWelcomeBanner(compact: Boolean) {
+private fun LoginAtlasHero(
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val palette = Atlas.palette
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(if (compact) 76.dp else 96.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(Brush.linearGradient(listOf(palette.heroStart, palette.heroEnd))),
+        modifier = modifier.background(
+            Brush.linearGradient(listOf(palette.heroStart, palette.heroEnd)),
+        ),
     ) {
         Box(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .offset(x = 18.dp, y = (-20).dp)
-                .size(if (compact) 94.dp else 124.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .offset(x = (-36).dp, y = 22.dp)
-                .size(if (compact) 54.dp else 72.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.34f)),
-        )
-        Box(
-            modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(x = (-30).dp, y = 20.dp)
-                .size(18.dp)
+                .offset(x = 92.dp, y = (-100).dp)
+                .size(280.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.78f)),
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.32f)),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .offset(x = 134.dp, y = 54.dp)
+                .size(250.dp)
+                .clip(RoundedCornerShape(120.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.50f),
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                        ),
+                    ),
+                ),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .offset(x = (-150).dp, y = 118.dp)
+                .size(330.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.18f)),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .offset(x = (-38).dp, y = 20.dp)
+                .size(if (compact) 42.dp else 56.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)),
         )
         Column(
-            modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp, vertical = if (compact) 12.dp else 22.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = "Content de vous revoir",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White,
-            )
-            Text(
-                text = "Connectez-vous à votre espace sécurisé.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.82f),
-            )
+            AtlasEntrance(delayMillis = 0) {
+                AtlasBrandWordmark(
+                    modifier = Modifier.widthIn(max = 185.dp),
+                    height = if (compact) 28.dp else 38.dp,
+                    tint = Color.White,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 6.dp)) {
+                Text(
+                    text = "Bienvenue chez Atlas",
+                    style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                )
+                Text(
+                    text = "Retrouvez votre espace professionnel en toute sécurité.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.82f),
+                    maxLines = if (compact) 1 else 2,
+                )
+            }
         }
     }
 }
@@ -418,9 +510,9 @@ private fun CredentialsForm(
     onSubmit: () -> Unit,
     compact: Boolean,
 ) {
-    AtlasCard(padding = if (compact) 14.dp else Atlas.density.cardPadding) {
+    Column(Modifier.fillMaxWidth()) {
         Text(
-            text = "Connexion",
+            text = "Identifiant et mot de passe",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
@@ -501,7 +593,7 @@ private fun OtpForm(
     onResend: () -> Unit,
     onBack: () -> Unit,
 ) {
-    AtlasCard {
+    Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = Icons.Outlined.AlternateEmail,

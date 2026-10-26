@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.settings
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -398,6 +400,19 @@ fun ProfileScreen(
                 checked = roleNotificationsEnabled,
                 onCheckedChange = appViewModel::setRoleNotificationsEnabled,
             )
+            TextButton(
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+                        )
+                    }.onFailure { onToast("Ouvrez Paramètres Android > Applications > Atlas Commerce > Notifications.") }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Autorisation et canaux de notification Android")
+            }
         }
 
         // 3. Camera & Barcode Customizations
@@ -990,7 +1005,7 @@ fun SettingsScreen(
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsToggleRow(
                 title = "Recherche automatique des mises à jour",
-                subtitle = "Vérifie silencieusement les nouvelles versions APK à l'ouverture.",
+                subtitle = "Vérifie à l'ouverture et environ toutes les 12 h en arrière-plan (selon les règles batterie d'Android).",
                 checked = autoCheckUpdates,
                 onCheckedChange = appViewModel::setAutoCheckUpdates,
             )
@@ -1062,7 +1077,7 @@ fun SettingsScreen(
                         Text("Passkey Android", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Text(
                             if (androidPasskeysAvailable) {
-                                "Disponibles sur ce serveur. L'inscription reste manuelle : aucune passkey n'est créée automatiquement."
+                                "Le serveur les autorise. La création exige aussi un gestionnaire Android compatible et un verrouillage d'écran."
                             } else {
                                 "Configuration Android non confirmée par le serveur sélectionné. L'inscription reste masquée tant que le serveur ne l'annonce pas comme disponible."
                             },
@@ -1075,11 +1090,27 @@ fun SettingsScreen(
                 if (androidPasskeysAvailable) {
                     AtlasOutlinedButton(
                         text = if (registeringPasskey) "Enregistrement en cours…" else "Enregistrer une passkey",
-                        onClick = { appViewModel.registerAndroidPasskey(context, onToast) },
+                        onClick = { appViewModel.registerAndroidPasskey(context) { } },
                         icon = Icons.Outlined.Fingerprint,
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !registeringPasskey,
                     )
+                    TextButton(
+                        onClick = {
+                            val credentialSettings = Intent("android.settings.PASSWORDS_AND_ACCOUNTS_SETTINGS")
+                            val securitySettings = Intent(Settings.ACTION_SECURITY_SETTINGS)
+                            val openedCredentialSettings = runCatching { context.startActivity(credentialSettings) }.isSuccess
+                            if (!openedCredentialSettings) {
+                                runCatching { context.startActivity(securitySettings) }
+                                    .onFailure { onToast("Ouvrez Paramètres Android > Mots de passe et clés d'accès, puis choisissez un fournisseur.") }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Configurer le fournisseur Android")
+                    }
                 } else {
                     TextButton(
                         onClick = appViewModel::refreshPasskeyCapability,

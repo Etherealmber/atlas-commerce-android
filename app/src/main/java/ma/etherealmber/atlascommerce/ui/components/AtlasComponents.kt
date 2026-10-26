@@ -205,18 +205,19 @@ fun AtlasMark(
     }
 }
 
-/** Full Atlas wordmark from the supplied artwork; the alpha mask is tinted per active theme. */
+/** Full Atlas wordmark from supplied artwork; defaults to the current foreground and accepts a custom tint. */
 @Composable
 fun AtlasBrandWordmark(
     modifier: Modifier = Modifier,
     height: Dp = 58.dp,
+    tint: Color = MaterialTheme.colorScheme.onBackground,
 ) {
     Image(
         painter = painterResource(ma.etherealmber.atlascommerce.R.drawable.atlas_wordmark_mask),
         contentDescription = "Atlas Commerce",
         modifier = modifier.height(height),
         contentScale = ContentScale.Fit,
-        colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground),
+        colorFilter = ColorFilter.tint(tint),
     )
 }
 

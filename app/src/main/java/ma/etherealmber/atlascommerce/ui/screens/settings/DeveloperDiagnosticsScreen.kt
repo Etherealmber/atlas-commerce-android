@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,6 +68,8 @@ fun DeveloperDiagnosticsScreen(
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
     var logs by remember { mutableStateOf("Lecture des journaux…") }
     var loadingLogs by remember { mutableStateOf(false) }
+    var showTechnicalDetails by remember { mutableStateOf(false) }
+    var showFullLogs by remember { mutableStateOf(false) }
 
     fun refreshLogs() {
         if (loadingLogs) return
@@ -121,27 +124,31 @@ fun DeveloperDiagnosticsScreen(
                     )
                 }
                 AtlasDivider(Modifier.padding(vertical = 8.dp))
-                AtlasInfoRow("Serveur sélectionné", ServerUrl.origin(server?.baseUrl) ?: "Aucun")
                 AtlasInfoRow("Application", "${AppDetails.VERSION_NAME} · build ${AppDetails.VERSION_CODE}")
-                AtlasInfoRow("Package / build", "${BuildConfig.APPLICATION_ID} · ${BuildConfig.BUILD_TYPE}")
-                AtlasInfoRow("Android", "${Build.VERSION.RELEASE ?: "?"} · API ${Build.VERSION.SDK_INT}")
-                AtlasInfoRow("Appareil", "${Build.MANUFACTURER} ${Build.MODEL}")
-                AtlasInfoRow("Catalogue hors ligne", "$cachedProductCount article(s)")
-                AtlasInfoRow("Passkeys Android", if (passkeyAvailable) "Annoncées par le serveur sélectionné" else "Non confirmées — consultez les événements PASSKEY")
-                AtlasInfoRow(
-                    "Crash reports automatiques",
-                    when {
-                        !CrashReportConsent.isConfigured(context) -> "Non configurés"
-                        CrashReportConsent.isEnabled(context) -> "Activés avec consentement"
-                        else -> "Désactivés — le diagnostic local reste disponible"
-                    },
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Android n'autorise pas une application à lire les journaux privés des autres apps. Le rapport contient les événements Atlas, les réponses HTTP et les traces de ce processus; quelques avertissements graphiques/fastpipe connus sont regroupés comme bruit système.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                AtlasInfoRow("Appareil", "${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE ?: "?"}")
+                AtlasInfoRow("Passkeys", if (passkeyAvailable) "Disponibles selon le serveur" else "Voir le diagnostic complet")
+                TextButton(onClick = { showTechnicalDetails = !showTechnicalDetails }) {
+                    Text(if (showTechnicalDetails) "Masquer les détails techniques" else "Afficher les détails techniques")
+                }
+                if (showTechnicalDetails) {
+                    AtlasInfoRow("Serveur sélectionné", ServerUrl.origin(server?.baseUrl) ?: "Aucun")
+                    AtlasInfoRow("Package / build", "${BuildConfig.APPLICATION_ID} · ${BuildConfig.BUILD_TYPE}")
+                    AtlasInfoRow("Android API", Build.VERSION.SDK_INT.toString())
+                    AtlasInfoRow("Catalogue hors ligne", "$cachedProductCount article(s)")
+                    AtlasInfoRow(
+                        "Crash reports automatiques",
+                        when {
+                            !CrashReportConsent.isConfigured(context) -> "Non configurés"
+                            CrashReportConsent.isEnabled(context) -> "Activés avec consentement"
+                            else -> "Désactivés — diagnostic local toujours disponible"
+                        },
+                    )
+                    Text(
+                        "Android limite les journaux accessibles à l'application. Les événements Atlas, les réponses HTTP et les traces de son processus restent inclus; le bruit graphique courant est regroupé.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             AtlasCard {
@@ -165,28 +172,35 @@ fun DeveloperDiagnosticsScreen(
                         Icon(Icons.Outlined.ContentCopy, contentDescription = "Copier tous les journaux")
                     }
                 }
-                androidx.compose.material3.OutlinedButton(
-                    onClick = ::refreshLogs,
-                    enabled = !loadingLogs,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Capturer les journaux à nouveau")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = ::refreshLogs,
+                        enabled = !loadingLogs,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Actualiser")
+                    }
+                    TextButton(onClick = { showFullLogs = !showFullLogs }) {
+                        Text(if (showFullLogs) "Masquer" else "Voir les journaux")
+                    }
                 }
-                AtlasDivider(Modifier.padding(vertical = 8.dp))
-                androidx.compose.material3.Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
-                ) {
-                    Column(Modifier.verticalScroll(rememberScrollState()).padding(10.dp)) {
-                        Text(
-                            logs,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                if (showFullLogs) {
+                    AtlasDivider(Modifier.padding(vertical = 8.dp))
+                    androidx.compose.material3.Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
+                    ) {
+                        Column(Modifier.verticalScroll(rememberScrollState()).padding(10.dp)) {
+                            Text(
+                                logs,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

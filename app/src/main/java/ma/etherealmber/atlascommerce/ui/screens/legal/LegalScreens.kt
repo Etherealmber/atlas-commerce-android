@@ -2,6 +2,7 @@ package ma.etherealmber.atlascommerce.ui.screens.legal
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -347,24 +348,19 @@ fun ProblemReportDialog(
                 ) {
                     Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "Diagnostics inclus · ID ${snapshot.maskedFingerprint}",
+                            text = "Diagnostics inclus automatiquement",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = "${snapshot.appVersion} · ${snapshot.androidVersion} · ${snapshot.manufacturerModel}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    text = if (loadingLogs) "Lecture des journaux…" else "${logsPreview.lineSequence().count()} lignes assainies",
+                                    text = if (loadingLogs) "Capture en cours…" else "${logsPreview.lineSequence().count()} lignes · ${snapshot.appVersion}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(
-                                    text = "Aucun compte GitHub requis · journaux expurgés des secrets",
+                                    text = "Journaux expurgés des secrets · les captures restent privées",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -395,11 +391,6 @@ fun ProblemReportDialog(
                                 Text(if (showLogsPreview) "Masquer" else "Voir")
                             }
                         }
-                        Text(
-                            "Atlas reçoit votre description, la version/appareil et jusqu'à 2 000 caractères de journaux expurgés (jetons, mots de passe et e-mails masqués). Les captures restent sur l'appareil; utilisez Partager pour les joindre manuellement.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                         if (showLogsPreview) {
                             Surface(
                                 shape = MaterialTheme.shapes.small,
@@ -499,12 +490,37 @@ fun ProblemReportDialog(
                             is ApiResult.Success -> {
                                 submitting = false
                                 val reference = result.data.reference?.takeIf { it.isNotBlank() }
-                                val created = !result.data.issueUrl.isNullOrBlank()
+                                val issueUrl = result.data.issueUrl?.takeIf { url ->
+                                    runCatching {
+                                        val parsed = java.net.URI(url)
+                                        parsed.scheme.equals("https", ignoreCase = true) &&
+                                            parsed.host.equals("github.com", ignoreCase = true)
+                                    }.getOrDefault(false)
+                                }
+                                val created = issueUrl != null
+                                // Open the actual created issue. If the Worker only queued the report,
+                                // open a prefilled GitHub issue form without placing diagnostic logs in the URL.
+                                val fallbackIssueUrl = Uri.parse(AppDetails.ISSUES_URL).buildUpon()
+                                    .appendQueryParameter("title", "[Atlas Android] ${title.ifBlank { category }.take(120)}")
+                                    .appendQueryParameter(
+                                        "body",
+                                        buildString {
+                                            appendLine("Catégorie : $category")
+                                            appendLine("Écran : $screenOrigin")
+                                            if (description.isNotBlank()) appendLine("Description : ${description.take(800)}")
+                                            reference?.let { appendLine("Référence Atlas : $it") }
+                                        },
+                                    )
+                                    .build()
+                                    .toString()
+                                val opened = openExternal(context, issueUrl ?: fallbackIssueUrl)
                                 onToast(
                                     when {
-                                        created -> "Rapport transmis à Atlas · ${reference ?: "ticket créé"}. Aucun compte GitHub demandé."
-                                        reference != null -> "Rapport reçu par Atlas · référence $reference. Aucun compte GitHub demandé."
-                                        else -> "Rapport reçu par Atlas. Aucun compte GitHub demandé."
+                                        created && opened -> "Ticket GitHub créé et ouvert${reference?.let { " · $it" } ?: ""}."
+                                        created -> "Ticket créé${reference?.let { " · $it" } ?: ""}, mais aucun navigateur n'est disponible."
+                                        opened -> "Rapport reçu par Atlas${reference?.let { " · $it" } ?: ""}. Le formulaire GitHub prérempli est ouvert; envoyez-le pour créer l'issue."
+                                        reference != null -> "Rapport reçu · $reference. Impossible d'ouvrir le suivi sur cet appareil."
+                                        else -> "Rapport reçu par Atlas. Impossible d'ouvrir le suivi sur cet appareil."
                                     },
                                 )
                                 onDismiss()

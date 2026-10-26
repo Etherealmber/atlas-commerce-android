@@ -49,6 +49,7 @@ import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
@@ -96,6 +97,7 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
 import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentScreen
+import ma.etherealmber.atlascommerce.ui.screens.legal.ProblemReportDialog
 import ma.etherealmber.atlascommerce.ui.screens.balance.BalanceScreen
 import ma.etherealmber.atlascommerce.ui.screens.home.HomeScreen
 import ma.etherealmber.atlascommerce.ui.screens.employees.EmployeesScreen
@@ -186,6 +188,15 @@ fun MainShell(
         else -> rawTab
     }
     val scope = rememberCoroutineScope()
+    var showProblemReportDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
+
+    if (showProblemReportDialog) {
+        ProblemReportDialog(
+            screenOrigin = tab.label,
+            onDismiss = { showProblemReportDialog = false },
+            onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+        )
+    }
 
     LaunchedEffect(externalTabRequest) {
         if (!externalTabRequest.isNullOrBlank()) {
@@ -260,6 +271,13 @@ fun MainShell(
                     if (hasHiddenDownload && tab !in BackStackTabs) {
                         Spacer(Modifier.width(6.dp))
                     }
+                    if (tab in BackStackTabs) IconButton(onClick = { showProblemReportDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Outlined.BugReport,
+                            contentDescription = "Signaler un problème",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     when (tab) {
                         MainTab.AGENT, MainTab.SALE, MainTab.SETTINGS -> Unit
 
@@ -327,7 +345,12 @@ fun MainShell(
             indexSelector = { it.ordinal },
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = if (showRail) 80.dp else 0.dp),
+                .padding(
+                    start = if (showRail) 80.dp else 0.dp,
+                    // Reserve the floating navigation area so every page can scroll
+                    // its final card/control completely above the bar.
+                    bottom = if (!useRail && tab !in BackStackTabs) 112.dp else 0.dp,
+                ),
         ) { currentTab ->
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 Box(Modifier.widthIn(max = if (useRail) 1200.dp else 840.dp).fillMaxSize()) {
@@ -367,6 +390,7 @@ fun MainShell(
 
                     MainTab.AGENT -> AgentScreen(
                         onToast = onToast,
+                        isActive = isForeground && tab == MainTab.AGENT && currentTab == MainTab.AGENT,
                     )
 
                     MainTab.PROFILE -> ProfileScreen(
@@ -447,7 +471,7 @@ private fun AtlasFloatingBottomBar(
     val leftTabs = if (centerIndex >= 0) tabs.take(centerIndex) else tabs
     val rightTabs = if (centerIndex >= 0) tabs.drop(centerIndex + 1) else emptyList()
     // Keep the pill translucent so page content remains visible beneath the floating controls.
-    val barColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.74f)
+    val barColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f)
     val motionEnabled = LocalAtlasAnimationsEnabled.current
 
     Box(
@@ -583,7 +607,7 @@ private fun FloatingBottomBarItem(
             Surface(
                 modifier = Modifier.width(indicatorWidth).height(28.dp),
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer,
+                color = MaterialTheme.colorScheme.primaryContainer,
             ) {}
             Icon(
                 item.icon,

@@ -76,5 +76,6 @@ class AtlasApp : Application() {
         const val ALERTS_CHANNEL_ID = "atlas_role_alerts_v2"
         const val EXTRA_OPEN_NOTIFICATIONS = "atlas_open_notifications"
         const val EXTRA_OPEN_SETTINGS = "atlas_open_settings"
+        const val ACTION_ASSIST_NOTIFICATION = "ATLAS_ASSIST_APPROVAL"
     }
 }
