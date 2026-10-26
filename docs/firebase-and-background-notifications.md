@@ -27,7 +27,7 @@ The Android app can receive pushes only if the APK has the matching Firebase con
    npx wrangler secret put FIREBASE_PRIVATE_KEY
    ```
 
-   `FIREBASE_PRIVATE_KEY` is the service-account PEM private key; the Worker accepts escaped `\\n` line breaks. Deploy the Worker after setting secrets.
+   `FIREBASE_PRIVATE_KEY` is the service-account PEM private key; the Worker accepts escaped `\n` line breaks. Deploy the Worker after setting secrets.
 
 4. Sign in with a Firebase-configured APK and allow Android notifications. The app registers its FCM token using `POST /api/assist/device-token`; the Worker stores it in D1 table `device_push_tokens`.
 5. Check Cloudflare Worker logs for `/api/assist/device-token`. A 500 means the token was **not** registered, so pushes cannot reach that device. The Android diagnostics now log the HTTP status and the sanitized Worker error without recording the FCM token.
