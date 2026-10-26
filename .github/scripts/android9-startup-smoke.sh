@@ -74,14 +74,15 @@ adb shell dumpsys activity activities > api28-activities.txt 2>&1
 if [ "$smoke_status" -ne 0 ]; then
   echo "=== Android 9 startup, build and app diagnostics ==="
   test_details=$(grep -E -i "FAILURE:|FAILED|Tests run:|Timed out|AssertionError|NoSuchMethodError|NoClassDefFoundError|AndroidJUnitRunner|ma\.etherealmber\.atlascommerce|^e: |error:|Unresolved reference|Type mismatch|Cannot infer|Compilation error|Minified release APK" api28-gradle.log api28-release-gradle.log api28-release-start.txt 2>/dev/null | tail -n 35 || true)
-  app_details=$(grep -E -i "Android9StartupSmoke|FATAL EXCEPTION|ANR in ma\.etherealmber\.atlascommerce|Process: ma\.etherealmber\.atlascommerce|ma\.etherealmber\.atlascommerce" api28-logcat.txt | tail -n 20 || true)
+  app_details=$(grep -A 40 -B 5 -E "FATAL EXCEPTION|ANR in ma\.etherealmber\.atlascommerce" api28-logcat.txt | tail -n 55 || true)
+  app_process=$(grep -E -i "Android9StartupSmoke|Process: ma\.etherealmber\.atlascommerce|ma\.etherealmber\.atlascommerce" api28-logcat.txt | tail -n 12 || true)
   window_details=$(grep -oE '.{0,100}(Aperçu interactif|Atlas Commerce|Not responding|has stopped).{0,180}' api28-release-window.xml 2>/dev/null | head -n 8 || true)
-  matches=$(printf '%s\n%s\n%s' "$test_details" "$app_details" "$window_details" | sed '/^[[:space:]]*$/d')
+  matches=$(printf '%s\n%s\n%s\n%s' "$test_details" "$app_details" "$app_process" "$window_details" | sed '/^[[:space:]]*$/d')
   if [ -z "$matches" ]; then
     matches=$(tail -n 50 api28-gradle.log 2>/dev/null || true)
   fi
   printf '%s\n' "$matches"
-  summary=$(printf '%s' "$matches" | tr '\n' ' ' | cut -c1-3500)
+  summary=$(printf '%s' "$matches" | tr '\n' ' ' | cut -c1-6500)
   echo "::error title=Android 9 startup diagnostics::$summary"
   echo "=== Activity state ==="
   cat api28-activities.txt || true
