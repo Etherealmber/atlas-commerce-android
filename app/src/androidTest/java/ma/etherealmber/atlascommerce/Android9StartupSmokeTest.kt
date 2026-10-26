@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.fetchSemanticsNodes
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
@@ -27,8 +28,7 @@ class Android9StartupSmokeTest {
             val visibleUi = runCatching { composeRule.onRoot(useUnmergedTree = true).printToString() }
                 .getOrDefault("<Compose semantics tree unavailable>")
             throw AssertionError(
-                "Cold start did not reach the first-run screen within 30 seconds. Visible UI: $visibleUi",
-                error,
+                "Cold start did not reach the first-run screen within 30 seconds: ${error.message}. Visible UI: $visibleUi",
             )
         }
         composeRule.onNodeWithText(firstRunMarker).assertExists()
