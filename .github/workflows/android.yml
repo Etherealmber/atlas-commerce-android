@@ -367,6 +367,10 @@ jobs:
           name: android9-startup-diagnostics
           path: |
             api28-gradle.log
+            api28-release-gradle.log
+            api28-release-install.txt
+            api28-release-start.txt
+            api28-release-window.xml
             api28-logcat.txt
             api28-activities.txt
             app/build/outputs/androidTest-results/connected/debug/**/*.xml
