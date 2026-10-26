@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 set +e
 
-./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain --stacktrace 2>&1 | tee api28-gradle.log
-gradle_status=${PIPESTATUS[0]}
-smoke_status=$gradle_status
+# Keep a stuck instrumentation runner from consuming the entire emulator job budget.
+timeout --signal=TERM --kill-after=30s 15m ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain --stacktrace 2>&1 | tee api28-gradle.log
+debug_status=${PIPESTATUS[0]}
+smoke_status=$debug_status
 
 # The production APK is minified, unlike the debug APK used by the instrumentation test.
-# Sign the CI release build with the temporary Android debug key and cold-launch that exact variant too.
-if [ "$smoke_status" -eq 0 ]; then
-  ./gradlew :app:assembleRelease --no-daemon --console=plain --stacktrace 2>&1 | tee api28-release-gradle.log
-  release_build_status=${PIPESTATUS[0]}
-  if [ "$release_build_status" -ne 0 ]; then
-    smoke_status=$release_build_status
-  else
+# Run this check even if debug instrumentation fails so the two variants provide independent evidence.
+timeout --signal=TERM --kill-after=30s 10m ./gradlew :app:assembleRelease --no-daemon --console=plain --stacktrace 2>&1 | tee api28-release-gradle.log
+release_build_status=${PIPESTATUS[0]}
+if [ "$release_build_status" -ne 0 ]; then
+  if [ "$smoke_status" -eq 0 ]; then smoke_status=$release_build_status; fi
+else
     sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
     apksigner=$(find "$sdk_root/build-tools" -type f -name apksigner 2>/dev/null | sort -V | tail -n 1)
     release_apk=$(find app/build/outputs/apk/release -type f -name '*.apk' 2>/dev/null | head -n 1)
@@ -34,24 +34,26 @@ if [ "$smoke_status" -eq 0 ]; then
         smoke_status=$sign_status
       else
         adb uninstall ma.etherealmber.atlascommerce >/dev/null 2>&1 || true
-        adb install api28-release-signed.apk > api28-release-install.txt 2>&1
+        timeout 120s adb install api28-release-signed.apk > api28-release-install.txt 2>&1
         install_status=$?
         if [ "$install_status" -ne 0 ]; then
           cat api28-release-install.txt
           smoke_status=$install_status
         else
           adb shell am force-stop ma.etherealmber.atlascommerce
-          adb shell am start -W -n ma.etherealmber.atlascommerce/.MainActivity > api28-release-start.txt 2>&1
+          timeout 30s adb shell am start -W -n ma.etherealmber.atlascommerce/.MainActivity > api28-release-start.txt 2>&1
           start_status=$?
+          adb shell rm -f /sdcard/api28-window.xml
+          rm -f api28-release-window.xml
           reached_first_run=false
-          for attempt in $(seq 1 45); do
-            adb shell uiautomator dump /sdcard/api28-window.xml >/dev/null 2>&1 || true
-            adb pull /sdcard/api28-window.xml api28-release-window.xml >/dev/null 2>&1 || true
+          for attempt in $(seq 1 12); do
+            timeout 8s adb shell uiautomator dump /sdcard/api28-window.xml >/dev/null 2>&1 || true
+            timeout 8s adb pull /sdcard/api28-window.xml api28-release-window.xml >/dev/null 2>&1 || true
             if grep -q 'Aperçu interactif' api28-release-window.xml 2>/dev/null; then
               reached_first_run=true
               break
             fi
-            sleep 1
+            sleep 5
           done
           if [ "$start_status" -ne 0 ] || [ "$reached_first_run" != "true" ]; then
             echo "Minified release APK failed the Android 9 cold-start check."
@@ -65,7 +67,6 @@ if [ "$smoke_status" -eq 0 ]; then
       fi
     fi
   fi
-fi
 
 adb logcat -d -v threadtime > api28-logcat.txt 2>&1
 adb shell dumpsys activity activities > api28-activities.txt 2>&1
