@@ -418,7 +418,8 @@ fun AgentScreen(
             }
 
             Surface(
-                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth().animateContentSize(),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
                 tonalElevation = 3.dp,
             ) {
                 Column(

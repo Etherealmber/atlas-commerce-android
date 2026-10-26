@@ -55,6 +55,8 @@ import ma.etherealmber.atlascommerce.data.model.WebAuthnRegistrationVerifyRespon
 import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
 import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
+import ma.etherealmber.atlascommerce.data.model.UserReportRequest
+import ma.etherealmber.atlascommerce.data.model.UserReportReceiptDto
 import ma.etherealmber.atlascommerce.data.model.VerifyLinkRequest
 import ma.etherealmber.atlascommerce.push.DeviceTokenAckDto
 import ma.etherealmber.atlascommerce.push.DeviceTokenRequest
@@ -96,6 +98,10 @@ interface AtlasApi {
 
     @GET("api/auth/me")
     suspend fun me(): ApiEnvelope<MeDto>
+
+    /** Authenticated user report; GitHub delivery is handled by the Worker (never by the app). */
+    @POST("api/reports")
+    suspend fun submitUserReport(@Body body: UserReportRequest): ApiEnvelope<UserReportReceiptDto>
 
     @PATCH("api/auth/me")
     suspend fun updateMe(@Body body: ProfileUpdateRequest): ActionAckDto

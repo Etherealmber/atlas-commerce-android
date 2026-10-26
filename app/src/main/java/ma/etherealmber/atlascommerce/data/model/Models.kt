@@ -87,6 +87,21 @@ data class ReportLinkTicketDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class UserReportRequest(
+    val kind: String = "bug",
+    val message: String,
+    val contact: String? = null,
+    val page: String? = null,
+    val version: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class UserReportReceiptDto(
+    val reference: String? = null,
+    @Json(name = "issue_url") val issueUrl: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
 data class WebAuthnCapabilitiesDto(
     val enabled: Boolean = false,
     val origins: List<String> = emptyList(),

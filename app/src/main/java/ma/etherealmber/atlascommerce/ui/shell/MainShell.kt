@@ -130,6 +130,7 @@ fun MainShell(
     onOpenLicense: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenDeveloperTools: () -> Unit = {},
     onSignOut: () -> Unit,
     onStartUpdateDownload: () -> Unit = {},
     shellViewModel: ShellViewModel = hiltViewModel(),
@@ -353,6 +354,7 @@ fun MainShell(
                         onOpenLicense = onOpenLicense,
                         onOpenSecurity = onOpenSecurity,
                         onOpenAbout = onOpenAbout,
+                        onOpenDeveloperTools = onOpenDeveloperTools,
                         onSignOut = onSignOut,
                         onStartUpdateDownload = onStartUpdateDownload,
                         onToast = onToast,
@@ -378,7 +380,7 @@ private fun AtlasFloatingBottomBar(
     val rightTabs = if (centerIndex >= 0) tabs.drop(centerIndex + 1) else emptyList()
     // Keep the floating dock visually light while letting the page surface show through.
     // Text and icons remain fully opaque for contrast in both themes.
-    val barColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.82f)
+    val barColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.74f)
 
     Box(
         modifier = Modifier

@@ -20,6 +20,7 @@ import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
+import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyCredentials
 import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyOrigin
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
@@ -76,22 +77,49 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             serverConfig.selection.collectLatest { selectedServer ->
                 _state.update { it.copy(passkeyAvailable = false) }
-                if (selectedServer != null) {
-                    val result = authRepository.webAuthnCapabilities()
-                    val currentBaseUrl = serverConfig.selection.value?.baseUrl
-                    if (currentBaseUrl != null && currentBaseUrl.equals(selectedServer.baseUrl, ignoreCase = true)) {
-                        val capabilities = (result as? ApiResult.Success)?.data
-                        _state.update {
-                            it.copy(passkeyAvailable = capabilities?.supportsAndroid(
-                                BuildConfig.APPLICATION_ID,
-                                AndroidPasskeyOrigin.forInstalledApp(applicationContext),
-                                ServerUrl.origin(selectedServer.baseUrl),
-                            ) == true)
-                        }
-                    }
-                }
+                selectedServer?.baseUrl?.let { refreshPasskeyCapabilityFor(it) }
             }
         }
+    }
+
+    fun refreshPasskeyCapability() {
+        val selectedBase = serverConfig.selection.value?.baseUrl ?: run {
+            _state.update { it.copy(passkeyAvailable = false) }
+            AtlasLogBuffer.log("PASSKEY", "Login capability refresh skipped: no selected server", "WARN")
+            return
+        }
+        viewModelScope.launch { refreshPasskeyCapabilityFor(selectedBase) }
+    }
+
+    private suspend fun refreshPasskeyCapabilityFor(selectedBase: String) {
+        val selectedOrigin = ServerUrl.origin(selectedBase)
+        val result = authRepository.webAuthnCapabilities()
+        if (!serverConfig.selection.value?.baseUrl.equals(selectedBase, ignoreCase = true)) return
+        val capability = (result as? ApiResult.Success)?.data
+        val installedOrigins = AndroidPasskeyOrigin.forInstalledApp(applicationContext)
+        val android = capability?.android
+        val advertisedOrigins = listOfNotNull(android?.origin, android?.originLegacy)
+        val originConfigured = advertisedOrigins.isNotEmpty()
+        val signingOriginMatch = advertisedOrigins.any(installedOrigins::contains)
+        val selectedOriginAllowed = selectedOrigin != null && capability?.origins?.contains(selectedOrigin) == true
+        val packageMatch = android?.packageName == BuildConfig.APPLICATION_ID
+        val available = capability?.supportsAndroid(
+            BuildConfig.APPLICATION_ID,
+            installedOrigins,
+            selectedOrigin,
+        ) == true
+        when (result) {
+            is ApiResult.Success -> AtlasLogBuffer.log(
+                "PASSKEY",
+                "Login capability: enabled=${capability?.enabled}; androidEnabled=${android?.enabled}; packageMatch=$packageMatch; selectedOriginAllowed=$selectedOriginAllowed; androidOriginConfigured=$originConfigured; installedSigningOriginMatch=$signingOriginMatch; available=$available",
+            )
+            is ApiResult.Failure -> AtlasLogBuffer.log(
+                "PASSKEY",
+                "Login capability request failed: code=${result.code}; http=${result.httpStatus ?: "none"}; message=${result.message}",
+                "ERROR",
+            )
+        }
+        _state.update { it.copy(passkeyAvailable = available) }
     }
 
     fun onUsernameChange(value: String) {
@@ -139,13 +167,16 @@ class LoginViewModel @Inject constructor(
         if (current.loading || !current.passkeyAvailable || current.step != Step.CREDENTIALS) return
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null, info = null) }
+            AtlasLogBuffer.log("PASSKEY", "Login flow started; usernameProvided=${current.username.isNotBlank()}")
             try {
                 val selectedServerOrigin = ServerUrl.origin(serverConfig.selection.value?.baseUrl)
+                AtlasLogBuffer.log("PASSKEY", "Login selected origin=${selectedServerOrigin ?: "invalid"}")
                 if (selectedServerOrigin == null) {
                     _state.update { it.copy(loading = false, passkeyAvailable = false, error = "L'origine du serveur sélectionné est invalide.") }
                     return@launch
                 }
                 if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
+                    AtlasLogBuffer.log("PASSKEY", "Login aborted: selected server no longer advertises Android passkeys", "ERROR")
                     _state.update {
                         it.copy(
                             loading = false,
@@ -155,40 +186,68 @@ class LoginViewModel @Inject constructor(
                     }
                     return@launch
                 }
+                AtlasLogBuffer.log("PASSKEY", "Requesting login options")
                 when (val options = authRepository.webAuthnLoginOptions(current.username.trim().ifBlank { null })) {
-                    is ApiResult.Failure -> _state.update { it.copy(loading = false, error = options.message) }
+                    is ApiResult.Failure -> {
+                        logPasskeyFailure("login-options", options)
+                        _state.update { it.copy(loading = false, error = formatPasskeyFailure(options)) }
+                    }
                     is ApiResult.Success -> {
+                        AtlasLogBuffer.log("PASSKEY", "Login options received; credential JSON is intentionally not logged")
                         if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
                             _state.update {
                                 it.copy(loading = false, passkeyAvailable = false, error = "Les passkeys Android ne sont plus disponibles sur ce serveur.")
                             }
                             return@launch
                         }
+                        AtlasLogBuffer.log("PASSKEY", "Opening Android Credential Manager for login")
                         val credentialJson = AndroidPasskeyCredentials.authenticate(context, options.data, selectedServerOrigin)
+                        AtlasLogBuffer.log("PASSKEY", "Credential Manager returned an assertion; sending it to selected Worker")
                         when (val verified = authRepository.verifyWebAuthnLogin(credentialJson, deviceIdentity.fingerprint)) {
-                            is ApiResult.Failure -> _state.update { it.copy(loading = false, error = verified.message) }
+                            is ApiResult.Failure -> {
+                                logPasskeyFailure("login-verify", verified)
+                                _state.update { it.copy(loading = false, error = formatPasskeyFailure(verified)) }
+                            }
                             is ApiResult.Success -> when (val signedIn = sessionManager.signInWithPasskey(verified.data)) {
-                                is ApiResult.Failure -> _state.update { it.copy(loading = false, error = signedIn.message) }
-                                is ApiResult.Success -> _state.update {
-                                    it.copy(loading = false, password = "", error = null, info = null)
+                                is ApiResult.Failure -> {
+                                    logPasskeyFailure("session-finalize", signedIn)
+                                    _state.update { it.copy(loading = false, error = formatPasskeyFailure(signedIn)) }
+                                }
+                                is ApiResult.Success -> {
+                                    AtlasLogBuffer.log("PASSKEY", "Login completed and session accepted")
+                                    _state.update { it.copy(loading = false, password = "", error = null, info = null) }
                                 }
                             }
                         }
                     }
                 }
             } catch (cancelled: CancellationException) {
+                AtlasLogBuffer.log("PASSKEY", "Login coroutine cancelled")
                 throw cancelled
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                val detail = "${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(240)}"
+                AtlasLogBuffer.log("PASSKEY", "Login failed in Credential Manager/client: $detail", "ERROR")
                 _state.update {
                     it.copy(
                         loading = false,
-                        error = "Connexion passkey annulée ou indisponible. Vous pouvez vous connecter avec votre mot de passe.",
+                        error = "Connexion passkey échouée — $detail. Vous pouvez réessayer ou utiliser le mot de passe.",
                     )
                 }
             }
         }
     }
 
+
+    private fun logPasskeyFailure(stage: String, failure: ApiResult.Failure) {
+        AtlasLogBuffer.log(
+            "PASSKEY",
+            "$stage failed: code=${failure.code}; http=${failure.httpStatus ?: "none"}; message=${failure.message}",
+            "ERROR",
+        )
+    }
+
+    private fun formatPasskeyFailure(failure: ApiResult.Failure): String =
+        "${AtlasLogBuffer.sanitize(failure.message)} [${failure.code}${failure.httpStatus?.let { " · HTTP $it" } ?: ""}]"
 
     private suspend fun supportsSelectedServerPasskeyOrigin(origin: String): Boolean {
         if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != origin) return false
