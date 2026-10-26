@@ -73,8 +73,7 @@ object AtlasLogBuffer {
     fun recentEntries(): List<String> = synchronized(entries) { entries.toList() }
 
     fun installCrashBreadcrumbHandler(context: Context) {
-        val dir = File(context.cacheDir, "diagnostics").apply { mkdirs() }
-        val crashFile = File(dir, CRASH_FILE_NAME)
+        val crashFile = File(File(context.cacheDir, "diagnostics"), CRASH_FILE_NAME)
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             runCatching {
@@ -87,6 +86,7 @@ object AtlasLogBuffer {
                     appendLine("[$stamp] Uncaught exception on thread '${thread.name}':")
                     append(sanitize(sw.toString()).take(8_000))
                 }
+                crashFile.parentFile?.mkdirs()
                 crashFile.writeText(text, Charsets.UTF_8)
             }
             previous?.uncaughtException(thread, throwable)
