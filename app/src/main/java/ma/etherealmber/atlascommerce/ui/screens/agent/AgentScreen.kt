@@ -47,6 +47,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.HourglassBottom
@@ -81,6 +82,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -110,6 +112,7 @@ private val QuickPrompts = listOf(
 @Composable
 fun AgentScreen(
     onToast: (String) -> Unit,
+    isActive: Boolean = true,
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -119,6 +122,7 @@ fun AgentScreen(
     val scope = rememberCoroutineScope()
     var showHistoryDialog by remember { mutableStateOf(false) }
     var composerExpanded by rememberSaveable { mutableStateOf(true) }
+    var showQuotaDetails by rememberSaveable { mutableStateOf(false) }
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             readAgentAttachment(context, uri).fold(
@@ -135,11 +139,22 @@ fun AgentScreen(
     val quotaLocked = state.policy?.isExhausted == true
     val conversationListState = rememberLazyListState()
 
-    LaunchedEffect(state.activeThreadId, state.messages.size, state.loadingThread) {
-        if (state.loadingThread) return@LaunchedEffect
+    // The screen stays composed behind other tabs. Reopening it must therefore
+    // explicitly restore the conversation tail, not rely on first composition.
+    LaunchedEffect(isActive, state.activeThreadId, state.messages.size, state.loadingThread) {
+        if (!isActive || state.loadingThread) return@LaunchedEffect
+        val itemCount = androidx.compose.runtime.snapshotFlow {
+            conversationListState.layoutInfo.totalItemsCount
+        }.first { it > 0 }
         withFrameNanos { }
-        val lastIndex = conversationListState.layoutInfo.totalItemsCount - 1
-        if (lastIndex >= 0) conversationListState.animateScrollToItem(lastIndex)
+        val lastIndex = itemCount - 1
+        conversationListState.scrollToItem(lastIndex)
+        withFrameNanos { }
+        val layout = conversationListState.layoutInfo
+        val lastItem = layout.visibleItemsInfo.firstOrNull { it.index == lastIndex }
+        val viewportSize = (layout.viewportEndOffset - layout.viewportStartOffset).coerceAtLeast(1)
+        val finalItemOverflow = ((lastItem?.size ?: 0) - viewportSize).coerceAtLeast(0)
+        conversationListState.animateScrollToItem(lastIndex, scrollOffset = finalItemOverflow)
     }
     LaunchedEffect(state.streamingReply.length) {
         if (state.streamingReply.isBlank()) return@LaunchedEffect
@@ -264,23 +279,39 @@ fun AgentScreen(
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        text = "Atlas Agent IA",
+                                        text = "Atlas Agent",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
                                     )
                                     Text(
                                         text = state.activeThreadTitle.takeIf { it.isNotBlank() }
-                                            ?: "Votre assistant pour le stock et les ventes",
+                                            ?: "Stock, ventes et assistance",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 }
+                                IconButton(onClick = { showHistoryDialog = true }) {
+                                    Icon(Icons.Outlined.History, contentDescription = "Historique des discussions")
+                                }
+                                IconButton(onClick = {
+                                    viewModel.startNewConversation()
+                                    onToast("Nouvelle discussion prête.")
+                                }) {
+                                    Icon(Icons.Outlined.AddComment, contentDescription = "Nouvelle discussion")
+                                }
+                                IconButton(onClick = viewModel::refreshContext) {
+                                    Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser le contexte")
+                                }
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 AtlasChip(
                                     text = when {
                                         quotaLocked -> "Quota atteint"
-                                        state.status?.configured == false -> "Veille"
+                                        state.status?.configured == false -> "En pause"
                                         else -> "En ligne"
                                     },
                                     tone = when {
@@ -289,54 +320,57 @@ fun AgentScreen(
                                         else -> AtlasTone.POSITIVE
                                     },
                                 )
-                                IconButton(onClick = { showHistoryDialog = true }) {
-                                    Icon(
-                                        Icons.Outlined.History,
-                                        contentDescription = "Historique Web & Mobile",
-                                    )
-                                }
-                                IconButton(
-                                    onClick = {
-                                        viewModel.startNewConversation()
-                                        onToast("Nouvelle discussion prête.")
+                                Spacer(Modifier.width(8.dp))
+                                val policy = state.policy
+                                Text(
+                                    text = when {
+                                        policy == null -> "Quota IA indisponible"
+                                        policy.isAdmin -> "Quota IA illimité"
+                                        else -> "${NumberFormat.getIntegerInstance(Locale.FRANCE).format(policy.dailyUsed)} / ${NumberFormat.getIntegerInstance(Locale.FRANCE).format(policy.dailyLimit)} jetons aujourd'hui"
                                     },
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                IconButton(
+                                    onClick = { showQuotaDetails = !showQuotaDetails },
+                                    modifier = Modifier.size(36.dp),
                                 ) {
                                     Icon(
-                                        Icons.Outlined.AddComment,
-                                        contentDescription = "Nouvelle discussion",
+                                        imageVector = if (showQuotaDetails) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.Info,
+                                        contentDescription = if (showQuotaDetails) "Masquer les détails du quota" else "Afficher les détails du quota",
+                                        tint = MaterialTheme.colorScheme.primary,
                                     )
                                 }
-                                IconButton(onClick = { viewModel.refreshContext() }) {
-                                    Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser")
-                                }
                             }
-
-                            // Real-time quota progress bar right inside Atlas Agent!
-                            state.policy?.let { policy ->
-                                Spacer(Modifier.height(10.dp))
-                                AtlasDivider()
-                                Spacer(Modifier.height(10.dp))
-                                AgentQuotaBarsContent(policy = policy, compact = true)
-                            }
-
-                            Surface(
-                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                            ) {
-                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.Top) {
-                                    Icon(Icons.Outlined.HourglassBottom, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.tertiary)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        "L'IA peut se tromper. Vérifiez les faits importants auprès d'une source officielle et évitez les données sensibles.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    )
+                            if (showQuotaDetails) {
+                                state.policy?.let { policy ->
+                                    Spacer(Modifier.height(6.dp))
+                                    AtlasDivider()
+                                    Spacer(Modifier.height(6.dp))
+                                    AgentQuotaBarsContent(policy = policy, compact = true)
                                 }
+                                Text(
+                                    "L'IA peut se tromper. Vérifiez les informations importantes et évitez les données sensibles.",
+                                    modifier = Modifier.padding(top = 6.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                Text(
+                                    "L'IA peut se tromper · vérifiez les informations importantes.",
+                                    modifier = Modifier.padding(top = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
 
                             if (state.messages.isEmpty() && !quotaLocked) {
-                                Spacer(Modifier.height(10.dp))
+                                Spacer(Modifier.height(8.dp))
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     QuickPrompts.forEach { prompt ->
                                         AssistChip(

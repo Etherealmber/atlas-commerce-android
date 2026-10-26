@@ -212,29 +212,19 @@ fun BalanceScreen(
 
     Column(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 8.dp)) {
-            if (maxWidth < 460.dp) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Balance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        MonthSelector(selectedPeriod = state.selectedPeriod, onSelect = viewModel::selectPeriod)
-                        IconButton(onClick = viewModel::refresh, enabled = !state.refreshing) {
-                            if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
-                            else Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les soldes")
-                        }
-                    }
-                    Text("Soldes, créances et mouvements réconciliés", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Balance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("Soldes, créances et mouvements réconciliés", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    MonthSelector(selectedPeriod = state.selectedPeriod, onSelect = viewModel::selectPeriod)
-                    IconButton(onClick = viewModel::refresh, enabled = !state.refreshing) {
-                        if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
-                        else Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les soldes")
-                    }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Trésorerie · créances · mouvements",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                MonthSelector(selectedPeriod = state.selectedPeriod, onSelect = viewModel::selectPeriod)
+                IconButton(onClick = viewModel::refresh, enabled = !state.refreshing) {
+                    if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les soldes")
                 }
             }
         }
@@ -275,7 +265,7 @@ fun BalanceScreen(
         if (state.error != null) {
             Text(state.error.orEmpty(), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
-        BoxWithConstraints(Modifier.fillMaxSize()) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val maxContentWidth = if (maxWidth >= 900.dp) 1180.dp else 820.dp
             LazyColumn(
                 modifier = Modifier.widthIn(max = maxContentWidth).fillMaxSize().align(Alignment.TopCenter),
@@ -400,9 +390,6 @@ fun BalanceScreen(
                     }
                     BalanceSection.CLIENTS -> {
                         val bucket = state.finance?.receivables
-                        item(key = "clients-title") {
-                            Text("Créances clients", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        }
                         item(key = "clients-total") {
                             SummaryAmountCard(
                                 title = "À recevoir",

@@ -373,13 +373,12 @@ class AppViewModel @Inject constructor(
                     "Credential Manager has no eligible provider after registration options were received; exceptionType=${error.type}; no credential was created",
                     "ERROR",
                 )
-                onDone(
-                    "Credential Manager n'a trouvé aucun fournisseur passkey prêt. Connectez un compte Google si vous utilisez " +
-                        "Google Password Manager, ou configurez un gestionnaire compatible; activez aussi le verrouillage d'écran " +
-                        "et sélectionnez le gestionnaire dans Paramètres > Mots de passe, clés d'accès et comptes, puis réessayez. " +
-                        "Si le problème persiste, vérifiez Digital Asset Links pour le domaine sélectionné. " +
-                        "Aucune passkey n'a été enregistrée.",
+                AtlasLogBuffer.log(
+                    "PASSKEY",
+                    "Troubleshooting: configure Google Password Manager or another credential provider; enable screen lock; select the provider in Android Passwords, passkeys & accounts settings; verify Digital Asset Links for the selected origin. No passkey was registered.",
+                    "INFO",
                 )
+                onDone("Aucun gestionnaire de passkey prêt. Configurez-en un dans les paramètres Android, puis réessayez. Aucune passkey créée.")
             } catch (error: Exception) {
                 val detail = "${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(240)}"
                 AtlasLogBuffer.log("PASSKEY", "Registration failed in Credential Manager/client: $detail", "ERROR")
