@@ -378,7 +378,7 @@ fun ProfileScreen(
             )
             Spacer(Modifier.height(4.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MainTab.BottomBarTabs.forEach { item ->
+                MainTab.bottomTabsForRole(user.role).forEach { item ->
                     FilterChip(
                         selected = defaultStartTab == item.name,
                         onClick = { appViewModel.setDefaultStartTab(item.name) },

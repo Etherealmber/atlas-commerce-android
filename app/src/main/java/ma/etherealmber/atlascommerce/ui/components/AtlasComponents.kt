@@ -560,6 +560,10 @@ fun AtlasTextField(
                 focusManager.clearFocus()
                 onDone?.invoke()
             },
+            onSend = {
+                focusManager.clearFocus()
+                onDone?.invoke()
+            },
         ),
         singleLine = singleLine,
         enabled = enabled,
