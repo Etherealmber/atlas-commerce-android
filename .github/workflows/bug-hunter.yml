@@ -157,11 +157,32 @@ jobs:
           # 3. Static Kotlin Safety, Privacy & Architecture Invariants
           # ------------------------------------------------------------------
           code_hazards = []
-          src_files = [f for f in sorted(glob.glob("app/src/**/*", recursive=True)) if os.path.isfile(f)]
-          if len(src_files) != 86:
-              code_hazards.append(
-                  f"- **Source file count drift**: found `{len(src_files)}` files under `app/src/` (expected `86` for `LegacySourceQuarantine` Windows pull compatibility)."
-              )
+          src_files = {
+              os.path.relpath(f, "app/src").replace(os.sep, "/")
+              for f in glob.glob("app/src/**/*", recursive=True)
+              if os.path.isfile(f)
+          }
+          quarantine_source = "buildSrc/src/main/java/LegacySourceQuarantine.java"
+          try:
+              quarantine_text = open(quarantine_source, encoding="utf-8").read()
+              manifest_match = re.search(r"new TreeSet<>\(List\.of\((.*?)\n\s*\)\)", quarantine_text, re.S)
+              if not manifest_match:
+                  raise ValueError("could not parse EXPECTED_APP_SRC_FILES")
+              expected_src_files = set(re.findall(r'"([^"\n]+)"', manifest_match.group(1)))
+              missing_from_manifest = sorted(src_files - expected_src_files)
+              missing_from_disk = sorted(expected_src_files - src_files)
+              if missing_from_manifest or missing_from_disk:
+                  details = []
+                  if missing_from_manifest:
+                      details.append("not in quarantine allowlist: " + ", ".join(missing_from_manifest[:20]))
+                  if missing_from_disk:
+                      details.append("allowlisted but absent: " + ", ".join(missing_from_disk[:20]))
+                  code_hazards.append(
+                      f"- **LegacySourceQuarantine manifest drift**: `app/src/` has {len(src_files)} files; "
+                      f"the manifest has {len(expected_src_files)}. " + "; ".join(details)
+                  )
+          except Exception as exc:
+              code_hazards.append(f"- **Could not validate LegacySourceQuarantine manifest**: `{exc}`")
 
           for kt in sorted(glob.glob("app/src/main/**/*.kt", recursive=True)):
               lines = open(kt, encoding="utf-8").read().splitlines()
@@ -203,11 +224,14 @@ jobs:
                       item["path"] for item in tree_data.get("tree", [])
                       if item.get("type") == "blob" and item["path"].startswith("worker/") and item["path"].endswith(".ts")
                   ]
+                  # Route handlers are split across nested files such as worker/routes/finance.ts.
+                  # Scan every tracked Worker TypeScript file; a fixed first-40 slice silently
+                  # omitted route modules and generated false contract-drift issues.
                   worker_corpus = []
-                  for wf in worker_files[:40]:
-                      rc2, content, _ = sh("gh", "api", f"repos/Etherealmber/atlas-commerce/contents/{wf}", "-H", "Accept: application/vnd.github.raw")
-                      if rc2 == 0:
-                          worker_corpus.append(content)
+                  for wf in worker_files:
+                    rc2, content, _ = sh("gh", "api", f"repos/Etherealmber/atlas-commerce/contents/{wf}", "-H", "Accept: application/vnd.github.raw")
+                    if rc2 == 0:
+                      worker_corpus.append(content)
                   joined_worker = "\n".join(worker_corpus)
                   atlas_api = open("app/src/main/java/ma/etherealmber/atlascommerce/core/net/AtlasApi.kt", encoding="utf-8").read()
                   missing_routes = []
@@ -216,7 +240,7 @@ jobs:
                       # Normalize Retrofit `{id}` path params to prefix match
                       clean_prefix = re.sub(r"/\{[^}]+\}.*$", "", raw_route)
                       if joined_worker and clean_prefix not in joined_worker:
-                          missing_routes.append(f"- `{raw_route}` (declared in `AtlasApi.kt`, prefix `{clean_prefix}` not found in `Etherealmber/atlas-commerce/worker/*.ts`)")
+                          missing_routes.append(f"- `{raw_route}` (declared in `AtlasApi.kt`, prefix `{clean_prefix}` not found in `Etherealmber/atlas-commerce/worker/**/*.ts`)")
                   if missing_routes:
                       findings.append({
                           "slug": "backend-api-route-drift",
