@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.ThemeMode
@@ -103,6 +104,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentQuotaCard
 import ma.etherealmber.atlascommerce.ui.screens.legal.EtherealmberAuthorCard
@@ -134,6 +136,7 @@ fun ProfileScreen(
     val scrollState = rememberScrollState()
 
     val themeMode by appViewModel.themeMode.collectAsStateWithLifecycle()
+    val appLanguage by appViewModel.appLanguage.collectAsStateWithLifecycle()
     val densityMode by appViewModel.densityMode.collectAsStateWithLifecycle()
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val autoOpenCamera by appViewModel.autoOpenCamera.collectAsStateWithLifecycle()
@@ -351,6 +354,22 @@ fun ProfileScreen(
                         selected = themeMode == mode,
                         onClick = { appViewModel.setThemeMode(mode) },
                         label = { Text(mode.label) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = atlasText("Langue", "Language", "اللغة"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppLanguage.entries.forEach { language ->
+                    FilterChip(
+                        selected = appLanguage == language,
+                        onClick = { appViewModel.setAppLanguage(language) },
+                        label = { Text(language.nativeLabel) },
                     )
                 }
             }
@@ -617,6 +636,7 @@ fun SettingsScreen(
     val agentPolicy by appViewModel.agentPolicy.collectAsStateWithLifecycle()
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val updateDownloadSource by appViewModel.updateDownloadSource.collectAsStateWithLifecycle()
+    val appLanguage by appViewModel.appLanguage.collectAsStateWithLifecycle()
     val mirrorPing by appViewModel.mirrorPing.collectAsStateWithLifecycle()
     val releaseChangelog by appViewModel.releaseChangelog.collectAsStateWithLifecycle()
     val releaseChangelogLoading by appViewModel.releaseChangelogLoading.collectAsStateWithLifecycle()
@@ -779,6 +799,24 @@ fun SettingsScreen(
             ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {
+        AtlasCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(atlasText("Langue de l'application", "App language", "لغة التطبيق"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppLanguage.entries.forEach { language ->
+                    FilterChip(
+                        selected = appLanguage == language,
+                        onClick = { appViewModel.setAppLanguage(language) },
+                        label = { Text(language.nativeLabel) },
+                    )
+                }
+            }
+        }
+
         // 1. Connected Devices & QR PC Pairing
         AtlasCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -791,23 +829,23 @@ fun SettingsScreen(
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = "Appareils connectés & QR PC (${devices.size})",
+                        text = atlasText("Appareils connectés & QR PC (${devices.size})", "Connected devices & PC QR (${devices.size})", "الأجهزة المتصلة وQR الكمبيوتر (${devices.size})"),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "Autorisez un ordinateur par QR ou révoquez une session à distance.",
+                        text = atlasText("Autorisez un ordinateur par QR ou révoquez une session à distance.", "Approve a computer with QR or revoke a session remotely.", "وافق على كمبيوتر عبر QR أو ألغِ جلسة عن بُعد."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 IconButton(onClick = appViewModel::loadDevices, enabled = !devicesLoading) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les appareils")
+                    Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les appareils", "Refresh devices", "تحديث الأجهزة"))
                 }
             }
             Spacer(Modifier.height(10.dp))
             AtlasButton(
-                text = "Scanner un poste PC (QR)",
+                text = atlasText("Scanner un poste PC (QR)", "Scan a PC sign-in QR", "امسح رمز تسجيل الدخول للكمبيوتر"),
                 onClick = onOpenQrDevice,
                 icon = Icons.Outlined.QrCode2,
                 modifier = Modifier.fillMaxWidth(),
@@ -1265,7 +1303,7 @@ private fun ConnectedDeviceRow(
                 )
                 if (device.current) {
                     Spacer(Modifier.width(6.dp))
-                    AtlasChip(text = "Cet appareil", tone = AtlasTone.POSITIVE)
+                    AtlasChip(text = atlasText("Cet appareil", "This device", "هذا الجهاز"), tone = AtlasTone.POSITIVE)
                 }
             }
             val meta = listOfNotNull(
@@ -1283,7 +1321,7 @@ private fun ConnectedDeviceRow(
         IconButton(onClick = onRevoke) {
             Icon(
                 imageVector = Icons.Outlined.DeleteOutline,
-                contentDescription = "Révoquer cet appareil",
+                contentDescription = atlasText("Révoquer cet appareil", "Revoke this device", "إلغاء صلاحية هذا الجهاز"),
                 tint = MaterialTheme.colorScheme.error,
             )
         }

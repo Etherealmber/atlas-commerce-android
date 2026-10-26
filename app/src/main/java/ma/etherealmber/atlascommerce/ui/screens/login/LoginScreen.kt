@@ -82,6 +82,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasServerChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
+import ma.etherealmber.atlascommerce.ui.i18n.AtlasLanguageSelector
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 @Composable
@@ -97,7 +99,7 @@ fun LoginScreen(
     val server by viewModel.server.collectAsStateWithLifecycle()
     val savedAccounts by viewModel.savedAccounts.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val host = server?.let { ServerUrl.display(it.baseUrl) } ?: "Serveur non sélectionné"
+    val host = server?.let { ServerUrl.display(it.baseUrl) } ?: atlasText("Serveur non sélectionné", "No server selected", "لم يتم اختيار خادم")
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner, viewModel) {
@@ -111,10 +113,10 @@ fun LoginScreen(
     state.passkeyError?.let { passkeyError ->
         AlertDialog(
             onDismissRequest = viewModel::dismissPasskeyError,
-            title = { Text("Connexion par passkey impossible") },
+            title = { Text(atlasText("Connexion par passkey impossible", "Passkey sign-in failed", "تعذّر تسجيل الدخول بمفتاح المرور")) },
             text = { Text(passkeyError) },
             confirmButton = {
-                TextButton(onClick = viewModel::dismissPasskeyError) { Text("Fermer") }
+                TextButton(onClick = viewModel::dismissPasskeyError) { Text(atlasText("Fermer", "Close", "إغلاق")) }
             },
             dismissButton = {
                 TextButton(
@@ -126,7 +128,7 @@ fun LoginScreen(
                                 runCatching { context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
                             }
                     },
-                ) { Text("Paramètres Android") }
+                ) { Text(atlasText("Paramètres Android", "Android settings", "إعدادات Android")) }
             },
         )
     }
@@ -137,11 +139,9 @@ fun LoginScreen(
     ) {
         val compact = maxWidth < 600.dp || maxHeight < 840.dp
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        val heroHeight = when {
-            keyboardVisible -> 104.dp
-            maxHeight < 680.dp -> maxHeight * 0.30f
-            else -> maxHeight * 0.36f
-        }
+        // Keep the brand header compact; the form already carries the welcome and
+        // verification context, so a tall duplicate hero wastes space on phones.
+        val heroHeight = if (keyboardVisible) 72.dp else 104.dp
 
         Box(Modifier.fillMaxSize()) {
             Column(
@@ -175,7 +175,7 @@ fun LoginScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text = if (state.step == LoginViewModel.Step.CREDENTIALS) "Bon retour" else "Vérification",
+                        text = if (state.step == LoginViewModel.Step.CREDENTIALS) atlasText("Bon retour", "Welcome back", "مرحبًا بعودتك") else atlasText("Vérification", "Verification", "التحقق"),
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
@@ -183,9 +183,9 @@ fun LoginScreen(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = if (state.step == LoginViewModel.Step.CREDENTIALS) {
-                            "Connectez-vous à votre espace Atlas Commerce."
+                            atlasText("Connectez-vous à votre espace Atlas Commerce.", "Sign in to your Atlas Commerce workspace.", "سجّل الدخول إلى مساحة Atlas Commerce الخاصة بك.")
                         } else {
-                            "Confirmez votre identité pour continuer."
+                            atlasText("Confirmez votre identité pour continuer.", "Verify your identity to continue.", "أكّد هويتك للمتابعة.")
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -237,11 +237,11 @@ fun LoginScreen(
                                 ) {
                                     Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Connexion avec une passkey")
+                                    Text(atlasText("Connexion avec une passkey", "Sign in with a passkey", "تسجيل الدخول بمفتاح مرور"))
                                 }
                             } else {
                                 AtlasOutlinedButton(
-                                    text = "Connexion avec une passkey",
+                                    text = atlasText("Connexion avec une passkey", "Sign in with a passkey", "تسجيل الدخول بمفتاح مرور"),
                                     onClick = { viewModel.signInWithPasskey(context) },
                                     icon = Icons.Outlined.Fingerprint,
                                     modifier = Modifier.fillMaxWidth(),
@@ -256,19 +256,19 @@ fun LoginScreen(
                             ) {
                                 Icon(Icons.Outlined.QrCode2, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Scanner un QR de connexion PC")
+                                Text(atlasText("Scanner un QR de connexion PC", "Scan a PC sign-in QR code", "امسح رمز QR لتسجيل الدخول على الكمبيوتر"))
                             }
                         } else {
                             Spacer(Modifier.height(4.dp))
                             AtlasOutlinedButton(
-                                text = "Scanner un QR de connexion PC",
+                                text = atlasText("Scanner un QR de connexion PC", "Scan a PC sign-in QR code", "امسح رمز QR لتسجيل الدخول على الكمبيوتر"),
                                 onClick = onOpenQrDevice,
                                 icon = Icons.Outlined.QrCode2,
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
                         Text(
-                            text = "Besoin d'un accès ? Contactez l'administrateur de votre espace Atlas.",
+                            text = atlasText("Besoin d'un accès ? Contactez l'administrateur de votre espace Atlas.", "Need access? Contact your Atlas workspace administrator.", "هل تحتاج إلى وصول؟ تواصل مع مسؤول مساحة Atlas."),
                             modifier = Modifier.padding(top = 4.dp),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -291,7 +291,7 @@ fun LoginScreen(
                         if (!state.error.isNullOrBlank()) {
                             Spacer(Modifier.height(8.dp))
                             AtlasErrorCard(
-                                title = if (state.step == LoginViewModel.Step.OTP) "Code refusé" else "Connexion refusée",
+                                title = if (state.step == LoginViewModel.Step.OTP) atlasText("Code refusé", "Code rejected", "تم رفض الرمز") else atlasText("Connexion refusée", "Sign-in failed", "فشل تسجيل الدخول"),
                                 message = state.error.orEmpty(),
                             )
                         }
@@ -313,9 +313,9 @@ fun LoginScreen(
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 0.dp else 4.dp)) {
-                        TextButton(onClick = onOpenSecurity) { Text("Sécurité") }
-                        TextButton(onClick = onOpenLicense) { Text("Licence") }
-                        TextButton(onClick = onCheckUpdates) { Text("Mises à jour") }
+                        TextButton(onClick = onOpenSecurity) { Text(atlasText("Sécurité", "Security", "الأمان")) }
+                        TextButton(onClick = onOpenLicense) { Text(atlasText("Licence", "License", "الترخيص")) }
+                        TextButton(onClick = onCheckUpdates) { Text(atlasText("Mises à jour", "Updates", "التحديثات")) }
                     }
                     Spacer(Modifier.height(8.dp))
                 }
@@ -374,11 +374,12 @@ private fun LoginAtlasHero(
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)),
         )
-        Column(
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = if (compact) 12.dp else 22.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = if (compact) 8.dp else 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             AtlasEntrance(delayMillis = 0) {
                 AtlasBrandWordmark(
@@ -387,21 +388,7 @@ private fun LoginAtlasHero(
                     tint = Color.White,
                 )
             }
-            Column(verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 6.dp)) {
-                Text(
-                    text = "Bienvenue chez Atlas",
-                    style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1,
-                )
-                Text(
-                    text = "Retrouvez votre espace professionnel en toute sécurité.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.82f),
-                    maxLines = if (compact) 1 else 2,
-                )
-            }
+            AtlasLanguageSelector(contentColor = Color.White)
         }
     }
 }
@@ -416,13 +403,13 @@ private fun SavedAccountsCard(
 ) {
     AtlasCard {
         Text(
-            text = "Comptes mémorisés sur ce serveur",
+            text = atlasText("Comptes mémorisés sur ce serveur", "Saved accounts on this server", "الحسابات المحفوظة على هذا الخادم"),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(2.dp))
         Text(
-            text = "Touchez un compte pour ouvrir sa session isolée instantanément.",
+            text = atlasText("Touchez un compte pour ouvrir sa session isolée instantanément.", "Choose an account to open its isolated session.", "اختر حسابًا لفتح جلسته المعزولة."),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -460,7 +447,7 @@ private fun SavedAccountsCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Close,
-                                contentDescription = "Oublier ce compte",
+                                contentDescription = atlasText("Oublier ce compte", "Forget this account", "نسيان هذا الحساب"),
                                 modifier = Modifier.size(18.dp),
                             )
                         }
@@ -479,7 +466,7 @@ private fun SavedAccountsCompact(
     onForget: (SavedAccountEntry) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text("Comptes mémorisés", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(atlasText("Comptes mémorisés", "Saved accounts", "الحسابات المحفوظة"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -512,13 +499,13 @@ private fun CredentialsForm(
 ) {
     Column(Modifier.fillMaxWidth()) {
         Text(
-            text = "Identifiant et mot de passe",
+            text = atlasText("Identifiant et mot de passe", "Username and password", "اسم المستخدم وكلمة المرور"),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(2.dp))
         Text(
-            text = "Utilisez les identifiants de votre espace Atlas.",
+            text = atlasText("Utilisez les identifiants de votre espace Atlas.", "Use the credentials for your Atlas workspace.", "استخدم بيانات اعتماد مساحة Atlas الخاصة بك."),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -526,7 +513,7 @@ private fun CredentialsForm(
         AtlasTextField(
             value = state.username,
             onValueChange = onUsername,
-            label = "Identifiant",
+            label = atlasText("Identifiant", "Username", "اسم المستخدم"),
             leadingIcon = Icons.Outlined.Person,
             keyboardType = KeyboardType.Text,
             imeAction = ImeAction.Next,
@@ -536,7 +523,7 @@ private fun CredentialsForm(
         AtlasTextField(
             value = state.password,
             onValueChange = onPassword,
-            label = "Mot de passe",
+            label = atlasText("Mot de passe", "Password", "كلمة المرور"),
             leadingIcon = Icons.Outlined.Lock,
             keyboardType = KeyboardType.Password,
             imeAction = ImeAction.Done,
@@ -551,12 +538,12 @@ private fun CredentialsForm(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = "Mémoriser ce compte",
+                    text = atlasText("Mémoriser ce compte", "Remember this account", "تذكّر هذا الحساب"),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
-                    text = if (compact) "Chiffré ici · propre à ce serveur." else "Chiffré localement et visible uniquement sur ce serveur.",
+                    text = if (compact) atlasText("Chiffré ici · propre à ce serveur.", "Encrypted on this device · tied to this server.", "مشفّر على هذا الجهاز · مرتبط بهذا الخادم.") else atlasText("Chiffré localement et visible uniquement sur ce serveur.", "Encrypted locally and available only on this server.", "مشفّر محليًا ومتاح على هذا الخادم فقط."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -570,18 +557,13 @@ private fun CredentialsForm(
         }
         Spacer(Modifier.height(if (compact) 9.dp else 16.dp))
         AtlasButton(
-            text = "Se connecter",
+            text = atlasText("Se connecter", "Sign in", "تسجيل الدخول"),
             onClick = onSubmit,
             modifier = Modifier.fillMaxWidth(),
             enabled = state.canSubmit,
             loading = state.loading,
         )
         Spacer(Modifier.height(if (compact) 4.dp else 10.dp))
-        Text(
-            text = if (compact) "Nouvel appareil ? Code envoyé par e-mail." else "Nouvel appareil ? Un code de vérification vous sera envoyé par e-mail.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -603,14 +585,14 @@ private fun OtpForm(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = "Vérification de l'appareil",
+                text = atlasText("Vérification de l'appareil", "Device verification", "التحقق من الجهاز"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            text = state.info ?: "Saisissez le code à 6 chiffres envoyé par e-mail.",
+            text = state.info ?: atlasText("Saisissez le code à 6 chiffres envoyé par e-mail.", "Enter the six-digit code sent by email.", "أدخل الرمز المكوّن من ستة أرقام المرسل عبر البريد الإلكتروني."),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -618,7 +600,7 @@ private fun OtpForm(
         AtlasTextField(
             value = state.otp,
             onValueChange = onOtp,
-            label = "Code de vérification",
+            label = atlasText("Code de vérification", "Verification code", "رمز التحقق"),
             keyboardType = KeyboardType.NumberPassword,
             imeAction = ImeAction.Done,
             enabled = !state.loading,
@@ -626,7 +608,7 @@ private fun OtpForm(
         )
         Spacer(Modifier.height(16.dp))
         AtlasButton(
-            text = "Valider le code",
+            text = atlasText("Valider le code", "Verify code", "تحقّق من الرمز"),
             onClick = onSubmit,
             modifier = Modifier.fillMaxWidth(),
             enabled = state.canSubmit,
@@ -638,10 +620,10 @@ private fun OtpForm(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             TextButton(onClick = onBack, enabled = !state.loading) {
-                Text("Autre compte")
+                Text(atlasText("Autre compte", "Use another account", "استخدام حساب آخر"))
             }
             TextButton(onClick = onResend, enabled = !state.loading) {
-                Text("Renvoyer le code")
+                Text(atlasText("Renvoyer le code", "Resend code", "إعادة إرسال الرمز"))
             }
         }
     }

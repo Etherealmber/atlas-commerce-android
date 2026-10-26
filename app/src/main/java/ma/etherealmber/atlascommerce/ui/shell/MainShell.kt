@@ -106,6 +106,7 @@ import ma.etherealmber.atlascommerce.ui.screens.sale.SaleScreen
 import ma.etherealmber.atlascommerce.ui.screens.scan.ScanScreen
 import ma.etherealmber.atlascommerce.ui.screens.settings.ProfileScreen
 import ma.etherealmber.atlascommerce.ui.screens.settings.SettingsScreen
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
 enum class MainTab(val label: String, val icon: ImageVector) {
     HOME("Accueil", Icons.Outlined.Home),
@@ -127,6 +128,19 @@ enum class MainTab(val label: String, val icon: ImageVector) {
         fun bottomTabsForRole(role: String?): List<MainTab> =
             if (Roles.isAdmin(role)) BottomBarTabs else listOf(HOME, PRODUCTS, SCAN, BALANCE)
     }
+}
+
+@Composable
+private fun MainTab.localizedLabel(): String = when (this) {
+    MainTab.HOME -> atlasText("Accueil", "Home", "الرئيسية")
+    MainTab.PRODUCTS -> atlasText("Produits", "Products", "المنتجات")
+    MainTab.SCAN -> atlasText("Scan", "Scan", "المسح")
+    MainTab.SALE -> atlasText("Vente", "Sales", "المبيعات")
+    MainTab.BALANCE -> atlasText("Balance", "Balance", "الرصيد")
+    MainTab.EMPLOYEES -> atlasText("Employés", "Employees", "الموظفون")
+    MainTab.AGENT -> atlasText("Atlas Agent", "Atlas Agent", "مساعد Atlas")
+    MainTab.PROFILE -> atlasText("Mon profil", "My profile", "ملفي الشخصي")
+    MainTab.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
 }
 
 private val BackStackTabs = setOf(MainTab.AGENT, MainTab.SALE, MainTab.PROFILE, MainTab.SETTINGS)
@@ -255,7 +269,7 @@ fun MainShell(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AtlasTopBar(
-                title = tab.label,
+                title = tab.localizedLabel(),
                 onBack = when (tab) {
                     MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
                     MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> ({ setTabName(lastBottomTabName) })
@@ -331,10 +345,10 @@ fun MainShell(
                         onClick = { switchTab(item) },
                         icon = {
                             if (item == MainTab.SALE && cartCount > 0) {
-                                BadgedBox(badge = { Badge { Text(cartCount.toString()) } }) { AnimatedTabIcon(item.icon, item.label, selected = tab == item) }
-                            } else AnimatedTabIcon(item.icon, item.label, selected = tab == item)
+                                BadgedBox(badge = { Badge { Text(cartCount.toString()) } }) { AnimatedTabIcon(item.icon, item.localizedLabel(), selected = tab == item) }
+                            } else AnimatedTabIcon(item.icon, item.localizedLabel(), selected = tab == item)
                         },
-                        label = { Text(item.label, style = MaterialTheme.typography.labelSmall, maxLines = 1) },
+                        label = { Text(item.localizedLabel(), style = MaterialTheme.typography.labelSmall, maxLines = 1) },
                     )
                 }
             }
@@ -345,12 +359,7 @@ fun MainShell(
             indexSelector = { it.ordinal },
             modifier = Modifier
                 .fillMaxSize()
-                .padding(
-                    start = if (showRail) 80.dp else 0.dp,
-                    // Reserve the floating navigation area so every page can scroll
-                    // its final card/control completely above the bar.
-                    bottom = if (!useRail && tab !in BackStackTabs) 112.dp else 0.dp,
-                ),
+                .padding(start = if (showRail) 80.dp else 0.dp),
         ) { currentTab ->
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 Box(Modifier.widthIn(max = if (useRail) 1200.dp else 840.dp).fillMaxSize()) {
@@ -470,8 +479,9 @@ private fun AtlasFloatingBottomBar(
     val centerIndex = centerTab?.let(tabs::indexOf) ?: -1
     val leftTabs = if (centerIndex >= 0) tabs.take(centerIndex) else tabs
     val rightTabs = if (centerIndex >= 0) tabs.drop(centerIndex + 1) else emptyList()
-    // Keep the pill translucent so page content remains visible beneath the floating controls.
-    val barColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f)
+    // Keep the navigation pill fully opaque for legible controls; only the surrounding
+    // system/navigation background is transparent so page content can extend behind it.
+    val barColor = MaterialTheme.colorScheme.surfaceContainerLow
     val motionEnabled = LocalAtlasAnimationsEnabled.current
 
     Box(
@@ -551,10 +561,10 @@ private fun AtlasFloatingBottomBar(
                     hoveredElevation = 5.dp,
                 ),
             ) {
-                Icon(centerTab.icon, contentDescription = centerTab.label, modifier = Modifier.size(25.dp))
+                Icon(centerTab.icon, contentDescription = centerTab.localizedLabel(), modifier = Modifier.size(25.dp))
             }
             Text(
-                text = centerTab.label,
+                text = centerTab.localizedLabel(),
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 1.dp),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
@@ -624,7 +634,7 @@ private fun FloatingBottomBarItem(
         }
         Spacer(Modifier.height(2.dp))
         Text(
-            text = item.label,
+            text = item.localizedLabel(),
             style = MaterialTheme.typography.labelSmall,
             color = tint,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,

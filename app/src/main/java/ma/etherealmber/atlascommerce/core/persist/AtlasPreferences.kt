@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import org.json.JSONArray
@@ -67,6 +68,7 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         val SAVED_SERVERS = stringPreferencesKey("saved_servers_v1")
         val SAVED_ACCOUNTS = stringPreferencesKey("saved_accounts_v1")
         val THEME = stringPreferencesKey("theme_mode")
+        val LANGUAGE = stringPreferencesKey("app_language")
         val DENSITY = stringPreferencesKey("density_mode")
         val ANIMATIONS_ENABLED = booleanPreferencesKey("animations_enabled")
         val DEVELOPER_MODE_ENABLED = booleanPreferencesKey("developer_mode_enabled")
@@ -147,6 +149,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
                 else -> ThemeMode.SYSTEM
             }
         }
+        .distinctUntilChanged()
+
+    val appLanguage: Flow<AppLanguage> = safeData
+        .map { prefs -> AppLanguage.fromTag(prefs.safeString(Keys.LANGUAGE.name)) }
         .distinctUntilChanged()
 
     val densityMode: Flow<DensityMode> = safeData
@@ -302,6 +308,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
 
     suspend fun setThemeMode(mode: ThemeMode) {
         safeEdit { prefs -> prefs.putClean(Keys.THEME, mode.storageKey) }
+    }
+
+    suspend fun setAppLanguage(language: AppLanguage) {
+        safeEdit { prefs -> prefs.putClean(Keys.LANGUAGE, language.tag) }
     }
 
     suspend fun setDensityMode(mode: DensityMode) {

@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.BuildConfig
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
@@ -92,6 +93,9 @@ class AppViewModel @Inject constructor(
 
     val densityMode: StateFlow<DensityMode> = preferences.densityMode
         .stateIn(viewModelScope, SharingStarted.Eagerly, DensityMode.COMPACT)
+
+    val appLanguage: StateFlow<AppLanguage> = preferences.appLanguage
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppLanguage.FRENCH)
 
     val appearanceLoaded: StateFlow<Boolean> = preferences.appearanceLoaded
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -666,6 +670,10 @@ class AppViewModel @Inject constructor(
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { preferences.setThemeMode(mode) }
+    }
+
+    fun setAppLanguage(language: AppLanguage) {
+        viewModelScope.launch { preferences.setAppLanguage(language) }
     }
 
     fun setDensityMode(mode: DensityMode) {

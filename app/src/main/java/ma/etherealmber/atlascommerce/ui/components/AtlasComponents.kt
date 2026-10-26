@@ -138,6 +138,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.ui.i18n.AtlasLanguageSelector
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 /** Semantic tone shared by chips, tiles and banners. */
@@ -1993,17 +1995,18 @@ private fun AtlasDemoPreviewScreen(
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Atlas Commerce", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("Aperçu interactif · mode démo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(atlasText("Aperçu interactif · mode démo", "Interactive preview · demo mode", "معاينة تفاعلية · وضع تجريبي"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TextButton(onClick = onSkip) { Text("Passer") }
+                AtlasLanguageSelector()
+                TextButton(onClick = onSkip) { Text(atlasText("Passer", "Skip", "تخطي")) }
             }
             AtlasCard {
-                AtlasChip("DÉMO — DONNÉES FICTIVES", tone = AtlasTone.INFO)
+                AtlasChip(atlasText("DÉMO — DONNÉES FICTIVES", "DEMO — SAMPLE DATA", "تجربة — بيانات توضيحية"), tone = AtlasTone.INFO)
                 Spacer(Modifier.height(8.dp))
-                Text("Découvrez votre espace avant de connecter votre serveur.", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(atlasText("Découvrez votre espace avant de connecter votre serveur.", "Explore your workspace before connecting your server.", "استكشف مساحة العمل قبل ربط الخادم."), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Tout ce qui apparaît ici est un exemple local : aucune connexion réseau, aucune écriture et aucun envoi à votre base de données.",
+                    atlasText("Tout ce qui apparaît ici est un exemple local : aucune connexion réseau, aucune écriture et aucun envoi à votre base de données.", "Everything here is a local example: no network connection, writes, or data sent to your database.", "كل ما تراه هنا مثال محلي: لا يوجد اتصال بالشبكة أو كتابة أو إرسال بيانات إلى قاعدة بياناتك."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -2016,7 +2019,7 @@ private fun AtlasDemoPreviewScreen(
                     icon = Icons.Outlined.AdminPanelSettings,
                 )
                 AtlasOutlinedButton(
-                    text = "Employé",
+                    text = atlasText("Employé", "Employee", "موظف"),
                     onClick = { adminPreview = false },
                     modifier = Modifier.weight(1f),
                     icon = Icons.Outlined.Inventory2,
@@ -2024,40 +2027,40 @@ private fun AtlasDemoPreviewScreen(
             }
             if (adminPreview) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AtlasStatTile("À recevoir", "8 450 DH", modifier = Modifier.weight(1f), hint = "3 clients", tone = AtlasTone.INFO)
-                    AtlasStatTile("À payer", "5 200 DH", modifier = Modifier.weight(1f), hint = "fournisseurs + paie", tone = AtlasTone.WARNING)
+                    AtlasStatTile(atlasText("À recevoir", "Receivables", "مبالغ مستحقة"), "8 450 DH", modifier = Modifier.weight(1f), hint = atlasText("3 clients", "3 customers", "٣ عملاء"), tone = AtlasTone.INFO)
+                    AtlasStatTile(atlasText("À payer", "Payables", "مبالغ واجبة الدفع"), "5 200 DH", modifier = Modifier.weight(1f), hint = "fournisseurs + paie", tone = AtlasTone.WARNING)
                 }
                 AtlasCard {
-                    Text("Tableau de bord Admin", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(atlasText("Tableau de bord Admin", "Admin dashboard", "لوحة تحكم المسؤول"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     AtlasDivider(Modifier.padding(vertical = 8.dp))
-                    AtlasInfoRow("Salaire équipe à verser", "12 600 DH")
-                    AtlasInfoRow("Client Atlas BTP · échéance 2 nov.", "3 200 DH")
-                    AtlasInfoRow("Facture fournisseur · échéance 3 nov.", "1 450 DH")
-                    AtlasInfoRow("Rapport mensuel", "Prêt à exporter en PDF")
+                    AtlasInfoRow(atlasText("Salaire équipe à verser", "Team payroll due", "رواتب الفريق المستحقة"), "12 600 DH")
+                    AtlasInfoRow(atlasText("Client Atlas BTP · échéance 2 nov.", "Atlas BTP customer · due Nov 2", "عميل Atlas BTP · الاستحقاق ٢ نوفمبر"), "3 200 DH")
+                    AtlasInfoRow(atlasText("Facture fournisseur · échéance 3 nov.", "Supplier invoice · due Nov 3", "فاتورة مورد · الاستحقاق ٣ نوفمبر"), "1 450 DH")
+                    AtlasInfoRow(atlasText("Rapport mensuel", "Monthly report", "التقرير الشهري"), atlasText("Prêt à exporter en PDF", "Ready to export as PDF", "جاهز للتصدير بصيغة PDF"))
                 }
                 AtlasCard {
-                    AtlasChip("RAPPORT MENSUEL", tone = AtlasTone.POSITIVE)
+                    AtlasChip(atlasText("RAPPORT MENSUEL", "MONTHLY REPORT", "التقرير الشهري"), tone = AtlasTone.POSITIVE)
                     Spacer(Modifier.height(6.dp))
-                    Text("À suivre cette semaine", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(atlasText("À suivre cette semaine", "This week", "هذا الأسبوع"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Text("• Client Atlas BTP doit régler 3 200 DH.\n• Client Marbre Plus a payé sa facture.\n• Facture fournisseur de 1 450 DH à payer.\n• Paie de l’équipe à préparer avant le 3.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AtlasStatTile("Mon salaire", "4 200 DH", modifier = Modifier.weight(1f), hint = "Exemple uniquement", tone = AtlasTone.INFO)
-                    AtlasStatTile("Prochaine paie", "3 nov.", modifier = Modifier.weight(1f), hint = "Dans 9 jours", tone = AtlasTone.POSITIVE)
+                    AtlasStatTile(atlasText("Mon salaire", "My pay", "راتبي"), "4 200 DH", modifier = Modifier.weight(1f), hint = atlasText("Exemple uniquement", "Example only", "مثال فقط"), tone = AtlasTone.INFO)
+                    AtlasStatTile(atlasText("Prochaine paie", "Next payday", "موعد الراتب القادم"), "3 nov.", modifier = Modifier.weight(1f), hint = atlasText("Dans 9 jours", "In 9 days", "بعد ٩ أيام"), tone = AtlasTone.POSITIVE)
                 }
                 AtlasCard {
-                    Text("Mon espace Employé", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(atlasText("Mon espace Employé", "My employee workspace", "مساحة الموظف الخاصة بي"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     AtlasDivider(Modifier.padding(vertical = 8.dp))
-                    AtlasInfoRow("Statut de la paie", "À venir")
-                    AtlasInfoRow("Mes tâches", "2 à traiter")
+                    AtlasInfoRow(atlasText("Statut de la paie", "Payroll status", "حالة الرواتب"), atlasText("À venir", "Upcoming", "قادم"))
+                    AtlasInfoRow(atlasText("Mes tâches", "My tasks", "مهامي"), atlasText("2 à traiter", "2 to do", "مهمتان قيد المعالجة"))
                     Spacer(Modifier.height(6.dp))
-                    Text("Les employés ne voient que leurs propres informations. Les montants affichés ici sont fictifs.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(atlasText("Les employés ne voient que leurs propres informations. Les montants affichés ici sont fictifs.", "Employees only see their own information. Amounts shown here are examples.", "لا يرى الموظفون سوى معلوماتهم الخاصة. المبالغ المعروضة هنا أمثلة توضيحية."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            AtlasButton(text = "Continuer vers la présentation", onClick = onContinue, modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.RocketLaunch)
+            AtlasButton(text = atlasText("Continuer vers la présentation", "Continue to introduction", "متابعة إلى المقدمة"), onClick = onContinue, modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.RocketLaunch)
             TextButton(onClick = onSkip, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                Text("Ignorer et configurer mon serveur")
+                Text(atlasText("Ignorer et configurer mon serveur", "Skip and configure my server", "تخطي وإعداد الخادم"))
             }
         }
     }
@@ -2103,14 +2106,15 @@ fun AtlasWelcomeOnboardingScreen(
                         color = MaterialTheme.colorScheme.onBackground,
                     )
                     Text(
-                        text = "Configuration de bienvenue · ${step + 1}/$total",
+                        text = atlasText("Configuration de bienvenue · ${step + 1}/$total", "Welcome setup · ${step + 1}/$total", "إعداد الترحيب · ${step + 1}/$total"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                AtlasLanguageSelector()
                 if (step < total - 1) {
                     TextButton(onClick = onComplete) {
-                        Text("Passer")
+                        Text(atlasText("Passer", "Skip", "تخطي"))
                     }
                 }
             }
@@ -2258,7 +2262,7 @@ fun AtlasWelcomeOnboardingScreen(
                     )
                 }
                 AtlasButton(
-                    text = if (step < total - 1) "Continuer" else "Commencer",
+                    text = if (step < total - 1) atlasText("Continuer", "Continue", "متابعة") else "Commencer",
                     onClick = {
                         if (step < total - 1) {
                             step += 1
