@@ -43,6 +43,15 @@
 -keep class androidx.datastore.preferences.protobuf.** { *; }
 -dontwarn androidx.datastore.preferences.protobuf.**
 
+# WorkManager creates its generated Room database and input mergers reflectively.
+# R8 full mode can otherwise remove the zero-argument constructors needed at startup/runtime.
+-keep class * extends androidx.room.RoomDatabase {
+    <init>();
+}
+-keep class * extends androidx.work.InputMerger {
+    <init>();
+}
+
 # Hilt / Dagger
 -keep class dagger.hilt.** { *; }
 -keep class javax.inject.** { *; }

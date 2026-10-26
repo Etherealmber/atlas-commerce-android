@@ -336,7 +336,7 @@ jobs:
     needs: build
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     permissions:
       contents: read
     steps:
@@ -367,6 +367,13 @@ jobs:
           name: android9-startup-diagnostics
           path: |
             api28-gradle.log
+            api28-release-gradle.log
+            api28-release-install.txt
+            api28-release-start.txt
+            api28-release-window.xml
+            app/build/outputs/mapping/release/mapping.txt
+            app/build/outputs/mapping/release/usage.txt
+            app/build/intermediates/merged_manifest/release/**/AndroidManifest.xml
             api28-logcat.txt
             api28-activities.txt
             app/build/outputs/androidTest-results/connected/debug/**/*.xml

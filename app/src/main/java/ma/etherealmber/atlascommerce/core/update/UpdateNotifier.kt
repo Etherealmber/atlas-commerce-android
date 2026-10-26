@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce.core.update
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -140,6 +141,9 @@ class AndroidUpdateNotifier @Inject constructor(
         }
     }
 
+    // Permission is checked immediately before posting; SecurityException is also caught below
+    // to cover a permission change between the check and the notification service call.
+    @SuppressLint("MissingPermission")
     private fun postNotification(builder: NotificationCompat.Builder) {
         if (!canPostNotifications()) return
         runCatching {
@@ -220,6 +224,9 @@ class RoleNotificationDispatcher @Inject constructor(
         }
     }
 
+    // The runtime permission gate is checked before deduplication and the notification call is
+    // guarded by runCatching to handle a permission revoked between check and post.
+    @SuppressLint("MissingPermission")
     fun dispatchIfNew(
         dedupKey: String,
         title: String,
