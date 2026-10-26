@@ -1090,7 +1090,7 @@ fun SettingsScreen(
                 if (androidPasskeysAvailable) {
                     AtlasOutlinedButton(
                         text = if (registeringPasskey) "Enregistrement en cours…" else "Enregistrer une passkey",
-                        onClick = { appViewModel.registerAndroidPasskey(context, onToast) },
+                        onClick = { appViewModel.registerAndroidPasskey(context) { } },
                         icon = Icons.Outlined.Fingerprint,
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !registeringPasskey,

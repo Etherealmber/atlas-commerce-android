@@ -3,6 +3,8 @@ package ma.etherealmber.atlascommerce.ui.root
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,7 +17,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -169,6 +175,7 @@ private fun AtlasGate(
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val defaultStartTab by viewModel.defaultStartTab.collectAsStateWithLifecycle()
     val autoCheckUpdates by viewModel.autoCheckUpdates.collectAsStateWithLifecycle()
+    val passkeyRegistrationMessage by viewModel.passkeyRegistrationMessage.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -177,6 +184,7 @@ private fun AtlasGate(
     var pendingQrToken by rememberSaveable { mutableStateOf<String?>(null) }
     var requestedTab by rememberSaveable { mutableStateOf<String?>(null) }
     var notificationPermissionPrompted by rememberSaveable { mutableStateOf(false) }
+    var passkeySetupOfferVisible by rememberSaveable { mutableStateOf(false) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -277,6 +285,9 @@ private fun AtlasGate(
 
     LaunchedEffect(viewModel) {
         viewModel.notices.collect { message -> showToast(message) }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.passkeySetupOffers.collect { passkeySetupOfferVisible = true }
     }
     LaunchedEffect(session) {
         if (session is SessionState.Active) {
@@ -503,6 +514,47 @@ private fun AtlasGate(
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 88.dp),
             )
+
+            if (passkeySetupOfferVisible && session is SessionState.Active) {
+                AlertDialog(
+                    onDismissRequest = { passkeySetupOfferVisible = false },
+                    title = { Text("Créer une passkey ?") },
+                    text = {
+                        Text("Ajoutez une connexion rapide et protégée par le gestionnaire de mots de passe de cet appareil. Vous pourrez aussi la créer plus tard dans Paramètres > Sécurité. Cette étape est facultative.")
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            passkeySetupOfferVisible = false
+                            viewModel.registerAndroidPasskey(context) { }
+                        }) { Text("Créer une passkey") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { passkeySetupOfferVisible = false }) { Text("Plus tard") }
+                    },
+                )
+            }
+
+            passkeyRegistrationMessage?.let { message ->
+                val providerSetupSuggested = message.contains("aucun fournisseur", ignoreCase = true) ||
+                    message.contains("verrouillage d'écran", ignoreCase = true) ||
+                    message.contains("activées", ignoreCase = true)
+                AlertDialog(
+                    onDismissRequest = viewModel::dismissPasskeyRegistrationMessage,
+                    title = { Text("Passkey Android") },
+                    text = { Text(message) },
+                    confirmButton = {
+                        TextButton(onClick = viewModel::dismissPasskeyRegistrationMessage) { Text("OK") }
+                    },
+                    dismissButton = {
+                        if (providerSetupSuggested) {
+                            TextButton(onClick = {
+                                viewModel.dismissPasskeyRegistrationMessage()
+                                runCatching { context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
+                            }) { Text("Paramètres Android") }
+                        }
+                    },
+                )
+            }
         }
     }
 }

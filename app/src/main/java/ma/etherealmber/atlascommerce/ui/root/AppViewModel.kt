@@ -40,6 +40,7 @@ import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyCredentials
 import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyOrigin
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
+import ma.etherealmber.atlascommerce.core.security.PasskeySetupPrompt
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.server.ServerSelection
@@ -80,6 +81,7 @@ class AppViewModel @Inject constructor(
     private val updateManager: AppUpdateManager,
     private val offlineCache: OfflineCache,
     private val deviceIdentity: DeviceIdentity,
+    private val passkeySetupPrompt: PasskeySetupPrompt,
 ) : ViewModel() {
 
     val deviceShortId: String get() = deviceIdentity.shortId()
@@ -185,6 +187,14 @@ class AppViewModel @Inject constructor(
     private val _registeringPasskey = MutableStateFlow(false)
     val registeringPasskey: StateFlow<Boolean> = _registeringPasskey.asStateFlow()
 
+    private val _passkeyRegistrationMessage = MutableStateFlow<String?>(null)
+    val passkeyRegistrationMessage: StateFlow<String?> = _passkeyRegistrationMessage.asStateFlow()
+    val passkeySetupOffers = passkeySetupPrompt.events
+
+    fun dismissPasskeyRegistrationMessage() {
+        _passkeyRegistrationMessage.value = null
+    }
+
     init {
         observeSessionExpiry()
         observeServerChanges()
@@ -284,9 +294,14 @@ class AppViewModel @Inject constructor(
     }
 
     fun registerAndroidPasskey(context: Context, onDone: (String) -> Unit) {
+        _passkeyRegistrationMessage.value = null
+        val report: (String) -> Unit = { message ->
+            _passkeyRegistrationMessage.value = message
+            onDone(message)
+        }
         if (!_androidPasskeysAvailable.value) {
             AtlasLogBuffer.log("PASSKEY", "Registration blocked because capability is unavailable", "WARN")
-            onDone("Les passkeys Android ne sont pas activées pour le serveur sélectionné.")
+            report("Les passkeys Android ne sont pas activées pour le serveur sélectionné.")
             return
         }
         if (_registeringPasskey.value) return
@@ -299,14 +314,14 @@ class AppViewModel @Inject constructor(
                 AtlasLogBuffer.log("PASSKEY", "Registration selected origin=${selectedServerOrigin ?: "invalid"}")
                 if (selectedServerOrigin == null) {
                     _androidPasskeysAvailable.value = false
-                    onDone("L'origine du serveur sélectionné est invalide.")
+                    report("L'origine du serveur sélectionné est invalide.")
                     return@launch
                 }
                 when (val capabilityResult = authRepository.webAuthnCapabilities()) {
                     is ApiResult.Failure -> {
                         AtlasLogBuffer.log("PASSKEY", "Registration capability failed: code=${capabilityResult.code}; http=${capabilityResult.httpStatus ?: "none"}; message=${capabilityResult.message}", "ERROR")
                         _androidPasskeysAvailable.value = false
-                        onDone("Impossible de vérifier les passkeys (${capabilityResult.code}${capabilityResult.httpStatus?.let { " · HTTP $it" } ?: ""}) : ${AtlasLogBuffer.sanitize(capabilityResult.message)}")
+                        report("Impossible de vérifier les passkeys (${capabilityResult.code}${capabilityResult.httpStatus?.let { " · HTTP $it" } ?: ""}) : ${AtlasLogBuffer.sanitize(capabilityResult.message)}")
                         return@launch
                     }
                     is ApiResult.Success -> {
@@ -319,7 +334,7 @@ class AppViewModel @Inject constructor(
                             )
                         ) {
                             _androidPasskeysAvailable.value = false
-                            onDone("Les passkeys Android ne sont plus activées pour le serveur sélectionné.")
+                            report("Les passkeys Android ne sont plus activées pour le serveur sélectionné.")
                             return@launch
                         }
                     }
@@ -328,7 +343,7 @@ class AppViewModel @Inject constructor(
                 when (val options = authRepository.webAuthnRegistrationOptions(deviceIdentity.fingerprint)) {
                     is ApiResult.Failure -> {
                         AtlasLogBuffer.log("PASSKEY", "registration-options failed: code=${options.code}; http=${options.httpStatus ?: "none"}; message=${options.message}", "ERROR")
-                        onDone("${AtlasLogBuffer.sanitize(options.message)} [${options.code}${options.httpStatus?.let { " · HTTP $it" } ?: ""}]")
+                        report("${AtlasLogBuffer.sanitize(options.message)} [${options.code}${options.httpStatus?.let { " · HTTP $it" } ?: ""}]")
                     }
                     is ApiResult.Success -> {
                         excludedCredentialCount = AndroidPasskeyCredentials.registrationExcludedCredentialsCount(options.data)
@@ -338,7 +353,7 @@ class AppViewModel @Inject constructor(
                         )
                         if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
                             _androidPasskeysAvailable.value = false
-                            onDone("Les passkeys Android ne sont plus disponibles sur ce serveur.")
+                            report("Les passkeys Android ne sont plus disponibles sur ce serveur.")
                             return@launch
                         }
                         AtlasLogBuffer.log("PASSKEY", "Opening Android Credential Manager for registration")
@@ -357,11 +372,11 @@ class AppViewModel @Inject constructor(
                         ) {
                             is ApiResult.Failure -> {
                                 AtlasLogBuffer.log("PASSKEY", "registration-verify failed: code=${result.code}; http=${result.httpStatus ?: "none"}; message=${result.message}", "ERROR")
-                                onDone("${AtlasLogBuffer.sanitize(result.message)} [${result.code}${result.httpStatus?.let { " · HTTP $it" } ?: ""}]")
+                                report("${AtlasLogBuffer.sanitize(result.message)} [${result.code}${result.httpStatus?.let { " · HTTP $it" } ?: ""}]")
                             }
                             is ApiResult.Success -> {
                                 AtlasLogBuffer.log("PASSKEY", "Registration verified by Worker")
-                                onDone(result.data)
+                                report(result.data)
                             }
                         }
                     }
@@ -385,11 +400,11 @@ class AppViewModel @Inject constructor(
                 } else {
                     ""
                 }
-                onDone("${existingKeyHint}Android n'a proposé aucun fournisseur de création prêt. Activez un gestionnaire de clés d'accès (par exemple Google Password Manager) et un verrouillage d'écran dans les paramètres Android, puis réessayez. Aucune nouvelle passkey n'a été créée.")
+                report("${existingKeyHint}Android n'a proposé aucun fournisseur de création compatible. Activez un gestionnaire de clés d'accès (par exemple Google Password Manager) dans Paramètres > Mots de passe, clés d'accès et comptes, connectez un compte Google et configurez un verrouillage d'écran. Sur un émulateur x86_64, utilisez une image système Google Play à jour; sinon, réessayez sur le téléphone OPPO lui-même. Aucune nouvelle passkey n'a été créée.")
             } catch (error: Exception) {
                 val detail = "${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(240)}"
                 AtlasLogBuffer.log("PASSKEY", "Registration failed in Credential Manager/client: $detail", "ERROR")
-                onDone("Enregistrement passkey échoué — $detail. Copiez les journaux du diagnostic pour l'administrateur.")
+                report("Enregistrement passkey échoué — $detail. Copiez les journaux du diagnostic pour l'administrateur.")
             } finally {
                 _registeringPasskey.value = false
             }

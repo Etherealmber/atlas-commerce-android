@@ -24,6 +24,7 @@ import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyCredentials
 import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyOrigin
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
+import ma.etherealmber.atlascommerce.core.security.PasskeySetupPrompt
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.session.LoginOutcome
@@ -39,6 +40,7 @@ class LoginViewModel @Inject constructor(
     private val preferences: AtlasPreferences,
     private val authRepository: AuthRepository,
     private val deviceIdentity: DeviceIdentity,
+    private val passkeySetupPrompt: PasskeySetupPrompt,
     @ApplicationContext private val applicationContext: Context,
 ) : ViewModel() {
 
@@ -145,7 +147,10 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             when (val res = sessionManager.switchToSavedAccount(entry)) {
-                is ApiResult.Success -> _state.update { it.copy(loading = false, error = null) }
+                is ApiResult.Success -> {
+                    _state.update { it.copy(loading = false, error = null) }
+                    passkeySetupPrompt.request()
+                }
                 is ApiResult.Failure -> _state.update {
                     it.copy(
                         loading = false,
@@ -317,7 +322,10 @@ class LoginViewModel @Inject constructor(
                 }
 
                 is ApiResult.Success -> when (val outcome = result.data) {
-                    is LoginOutcome.SignedIn -> _state.update { it.copy(loading = false, password = "", error = null) }
+                    is LoginOutcome.SignedIn -> {
+                        _state.update { it.copy(loading = false, password = "", error = null) }
+                        passkeySetupPrompt.request()
+                    }
                     is LoginOutcome.OtpRequired -> _state.update {
                         it.copy(
                             loading = false,
@@ -354,7 +362,10 @@ class LoginViewModel @Inject constructor(
                 }
 
                 is ApiResult.Success -> when (val outcome = result.data) {
-                    is LoginOutcome.SignedIn -> _state.update { it.copy(loading = false, password = "", error = null) }
+                    is LoginOutcome.SignedIn -> {
+                        _state.update { it.copy(loading = false, password = "", error = null) }
+                        passkeySetupPrompt.request()
+                    }
                     is LoginOutcome.OtpRequired -> _state.update {
                         it.copy(loading = false, info = outcome.message)
                     }
