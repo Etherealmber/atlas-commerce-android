@@ -371,6 +371,8 @@ jobs:
             api28-release-install.txt
             api28-release-start.txt
             api28-release-window.xml
+            app/build/outputs/mapping/release/mapping.txt
+            app/build/intermediates/merged_manifest/release/**/AndroidManifest.xml
             api28-logcat.txt
             api28-activities.txt
             app/build/outputs/androidTest-results/connected/debug/**/*.xml

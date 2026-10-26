@@ -43,6 +43,12 @@
 -keep class androidx.datastore.preferences.protobuf.** { *; }
 -dontwarn androidx.datastore.preferences.protobuf.**
 
+# AndroidX Startup discovers Initializer implementations reflectively from manifest metadata.
+# Preserve their names and zero-argument constructors in the minified release APK.
+-keep class * implements androidx.startup.Initializer {
+    <init>();
+}
+
 # Hilt / Dagger
 -keep class dagger.hilt.** { *; }
 -keep class javax.inject.** { *; }
