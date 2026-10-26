@@ -1005,7 +1005,7 @@ fun SettingsScreen(
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsToggleRow(
                 title = "Recherche automatique des mises à jour",
-                subtitle = "Vérifie à l'ouverture et environ toutes les 12 h en arrière-plan (selon les règles batterie d'Android)."
+                subtitle = "Vérifie à l'ouverture et environ toutes les 12 h en arrière-plan (selon les règles batterie d'Android).",
                 checked = autoCheckUpdates,
                 onCheckedChange = appViewModel::setAutoCheckUpdates,
             )
