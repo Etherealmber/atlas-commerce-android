@@ -281,13 +281,6 @@ fun MainShell(
                 },
             )
         },
-        bottomBar = {
-            if (!useRail && tab !in BackStackTabs) AtlasFloatingBottomBar(
-                tabs = roleTabs,
-                selected = tab,
-                onSelect = switchTab,
-            )
-        },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
         val showRail = useRail && tab !in BackStackTabs
@@ -382,6 +375,14 @@ fun MainShell(
         }
         }
     }
+    if (!useRail && tab !in BackStackTabs) {
+        AtlasFloatingBottomBar(
+            tabs = roleTabs,
+            selected = tab,
+            onSelect = switchTab,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
+    }
     }
 }
 
@@ -390,17 +391,18 @@ private fun AtlasFloatingBottomBar(
     tabs: List<MainTab>,
     selected: MainTab,
     onSelect: (MainTab) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val centerTab = tabs.firstOrNull { it == MainTab.SCAN } ?: tabs.getOrNull(tabs.size / 2)
     val centerIndex = centerTab?.let(tabs::indexOf) ?: -1
     val leftTabs = if (centerIndex >= 0) tabs.take(centerIndex) else tabs
     val rightTabs = if (centerIndex >= 0) tabs.drop(centerIndex + 1) else emptyList()
-    // Opaque M3 surface + elevation avoids the bright outline/edge artifact on light backgrounds.
-    val barColor = MaterialTheme.colorScheme.surfaceContainerLow
+    // Keep the pill translucent so page content remains visible beneath the floating controls.
+    val barColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.74f)
     val motionEnabled = ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled.current
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(horizontal = 10.dp, vertical = 4.dp)
