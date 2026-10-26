@@ -43,9 +43,12 @@
 -keep class androidx.datastore.preferences.protobuf.** { *; }
 -dontwarn androidx.datastore.preferences.protobuf.**
 
-# AndroidX Startup discovers Initializer implementations reflectively from manifest metadata.
-# Preserve their names and zero-argument constructors in the minified release APK.
--keep class * implements androidx.startup.Initializer {
+# WorkManager creates its generated Room database and input mergers reflectively.
+# R8 full mode can otherwise remove the zero-argument constructors needed at startup/runtime.
+-keep class * extends androidx.room.RoomDatabase {
+    <init>();
+}
+-keep class * extends androidx.work.InputMerger {
     <init>();
 }
 
