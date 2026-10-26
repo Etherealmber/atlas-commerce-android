@@ -137,9 +137,10 @@ class MarkdownParserTest {
             MainTab.BottomBarTabs.contains(MainTab.SETTINGS),
         )
         assertEquals(
-            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.AGENT),
+            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.EMPLOYEES),
             MainTab.BottomBarTabs,
         )
+        assertFalse("Atlas Agent must stay in the top quick menu, not the bottom bar", MainTab.BottomBarTabs.contains(MainTab.AGENT))
         assertFalse("Vente must stay in the top quick menu, not the bottom bar", MainTab.BottomBarTabs.contains(MainTab.SALE))
         assertTrue("Balance replaces Vente in the bottom bar", MainTab.BottomBarTabs.contains(MainTab.BALANCE))
         assertFalse(
@@ -176,23 +177,16 @@ class MarkdownParserTest {
         assertFalse(Roles.canViewFinancials("stock"))
         assertFalse(Roles.canViewFinancials("user"))
 
-        // 2. Balance replaces Vente in bottom navigation for every role; finance data stays server-authorized
+        // 2. Balance replaces Vente for every role; employee payroll stays admin-only.
         assertEquals(
-            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.AGENT),
+            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.EMPLOYEES),
             MainTab.bottomTabsForRole("admin"),
         )
-        assertEquals(
-            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.AGENT),
-            MainTab.bottomTabsForRole("secretaire"),
-        )
-        assertEquals(
-            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.AGENT),
-            MainTab.bottomTabsForRole("stock"),
-        )
-        assertEquals(
-            listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.AGENT),
-            MainTab.bottomTabsForRole("user"),
-        )
+        val nonAdminTabs = listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE)
+        assertEquals(nonAdminTabs, MainTab.bottomTabsForRole("secretaire"))
+        assertEquals(nonAdminTabs, MainTab.bottomTabsForRole("stock"))
+        assertEquals(nonAdminTabs, MainTab.bottomTabsForRole("user"))
+        assertFalse(nonAdminTabs.contains(MainTab.EMPLOYEES))
 
         // 3. Role-based notifications & Info Box filtering
         val adminProductReq = MobileActionDto(

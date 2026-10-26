@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,6 +37,8 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
@@ -51,12 +55,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,9 +102,11 @@ fun AgentScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val density = Atlas.density
     val scope = rememberCoroutineScope()
     var showHistoryDialog by remember { mutableStateOf(false) }
+    var composerExpanded by rememberSaveable { mutableStateOf(true) }
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             readAgentAttachment(context, uri).fold(
@@ -202,8 +210,8 @@ fun AgentScreen(
             .fillMaxSize()
             .imePadding(),
     ) {
-        // The dock takes a fixed slice of phone height. Compact the chat composer when
-        // the remaining viewport is short (especially while the keyboard is open).
+        // Compact the composer when the remaining phone viewport is short,
+        // especially while the keyboard is open.
         val compactComposer = maxHeight < 600.dp
         Column(Modifier.fillMaxSize()) {
             LazyColumn(
@@ -417,64 +425,109 @@ fun AgentScreen(
                 }
             }
 
-            Surface(
-                modifier = Modifier.fillMaxWidth().animateContentSize(),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                tonalElevation = 3.dp,
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(
-                        horizontal = density.screenPadding,
-                        vertical = if (compactComposer) 4.dp else 8.dp,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    if (state.attachments.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            Box(Modifier.fillMaxWidth().animateContentSize()) {
+                if (composerExpanded) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                        tonalElevation = 3.dp,
+                        shadowElevation = 4.dp,
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(
+                                horizontal = density.screenPadding,
+                                vertical = if (compactComposer) 4.dp else 8.dp,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            state.attachments.forEachIndexed { index, attachment ->
-                                AssistChip(
-                                    onClick = { viewModel.removeAttachment(index) },
-                                    label = { Text(attachment.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                    leadingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Retirer ${attachment.name}", modifier = Modifier.size(16.dp)) },
-                                    enabled = !state.sending,
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Écrire à Atlas Agent",
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                IconButton(
+                                    onClick = {
+                                    focusManager.clearFocus()
+                                    composerExpanded = false
+                                },
+                                    modifier = Modifier.size(34.dp),
+                                ) {
+                                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Masquer la zone de rédaction")
+                                }
+                            }
+                            if (state.attachments.isNotEmpty()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    state.attachments.forEachIndexed { index, attachment ->
+                                        AssistChip(
+                                            onClick = { viewModel.removeAttachment(index) },
+                                            label = { Text(attachment.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                            leadingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Retirer ${attachment.name}", modifier = Modifier.size(16.dp)) },
+                                            enabled = !state.sending,
+                                        )
+                                    }
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { attachmentPicker.launch(arrayOf("image/*", "application/pdf", "text/plain", "text/csv", "text/markdown", "application/json")) },
+                                    enabled = !state.sending && !quotaLocked && (state.attachments.sumOf { it.imageDataUrls.size } < 4 || state.attachments.sumOf { it.documentDataUrls.size } < 2),
+                                ) {
+                                    Icon(Icons.Outlined.AttachFile, contentDescription = "Joindre un fichier ou une image", tint = MaterialTheme.colorScheme.primary)
+                                }
+                                AtlasTextField(
+                                    value = state.input,
+                                    onValueChange = viewModel::onInputChange,
+                                    label = if (quotaLocked) "Quota IA atteint — réinitialisation automatique…" else "Message à Atlas Agent",
+                                    placeholder = "Écrivez votre question…",
+                                    imeAction = ImeAction.Send,
+                                    enabled = !state.sending && !quotaLocked,
+                                    onDone = { viewModel.sendPrompt() },
+                                    singleLine = false,
+                                    modifier = Modifier.weight(1f).heightIn(min = 58.dp, max = if (compactComposer) 92.dp else 132.dp),
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                IconButton(
+                                    onClick = { viewModel.sendPrompt() },
+                                    enabled = (state.input.isNotBlank() || state.attachments.isNotEmpty()) && !state.sending && !quotaLocked,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Outlined.Send,
+                                        contentDescription = "Envoyer",
+                                        tint = if (quotaLocked) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
+                                    )
+                                }
                             }
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = { attachmentPicker.launch(arrayOf("image/*", "application/pdf", "text/plain", "text/csv", "text/markdown", "application/json")) },
-                            enabled = !state.sending && !quotaLocked && (state.attachments.sumOf { it.imageDataUrls.size } < 4 || state.attachments.sumOf { it.documentDataUrls.size } < 2),
+                } else {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().animateContentSize(),
+                        shape = RoundedCornerShape(22.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                        tonalElevation = 2.dp,
+                        shadowElevation = 4.dp,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { composerExpanded = true }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Outlined.AttachFile, contentDescription = "Joindre un fichier ou une image", tint = MaterialTheme.colorScheme.primary)
-                        }
-                        AtlasTextField(
-                            value = state.input,
-                            onValueChange = viewModel::onInputChange,
-                            label = if (quotaLocked) {
-                                "Quota IA atteint — réinitialisation automatique…"
-                            } else {
-                                "Poser une question à Atlas Agent…"
-                            },
-                            placeholder = "Ex. Résumé des ventes et impayés du jour",
-                            imeAction = ImeAction.Send,
-                            enabled = !state.sending && !quotaLocked,
-                            onDone = { viewModel.sendPrompt() },
-                            modifier = Modifier.weight(1f),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        IconButton(
-                            onClick = { viewModel.sendPrompt() },
-                            enabled = (state.input.isNotBlank() || state.attachments.isNotEmpty()) && !state.sending && !quotaLocked,
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.Send,
-                                contentDescription = "Envoyer",
-                                tint = if (quotaLocked) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
+                            Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Afficher la zone de rédaction",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
                             )
+                            Text("${state.input.length} caractères", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }

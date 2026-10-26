@@ -1,10 +1,12 @@
 package ma.etherealmber.atlascommerce.ui.shell
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
@@ -63,6 +66,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -80,6 +86,7 @@ import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentScreen
 import ma.etherealmber.atlascommerce.ui.screens.balance.BalanceScreen
 import ma.etherealmber.atlascommerce.ui.screens.home.HomeScreen
+import ma.etherealmber.atlascommerce.ui.screens.employees.EmployeesScreen
 import ma.etherealmber.atlascommerce.ui.screens.products.ProductsScreen
 import ma.etherealmber.atlascommerce.ui.screens.sale.SaleScreen
 import ma.etherealmber.atlascommerce.ui.screens.scan.ScanScreen
@@ -92,23 +99,23 @@ enum class MainTab(val label: String, val icon: ImageVector) {
     SCAN("Scan", Icons.Outlined.QrCodeScanner),
     SALE("Vente", Icons.Outlined.ShoppingCart),
     BALANCE("Balance", Icons.Outlined.AccountBalanceWallet),
-    AGENT("Agent", Icons.Outlined.AutoAwesome),
+    EMPLOYEES("Employés", Icons.Outlined.Groups),
+    AGENT("Atlas Agent", Icons.Outlined.AutoAwesome),
     PROFILE("Mon profil", Icons.Outlined.Person),
     SETTINGS("Paramètres", Icons.Outlined.Settings),
     ;
 
     companion object {
-        /**
-         * Neither `PROFILE` nor `SETTINGS` appears in the Bottom Navigation Bar:
-         * tapping the Top Bar Avatar opens `PROFILE` (Account + Customizations ONLY),
-         * and the top-right Settings icon inside `PROFILE` opens `SETTINGS`.
-         */
-        val BottomBarTabs = listOf(HOME, PRODUCTS, SCAN, BALANCE, AGENT)
+        /** Profile, settings, sales, and Atlas Agent are pushed screens with a back action. */
+        val BottomBarTabs = listOf(HOME, PRODUCTS, SCAN, BALANCE, EMPLOYEES)
 
-        /** Balance is always in navigation; financial figures remain server-authorized. */
-        fun bottomTabsForRole(@Suppress("UNUSED_PARAMETER") role: String?): List<MainTab> = BottomBarTabs
+        /** Financial and employee data remain guarded by server-authorized roles. */
+        fun bottomTabsForRole(role: String?): List<MainTab> =
+            if (Roles.isAdmin(role)) BottomBarTabs else listOf(HOME, PRODUCTS, SCAN, BALANCE)
     }
 }
+
+private val BackStackTabs = setOf(MainTab.AGENT, MainTab.SALE, MainTab.PROFILE, MainTab.SETTINGS)
 
 @Composable
 fun MainShell(
@@ -152,28 +159,32 @@ fun MainShell(
         internalTabName = next
         onActiveTabChange?.invoke(next)
     }
-    val lastBottomTabName = lastBottomTabOverride ?: internalLastBottomTabName
+    val storedLastBottomTabName = lastBottomTabOverride ?: internalLastBottomTabName
+    val lastBottomTabName = storedLastBottomTabName.takeIf { saved -> roleTabs.any { it.name == saved } }
+        ?: MainTab.HOME.name
     val setLastBottomTabName: (String) -> Unit = { next ->
         internalLastBottomTabName = next
         onLastBottomTabChange?.invoke(next)
     }
 
     val rawTab = MainTab.entries.firstOrNull { it.name == tabName } ?: MainTab.HOME
-    val tab = if (rawTab == MainTab.SALE && !Roles.canCreateDocuments(user.role)) {
-        MainTab.HOME
-    } else {
-        rawTab
+    val tab = when {
+        rawTab == MainTab.SALE && !Roles.canCreateDocuments(user.role) -> MainTab.HOME
+        rawTab == MainTab.EMPLOYEES && !Roles.isAdmin(user.role) -> MainTab.HOME
+        else -> rawTab
     }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(externalTabRequest) {
         if (!externalTabRequest.isNullOrBlank()) {
-            val targetAllowed = externalTabRequest != MainTab.SALE.name || Roles.canCreateDocuments(user.role)
-            val resolved = if (targetAllowed) externalTabRequest else MainTab.PRODUCTS.name
-            setTabName(resolved)
-            if (resolved != MainTab.PROFILE.name && resolved != MainTab.SETTINGS.name) {
-                setLastBottomTabName(resolved)
+            val targetAllowed = when (externalTabRequest) {
+                MainTab.SALE.name -> Roles.canCreateDocuments(user.role)
+                MainTab.EMPLOYEES.name -> Roles.isAdmin(user.role)
+                else -> true
             }
+            val resolved = if (targetAllowed) externalTabRequest else MainTab.HOME.name
+            setTabName(resolved)
+            if (roleTabs.any { it.name == resolved }) setLastBottomTabName(resolved)
             onExternalTabHandled()
         }
     }
@@ -191,9 +202,7 @@ fun MainShell(
         if (target == MainTab.SALE && !Roles.canCreateDocuments(user.role)) {
             onToast("Accès Vente réservé aux rôles Administrateur et Secrétaire.")
         } else {
-            if (target != MainTab.PROFILE && target != MainTab.SETTINGS) {
-                setLastBottomTabName(target.name)
-            }
+            if (roleTabs.contains(target)) setLastBottomTabName(target.name)
             setTabName(target.name)
         }
     }
@@ -201,7 +210,7 @@ fun MainShell(
     BackHandler(enabled = isForeground && tab != MainTab.HOME) {
         when (tab) {
             MainTab.SETTINGS -> setTabName(MainTab.PROFILE.name)
-            MainTab.PROFILE -> setTabName(lastBottomTabName)
+            MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> setTabName(lastBottomTabName)
             else -> switchTab(MainTab.HOME)
         }
     }
@@ -217,20 +226,22 @@ fun MainShell(
                 subtitle = "${user.displayName} · ${Roles.label(user.role)}",
                 onBack = when (tab) {
                     MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
-                    MainTab.PROFILE -> ({ setTabName(lastBottomTabName) })
+                    MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> ({ setTabName(lastBottomTabName) })
                     else -> null
                 },
                 actions = {
                     val hasHiddenDownload =
                         (updateState as? UpdateState.Downloading)?.let { it.hiddenInForeground && !it.info.mandatory } == true
-                    if (tab != MainTab.SETTINGS) UpdateMiniProgressBall(
+                    if (tab !in BackStackTabs) UpdateMiniProgressBall(
                         state = updateState,
                         onClick = onShowUpdateProgress,
                     )
-                    if (hasHiddenDownload && tab != MainTab.SETTINGS) {
+                    if (hasHiddenDownload && tab !in BackStackTabs) {
                         Spacer(Modifier.width(6.dp))
                     }
                     when (tab) {
+                        MainTab.AGENT, MainTab.SALE, MainTab.SETTINGS -> Unit
+
                         MainTab.PROFILE -> {
                             IconButton(onClick = { switchTab(MainTab.SETTINGS) }) {
                                 Icon(
@@ -241,11 +252,14 @@ fun MainShell(
                             Spacer(Modifier.width(4.dp))
                         }
 
-                        MainTab.SETTINGS -> {
-                            Spacer(Modifier.width(8.dp))
-                        }
-
                         else -> {
+                            IconButton(onClick = { switchTab(MainTab.AGENT) }) {
+                                Icon(
+                                    imageVector = MainTab.AGENT.icon,
+                                    contentDescription = "Ouvrir Atlas Agent",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                             TopBarQuickActionsMenu(
                                 notificationCount = notificationCount,
                                 showSale = Roles.canCreateDocuments(user.role),
@@ -268,7 +282,7 @@ fun MainShell(
             )
         },
         bottomBar = {
-            if (!useRail) AtlasFloatingBottomBar(
+            if (!useRail && tab !in BackStackTabs) AtlasFloatingBottomBar(
                 tabs = roleTabs,
                 selected = tab,
                 onSelect = switchTab,
@@ -276,7 +290,8 @@ fun MainShell(
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-        if (useRail) {
+        val showRail = useRail && tab !in BackStackTabs
+        if (showRail) {
             NavigationRail(modifier = Modifier.align(Alignment.CenterStart), containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
                 roleTabs.forEach { item ->
                     NavigationRailItem(
@@ -298,7 +313,7 @@ fun MainShell(
             indexSelector = { it.ordinal },
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = if (useRail) 80.dp else 0.dp),
+                .padding(start = if (showRail) 80.dp else 0.dp),
         ) { currentTab ->
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 Box(Modifier.widthIn(max = if (useRail) 1200.dp else 840.dp).fillMaxSize()) {
@@ -333,6 +348,8 @@ fun MainShell(
                         onOpenProducts = { switchTab(MainTab.PRODUCTS) },
                         onToast = onToast,
                     )
+
+                    MainTab.EMPLOYEES -> EmployeesScreen(user = user)
 
                     MainTab.AGENT -> AgentScreen(
                         onToast = onToast,
@@ -378,9 +395,9 @@ private fun AtlasFloatingBottomBar(
     val centerIndex = centerTab?.let(tabs::indexOf) ?: -1
     val leftTabs = if (centerIndex >= 0) tabs.take(centerIndex) else tabs
     val rightTabs = if (centerIndex >= 0) tabs.drop(centerIndex + 1) else emptyList()
-    // Keep the floating dock visually light while letting the page surface show through.
-    // Text and icons remain fully opaque for contrast in both themes.
-    val barColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.74f)
+    // Opaque M3 surface + elevation avoids the bright outline/edge artifact on light backgrounds.
+    val barColor = MaterialTheme.colorScheme.surfaceContainerLow
+    val motionEnabled = ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled.current
 
     Box(
         modifier = Modifier
@@ -394,9 +411,8 @@ private fun AtlasFloatingBottomBar(
             shape = RoundedCornerShape(26.dp),
             color = barColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
-            tonalElevation = 3.dp,
-            shadowElevation = 6.dp,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+            tonalElevation = 1.dp,
+            shadowElevation = 10.dp,
         ) {
             Row(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
@@ -406,15 +422,17 @@ private fun AtlasFloatingBottomBar(
                     FloatingBottomBarItem(
                         item = item,
                         selected = selected == item,
+                        motionEnabled = motionEnabled,
                         modifier = Modifier.weight(1f),
                         onClick = { onSelect(item) },
                     )
                 }
-                if (centerTab != null) Spacer(Modifier.width(68.dp))
+                if (centerTab != null) Spacer(Modifier.width(64.dp))
                 rightTabs.forEach { item ->
                     FloatingBottomBarItem(
                         item = item,
                         selected = selected == item,
+                        motionEnabled = motionEnabled,
                         modifier = Modifier.weight(1f),
                         onClick = { onSelect(item) },
                     )
@@ -423,28 +441,31 @@ private fun AtlasFloatingBottomBar(
         }
 
         if (centerTab != null) {
-            Box(
+            val fabScale by animateFloatAsState(
+                targetValue = if (!motionEnabled || selected == centerTab) 1f else 0.96f,
+                animationSpec = spring(dampingRatio = 0.68f, stiffness = 520f),
+                label = "nav-fab-${centerTab.name}",
+            )
+            FloatingActionButton(
+                onClick = { onSelect(centerTab) },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .size(68.dp)
-                    .border(BorderStroke(4.dp, barColor), CircleShape)
-                    .padding(4.dp),
+                    .size(56.dp)
+                    .graphicsLayer {
+                        scaleX = if (motionEnabled) fabScale else 1f
+                        scaleY = if (motionEnabled) fabScale else 1f
+                    },
+                shape = CircleShape,
+                containerColor = if (selected == centerTab) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
+                contentColor = if (selected == centerTab) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
+                elevation = FloatingActionButtonDefaults.elevation(
+                    defaultElevation = 8.dp,
+                    pressedElevation = 12.dp,
+                    focusedElevation = 9.dp,
+                    hoveredElevation = 9.dp,
+                ),
             ) {
-                FloatingActionButton(
-                    onClick = { onSelect(centerTab) },
-                    modifier = Modifier.fillMaxSize(),
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 7.dp,
-                        pressedElevation = 10.dp,
-                        focusedElevation = 8.dp,
-                        hoveredElevation = 8.dp,
-                    ),
-                ) {
-                    Icon(centerTab.icon, contentDescription = centerTab.label, modifier = Modifier.size(25.dp))
-                }
+                Icon(centerTab.icon, contentDescription = centerTab.label, modifier = Modifier.size(25.dp))
             }
             Text(
                 text = centerTab.label,
@@ -462,21 +483,54 @@ private fun AtlasFloatingBottomBar(
 private fun FloatingBottomBarItem(
     item: MainTab,
     selected: Boolean,
+    motionEnabled: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    val tint by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = androidx.compose.animation.core.tween(if (motionEnabled) 180 else 0),
+        label = "nav-tint-${item.name}",
+    )
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (selected) 44.dp else 0.dp,
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.78f, stiffness = 480f) else tween(0),
+        label = "nav-indicator-${item.name}",
+    )
+    val iconScale by animateFloatAsState(
+        targetValue = if (selected && motionEnabled) 1.12f else 1f,
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = 520f),
+        label = "nav-icon-scale-${item.name}",
+    )
     Column(
         modifier = modifier
             .fillMaxHeight()
             .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 2.dp, vertical = 7.dp),
+            .semantics { this.selected = selected }
+            .clickable(role = Role.Tab, onClick = onClick)
+            .padding(horizontal = 2.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(item.icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.height(3.dp))
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.height(30.dp)) {
+            Surface(
+                modifier = Modifier.width(indicatorWidth).height(28.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+            ) {}
+            Icon(
+                item.icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer {
+                        scaleX = if (motionEnabled) iconScale else 1f
+                        scaleY = if (motionEnabled) iconScale else 1f
+                    },
+            )
+        }
+        Spacer(Modifier.height(2.dp))
         Text(
             text = item.label,
             style = MaterialTheme.typography.labelSmall,

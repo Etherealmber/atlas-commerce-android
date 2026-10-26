@@ -2,6 +2,7 @@ package ma.etherealmber.atlascommerce.ui.root
 
 import android.content.Context
 import android.net.Uri
+import androidx.credentials.exceptions.CreateCredentialNoCreateOptionException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -363,6 +364,19 @@ class AppViewModel @Inject constructor(
             } catch (cancelled: CancellationException) {
                 AtlasLogBuffer.log("PASSKEY", "Registration coroutine cancelled")
                 throw cancelled
+            } catch (error: CreateCredentialNoCreateOptionException) {
+                AtlasLogBuffer.log(
+                    "PASSKEY",
+                    "Credential Manager has no eligible provider after registration options were received; no credential was created",
+                    "ERROR",
+                )
+                onDone(
+                    "Credential Manager n'a trouvé aucun fournisseur passkey prêt. Connectez un compte Google si vous utilisez " +
+                        "Google Password Manager, ou configurez un gestionnaire compatible; activez aussi le verrouillage d'écran " +
+                        "et sélectionnez le gestionnaire dans Paramètres > Mots de passe, clés d'accès et comptes, puis réessayez. " +
+                        "Si le problème persiste, vérifiez Digital Asset Links pour le domaine sélectionné. " +
+                        "Aucune passkey n'a été enregistrée.",
+                )
             } catch (error: Exception) {
                 val detail = "${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(240)}"
                 AtlasLogBuffer.log("PASSKEY", "Registration failed in Credential Manager/client: $detail", "ERROR")

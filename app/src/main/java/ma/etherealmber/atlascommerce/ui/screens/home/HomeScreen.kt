@@ -358,7 +358,8 @@ private fun HomeContent(
             start = density.screenPadding,
             end = density.screenPadding,
             top = density.cardMargin,
-            bottom = 28.dp,
+            // Keep the last report heading and actions fully scrollable above the floating dock.
+            bottom = 48.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {
