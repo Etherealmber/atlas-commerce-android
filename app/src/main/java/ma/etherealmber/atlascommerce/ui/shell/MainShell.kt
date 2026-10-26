@@ -245,7 +245,6 @@ fun MainShell(
         topBar = {
             AtlasTopBar(
                 title = tab.label,
-                subtitle = "${user.displayName} · ${Roles.label(user.role)}",
                 onBack = when (tab) {
                     MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
                     MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> ({ setTabName(lastBottomTabName) })
@@ -291,7 +290,7 @@ fun MainShell(
                             }
                             AtlasAvatar(
                                 avatarUrl = user.avatarUrl,
-                                label = user.displayName,
+                                label = user.username,
                                 size = 34.dp,
                                 serverBaseUrl = serverBaseUrl,
                                 borderColor = MaterialTheme.colorScheme.outlineVariant,

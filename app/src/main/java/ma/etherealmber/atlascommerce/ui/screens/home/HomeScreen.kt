@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -56,11 +57,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.time.LocalTime
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.net.ApiResult
@@ -69,6 +70,7 @@ import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
+import ma.etherealmber.atlascommerce.data.model.MonthlyPointDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
@@ -352,6 +354,7 @@ private fun HomeContent(
     // dashboard's financial fields after that protected endpoint has authorized us.
     val canDisplayFinance = isAdmin && state.finance != null
     val invoices = dashboard.recentInvoices.take(5)
+    val greeting = if (LocalTime.now(ZoneId.systemDefault()).hour in 5..17) "Bonjour" else "Bonsoir"
 
     LazyColumn(
         contentPadding = PaddingValues(
@@ -363,6 +366,24 @@ private fun HomeContent(
         ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {
+        item(key = "dashboard_greeting") {
+            AtlasEntrance(delayMillis = 0) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = greeting,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Text(
+                        text = "Voici l'essentiel de votre activité.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
         if (state.offline) {
             item { AtlasOfflineBanner() }
         }
@@ -406,7 +427,6 @@ private fun HomeContent(
                     )
                 } else {
                     OperationsHero(
-                        roleLabel = Roles.label(user.role),
                         productCount = dashboard.productCount,
                         lowStockCount = dashboard.lowStockCount,
                     )
@@ -461,16 +481,13 @@ private fun HomeContent(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
-                                text = if (isAdmin) {
-                                    "Info Box Admin · Demandes & notifications"
-                                } else {
-                                    "Info Box · Notifications ${Roles.label(user.role)}"
-                                },
+                                text = if (isAdmin) "Demandes & notifications" else "Notifications",
+
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = Roles.scopeSummary(user.role),
+                                text = "Retrouvez ici vos demandes et notifications récentes.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -539,6 +556,17 @@ private fun HomeContent(
             }
         }
 
+        if (canDisplayFinance && dashboard.monthlySeries.isNotEmpty()) {
+            item(key = "monthly_sales_trend") {
+                AtlasEntrance(delayMillis = 165) {
+                    MonthlySalesTrendCard(
+                        points = dashboard.monthlySeries,
+                        currency = state.currency,
+                    )
+                }
+            }
+        }
+
         if (isAdmin) {
             item {
                 FinanceAdminCard(
@@ -603,18 +631,66 @@ private fun HomeContent(
             }
         }
 
-        item {
-            AtlasCard {
-                Text(
-                    text = "Atlas Commerce ${AppDetails.VERSION_NAME}",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Affichage et permissions synchronisés dynamiquement avec votre rôle (${Roles.label(user.role)}).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+    }
+}
+
+@Composable
+private fun MonthlySalesTrendCard(points: List<MonthlyPointDto>, currency: String) {
+    val recent = points.takeLast(6)
+    if (recent.isEmpty()) return
+    val peak = recent.maxOfOrNull { it.sales.coerceAtLeast(0.0) }?.takeIf { it > 0.0 } ?: 1.0
+    val palette = Atlas.palette
+
+    AtlasCard(padding = 14.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Tendance des ventes", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text("Données réelles · ${recent.size} périodes", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Outlined.TrendingUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().height(112.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            recent.forEach { point ->
+                val value = point.sales.coerceAtLeast(0.0)
+                val barFraction = (value / peak).toFloat().coerceIn(0.04f, 1f)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = AtlasFormat.moneyCompact(value, currency),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Clip,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(62.dp),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.52f)
+                                .fillMaxHeight(barFraction)
+                                .clip(RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp))
+                                .background(Brush.verticalGradient(listOf(palette.heroStart, palette.heroEnd))),
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = point.label.ifBlank { point.key },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }
@@ -978,7 +1054,6 @@ private fun BalanceHero(
 
 @Composable
 private fun OperationsHero(
-    roleLabel: String,
     productCount: Int,
     lowStockCount: Int,
 ) {
@@ -991,7 +1066,7 @@ private fun OperationsHero(
             .padding(18.dp),
     ) {
         Text(
-            text = "PILOTAGE CATALOGUE & STOCK · ${roleLabel.uppercase()}",
+            text = "CATALOGUE & STOCK",
             style = MaterialTheme.typography.labelSmall,
             color = Color.White.copy(alpha = 0.72f),
         )
