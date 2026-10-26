@@ -42,12 +42,24 @@ data class AndroidUpdateDto(
     @Json(name = "github_url") val githubUrlSnake: String? = null,
     val sha256: String? = null,
     val mandatory: Boolean = false,
+    val minimumSupportedVersionCode: Int = 0,
+    @Json(name = "minimum_supported_version_code") val minimumSupportedVersionCodeSnake: Int = 0,
+    val minimumVersionCode: Int = 0,
+    @Json(name = "minimum_version_code") val minimumVersionCodeSnake: Int = 0,
     val notes: String? = null,
     val publishedAt: String? = null,
     val message: String? = null,
     override val error: String? = null,
     override val code: String? = null,
 ) : ApiStatus {
+    val resolvedMinimumSupportedVersionCode: Int
+        get() = maxOf(
+            minimumSupportedVersionCode,
+            minimumSupportedVersionCodeSnake,
+            minimumVersionCode,
+            minimumVersionCodeSnake,
+        )
+
     val resolvedPrimaryUrl: String?
         get() = apkUrl?.takeIf { it.isNotBlank() }
             ?: apkUrlSnake?.takeIf { it.isNotBlank() }

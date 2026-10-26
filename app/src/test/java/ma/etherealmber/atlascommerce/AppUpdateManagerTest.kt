@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
 import androidx.compose.ui.graphics.Color
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
@@ -17,12 +18,15 @@ import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.ui.components.buildInlineMarkdownAnnotatedString
 import java.util.Calendar
 import ma.etherealmber.atlascommerce.core.net.ApiErrorPayload
+import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.net.ApiRunner
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
 import ma.etherealmber.atlascommerce.core.update.UpdateFormatter
 import ma.etherealmber.atlascommerce.core.update.formatReleaseNotesForDisplay
 import ma.etherealmber.atlascommerce.core.update.UpdateInfo
 import ma.etherealmber.atlascommerce.core.update.UpdateNotifier
 import ma.etherealmber.atlascommerce.core.update.UpdateState
+import ma.etherealmber.atlascommerce.core.update.minimumVersionRequiresUpdate
 import ma.etherealmber.atlascommerce.push.DeviceTokenAckDto
 import ma.etherealmber.atlascommerce.push.DeviceTokenRequest
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
@@ -33,6 +37,10 @@ import ma.etherealmber.atlascommerce.data.model.HealthDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import okhttp3.OkHttpClient
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
+import retrofit2.HttpException
+import retrofit2.Response
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -46,6 +54,7 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.net.ServerSocket
+import java.net.UnknownHostException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.Collections
@@ -76,6 +85,14 @@ class AppUpdateManagerTest {
     fun tearDown() {
         scope.cancel()
         tempDir.deleteRecursively()
+    }
+
+    @Test
+    fun minimumVersionRequiresAnAvailableReleaseAtOrAboveTheConfiguredFloor() {
+        assertTrue(minimumVersionRequiresUpdate(installedVersionCode = 10, minimumSupportedVersionCode = 12, availableVersionCode = 14))
+        assertFalse(minimumVersionRequiresUpdate(installedVersionCode = 12, minimumSupportedVersionCode = 12, availableVersionCode = 14))
+        assertFalse(minimumVersionRequiresUpdate(installedVersionCode = 10, minimumSupportedVersionCode = 12, availableVersionCode = 11))
+        assertFalse(minimumVersionRequiresUpdate(installedVersionCode = 10, minimumSupportedVersionCode = 0, availableVersionCode = 14))
     }
 
     @Test
@@ -118,6 +135,29 @@ class AppUpdateManagerTest {
     }
 
     @Test
+    fun networkErrorsAreConciseAndVersionGateIsActionable() = runBlocking {
+        val runner = ApiRunner(moshi)
+        val dns = runner.envelope<String> {
+            throw UnknownHostException("stock.afmarbre.com lookup failed")
+        } as ApiResult.Failure
+        assertEquals(ApiRunner.CODE_NETWORK, dns.code)
+        assertEquals("Impossible de joindre ce serveur. Vérifiez votre connexion puis réessayez.", dns.message)
+        assertFalse(dns.message.contains("stock.afmarbre.com"))
+
+        val updateRequired = runner.envelope<String> {
+            throw HttpException(
+                Response.error<String>(
+                    426,
+                    "{\"success\":false,\"code\":\"APP_UPDATE_REQUIRED\",\"error\":\"technical detail\"}"
+                        .toResponseBody("application/json".toMediaType()),
+                ),
+            )
+        } as ApiResult.Failure
+        assertEquals("APP_UPDATE_REQUIRED", updateRequired.code)
+        assertEquals("Une mise à jour est requise pour continuer. Téléchargez la dernière version.", updateRequired.message)
+    }
+
+    @Test
     fun moshiAdaptersRoundTripCoreAndModelDtos() {
         val errorAdapter = moshi.adapter(ApiErrorPayload::class.java)
         val parsedError = errorAdapter.fromJson("""{"success":false,"code":"AUTH_EXPIRED","error":"Session expirée"}""")
@@ -132,10 +172,11 @@ class AppUpdateManagerTest {
 
         val updateAdapter = moshi.adapter(AndroidUpdateDto::class.java)
         val update = updateAdapter.fromJson(
-            """{"success":true,"ok":true,"updateAvailable":true,"versionCode":107,"versionName":"1.0.7","apkUrl":"https://cdn1.afmarbre.com/app-updates/android/latest.apk","mandatory":false,"notes":"Stabilité"}""",
+            """{"success":true,"ok":true,"updateAvailable":true,"versionCode":107,"versionName":"1.0.7","apkUrl":"https://cdn1.afmarbre.com/app-updates/android/latest.apk","mandatory":false,"minimum_supported_version_code":105,"notes":"Stabilité"}""",
         )
         assertTrue(update?.updateAvailable == true)
         assertEquals(107, update?.versionCode)
+        assertEquals(105, update?.resolvedMinimumSupportedVersionCode)
 
         val dashboardAdapter = moshi.adapter(DashboardDto::class.java)
         assertNotNull(dashboardAdapter.fromJson("""{"currency":"MAD","productCount":42}"""))

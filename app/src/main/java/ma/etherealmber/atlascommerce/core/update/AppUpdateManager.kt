@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.BuildConfig
+import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
@@ -317,12 +318,12 @@ class AppUpdateManager internal constructor(
      * Checks `GET /api/app/android-update`, `CDN 1/latest.json`, and
      * `GitHub releases/latest/download/latest.json` without overriding any active download.
      */
-    fun checkForUpdate(manual: Boolean = false) {
+    fun checkForUpdate(manual: Boolean = false, mandatoryOnly: Boolean = false) {
         synchronized(lock) {
             if (_state.value is UpdateState.Downloading || downloadJob?.isActive == true) {
                 return
             }
-            if (!manual && _state.value is UpdateState.ReadyToInstall) {
+            if (!manual && !mandatoryOnly && _state.value is UpdateState.ReadyToInstall) {
                 return
             }
             if (checkJob?.isActive == true) {
@@ -332,7 +333,7 @@ class AppUpdateManager internal constructor(
                 _state.value = UpdateState.Checking
             }
             checkJob = scope.launch(ioDispatcher) {
-                performCheck(manual)
+                performCheck(manual, mandatoryOnly)
             }
         }
     }
@@ -356,7 +357,7 @@ class AppUpdateManager internal constructor(
         }
     }
 
-    private suspend fun performCheck(manual: Boolean) {
+    private suspend fun performCheck(manual: Boolean, mandatoryOnly: Boolean) {
         val baseUrl = ServerUrl.normalize(baseUrlProvider()) ?: return
         if (ServerUrl.isCleartext(baseUrl) && !allowCleartext) {
             synchronized(lock) {
@@ -455,8 +456,30 @@ class AppUpdateManager internal constructor(
             dto.versionCode != currentVersionCode ||
                 (remoteCleanName.isNotEmpty() && !remoteCleanName.equals(localCleanName, ignoreCase = true))
             )
+        val policyMinimumVersionCode = maxOf(
+            dto.resolvedMinimumSupportedVersionCode,
+            primaryDto?.resolvedMinimumSupportedVersionCode ?: 0,
+        )
+        val backendRequiresUpdate = minimumVersionRequiresUpdate(
+            installedVersionCode = currentVersionCode,
+            minimumSupportedVersionCode = policyMinimumVersionCode,
+            availableVersionCode = dto.versionCode,
+        )
+        val manifestRequiresUpdate = dto.mandatory || primaryDto?.mandatory == true
+        if (policyMinimumVersionCode > 0) {
+            AtlasLogBuffer.log(
+                "UPDATE",
+                "Minimum-version policy: current=$currentVersionCode minimum=$policyMinimumVersionCode release=${dto.versionCode} forced=$backendRequiresUpdate",
+                if (policyMinimumVersionCode > dto.versionCode) "WARN" else "INFO",
+            )
+        }
+        if (policyMinimumVersionCode > dto.versionCode && dto.versionCode > 0) {
+            AtlasLogBuffer.log("UPDATE", "Ignored invalid minimum-version policy above available release", "WARN")
+        }
 
-        val shouldOfferUpdate = primaryUrl != null && if (followLatest) {
+        val shouldOfferUpdate = primaryUrl != null && if (mandatoryOnly) {
+            (backendRequiresUpdate || manifestRequiresUpdate) && dto.versionCode > currentVersionCode
+        } else if (followLatest) {
             dto.versionCode > currentVersionCode || differsFromInstalled
         } else {
             dto.versionCode > currentVersionCode
@@ -474,7 +497,7 @@ class AppUpdateManager internal constructor(
                 versionCode = dto.versionCode,
                 versionName = dto.versionName?.takeIf { it.isNotBlank() } ?: dto.versionCode.toString(),
                 apkUrl = primaryUrl,
-                mandatory = dto.mandatory,
+                mandatory = dto.mandatory || primaryDto?.mandatory == true || backendRequiresUpdate,
                 notes = dto.notes?.trim()?.takeIf { it.isNotBlank() },
                 cdn1Url = resolvedCdn1,
                 githubUrl = resolvedGithub,
@@ -1106,11 +1129,12 @@ class AppUpdateManager internal constructor(
             installApk(context)
             return
         }
-        if (!autoCheck) return
         val now = System.currentTimeMillis()
         if (!isDownloading && now - lastAutoCheckMs >= RESUME_RECHECK_DEBOUNCE_MS) {
             lastAutoCheckMs = now
-            checkForUpdate(manual = false)
+            // Mandatory compatibility checks always run; the preference controls only
+            // optional update discovery, never the server's minimum-version policy.
+            checkForUpdate(manual = false, mandatoryOnly = !autoCheck)
         }
     }
 

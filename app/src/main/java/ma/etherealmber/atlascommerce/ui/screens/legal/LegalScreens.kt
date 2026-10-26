@@ -144,7 +144,7 @@ fun ProblemReportDialog(
     }
 
     LaunchedEffect(Unit) {
-        logsPreview = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 16_000)
+        logsPreview = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 32_000)
         loadingLogs = false
     }
 
@@ -374,7 +374,7 @@ fun ProblemReportDialog(
                                 onClick = {
                                     scope.launch {
                                         loadingLogs = true
-                                        logsPreview = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 16_000)
+                                        logsPreview = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 32_000)
                                         loadingLogs = false
                                     }
                                 },
@@ -468,7 +468,7 @@ fun ProblemReportDialog(
                     scope.launch {
                         submitting = true
                         submitError = null
-                        val freshLogs = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 16_000)
+                        val freshLogs = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 32_000)
                         logsPreview = freshLogs
                         val reportKind = when (category) {
                             "Demande de fonctionnalité" -> "idea"

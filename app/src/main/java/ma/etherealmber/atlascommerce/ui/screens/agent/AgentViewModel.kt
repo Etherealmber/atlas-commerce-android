@@ -346,7 +346,7 @@ class AgentViewModel @Inject constructor(
             attachmentNames = attachments.map { it.name },
         )
 
-        AtlasLogBuffer.log("AGENT", "Chat request started")
+        AtlasLogBuffer.log("AGENT", "Chat request started: request=${requestId.take(8)} thread=$activeId")
         val firstTokenLogged = AtomicBoolean(false)
         _state.update {
             it.copy(

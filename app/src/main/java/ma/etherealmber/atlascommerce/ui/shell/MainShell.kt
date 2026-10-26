@@ -90,6 +90,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.Roles
+import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
@@ -275,6 +276,10 @@ fun MainShell(
             if (roleTabs.any { it.name == resolved }) setLastBottomTabName(resolved)
             onExternalTabHandled()
         }
+    }
+
+    LaunchedEffect(tab) {
+        AtlasLogBuffer.log("NAVIGATION", "Main tab selected: ${tab.name}")
     }
 
     LaunchedEffect(tab, isForeground) {

@@ -231,11 +231,15 @@ class AppViewModel @Inject constructor(
                 if (previous != null && next != null && !previous.equals(next, ignoreCase = true)) {
                     apiProvider.invalidate()
                     sessionManager.signOut("Serveur modifié — veuillez vous reconnecter.")
-                    if (autoCheckUpdates.value) {
-                        updateManager.checkForUpdate(manual = false)
-                    }
-                } else if (previous == null && next != null && autoCheckUpdates.value) {
-                    updateManager.checkForUpdate(manual = false)
+                    updateManager.checkForUpdate(
+                        manual = false,
+                        mandatoryOnly = !autoCheckUpdates.value,
+                    )
+                } else if (previous == null && next != null) {
+                    updateManager.checkForUpdate(
+                        manual = false,
+                        mandatoryOnly = !autoCheckUpdates.value,
+                    )
                 }
                 previous = next
             }
@@ -319,7 +323,6 @@ class AppViewModel @Inject constructor(
         if (_registeringPasskey.value) return
         viewModelScope.launch {
             _registeringPasskey.value = true
-            var excludedCredentialCount = 0
             AtlasLogBuffer.log("PASSKEY", "Registration flow started")
             try {
                 val selectedServerOrigin = ServerUrl.origin(serverConfig.selection.value?.baseUrl)
@@ -333,7 +336,7 @@ class AppViewModel @Inject constructor(
                     is ApiResult.Failure -> {
                         AtlasLogBuffer.log("PASSKEY", "Registration capability failed: code=${capabilityResult.code}; http=${capabilityResult.httpStatus ?: "none"}; message=${capabilityResult.message}", "ERROR")
                         _androidPasskeysAvailable.value = false
-                        report("Impossible de vérifier les passkeys (${capabilityResult.code}${capabilityResult.httpStatus?.let { " · HTTP $it" } ?: ""}) : ${AtlasLogBuffer.sanitize(capabilityResult.message)}")
+                        report("Impossible de vérifier la disponibilité des passkeys. Réessayez plus tard.")
                         return@launch
                     }
                     is ApiResult.Success -> {
@@ -355,10 +358,9 @@ class AppViewModel @Inject constructor(
                 when (val options = authRepository.webAuthnRegistrationOptions(deviceIdentity.fingerprint)) {
                     is ApiResult.Failure -> {
                         AtlasLogBuffer.log("PASSKEY", "registration-options failed: code=${options.code}; http=${options.httpStatus ?: "none"}; message=${options.message}", "ERROR")
-                        report("${AtlasLogBuffer.sanitize(options.message)} [${options.code}${options.httpStatus?.let { " · HTTP $it" } ?: ""}]")
+                        report("Impossible de préparer la création de la passkey. Réessayez plus tard.")
                     }
                     is ApiResult.Success -> {
-                        excludedCredentialCount = AndroidPasskeyCredentials.registrationExcludedCredentialsCount(options.data)
                         AtlasLogBuffer.log(
                             "PASSKEY",
                             "Registration options received; challenge and user data are not logged; ${AndroidPasskeyCredentials.registrationOptionsSummary(options.data)}",
@@ -384,7 +386,7 @@ class AppViewModel @Inject constructor(
                         ) {
                             is ApiResult.Failure -> {
                                 AtlasLogBuffer.log("PASSKEY", "registration-verify failed: code=${result.code}; http=${result.httpStatus ?: "none"}; message=${result.message}", "ERROR")
-                                report("${AtlasLogBuffer.sanitize(result.message)} [${result.code}${result.httpStatus?.let { " · HTTP $it" } ?: ""}]")
+                                report("Le serveur n'a pas pu enregistrer la passkey. Réessayez plus tard.")
                             }
                             is ApiResult.Success -> {
                                 AtlasLogBuffer.log("PASSKEY", "Registration verified by Worker")
@@ -407,16 +409,11 @@ class AppViewModel @Inject constructor(
                     "Troubleshooting: configure Google Password Manager or another credential provider; enable screen lock; select the provider in Android Passwords, passkeys & accounts settings; verify Digital Asset Links for the selected origin. No passkey was registered.",
                     "INFO",
                 )
-                val existingKeyHint = if (excludedCredentialCount > 0) {
-                    "Le serveur signale déjà une passkey pour ce compte : essayez d'abord de vous connecter avec celle-ci. "
-                } else {
-                    ""
-                }
-                report("${existingKeyHint}Android n'a proposé aucun fournisseur de création compatible. Activez un gestionnaire de clés d'accès (par exemple Google Password Manager) dans Paramètres > Mots de passe, clés d'accès et comptes, connectez un compte Google et configurez un verrouillage d'écran. Sur un émulateur x86_64, utilisez une image système Google Play à jour; sinon, réessayez sur le téléphone OPPO lui-même. Aucune nouvelle passkey n'a été créée.")
+                report("Aucun fournisseur de passkeys n'est disponible sur cet appareil. Aucune passkey n'a été créée.")
             } catch (error: Exception) {
                 val detail = "${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(240)}"
                 AtlasLogBuffer.log("PASSKEY", "Registration failed in Credential Manager/client: $detail", "ERROR")
-                report("Enregistrement passkey échoué — $detail. Copiez les journaux du diagnostic pour l'administrateur.")
+                report("La création de la passkey a échoué. Réessayez plus tard ou contactez l'administrateur.")
             } finally {
                 _registeringPasskey.value = false
             }
@@ -444,9 +441,10 @@ class AppViewModel @Inject constructor(
     private fun checkUpdatesOnceServerReady() {
         viewModelScope.launch {
             serverConfig.loaded.filter { it }.first()
-            if (autoCheckUpdates.value) {
-                updateManager.checkForUpdate(manual = false)
-            }
+            updateManager.checkForUpdate(
+                manual = false,
+                mandatoryOnly = !autoCheckUpdates.value,
+            )
         }
     }
 
