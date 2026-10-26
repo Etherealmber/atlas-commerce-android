@@ -610,6 +610,7 @@ fun ProfileScreen(
  * Includes QR PC pairing & connected devices, live Atlas Agent IA quota bars & reset countdown,
  * saved servers management, OTA APK updates, isolated offline cache, and legal information.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     user: SessionUser,
