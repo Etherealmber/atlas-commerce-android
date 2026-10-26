@@ -253,13 +253,6 @@ fun MainShell(
                         }
 
                         else -> {
-                            IconButton(onClick = { switchTab(MainTab.AGENT) }) {
-                                Icon(
-                                    imageVector = MainTab.AGENT.icon,
-                                    contentDescription = "Ouvrir Atlas Agent",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
                             TopBarQuickActionsMenu(
                                 notificationCount = notificationCount,
                                 showSale = Roles.canCreateDocuments(user.role),
@@ -267,6 +260,13 @@ fun MainShell(
                                 onOpenSale = { switchTab(MainTab.SALE) },
                             )
                             Spacer(Modifier.width(6.dp))
+                            IconButton(onClick = { switchTab(MainTab.AGENT) }) {
+                                Icon(
+                                    imageVector = MainTab.AGENT.icon,
+                                    contentDescription = "Ouvrir Atlas Agent",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                             AtlasAvatar(
                                 avatarUrl = user.avatarUrl,
                                 label = user.displayName,
