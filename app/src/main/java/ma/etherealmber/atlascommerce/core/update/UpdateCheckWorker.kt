@@ -98,7 +98,7 @@ class UpdateCheckWorker(
     }
 
     private fun backendManifestUrl(): String? {
-        val rawBase = inputData.getString(UpdateCheckWorkScheduler.KEY_BACKEND_URL)
+        val rawBase = inputData.getString(KEY_BACKEND_URL)
             ?.takeIf { it.isNotBlank() }
             ?: return null
         val base = ServerUrl.normalize(rawBase) ?: return null

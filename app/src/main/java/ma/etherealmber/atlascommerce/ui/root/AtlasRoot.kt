@@ -257,11 +257,11 @@ private fun AtlasGate(
         viewModel.startUpdateDownload(fromSettings = true)
     }
 
-    LaunchedEffect(autoCheckUpdates, updateServer?.baseUrl) {
+    LaunchedEffect(autoCheckUpdates, server?.baseUrl) {
         ma.etherealmber.atlascommerce.core.update.UpdateCheckWorkScheduler.setEnabled(
             context,
             autoCheckUpdates,
-            updateServer?.baseUrl,
+            server?.baseUrl,
         )
     }
 
