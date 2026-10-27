@@ -133,6 +133,13 @@ fun AgentScreen(
         atlasText("Résumé des ventes et impayés du jour", "Summarize today's sales and unpaid invoices", "لخّص مبيعات اليوم والفواتير غير المدفوعة"),
         atlasText("Quelles demandes scan sont en attente ?", "Which scan requests are pending?", "ما طلبات المسح المعلّقة؟"),
     )
+    val newConversationToast = atlasText("Nouvelle discussion ouverte.", "New conversation started.", "بدأت محادثة جديدة.")
+    val speechPromptText = atlasText("Parlez maintenant", "Speak now", "تحدث الآن")
+    val speechUnavailableText = atlasText(
+        "Aucun service de dictée Android n'est disponible.",
+        "No Android speech recognition service is available.",
+        "لا تتوفر خدمة للتعرّف على الكلام في Android.",
+    )
     val density = Atlas.density
     val scope = rememberCoroutineScope()
     val speechRecognitionLauncher = rememberLauncherForActivityResult(
@@ -272,7 +279,7 @@ fun AgentScreen(
                     onClick = {
                         viewModel.startNewConversation()
                         showHistoryDialog = false
-                        onToast(atlasText("Nouvelle discussion ouverte.", "New conversation started.", "بدأت محادثة جديدة."))
+                        onToast(newConversationToast)
                     },
                 ) {
                     Text(atlasText("Nouvelle discussion", "New conversation", "محادثة جديدة"))
@@ -632,15 +639,11 @@ fun AgentScreen(
                                         val speechIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                                             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                                             putExtra(RecognizerIntent.EXTRA_LANGUAGE, selectedSpeechLanguage)
-                                            putExtra(RecognizerIntent.EXTRA_PROMPT, atlasText("Parlez maintenant", "Speak now", "تحدث الآن"))
+                                            putExtra(RecognizerIntent.EXTRA_PROMPT, speechPromptText)
                                         }
                                         runCatching { speechRecognitionLauncher.launch(speechIntent) }
                                             .onFailure {
-                                                onToast(atlasText(
-                                                    "Aucun service de dictée Android n'est disponible.",
-                                                    "No Android speech recognition service is available.",
-                                                    "لا تتوفر خدمة للتعرّف على الكلام في Android.",
-                                                ))
+                                                onToast(speechUnavailableText)
                                             }
                                     },
                                     enabled = !state.sending && !state.loadingThread && !quotaLocked,
