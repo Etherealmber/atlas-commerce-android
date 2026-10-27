@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Atlas Commerce</string>
+    <string name="app_tagline">المخزون · نقطة البيع · الفوترة</string>
+
+    <!-- Common actions -->
+    <string name="action_continue">متابعة</string>
+    <string name="action_cancel">إلغاء</string>
+    <string name="action_retry">إعادة المحاولة</string>
+    <string name="action_refresh">تحديث</string>
+    <string name="action_save">حفظ</string>
+    <string name="action_close">إغلاق</string>
+    <string name="action_back">رجوع</string>
+    <string name="action_sign_out">تسجيل الخروج</string>
+    <string name="action_change_server">تغيير الخادم</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">الرئيسية</string>
+    <string name="nav_products">المنتجات</string>
+    <string name="nav_scan">مسح</string>
+    <string name="nav_sale">بيع</string>
+    <string name="nav_settings">الإعدادات</string>
+
+    <!-- Auth -->
+    <string name="login_title">تسجيل الدخول</string>
+    <string name="login_username">اسم المستخدم</string>
+    <string name="login_password">كلمة المرور</string>
+    <string name="login_submit">تسجيل الدخول</string>
+    <string name="login_otp_title">التحقق</string>
+    <string name="login_otp_hint">الرمز المرسل عبر البريد الإلكتروني</string>
+    <string name="login_otp_submit">تحقّق من الرمز</string>
+
+    <!-- Legal -->
+    <string name="legal_license">الترخيص</string>
+    <string name="legal_security">الأمان والخصوصية</string>
+    <string name="legal_about">حول التطبيق</string>
+</resources>

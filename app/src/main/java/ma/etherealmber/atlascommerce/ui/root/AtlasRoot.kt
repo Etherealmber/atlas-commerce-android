@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.root
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import android.Manifest
 import android.content.res.Configuration
 import android.content.pm.PackageManager
@@ -119,6 +121,7 @@ fun AtlasRoot(
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val densityMode by viewModel.densityMode.collectAsStateWithLifecycle()
     val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val updateServer by viewModel.server.collectAsStateWithLifecycle()
     val appearanceLoaded by viewModel.appearanceLoaded.collectAsStateWithLifecycle()
     val animationsEnabled by viewModel.animationsEnabled.collectAsStateWithLifecycle()
     var appearanceTimedOut by remember { mutableStateOf(false) }
@@ -192,6 +195,7 @@ private fun AtlasGate(
     viewModel: AppViewModel,
 ) {
     val context = LocalContext.current
+    val atlasLanguage = LocalAtlasLanguage.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val session by viewModel.session.collectAsStateWithLifecycle()
     val server by viewModel.server.collectAsStateWithLifecycle()
@@ -253,8 +257,12 @@ private fun AtlasGate(
         viewModel.startUpdateDownload(fromSettings = true)
     }
 
-    LaunchedEffect(autoCheckUpdates) {
-        ma.etherealmber.atlascommerce.core.update.UpdateCheckWorkScheduler.setEnabled(context, autoCheckUpdates)
+    LaunchedEffect(autoCheckUpdates, updateServer?.baseUrl) {
+        ma.etherealmber.atlascommerce.core.update.UpdateCheckWorkScheduler.setEnabled(
+            context,
+            autoCheckUpdates,
+            updateServer?.baseUrl,
+        )
     }
 
     val triggerInstall: () -> Unit = {
@@ -297,7 +305,7 @@ private fun AtlasGate(
     }
 
     val showToast: (String) -> Unit = { message ->
-        scope.launch { snackbarHostState.showSnackbar(message) }
+        scope.launch { snackbarHostState.showSnackbar(atlasNotice(message, atlasLanguage)) }
     }
 
     LaunchedEffect(deepLinkVerify) {
@@ -545,18 +553,18 @@ private fun AtlasGate(
             if (passkeySetupOfferVisible && session is SessionState.Active) {
                 AlertDialog(
                     onDismissRequest = { passkeySetupOfferVisible = false },
-                    title = { Text("Créer une passkey ?") },
+                    title = { Text(atlasText("Créer une passkey ?")) },
                     text = {
-                        Text("Ajoutez une connexion rapide et protégée par le gestionnaire de mots de passe de cet appareil. Vous pourrez aussi la créer plus tard dans Paramètres > Sécurité. Cette étape est facultative.")
+                        Text(atlasText("Ajoutez une connexion rapide et protégée par le gestionnaire de mots de passe de cet appareil. Vous pourrez aussi la créer plus tard dans Paramètres > Sécurité. Cette étape est facultative."))
                     },
                     confirmButton = {
                         Button(onClick = {
                             passkeySetupOfferVisible = false
                             viewModel.registerAndroidPasskey(context) { }
-                        }) { Text("Créer une passkey") }
+                        }) { Text(atlasText("Créer une passkey")) }
                     },
                     dismissButton = {
-                        TextButton(onClick = { passkeySetupOfferVisible = false }) { Text("Plus tard") }
+                        TextButton(onClick = { passkeySetupOfferVisible = false }) { Text(atlasText("Plus tard")) }
                     },
                 )
             }
@@ -567,17 +575,17 @@ private fun AtlasGate(
                     message.contains("activées", ignoreCase = true)
                 AlertDialog(
                     onDismissRequest = viewModel::dismissPasskeyRegistrationMessage,
-                    title = { Text("Passkey Android") },
+                    title = { Text(atlasText("Passkey Android")) },
                     text = { Text(message) },
                     confirmButton = {
-                        TextButton(onClick = viewModel::dismissPasskeyRegistrationMessage) { Text("OK") }
+                        TextButton(onClick = viewModel::dismissPasskeyRegistrationMessage) { Text(atlasText("OK")) }
                     },
                     dismissButton = {
                         if (providerSetupSuggested) {
                             TextButton(onClick = {
                                 viewModel.dismissPasskeyRegistrationMessage()
                                 runCatching { context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
-                            }) { Text("Paramètres Android") }
+                            }) { Text(atlasText("Paramètres Android")) }
                         }
                     },
                 )

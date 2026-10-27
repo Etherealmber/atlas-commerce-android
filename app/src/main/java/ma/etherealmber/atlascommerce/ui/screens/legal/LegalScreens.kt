@@ -154,12 +154,16 @@ fun ProblemReportDialog(
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         val remainingSlots = DiagnosticReporter.MAX_ATTACHMENTS - attachments.size
         if (remainingSlots <= 0) {
-            onToast("Maximum 3 captures autorisées par rapport.")
+            onToast(atlasText("Maximum 3 captures autorisées par rapport."))
             return@rememberLauncherForActivityResult
         }
         val selected = uris.take(remainingSlots)
         if (uris.size > remainingSlots) {
-            onToast("Seules les $remainingSlots premières images ont été retenues (max 3).")
+            onToast(atlasText(
+                "Seules les $remainingSlots premières images ont été retenues (max 3).",
+                "Only the first $remainingSlots images were kept (maximum 3).",
+                "تم الاحتفاظ بأول $remainingSlots صور فقط (الحد الأقصى 3).",
+            ))
         }
         scope.launch {
             compressing = true
@@ -214,7 +218,7 @@ fun ProblemReportDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    text = "Catégorie",
+                    text = atlasText("Catégorie"),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -234,16 +238,16 @@ fun ProblemReportDialog(
                 AtlasTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = "Titre court du problème",
-                    placeholder = "Ex. : Tableau coupé à droite dans Agent IA",
+                    label = atlasText("Titre court du problème"),
+                    placeholder = atlasText("Ex. : Tableau coupé à droite dans Agent IA"),
                     imeAction = ImeAction.Next,
                 )
 
                 AtlasTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = "Que s'est-il passé ?",
-                    placeholder = "Décrivez ce que vous voyez à l'écran…",
+                    label = atlasText("Que s'est-il passé ?"),
+                    placeholder = atlasText("Décrivez ce que vous voyez à l'écran…"),
                     singleLine = false,
                     imeAction = ImeAction.Default,
                 )
@@ -251,8 +255,8 @@ fun ProblemReportDialog(
                 AtlasTextField(
                     value = steps,
                     onValueChange = { steps = it },
-                    label = "Étapes (optionnel)",
-                    placeholder = "1. Ouvrir Agent IA  2. Envoyer une demande…",
+                    label = atlasText("Étapes (optionnel)"),
+                    placeholder = atlasText("1. Ouvrir Agent IA  2. Envoyer une demande…"),
                     singleLine = false,
                     imeAction = ImeAction.Done,
                 )
@@ -275,12 +279,16 @@ fun ProblemReportDialog(
                             Spacer(Modifier.width(6.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    text = "Captures jointes (${attachments.size}/${DiagnosticReporter.MAX_ATTACHMENTS})",
+                                    text = atlasText(
+                                        "Captures jointes (${attachments.size}/${DiagnosticReporter.MAX_ATTACHMENTS})",
+                                        "Attached screenshots (${attachments.size}/${DiagnosticReporter.MAX_ATTACHMENTS})",
+                                        "لقطات الشاشة المرفقة (${attachments.size}/${DiagnosticReporter.MAX_ATTACHMENTS})",
+                                    ),
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    text = "Max 3 images · compression auto ≤ 1 Mo chacune",
+                                    text = atlasText("Max 3 images · compression auto ≤ 1 Mo chacune"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -290,7 +298,7 @@ fun ProblemReportDialog(
                                     onClick = { multiImagePicker.launch("image/*") },
                                     enabled = !compressing && !submitting,
                                 ) {
-                                    Text(if (compressing) "Compression…" else "Ajouter")
+                                    Text(if (compressing) atlasText("Compression…") else atlasText("Ajouter"))
                                 }
                             }
                         }
@@ -333,7 +341,7 @@ fun ProblemReportDialog(
                                         IconButton(onClick = { attachments.remove(item) }) {
                                             Icon(
                                                 imageVector = Icons.Outlined.Close,
-                                                contentDescription = "Retirer l'image",
+                                                contentDescription = atlasText("Retirer l'image"),
                                                 modifier = Modifier.size(16.dp),
                                             )
                                         }
@@ -353,19 +361,27 @@ fun ProblemReportDialog(
                 ) {
                     Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "Diagnostics inclus automatiquement",
+                            text = atlasText("Diagnostics inclus automatiquement"),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    text = if (loadingLogs) "Capture en cours…" else "${logsPreview.lineSequence().count()} lignes · ${snapshot.appVersion}",
+                                    text = if (loadingLogs) {
+                                        atlasText("Capture en cours…", "Capturing…", "جارٍ الالتقاط…")
+                                    } else {
+                                        atlasText(
+                                            "${logsPreview.lineSequence().count()} lignes · ${snapshot.appVersion}",
+                                            "${logsPreview.lineSequence().count()} lines · ${snapshot.appVersion}",
+                                            "${logsPreview.lineSequence().count()} سطراً · ${snapshot.appVersion}",
+                                        )
+                                    },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(
-                                    text = "Journaux expurgés des secrets · les captures restent privées",
+                                    text = atlasText("Journaux expurgés des secrets · les captures restent privées"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -380,20 +396,20 @@ fun ProblemReportDialog(
                                 },
                                 enabled = !submitting && !loadingLogs,
                             ) {
-                                Icon(Icons.Outlined.Refresh, contentDescription = "Rafraîchir les journaux")
+                                Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Rafraîchir les journaux"))
                             }
                             IconButton(
                                 onClick = {
                                     val clipboard = context.getSystemService(ClipboardManager::class.java)
                                     clipboard?.setPrimaryClip(ClipData.newPlainText("Journaux Atlas assainis", logsPreview))
-                                    onToast("Journaux assainis copiés.")
+                                    onToast(atlasText("Journaux assainis copiés."))
                                 },
                                 enabled = logsPreview.isNotBlank() && !loadingLogs,
                             ) {
-                                Icon(Icons.Outlined.ContentCopy, contentDescription = "Copier les journaux")
+                                Icon(Icons.Outlined.ContentCopy, contentDescription = atlasText("Copier les journaux"))
                             }
                             TextButton(onClick = { showLogsPreview = !showLogsPreview }) {
-                                Text(if (showLogsPreview) "Masquer" else "Voir")
+                                Text(if (showLogsPreview) atlasText("Masquer") else atlasText("Voir"))
                             }
                         }
                         if (showLogsPreview) {
@@ -404,7 +420,7 @@ fun ProblemReportDialog(
                             ) {
                                 Column(Modifier.verticalScroll(rememberScrollState()).padding(8.dp)) {
                                     Text(
-                                        text = logsPreview.ifBlank { "Aucun journal récent." },
+                                        text = logsPreview.ifBlank { atlasText("Aucun journal récent.") },
                                         style = MaterialTheme.typography.labelSmall,
                                         fontFamily = FontFamily.Monospace,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -432,7 +448,11 @@ fun ProblemReportDialog(
 
                 if (attachments.isNotEmpty()) {
                     AtlasOutlinedButton(
-                        text = "Partager captures & logs (${attachments.size} img ≤ 1 Mo)",
+                        text = atlasText(
+                            "Partager captures & logs (${attachments.size} img ≤ 1 Mo)",
+                            "Share screenshots & logs (${attachments.size} images, ≤ 1 MB)",
+                            "مشاركة لقطات الشاشة والسجلات (${attachments.size} صورة، ≤ 1 ميغابايت)",
+                        ),
                         icon = Icons.Outlined.Share,
                         onClick = {
                             val fullMd = DiagnosticReporter.buildMarkdownReport(
@@ -452,7 +472,7 @@ fun ProblemReportDialog(
                                     attachments = attachments.toList(),
                                 )
                             ) {
-                                onToast("Partage indisponible sur cet appareil.")
+                                onToast(atlasText("Partage indisponible sur cet appareil."))
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -521,11 +541,31 @@ fun ProblemReportDialog(
                                 val opened = openExternal(context, issueUrl ?: fallbackIssueUrl)
                                 onToast(
                                     when {
-                                        created && opened -> "Ticket GitHub créé et ouvert${reference?.let { " · $it" } ?: ""}."
-                                        created -> "Ticket créé${reference?.let { " · $it" } ?: ""}, mais aucun navigateur n'est disponible."
-                                        opened -> "Rapport reçu par Atlas${reference?.let { " · $it" } ?: ""}. Le formulaire GitHub prérempli est ouvert; envoyez-le pour créer l'issue."
-                                        reference != null -> "Rapport reçu · $reference. Impossible d'ouvrir le suivi sur cet appareil."
-                                        else -> "Rapport reçu par Atlas. Impossible d'ouvrir le suivi sur cet appareil."
+                                        created && opened -> atlasText(
+                                            "Ticket GitHub créé et ouvert${reference?.let { " · $it" } ?: ""}.",
+                                            "GitHub issue created and opened${reference?.let { " · $it" } ?: ""}.",
+                                            "تم إنشاء بلاغ GitHub وفتحه${reference?.let { " · $it" } ?: ""}.",
+                                        )
+                                        created -> atlasText(
+                                            "Ticket créé${reference?.let { " · $it" } ?: ""}, mais aucun navigateur n'est disponible.",
+                                            "Issue created${reference?.let { " · $it" } ?: ""}, but no browser is available.",
+                                            "تم إنشاء البلاغ${reference?.let { " · $it" } ?: ""}، لكن لا يتوفر متصفح.",
+                                        )
+                                        opened -> atlasText(
+                                            "Rapport reçu par Atlas${reference?.let { " · $it" } ?: ""}. Le formulaire GitHub prérempli est ouvert; envoyez-le pour créer l'issue.",
+                                            "Atlas received the report${reference?.let { " · $it" } ?: ""}. The prefilled GitHub form is open; submit it to create the issue.",
+                                            "استلم Atlas البلاغ${reference?.let { " · $it" } ?: ""}. نموذج GitHub المعبأ مسبقاً مفتوح؛ أرسله لإنشاء البلاغ.",
+                                        )
+                                        reference != null -> atlasText(
+                                            "Rapport reçu · $reference. Impossible d'ouvrir le suivi sur cet appareil.",
+                                            "Report received · $reference. Could not open tracking on this device.",
+                                            "تم استلام البلاغ · $reference. تعذّر فتح صفحة المتابعة على هذا الجهاز.",
+                                        )
+                                        else -> atlasText(
+                                            "Rapport reçu par Atlas. Impossible d'ouvrir le suivi sur cet appareil.",
+                                            "Atlas received the report. Could not open tracking on this device.",
+                                            "استلم Atlas البلاغ. تعذّر فتح صفحة المتابعة على هذا الجهاز.",
+                                        )
                                     },
                                 )
                                 onDismiss()
@@ -598,7 +638,7 @@ fun EtherealmberAuthorCard(
             }
             Icon(
                 imageVector = Icons.Outlined.OpenInNew,
-                contentDescription = "Ouvrir le profil GitHub Etherealmber",
+                contentDescription = atlasText("Ouvrir le profil GitHub Etherealmber"),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp),
             )
@@ -614,7 +654,7 @@ private fun LegalPage(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        AtlasTopBar(title = title, subtitle = subtitle, onBack = onBack)
+        AtlasTopBar(title = atlasText(title), subtitle = subtitle?.let { atlasText(it) }, onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -668,29 +708,32 @@ fun LicenseScreen(onBack: () -> Unit) {
             AtlasCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Licence MIT",
+                        text = atlasText("Licence MIT"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(Modifier.weight(1f))
-                    AtlasChip(text = "Open source", tone = AtlasTone.POSITIVE)
+                    AtlasChip(text = atlasText("Open source"), tone = AtlasTone.POSITIVE)
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}. L'application Android " +
-                        "Atlas Commerce est distribuée sous licence MIT, comme le projet web dont elle dépend.",
+                    text = atlasText(
+                        "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}. L'application Android Atlas Commerce est distribuée sous licence MIT, comme le projet web dont elle dépend.",
+                        "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}. The Atlas Commerce Android app is distributed under the MIT License, like the web project it accompanies.",
+                        "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}. يُوزّع تطبيق Atlas Commerce لنظام Android بموجب ترخيص MIT، مثل مشروع الويب الذي يرافقه.",
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(10.dp))
                 AtlasButton(
-                    text = "Profil GitHub @${AppDetails.GITHUB_HANDLE}",
+                    text = atlasText("Profil GitHub @${AppDetails.GITHUB_HANDLE}", "GitHub profile @${AppDetails.GITHUB_HANDLE}", "ملف GitHub @${AppDetails.GITHUB_HANDLE}"),
                     onClick = { openExternal(context, AppDetails.GITHUB_PROFILE_URL) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
                 AtlasButton(
-                    text = "Voir le dépôt web",
+                    text = atlasText("Voir le dépôt web"),
                     onClick = { openExternal(context, AppDetails.WEB_REPO) },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -700,7 +743,7 @@ fun LicenseScreen(onBack: () -> Unit) {
         AtlasEntrance(delayMillis = 80) {
             AtlasCard {
                 Text(
-                    text = "Texte de la licence",
+                    text = atlasText("Texte de la licence"),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -716,12 +759,12 @@ fun LicenseScreen(onBack: () -> Unit) {
         AtlasEntrance(delayMillis = 120) {
             AtlasCard {
                 Text(
-                    text = "Composants tiers",
+                    text = atlasText("Composants tiers"),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Chaque composant reste la propriété de ses auteurs et est utilisé selon sa licence.",
+                    text = atlasText("Chaque composant reste la propriété de ses auteurs et est utilisé selon sa licence."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -742,14 +785,16 @@ fun LicenseScreen(onBack: () -> Unit) {
         AtlasEntrance(delayMillis = 150) {
             AtlasCard {
                 Text(
-                    text = "Marques",
+                    text = atlasText("Marques"),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "« Atlas Commerce » et le logo Atlas appartiennent à ${AppDetails.COPYRIGHT_HOLDER}. " +
-                        "Android et Google Play sont des marques de Google LLC. " +
-                        "Cloudflare est une marque de Cloudflare, Inc.",
+                    text = atlasText(
+                        "« Atlas Commerce » et le logo Atlas appartiennent à ${AppDetails.COPYRIGHT_HOLDER}. Android et Google Play sont des marques de Google LLC. Cloudflare est une marque de Cloudflare, Inc.",
+                        "Atlas Commerce and the Atlas logo are owned by ${AppDetails.COPYRIGHT_HOLDER}. Android and Google Play are trademarks of Google LLC. Cloudflare is a trademark of Cloudflare, Inc.",
+                        "تعود ملكية Atlas Commerce وشعار Atlas إلى ${AppDetails.COPYRIGHT_HOLDER}. Android وGoogle Play علامتان تجاريتان لشركة Google LLC. وCloudflare علامة تجارية لشركة Cloudflare, Inc.",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -793,10 +838,13 @@ fun SecurityScreen(onBack: () -> Unit) {
                     AtlasMark(size = 36.dp)
                     Spacer(Modifier.width(8.dp))
                     Column {
-                        Text("Aucun traqueur publicitaire", style = MaterialTheme.typography.titleSmall)
+                        Text(atlasText("Aucun traqueur publicitaire"), style = MaterialTheme.typography.titleSmall)
                         Text(
-                            text = "Pas d'analytics, pas de publicité. Seul ML Kit (scan) transmet ses " +
-                                "statistiques d'usage à Google.",
+                            text = atlasText(
+                                "Pas d'analytics, pas de publicité. Seul ML Kit (scan) transmet ses statistiques d'usage à Google.",
+                                "No analytics or advertising. Only ML Kit (scanning) sends usage statistics to Google.",
+                                "لا تحليلات ولا إعلانات. يرسل ML Kit فقط، المستخدم للمسح، إحصاءات الاستخدام إلى Google.",
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -848,9 +896,11 @@ fun SecurityScreen(onBack: () -> Unit) {
             AtlasCard {
                 SectionTitle("Vos responsabilités", "Auto-hébergement")
                 Text(
-                    text = "Atlas Commerce fonctionne avec votre propre serveur. L'administrateur du serveur " +
-                        "voit les ventes, le stock et les comptes. Choisissez un serveur de confiance et un " +
-                        "mot de passe fort, et activez la double authentification côté web.",
+                    text = atlasText(
+                        "Atlas Commerce fonctionne avec votre propre serveur. L'administrateur du serveur voit les ventes, le stock et les comptes. Choisissez un serveur de confiance et un mot de passe fort, et activez la double authentification côté web.",
+                        "Atlas Commerce uses your own server. Its administrator can see sales, inventory and accounts. Choose a trusted server, use a strong password and enable two-factor authentication on the web app.",
+                        "يعمل Atlas Commerce عبر خادمك الخاص. يمكن لمسؤول الخادم الاطلاع على المبيعات والمخزون والحسابات. اختر خادماً موثوقاً واستخدم كلمة مرور قوية وفعّل المصادقة الثنائية في تطبيق الويب.",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -861,14 +911,17 @@ fun SecurityScreen(onBack: () -> Unit) {
             AtlasCard {
                 SectionTitle("Signaler une vulnérabilité", "Réponse sous 48 h")
                 Text(
-                    text = "Merci de ne pas ouvrir d'issue publique pour une faille. Écrivez à " +
-                        "${AppDetails.SECURITY_EMAIL} ou à @${AppDetails.GITHUB_HANDLE} avec les étapes de reproduction.",
+                    text = atlasText(
+                        "Merci de ne pas ouvrir d'issue publique pour une faille. Écrivez à ${AppDetails.SECURITY_EMAIL} ou à @${AppDetails.GITHUB_HANDLE} avec les étapes de reproduction.",
+                        "Please do not open a public issue for a security vulnerability. Email ${AppDetails.SECURITY_EMAIL} or contact @${AppDetails.GITHUB_HANDLE} with reproduction steps.",
+                        "يرجى عدم فتح بلاغ عام عن ثغرة أمنية. راسل ${AppDetails.SECURITY_EMAIL} أو @${AppDetails.GITHUB_HANDLE} مع خطوات إعادة إنتاجها.",
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(10.dp))
                 AtlasButton(
-                    text = "Contacter la sécurité",
+                    text = atlasText("Contacter la sécurité"),
                     onClick = { openExternal(context, "mailto:${AppDetails.SECURITY_EMAIL}") },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -889,10 +942,10 @@ private fun SectionTitle(title: String, subtitle: String? = null) {
         )
         Spacer(Modifier.width(6.dp))
         Column {
-            Text(text = title, style = MaterialTheme.typography.titleSmall)
+            Text(text = atlasText(title), style = MaterialTheme.typography.titleSmall)
             if (!subtitle.isNullOrBlank()) {
                 Text(
-                    text = subtitle,
+                    text = atlasText(subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -939,7 +992,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Text(
-                    text = AppDetails.TAGLINE,
+                    text = atlasText(AppDetails.TAGLINE),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -959,14 +1012,17 @@ fun AboutScreen(onBack: () -> Unit) {
         AtlasEntrance(delayMillis = 85) {
             AtlasCard {
                 Text(
-                    text = AppDetails.DESCRIPTION,
+                    text = atlasText(AppDetails.DESCRIPTION),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Cette application est le compagnon Android du projet web Atlas Commerce : " +
-                        "elle se connecte à votre serveur et ne stocke aucune comptabilité localement.",
+                    text = atlasText(
+                        "Cette application est le compagnon Android du projet web Atlas Commerce : elle se connecte à votre serveur et ne stocke aucune comptabilité localement.",
+                        "This Android app accompanies the Atlas Commerce web project: it connects to your server and stores no accounting data locally.",
+                        "هذا التطبيق هو رفيق Android لمشروع Atlas Commerce على الويب؛ يتصل بخادمك ولا يخزّن بيانات المحاسبة محلياً.",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -975,7 +1031,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
         AtlasEntrance(delayMillis = 120) {
             AtlasCard {
-                Text("Fonctionnalités", style = MaterialTheme.typography.titleSmall)
+                Text(atlasText("Fonctionnalités"), style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(8.dp))
                 AtlasBullet("Tableau de bord : trésorerie, valeur du stock, créances, tendance.")
                 AtlasBullet("Catalogue produits avec recherche, stock faible et mode hors ligne.")
@@ -987,7 +1043,7 @@ fun AboutScreen(onBack: () -> Unit) {
 
         AtlasEntrance(delayMillis = 155) {
             AtlasCard {
-                Text("Liens & Support", style = MaterialTheme.typography.titleSmall)
+                Text(atlasText("Liens & Support"), style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(8.dp))
                 AtlasButton(
                     text = "GitHub @${AppDetails.GITHUB_HANDLE}",
@@ -996,19 +1052,19 @@ fun AboutScreen(onBack: () -> Unit) {
                 )
                 Spacer(Modifier.height(8.dp))
                 AtlasButton(
-                    text = "Projet Atlas Commerce (web)",
+                    text = atlasText("Projet Atlas Commerce (web)"),
                     onClick = { openExternal(context, AppDetails.WEB_REPO) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
                 AtlasButton(
-                    text = "Code source Android",
+                    text = atlasText("Code source Android"),
                     onClick = { openExternal(context, AppDetails.PROJECT_REPO) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
                 AtlasOutlinedButton(
-                    text = "Signaler un problème (avec journaux & captures)",
+                    text = atlasText("Signaler un problème (avec journaux & captures)"),
                     icon = Icons.Outlined.BugReport,
                     onClick = { showReportDialog = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -1031,7 +1087,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             style = MaterialTheme.typography.titleSmall,
                         )
                         Text(
-                            text = "Distribué sous licence MIT. Forkez, modifiez, citez-nous.",
+                            text = atlasText("Distribué sous licence MIT. Forkez, modifiez, citez-nous."),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

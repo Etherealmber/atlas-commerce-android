@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.employees
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -95,8 +96,8 @@ fun EmployeesScreen(
 
     if (!isAdmin) {
         AtlasErrorCard(
-            title = "Accès réservé",
-            message = "La liste des employés et les informations de paie sont réservées aux rôles administrateur. Aucune donnée n'a été demandée au serveur.",
+            title = atlasText("Accès réservé"),
+            message = atlasText("La liste des employés et les informations de paie sont réservées aux rôles administrateur. Aucune donnée n'a été demandée au serveur."),
         )
         return
     }
@@ -128,9 +129,9 @@ fun EmployeesScreen(
                     }
                     Spacer(Modifier.size(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Suivi de la paie", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(atlasText("Suivi de la paie"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Consultation seule · échéances et versements du serveur Atlas",
+                            atlasText("Consultation seule · échéances et versements du serveur Atlas"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -139,7 +140,7 @@ fun EmployeesScreen(
                         if (state.refreshing || state.financeLoading) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         } else {
-                            Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les employés")
+                            Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les employés"))
                         }
                     }
                 }
@@ -149,12 +150,12 @@ fun EmployeesScreen(
                         onClick = { viewModel.selectFinancePeriod(selectedMonth.minusMonths(1).toString()) },
                         enabled = !state.financeLoading,
                     ) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Mois précédent")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Mois précédent"))
                     }
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(monthLabel, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Text(
-                            if (selectedMonth == currentMonth) "Mois en cours · données provisoires" else "Période de paie sélectionnée",
+                            if (selectedMonth == currentMonth) atlasText("Mois en cours · données provisoires") else atlasText("Période de paie sélectionnée", "Selected payroll period", "فترة الرواتب المحددة"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -163,7 +164,7 @@ fun EmployeesScreen(
                         onClick = { viewModel.selectFinancePeriod(selectedMonth.plusMonths(1).toString()) },
                         enabled = !state.financeLoading && selectedMonth < currentMonth,
                     ) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = "Mois suivant")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = atlasText("Mois suivant"))
                     }
                 }
             }
@@ -171,7 +172,7 @@ fun EmployeesScreen(
 
         state.financeError?.let { error ->
             item(key = "employees_error") {
-                AtlasErrorCard(title = "Données indisponibles", message = error, onRetry = viewModel::refresh)
+                AtlasErrorCard(title = atlasText("Données indisponibles"), message = error, onRetry = viewModel::refresh)
             }
         }
 
@@ -200,8 +201,8 @@ fun EmployeesScreen(
                 AtlasTextField(
                     value = query,
                     onValueChange = { query = it },
-                    label = "Rechercher un employé",
-                    placeholder = "Nom ou identifiant",
+                    label = atlasText("Rechercher un employé"),
+                    placeholder = atlasText("Nom ou identifiant"),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
@@ -228,11 +229,19 @@ fun EmployeesScreen(
             item(key = "employee_empty") {
                 AtlasEmptyState(
                     icon = Icons.Outlined.Groups,
-                    title = if (payroll?.rows.isNullOrEmpty()) "Aucun versement pour cette période" else "Aucun résultat",
-                    message = if (payroll?.rows.isNullOrEmpty()) {
-                        "Le serveur n'a renvoyé aucun versement à afficher pour $monthLabel."
+                    title = if (payroll?.rows.isNullOrEmpty()) {
+                        atlasText("Aucun versement pour cette période", "No payments for this period", "لا توجد دفعات لهذه الفترة")
                     } else {
-                        "Modifiez la recherche ou le filtre de paiement."
+                        atlasText("Aucun résultat")
+                    },
+                    message = if (payroll?.rows.isNullOrEmpty()) {
+                        atlasText(
+                            "Le serveur n'a renvoyé aucun versement à afficher pour $monthLabel.",
+                            "The server returned no payments to show for $monthLabel.",
+                            "لم يُرجع الخادم أي دفعات لعرضها عن $monthLabel.",
+                        )
+                    } else {
+                        atlasText("Modifiez la recherche ou le filtre de paiement.", "Change the search or payment filter.", "غيّر البحث أو عامل تصفية الدفعات.")
                     },
                 )
             }
@@ -246,14 +255,14 @@ fun EmployeesScreen(
             item(key = "employee_more") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "${payroll.rows.size} sur ${payroll.total} affichés",
+                        atlasText("${payroll.rows.size} sur ${payroll.total} affichés", "${payroll.rows.size} of ${payroll.total} shown", "${payroll.rows.size} من أصل ${payroll.total} معروض"),
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     TextButton(onClick = viewModel::loadMorePayroll, enabled = !state.payrollLoadingMore) {
                         if (state.payrollLoadingMore) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                        else Text("Afficher plus")
+                        else Text(atlasText("Afficher plus"))
                     }
                 }
             }
@@ -276,11 +285,21 @@ private fun EmployeePayrollCard(row: PayrollRowDto, asOf: String, currency: Stri
     AtlasCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(row.displayName.ifBlank { "Employé #${row.employeeId}" }, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    row.displayName.ifBlank { atlasText("Employé #${row.employeeId}", "Employee #${row.employeeId}", "موظف رقم ${row.employeeId}") },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
                 Text(
                     text = buildString {
-                        append("Période ${row.payPeriod.from.ifBlank { "—" }} → ${row.payPeriod.to.ifBlank { "—" }}")
-                        row.dueDate?.takeIf(String::isNotBlank)?.let { append(" · Échéance $it") }
+                        append(atlasText(
+                            "Période ${row.payPeriod.from.ifBlank { "—" }} → ${row.payPeriod.to.ifBlank { "—" }}",
+                            "Period ${row.payPeriod.from.ifBlank { "—" }} → ${row.payPeriod.to.ifBlank { "—" }}",
+                            "الفترة ${row.payPeriod.from.ifBlank { "—" }} → ${row.payPeriod.to.ifBlank { "—" }}",
+                        ))
+                        row.dueDate?.takeIf(String::isNotBlank)?.let {
+                            append(atlasText(" · Échéance $it", " · Due $it", " · الاستحقاق $it"))
+                        }
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -292,7 +311,12 @@ private fun EmployeePayrollCard(row: PayrollRowDto, asOf: String, currency: Stri
                 Text(AtlasFormat.money(row.amountDue, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 AtlasChip(
-                    text = status,
+                    text = when (status) {
+                        "Payé" -> atlasText("Payé", "Paid", "مدفوع")
+                        "À venir" -> atlasText("À venir", "Upcoming", "قادم")
+                        "À payer" -> atlasText("À payer", "To pay", "مستحق الدفع")
+                        else -> status
+                    },
                     tone = when (status) {
                         "Payé" -> AtlasTone.POSITIVE
                         "À venir" -> AtlasTone.INFO
@@ -304,7 +328,11 @@ private fun EmployeePayrollCard(row: PayrollRowDto, asOf: String, currency: Stri
         row.lastPayment?.let { payment ->
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             Text(
-                "Dernier versement · ${AtlasFormat.money(payment.amount, currency)} · ${payment.paidAt}",
+                atlasText(
+                    "Dernier versement · ${AtlasFormat.money(payment.amount, currency)} · ${payment.paidAt}",
+                    "Last payment · ${AtlasFormat.money(payment.amount, currency)} · ${payment.paidAt}",
+                    "آخر دفعة · ${AtlasFormat.money(payment.amount, currency)} · ${payment.paidAt}",
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

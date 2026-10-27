@@ -206,6 +206,11 @@ fun ProfileScreen(
                             label = user.username,
                             size = 64.dp,
                             serverBaseUrl = serverSelection?.baseUrl,
+                            clickContentDescription = atlasText(
+                                "Changer la photo de profil de ${user.username}",
+                                "Change ${user.username}'s profile photo",
+                                "تغيير صورة الملف الشخصي لـ ${user.username}",
+                            ),
                             onClick = {
                                 if (!uploadingAvatar) {
                                     photoPicker.launch("image/*")
@@ -230,7 +235,7 @@ fun ProfileScreen(
                                 } else {
                                     Icon(
                                         imageVector = Icons.Outlined.PhotoCamera,
-                                        contentDescription = "Changer la photo de profil",
+                                        contentDescription = atlasText("Changer la photo de profil", "Change profile photo", "تغيير صورة الملف الشخصي"),
                                         tint = MaterialTheme.colorScheme.onPrimary,
                                         modifier = Modifier.size(13.dp),
                                     )
@@ -246,7 +251,11 @@ fun ProfileScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = "@${user.username} · Appuyez sur la photo pour modifier",
+                            text = atlasText(
+                                "@${user.username} · Appuyez sur la photo pour modifier",
+                                "@${user.username} · Tap the photo to edit",
+                                "@${user.username} · اضغط على الصورة للتعديل",
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -258,16 +267,16 @@ fun ProfileScreen(
                             showEditProfile = true
                         },
                     ) {
-                        Icon(Icons.Outlined.Edit, contentDescription = "Modifier le profil")
+                        Icon(Icons.Outlined.Edit, contentDescription = atlasText("Modifier le profil", "Edit profile", "تعديل الملف الشخصي"))
                     }
                 }
                 if (user.email.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
-                    AtlasInfoRow(label = "E-mail", value = user.email)
+                    AtlasInfoRow(label = atlasText("E-mail", "Email", "البريد الإلكتروني"), value = user.email)
                 }
                 Spacer(Modifier.height(10.dp))
                 AtlasOutlinedButton(
-                    text = "Se déconnecter de cette session",
+                    text = atlasText("Se déconnecter de cette session", "Sign out of this session", "تسجيل الخروج من هذه الجلسة"),
                     onClick = { confirmSignOut = true },
                     icon = Icons.Outlined.Logout,
                     modifier = Modifier.fillMaxWidth(),
@@ -279,13 +288,17 @@ fun ProfileScreen(
         if (otherSavedAccounts.isNotEmpty()) {
             AtlasCard {
                 Text(
-                    text = "Autres comptes mémorisés sur ce serveur",
+                    text = atlasText("Autres comptes mémorisés sur ce serveur", "Other accounts saved on this server", "حسابات أخرى محفوظة على هذا الخادم"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "Bascule instantanée — les paniers, caches et discussions restent strictement séparés.",
+                    text = atlasText(
+                        "Bascule instantanée — les paniers, caches et discussions restent strictement séparés.",
+                        "Switch instantly — carts, caches, and conversations stay separate.",
+                        "التبديل فوري — تبقى السلال وذاكرات التخزين والمحادثات منفصلة.",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -311,7 +324,11 @@ fun ProfileScreen(
                                         fontWeight = FontWeight.SemiBold,
                                     )
                                     Text(
-                                        text = "@${acc.username} · ${profileRoleLabel(acc.role)}",
+                                        text = atlasText(
+                                "@${acc.username} · ${profileRoleLabel(acc.role)}",
+                                "@${acc.username} · ${profileRoleLabel(acc.role)}",
+                                "@${acc.username} · ${profileRoleLabel(acc.role)}",
+                            ),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -321,7 +338,7 @@ fun ProfileScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Outlined.Close,
-                                        contentDescription = "Oublier ce compte",
+                                        contentDescription = atlasText("Oublier ce compte"),
                                         modifier = Modifier.size(16.dp),
                                     )
                                 }
@@ -343,14 +360,14 @@ fun ProfileScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Apparence, navigation & animations",
+                    text = atlasText("Apparence, navigation & animations"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                text = "Thème",
+                text = atlasText("Thème"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -382,7 +399,7 @@ fun ProfileScreen(
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                text = "Densité d'affichage",
+                text = atlasText("Densité d'affichage"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -398,7 +415,7 @@ fun ProfileScreen(
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                text = "Onglet d'ouverture au lancement",
+                text = atlasText("Onglet d'ouverture au lancement"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -422,7 +439,11 @@ fun ProfileScreen(
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsToggleRow(
                 title = "Notifications système par rôle",
-                subtitle = "Affiche les notifications Android filtrées selon votre rôle (${Roles.label(user.role)}).",
+                subtitle = atlasText(
+                    "Affiche les notifications Android filtrées selon votre rôle (${profileRoleLabel(user.role)}).",
+                    "Shows Android notifications filtered for your role (${profileRoleLabel(user.role)}).",
+                    "يعرض إشعارات Android المصفّاة حسب دورك (${profileRoleLabel(user.role)}).",
+                ),
                 checked = roleNotificationsEnabled,
                 onCheckedChange = appViewModel::setRoleNotificationsEnabled,
             )
@@ -433,11 +454,11 @@ fun ProfileScreen(
                             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                                 .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
                         )
-                    }.onFailure { onToast("Ouvrez Paramètres Android > Applications > Atlas Commerce > Notifications.") }
+                    }.onFailure { onToast(atlasText("Ouvrez Paramètres Android > Applications > Atlas Commerce > Notifications.")) }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Autorisation et canaux de notification Android")
+                Text(atlasText("Autorisation et canaux de notification Android"))
             }
         }
 
@@ -452,7 +473,7 @@ fun ProfileScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Caméra & lecteur code-barres",
+                    text = atlasText("Caméra & lecteur code-barres"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -499,7 +520,7 @@ fun ProfileScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Vente rapide & caisse",
+                        text = atlasText("Vente rapide & caisse"),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -509,22 +530,22 @@ fun ProfileScreen(
                     AtlasTextField(
                         value = draftClientName,
                         onValueChange = { draftClientName = it },
-                        label = "Client pré-rempli par défaut",
-                        placeholder = "Ex. Client comptoir",
+                        label = atlasText("Client pré-rempli par défaut"),
+                        placeholder = atlasText("Ex. Client comptoir"),
                         leadingIcon = Icons.Outlined.Person,
                         imeAction = ImeAction.Done,
                         onDone = {
                             appViewModel.setDefaultClientName(draftClientName)
-                            onToast("Client par défaut enregistré.")
+                            onToast(atlasText("Client par défaut enregistré."))
                         },
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(8.dp))
                     AtlasOutlinedButton(
-                        text = "OK",
+                        text = atlasText("OK"),
                         onClick = {
                             appViewModel.setDefaultClientName(draftClientName)
-                            onToast("Client par défaut enregistré.")
+                            onToast(atlasText("Client par défaut enregistré."))
                         },
                     )
                 }
@@ -542,20 +563,20 @@ fun ProfileScreen(
     if (showEditProfile) {
         AlertDialog(
             onDismissRequest = { if (!savingProfile) showEditProfile = false },
-            title = { Text("Modifier mon profil") },
+            title = { Text(atlasText("Modifier mon profil")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     AtlasTextField(
                         value = draftDisplayName,
                         onValueChange = { draftDisplayName = it },
-                        label = "Nom affiché *",
-                        placeholder = "Ex. Nom complet",
+                        label = atlasText("Nom affiché *"),
+                        placeholder = atlasText("Ex. Nom complet"),
                         imeAction = ImeAction.Next,
                     )
                     AtlasTextField(
                         value = draftEmail,
                         onValueChange = { draftEmail = it },
-                        label = "Adresse e-mail",
+                        label = atlasText("Adresse e-mail"),
                         placeholder = "contact@exemple.com",
                         keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Done,
@@ -579,7 +600,7 @@ fun ProfileScreen(
                     onClick = { showEditProfile = false },
                     enabled = !savingProfile,
                 ) {
-                    Text("Annuler")
+                    Text(atlasText("Annuler"))
                 }
             },
         )
@@ -588,11 +609,14 @@ fun ProfileScreen(
     if (confirmSignOut) {
         AlertDialog(
             onDismissRequest = { confirmSignOut = false },
-            title = { Text("Se déconnecter ?") },
+            title = { Text(atlasText("Se déconnecter ?")) },
             text = {
                 Text(
-                    "La session active, le panier et les données temporaires seront effacés. " +
-                        "Aucune donnée métier n'est supprimée sur le serveur.",
+                    atlasText(
+                        "La session active, le panier et les données temporaires seront effacés. Aucune donnée métier n'est supprimée sur le serveur.",
+                        "The active session, cart and temporary data will be cleared. No business data will be deleted from the server.",
+                        "سيتم مسح الجلسة النشطة والسلة والبيانات المؤقتة. لن تُحذف أي بيانات تجارية من الخادم.",
+                    ),
                 )
             },
             confirmButton = {
@@ -601,10 +625,10 @@ fun ProfileScreen(
                         confirmSignOut = false
                         onSignOut()
                     },
-                ) { Text("Se déconnecter") }
+                ) { Text(atlasText("Se déconnecter")) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmSignOut = false }) { Text("Annuler") }
+                TextButton(onClick = { confirmSignOut = false }) { Text(atlasText("Annuler")) }
             },
         )
     }
@@ -675,10 +699,10 @@ fun SettingsScreen(
             val enabled = !developerModeEnabled
             appViewModel.setDeveloperModeEnabled(enabled)
             if (enabled) {
-                onToast("Mode développeur activé. Ouverture des outils développeur.")
+                onToast(atlasText("Mode développeur activé. Ouverture des outils développeur."))
                 onOpenDeveloperTools()
             } else {
-                onToast("Mode développeur désactivé.")
+                onToast(atlasText("Mode développeur désactivé."))
             }
         }
     }
@@ -686,32 +710,32 @@ fun SettingsScreen(
     if (showClearReportsDialog) {
         AlertDialog(
             onDismissRequest = { showClearReportsDialog = false },
-            title = { Text("Supprimer les PDF temporaires ?") },
-            text = { Text("Les rapports téléchargés dans le cache privé de cette application seront supprimés de cet appareil. Les copies déjà enregistrées ou partagées ailleurs ne seront pas touchées.") },
+            title = { Text(atlasText("Supprimer les PDF temporaires ?")) },
+            text = { Text(atlasText("Les rapports téléchargés dans le cache privé de cette application seront supprimés de cet appareil. Les copies déjà enregistrées ou partagées ailleurs ne seront pas touchées.")) },
             confirmButton = {
                 TextButton(onClick = {
                     showClearReportsDialog = false
                     appViewModel.clearFinanceReportCache(onToast)
-                }) { Text("Supprimer") }
+                }) { Text(atlasText("Supprimer")) }
             },
-            dismissButton = { TextButton(onClick = { showClearReportsDialog = false }) { Text("Annuler") } },
+            dismissButton = { TextButton(onClick = { showClearReportsDialog = false }) { Text(atlasText("Annuler")) } },
         )
     }
 
     if (showClearLocalDataDialog) {
         AlertDialog(
             onDismissRequest = { showClearLocalDataDialog = false },
-            title = { Text("Effacer les données locales ?") },
+            title = { Text(atlasText("Effacer les données locales ?")) },
             text = {
-                Text("Cette action déconnecte ce compte et supprime les sessions mémorisées, serveurs enregistrés, préférences, cache hors ligne, journaux et PDF temporaires de cet appareil. Elle ne supprime aucune vente, facture ni donnée d'entreprise sur le serveur.")
+                Text(atlasText("Cette action déconnecte ce compte et supprime les sessions mémorisées, serveurs enregistrés, préférences, cache hors ligne, journaux et PDF temporaires de cet appareil. Elle ne supprime aucune vente, facture ni donnée d'entreprise sur le serveur."))
             },
             confirmButton = {
                 TextButton(onClick = {
                     showClearLocalDataDialog = false
                     appViewModel.clearAllLocalAppData(onToast)
-                }) { Text("Effacer de cet appareil") }
+                }) { Text(atlasText("Effacer de cet appareil")) }
             },
-            dismissButton = { TextButton(onClick = { showClearLocalDataDialog = false }) { Text("Annuler") } },
+            dismissButton = { TextButton(onClick = { showClearLocalDataDialog = false }) { Text(atlasText("Annuler")) } },
         )
     }
 
@@ -720,12 +744,12 @@ fun SettingsScreen(
             onDismissRequest = { showReleaseHistoryDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Historique des versions", modifier = Modifier.weight(1f))
+                    Text(atlasText("Historique des versions"), modifier = Modifier.weight(1f))
                     if (releaseChangelogLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     } else {
                         IconButton(onClick = appViewModel::refreshReleaseChangelog) {
-                            Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser l'historique")
+                            Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique"))
                         }
                     }
                 }
@@ -742,7 +766,7 @@ fun SettingsScreen(
                         CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
                     } else if (releaseChangelog.isEmpty()) {
                         Text(
-                            "Aucune version publiée n'est disponible pour le moment.",
+                            atlasText("Aucune version publiée n'est disponible pour le moment."),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -759,7 +783,7 @@ fun SettingsScreen(
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.weight(1f),
                                 )
-                                if (entry.isLatest) AtlasChip(text = "Dernière", tone = AtlasTone.POSITIVE)
+                                if (entry.isLatest) AtlasChip(text = atlasText("Dernière"), tone = AtlasTone.POSITIVE)
                                 entry.publishedAt?.let { AtlasChip(text = it, tone = AtlasTone.NEUTRAL) }
                             }
                             Spacer(Modifier.height(6.dp))
@@ -773,7 +797,7 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showReleaseHistoryDialog = false }) { Text("Fermer") }
+                TextButton(onClick = { showReleaseHistoryDialog = false }) { Text(atlasText("Fermer")) }
             },
         )
     }
@@ -903,7 +927,7 @@ fun SettingsScreen(
                 onDownload = onStartUpdateDownload,
                 onInstall = {
                     if (!appViewModel.installDownloadedUpdate(context)) {
-                        onToast("Impossible d'ouvrir l'installateur sur cet appareil.")
+                        onToast(atlasText("Impossible d'ouvrir l'installateur sur cet appareil."))
                     }
                 },
             )
@@ -934,24 +958,24 @@ fun SettingsScreen(
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f).clickable { showReleaseHistoryDialog = true }) {
                     Text(
-                        text = "Nouveautés des versions",
+                        text = atlasText("Nouveautés des versions"),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "Ouvrir l'historique complet des changements publiés",
+                        text = atlasText("Ouvrir l'historique complet des changements publiés"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 TextButton(onClick = { showReleaseHistoryDialog = true }) {
-                    Text("Voir")
+                    Text(atlasText("Voir"))
                 }
                 IconButton(
                     onClick = appViewModel::refreshReleaseChangelog,
                     enabled = !releaseChangelogLoading,
                 ) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser l'historique des versions")
+                    Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique des versions"))
                 }
             }
         }
@@ -967,21 +991,21 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Serveur & espaces enregistrés",
+                    text = atlasText("Serveur & espaces enregistrés"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                text = serverSelection?.baseUrl?.let { ServerUrl.display(it) } ?: "Aucun serveur configuré",
+                text = serverSelection?.baseUrl?.let { ServerUrl.display(it) } ?: atlasText("Aucun serveur configuré"),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = "Chaque serveur dispose de son propre stockage chiffré isolé. Changer de serveur ferme automatiquement la session en cours.",
+                text = atlasText("Chaque serveur dispose de son propre stockage chiffré isolé. Changer de serveur ferme automatiquement la session en cours."),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1014,7 +1038,7 @@ fun SettingsScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Outlined.Close,
-                                        contentDescription = "Supprimer ce serveur",
+                                        contentDescription = atlasText("Supprimer ce serveur"),
                                         modifier = Modifier.size(16.dp),
                                     )
                                 }
@@ -1025,7 +1049,7 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(10.dp))
             AtlasOutlinedButton(
-                text = "Changer ou ajouter un serveur",
+                text = atlasText("Changer ou ajouter un serveur"),
                 onClick = onChangeServer,
                 icon = Icons.Outlined.SwapHoriz,
                 modifier = Modifier.fillMaxWidth(),
@@ -1044,18 +1068,22 @@ fun SettingsScreen(
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = "Catalogue hors ligne & système",
+                        text = atlasText("Catalogue hors ligne & système"),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "$cachedProductCount article(s) isolé(s) pour @${user.username}",
+                        text = atlasText(
+                            "$cachedProductCount article(s) isolé(s) pour @${user.username}",
+                            "$cachedProductCount cached item(s) for @${user.username}",
+                            "$cachedProductCount عنصر محفوظ لـ @${user.username}",
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 AtlasOutlinedButton(
-                    text = "Vider",
+                    text = atlasText("Vider"),
                     onClick = { appViewModel.clearOfflineCache(onToast) },
                     icon = Icons.Outlined.DeleteOutline,
                     enabled = cachedProductCount > 0,
@@ -1081,7 +1109,7 @@ fun SettingsScreen(
                     icon = Icons.Outlined.BugReport,
                     title = "Rapports automatiques de plantage",
                     subtitle = "Indisponible : cette version n'est pas configurée avec Firebase Crashlytics.",
-                    onClick = { onToast("L'administrateur doit configurer Firebase Crashlytics pour cette version.") },
+                    onClick = { onToast(atlasText("L'administrateur doit configurer Firebase Crashlytics pour cette version.")) },
                 )
             }
             AtlasDivider(Modifier.padding(vertical = 8.dp))
@@ -1133,12 +1161,20 @@ fun SettingsScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Passkey Android", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(atlasText("Passkey Android"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Text(
                             if (androidPasskeysAvailable) {
-                                "Le serveur les autorise. La création exige aussi un gestionnaire Android compatible et un verrouillage d'écran."
+                                atlasText(
+                                    "Le serveur les autorise. La création exige aussi un gestionnaire Android compatible et un verrouillage d'écran.",
+                                    "The server allows passkeys. Creating one also requires a compatible Android credential manager and a screen lock.",
+                                    "يسمح الخادم بمفاتيح المرور. يتطلب إنشاؤها أيضاً مدير بيانات اعتماد متوافقاً مع Android وقفل شاشة.",
+                                )
                             } else {
-                                "Configuration Android non confirmée par le serveur sélectionné. L'inscription reste masquée tant que le serveur ne l'annonce pas comme disponible."
+                                atlasText(
+                                    "Configuration Android non confirmée par le serveur sélectionné. L'inscription reste masquée tant que le serveur ne l'annonce pas comme disponible.",
+                                    "Android support has not been confirmed by the selected server. Registration stays hidden until the server reports it as available.",
+                                    "لم يؤكد الخادم المحدد دعم Android. يظل التسجيل مخفياً حتى يعلن الخادم توفره.",
+                                )
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1148,7 +1184,7 @@ fun SettingsScreen(
                 Spacer(Modifier.height(10.dp))
                 if (androidPasskeysAvailable) {
                     AtlasOutlinedButton(
-                        text = if (registeringPasskey) "Enregistrement en cours…" else "Enregistrer une passkey",
+                        text = if (registeringPasskey) atlasText("Enregistrement en cours…") else atlasText("Enregistrer une passkey", "Register passkey", "تسجيل مفتاح مرور"),
                         onClick = { appViewModel.registerAndroidPasskey(context) { } },
                         icon = Icons.Outlined.Fingerprint,
                         modifier = Modifier.fillMaxWidth(),
@@ -1161,14 +1197,14 @@ fun SettingsScreen(
                             val openedCredentialSettings = runCatching { context.startActivity(credentialSettings) }.isSuccess
                             if (!openedCredentialSettings) {
                                 runCatching { context.startActivity(securitySettings) }
-                                    .onFailure { onToast("Ouvrez Paramètres Android > Mots de passe et clés d'accès, puis choisissez un fournisseur.") }
+                                    .onFailure { onToast(atlasText("Ouvrez Paramètres Android > Mots de passe et clés d'accès, puis choisissez un fournisseur.")) }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Configurer le fournisseur Android")
+                        Text(atlasText("Configurer le fournisseur Android"))
                     }
                 } else {
                     TextButton(
@@ -1177,7 +1213,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Vérifier à nouveau")
+                        Text(atlasText("Vérifier à nouveau"))
                     }
                 }
             }
@@ -1211,7 +1247,7 @@ fun SettingsScreen(
         EtherealmberAuthorCard(onToast = onToast)
 
         AtlasCard {
-            Text("Liens du projet", style = MaterialTheme.typography.titleSmall)
+            Text(atlasText("Liens du projet"), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
             SettingsRow(
                 icon = Icons.Outlined.Person,
@@ -1219,7 +1255,7 @@ fun SettingsScreen(
                 subtitle = "github.com/${AppDetails.GITHUB_HANDLE}",
                 onClick = {
                     if (!openExternal(context, AppDetails.GITHUB_PROFILE_URL)) {
-                        onToast("Aucun navigateur disponible.")
+                        onToast(atlasText("Aucun navigateur disponible."))
                     }
                 },
             )
@@ -1229,7 +1265,7 @@ fun SettingsScreen(
                 subtitle = "Etherealmber/atlas-commerce",
                 onClick = {
                     if (!openExternal(context, AppDetails.WEB_REPO)) {
-                        onToast("Aucun navigateur disponible.")
+                        onToast(atlasText("Aucun navigateur disponible."))
                     }
                 },
             )
@@ -1239,7 +1275,7 @@ fun SettingsScreen(
                 subtitle = "Etherealmber/atlas-commerce-android",
                 onClick = {
                     if (!openExternal(context, AppDetails.PROJECT_REPO)) {
-                        onToast("Aucun navigateur disponible.")
+                        onToast(atlasText("Aucun navigateur disponible."))
                     }
                 },
             )
@@ -1253,7 +1289,11 @@ fun SettingsScreen(
 
         Column(Modifier.padding(vertical = 8.dp)) {
             Text(
-                text = "${AppDetails.NAME} ${AppDetails.VERSION_NAME} (build ${AppDetails.VERSION_CODE})",
+                text = atlasText(
+                    "${AppDetails.NAME} ${AppDetails.VERSION_NAME} (build ${AppDetails.VERSION_CODE})",
+                    "${AppDetails.NAME} ${AppDetails.VERSION_NAME} (build ${AppDetails.VERSION_CODE})",
+                    "${AppDetails.NAME} ${AppDetails.VERSION_NAME} (البنية ${AppDetails.VERSION_CODE})",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
@@ -1261,7 +1301,11 @@ fun SettingsScreen(
                     .padding(vertical = 8.dp),
             )
             Text(
-                text = "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER} · Licence ${AppDetails.LICENSE_NAME}",
+                text = atlasText(
+                    "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER} · Licence ${AppDetails.LICENSE_NAME}",
+                    "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER} · License ${AppDetails.LICENSE_NAME}",
+                    "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER} · الترخيص ${AppDetails.LICENSE_NAME}",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

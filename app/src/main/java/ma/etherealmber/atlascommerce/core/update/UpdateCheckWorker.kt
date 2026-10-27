@@ -25,11 +25,13 @@ import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.MainActivity
 import ma.etherealmber.atlascommerce.R
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
+import ma.etherealmber.atlascommerce.core.net.ServerUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
-/** Best-effort periodic public-release check; business/payroll data is never fetched here. */
+/** Best-effort periodic check of the configured backend update API and public release mirrors. */
 class UpdateCheckWorker(
     appContext: Context,
     params: WorkerParameters,
@@ -37,9 +39,24 @@ class UpdateCheckWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            val latest = MANIFEST_URLS.mapNotNull(::fetchManifest)
-                .maxByOrNull { it.versionCode }
+            val backendUrl = backendManifestUrl()
+            val backendManifest = backendUrl?.let(::fetchManifest)
+            val candidates = listOfNotNull(backendManifest) + MANIFEST_URLS.mapNotNull(::fetchManifest)
+            val newest = candidates.maxByOrNull { it.versionCode }
                 ?: return@withContext Result.retry()
+            val minimumVersionCode = maxOf(
+                newest.resolvedMinimumSupportedVersionCode,
+                backendManifest?.resolvedMinimumSupportedVersionCode ?: 0,
+            )
+            val latest = newest.copy(
+                minimumSupportedVersionCode = minimumVersionCode,
+                mandatory = newest.mandatory || backendManifest?.mandatory == true ||
+                    minimumVersionRequiresUpdate(
+                        installedVersionCode = BuildConfig.VERSION_CODE,
+                        minimumSupportedVersionCode = minimumVersionCode,
+                        availableVersionCode = newest.versionCode,
+                    ),
+            )
             if (latest.versionCode <= BuildConfig.VERSION_CODE) return@withContext Result.success()
 
             if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -80,6 +97,21 @@ class UpdateCheckWorker(
         }
     }
 
+    private fun backendManifestUrl(): String? {
+        val rawBase = inputData.getString(UpdateCheckWorkScheduler.KEY_BACKEND_URL)
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        val base = ServerUrl.normalize(rawBase) ?: return null
+        if (ServerUrl.isCleartext(base) && !BuildConfig.ALLOW_CLEARTEXT) return null
+        return (ServerUrl.withSlash(base) + "api/app/android-update")
+            .toHttpUrlOrNull()
+            ?.newBuilder()
+            ?.addQueryParameter("versionCode", BuildConfig.VERSION_CODE.toString())
+            ?.addQueryParameter("versionName", BuildConfig.VERSION_NAME)
+            ?.build()
+            ?.toString()
+    }
+
     private fun fetchManifest(url: String): AndroidUpdateDto? = runCatching {
         val request = Request.Builder()
             .url(url)
@@ -100,6 +132,7 @@ class UpdateCheckWorker(
         const val REQUEST_CODE = 4107
         const val PREFS = "atlas_background_update_check"
         const val KEY_LAST_NOTIFIED_VERSION = "last_notified_version_code"
+        const val KEY_BACKEND_URL = "backend_url"
 
         val MANIFEST_URLS = listOf(
             "${BuildConfig.CDN1_BASE_URL.trimEnd('/')}/latest.json",
@@ -116,13 +149,18 @@ class UpdateCheckWorker(
 }
 
 object UpdateCheckWorkScheduler {
-    fun setEnabled(context: Context, enabled: Boolean) {
+    fun setEnabled(context: Context, enabled: Boolean, serverBaseUrl: String? = null) {
         val workManager = WorkManager.getInstance(context.applicationContext)
         if (!enabled) {
             workManager.cancelUniqueWork(UpdateCheckWorker.UNIQUE_WORK_NAME)
             return
         }
         val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(12, TimeUnit.HOURS)
+            .setInputData(
+                androidx.work.workDataOf(
+                    UpdateCheckWorker.KEY_BACKEND_URL to serverBaseUrl.orEmpty(),
+                ),
+            )
             .setInitialDelay(2, TimeUnit.HOURS)
             .setConstraints(
                 Constraints.Builder()

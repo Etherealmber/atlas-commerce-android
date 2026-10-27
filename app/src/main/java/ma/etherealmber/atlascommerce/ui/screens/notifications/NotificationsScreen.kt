@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.notifications
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
@@ -89,15 +90,19 @@ fun NotificationsScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AtlasTopBar(
-                title = "Info Box & Notifications",
-                subtitle = "${state.roleLabel} · ${state.alerts.size} alerte(s) · ${state.pendingCount} en attente",
+                title = atlasText("Info Box & Notifications"),
+                subtitle = atlasText(
+                    "${state.roleLabel} · ${state.alerts.size} alerte(s) · ${state.pendingCount} en attente",
+                    "${state.roleLabel} · ${state.alerts.size} alert(s) · ${state.pendingCount} pending",
+                    "${state.roleLabel} · ${state.alerts.size} تنبيه · ${state.pendingCount} معلّق",
+                ),
                 onBack = onBack,
                 actions = {
                     IconButton(onClick = { showComposeDialog = true }) {
-                        Icon(Icons.Outlined.Send, contentDescription = "Envoyer une notification")
+                        Icon(Icons.Outlined.Send, contentDescription = atlasText("Envoyer une notification"))
                     }
                     IconButton(onClick = viewModel::refresh) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser")
+                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser"))
                     }
                 },
             )
@@ -129,12 +134,12 @@ fun NotificationsScreen(
                             Spacer(Modifier.width(8.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    text = "Notifications Android désactivées",
+                                    text = atlasText("Notifications Android désactivées"),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    text = "Activez les notifications système dans les Paramètres Android pour recevoir immédiatement les alertes et suivre les téléchargements.",
+                                    text = atlasText("Activez les notifications système dans les Paramètres Android pour recevoir immédiatement les alertes et suivre les téléchargements."),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -172,7 +177,7 @@ fun NotificationsScreen(
                             Spacer(Modifier.width(8.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    text = "Info Box · ${state.roleLabel}",
+                                    text = atlasText("Info Box · ${state.roleLabel}", "Info Box · ${state.roleLabel}", "صندوق المعلومات · ${state.roleLabel}"),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -183,7 +188,7 @@ fun NotificationsScreen(
                                 )
                             }
                             AtlasChip(
-                                text = if (state.isAdmin) "Admin" else "Filtré rôle",
+                                text = if (state.isAdmin) atlasText("Admin") else atlasText("Filtré rôle"),
                                 tone = if (state.isAdmin) AtlasTone.POSITIVE else AtlasTone.INFO,
                             )
                         }
@@ -214,10 +219,14 @@ fun NotificationsScreen(
                 state.alerts.isEmpty() && state.actions.isEmpty() -> {
                     item {
                         AtlasEmptyState(
-                            title = "Aucune notification pour votre rôle",
-                            message = "Votre flux ${state.roleLabel} est à jour. Vous pouvez envoyer un message ciblé à une équipe ci-dessus.",
+                            title = atlasText("Aucune notification pour votre rôle"),
+                            message = atlasText(
+                                "Votre flux ${state.roleLabel} est à jour. Vous pouvez envoyer un message ciblé à une équipe ci-dessus.",
+                                "Your ${state.roleLabel} feed is up to date. You can send a targeted message to a team above.",
+                                "تدفّق ${state.roleLabel} محدّث. يمكنك إرسال رسالة موجهة إلى فريق أعلاه.",
+                            ),
                             icon = Icons.Outlined.NotificationsNone,
-                            actionLabel = "Actualiser",
+                            actionLabel = atlasText("Actualiser"),
                             onAction = viewModel::refresh,
                         )
                     }
@@ -227,8 +236,8 @@ fun NotificationsScreen(
                     if (state.alerts.isNotEmpty()) {
                         item {
                             AtlasSectionHeader(
-                                title = "Alertes ${state.roleLabel} (${state.alerts.size})",
-                                subtitle = "Filtrées automatiquement selon vos permissions",
+                                title = atlasText("Alertes ${state.roleLabel} (${state.alerts.size})", "${state.roleLabel} alerts (${state.alerts.size})", "تنبيهات ${state.roleLabel} (${state.alerts.size})"),
+                                subtitle = atlasText("Filtrées automatiquement selon vos permissions"),
                             )
                         }
                         items(state.alerts) { alert ->
@@ -242,11 +251,11 @@ fun NotificationsScreen(
                     item {
                         Spacer(Modifier.height(4.dp))
                         AtlasSectionHeader(
-                            title = "Demandes & notifications par rôle",
+                            title = atlasText("Demandes & notifications par rôle"),
                             subtitle = if (state.isAdmin) {
-                                "Validez en 1 clic les demandes produits envoyées par l'équipe"
+                                atlasText("Validez en 1 clic les demandes produits envoyées par l'équipe")
                             } else {
-                                "Notifications reçues pour votre rôle et suivi de vos envois Admin"
+                                atlasText("Notifications reçues pour votre rôle et suivi de vos envois Admin")
                             },
                         )
                         Spacer(Modifier.height(6.dp))
@@ -254,12 +263,12 @@ fun NotificationsScreen(
                             FilterChip(
                                 selected = !state.pendingOnly,
                                 onClick = { viewModel.togglePendingOnly(false) },
-                                label = { Text("Toutes (${state.actions.size})") },
+                                label = { Text(atlasText("Toutes (${state.actions.size})", "All (${state.actions.size})", "الكل (${state.actions.size})")) },
                             )
                             FilterChip(
                                 selected = state.pendingOnly,
                                 onClick = { viewModel.togglePendingOnly(true) },
-                                label = { Text("En attente (${state.pendingCount})") },
+                                label = { Text(atlasText("En attente (${state.pendingCount})", "Pending (${state.pendingCount})", "معلّق (${state.pendingCount})")) },
                             )
                         }
                     }
@@ -316,7 +325,7 @@ private fun SendRoleNotificationDialog(
         onDismissRequest = { if (!sending) onDismiss() },
         title = {
             Text(
-                text = "Envoyer une notification par rôle",
+                text = atlasText("Envoyer une notification par rôle"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -324,7 +333,7 @@ private fun SendRoleNotificationDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Destinataires (rôle cible)",
+                    text = atlasText("Destinataires (rôle cible)"),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -344,7 +353,7 @@ private fun SendRoleNotificationDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Objet de la notification *") },
+                    label = { Text(atlasText("Objet de la notification *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -352,7 +361,7 @@ private fun SendRoleNotificationDialog(
                 OutlinedTextField(
                     value = message,
                     onValueChange = { message = it },
-                    label = { Text("Détails / Instructions") },
+                    label = { Text(atlasText("Détails / Instructions")) },
                     minLines = 2,
                     maxLines = 4,
                     modifier = Modifier.fillMaxWidth(),
@@ -364,12 +373,12 @@ private fun SendRoleNotificationDialog(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = "Priorité urgente",
+                            text = atlasText("Priorité urgente"),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                         )
                         Text(
-                            text = "Déclenche une alerte haute priorité sur les appareils du rôle",
+                            text = atlasText("Déclenche une alerte haute priorité sur les appareils du rôle"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -384,13 +393,13 @@ private fun SendRoleNotificationDialog(
                 onClick = { onSend(selectedTarget, title, message, urgent) },
             ) {
                 Icon(Icons.Outlined.Send, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                Text("Envoyer")
+                Text(atlasText("Envoyer"))
             }
         },
         dismissButton = {
             OutlinedButton(onClick = onDismiss, enabled = !sending) {
                 Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                Text("Annuler")
+                Text(atlasText("Annuler"))
             }
         },
     )
@@ -468,7 +477,9 @@ private fun MobileActionRow(
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = action.title.ifBlank { "Notification #${action.id}" },
+                    text = action.title.ifBlank {
+                        atlasText("Notification #${action.id}", "Notification #${action.id}", "إشعار رقم ${action.id}")
+                    },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -508,9 +519,9 @@ private fun MobileActionRow(
                     Spacer(Modifier.width(4.dp))
                     Text(
                         if (isAdmin && isProductRequest) {
-                            "Créer & Valider"
+                            atlasText("Créer & Valider")
                         } else {
-                            "Marquer traité"
+                            atlasText("Marquer traité")
                         },
                     )
                 }
@@ -518,7 +529,7 @@ private fun MobileActionRow(
                     TextButton(onClick = onReject, enabled = !busy) {
                         Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Refuser")
+                        Text(atlasText("Refuser"))
                     }
                 }
             }

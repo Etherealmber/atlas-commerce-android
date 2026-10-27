@@ -331,9 +331,11 @@ fun ServerSetupScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "1. Installez et déployez d'abord l'application web Atlas Commerce sur votre domaine HTTPS.\n" +
-                    "2. Entrez votre URL exacte ci-dessus puis touchez « Tester la connexion ».\n" +
-                    "3. Si le site apparaît indisponible, vérifiez attentivement l'orthographe de ce que vous avez tapé.",
+                text = atlasText(
+                    "1. Installez et déployez d'abord l'application web Atlas Commerce sur votre domaine HTTPS.\n2. Entrez votre URL exacte ci-dessus puis touchez « Tester la connexion ».\n3. Si le site apparaît indisponible, vérifiez attentivement l'orthographe de ce que vous avez tapé.",
+                    "1. First install and deploy the Atlas Commerce web app on your HTTPS domain.\n2. Enter the exact URL above and tap ‘Test connection’.\n3. If the site appears unavailable, carefully check the spelling of the address.",
+                    "١. ثبّت وانشر أولاً تطبيق Atlas Commerce على نطاق HTTPS الخاص بك.\n٢. أدخل عنوان URL الدقيق أعلاه ثم اضغط «اختبار الاتصال».\n٣. إذا ظهر الموقع غير متاح، فتحقّق من كتابة العنوان بدقة.",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -347,7 +349,11 @@ fun ServerSetupScreen(
 
         Spacer(Modifier.height(density.sectionGap))
         Text(
-            text = "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · Licence ${AppDetails.LICENSE_NAME}",
+            text = atlasText(
+                "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · Licence ${AppDetails.LICENSE_NAME}",
+                "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · License ${AppDetails.LICENSE_NAME}",
+                "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · الترخيص ${AppDetails.LICENSE_NAME}",
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

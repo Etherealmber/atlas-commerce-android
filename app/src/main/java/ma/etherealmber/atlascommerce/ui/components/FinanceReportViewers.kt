@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.components
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
@@ -92,18 +93,24 @@ fun FinancePdfViewerDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, contentDescription = "Retour au rapport précédent") }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, contentDescription = atlasText("Retour au rapport précédent")) }
                     Column(Modifier.weight(1f)) {
-                        Text("Rapport mensuel · PDF", style = MaterialTheme.typography.titleMedium)
+                        Text(atlasText("Rapport mensuel · PDF"), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            text = session?.let { "${it.pageCount} page${if (it.pageCount > 1) "s" else ""} · lecture privée" } ?: "Ouverture du document…",
+                            text = session?.let {
+                                atlasText(
+                                    "${it.pageCount} page${if (it.pageCount > 1) "s" else ""} · lecture privée",
+                                    "${it.pageCount} page(s) · private viewing",
+                                    "${it.pageCount} صفحات · عرض خاص",
+                                )
+                            } ?: atlasText("Ouverture du document…", "Opening document…", "جارٍ فتح المستند…"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    if (onShare != null) IconButton(onClick = onShare) { Icon(Icons.Outlined.Share, contentDescription = "Partager le PDF") }
-                    if (onSave != null) IconButton(onClick = onSave) { Icon(Icons.Outlined.FileDownload, contentDescription = "Enregistrer une copie") }
-                    if (onDelete != null) IconButton(onClick = onDelete) { Icon(Icons.Outlined.DeleteOutline, contentDescription = "Supprimer le PDF temporaire") }
+                    if (onShare != null) IconButton(onClick = onShare) { Icon(Icons.Outlined.Share, contentDescription = atlasText("Partager le PDF")) }
+                    if (onSave != null) IconButton(onClick = onSave) { Icon(Icons.Outlined.FileDownload, contentDescription = atlasText("Enregistrer une copie")) }
+                    if (onDelete != null) IconButton(onClick = onDelete) { Icon(Icons.Outlined.DeleteOutline, contentDescription = atlasText("Supprimer le PDF temporaire")) }
                 }
                 if (session != null) {
                     Row(
@@ -111,21 +118,21 @@ fun FinancePdfViewerDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End,
                     ) {
-                        Text("Zoom", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(atlasText("Zoom"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.width(8.dp))
                         IconButton(onClick = { zoom = (zoom - 0.25f).coerceAtLeast(1f) }, enabled = zoom > 1f) {
-                            Icon(Icons.Outlined.ZoomOut, contentDescription = "Réduire le zoom")
+                            Icon(Icons.Outlined.ZoomOut, contentDescription = atlasText("Réduire le zoom"))
                         }
                         Text("${(zoom * 100).toInt()}%", style = MaterialTheme.typography.labelLarge)
                         IconButton(onClick = { zoom = (zoom + 0.25f).coerceAtMost(3f) }, enabled = zoom < 3f) {
-                            Icon(Icons.Outlined.ZoomIn, contentDescription = "Agrandir le PDF")
+                            Icon(Icons.Outlined.ZoomIn, contentDescription = atlasText("Agrandir le PDF"))
                         }
                     }
                 }
                 when {
                     loadResult == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                     session == null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text("Impossible de lire ce PDF. Téléchargez-le à nouveau.", color = MaterialTheme.colorScheme.error)
+                        Text(atlasText("Impossible de lire ce PDF. Téléchargez-le à nouveau."), color = MaterialTheme.colorScheme.error)
                     }
                     else -> LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -165,7 +172,11 @@ private fun PdfPage(session: PdfRenderSession, pageIndex: Int, zoom: Float) {
                 bitmap?.let { renderedBitmap ->
                     Image(
                         bitmap = renderedBitmap.asImageBitmap(),
-                        contentDescription = "Page ${pageIndex + 1} du rapport, zoom ${(zoom * 100).toInt()} pour cent",
+                        contentDescription = atlasText(
+                            "Page ${pageIndex + 1} du rapport, zoom ${(zoom * 100).toInt()} pour cent",
+                            "Report page ${pageIndex + 1}, zoom ${(zoom * 100).toInt()} percent",
+                            "صفحة التقرير ${pageIndex + 1}، التكبير ${(zoom * 100).toInt()} بالمئة",
+                        ),
                         modifier = Modifier.width(pageWidth).aspectRatio(size.first.toFloat() / size.second.coerceAtLeast(1)),
                     )
                 }
@@ -249,6 +260,11 @@ fun CombinedReportWebViewDialog(
     }
     val activeSection = sections.firstOrNull { it.key == activeKey }
     val activeTitle = if (activeKey == "summary") "Synthèse" else activeSection?.label ?: "Rapport"
+    val periodSummary = FinanceReportSelection(
+        period = originUri.getQueryParameter("period") ?: "month",
+        from = originUri.getQueryParameter("from"),
+        to = originUri.getQueryParameter("to"),
+    ).shortLabel
     val activeUrl = remember(url, activeKey, activeSection) {
         if (activeKey == "summary" || activeSection == null) url else reportSectionUrl(originUri, activeSection)
     }
@@ -264,13 +280,13 @@ fun CombinedReportWebViewDialog(
                     modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, contentDescription = "Retour à la page précédente") }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, contentDescription = atlasText("Retour à la page précédente")) }
                     Column(Modifier.weight(1f)) {
-                        Text("Rapports · $activeTitle", style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                        Text("${FinanceReportSelection(period = originUri.getQueryParameter("period") ?: "month", from = originUri.getQueryParameter("from"), to = originUri.getQueryParameter("to")).shortLabel} · consultation sécurisée", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        Text(atlasText("Rapports · $activeTitle", "Reports · $activeTitle", "التقارير · $activeTitle"), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                        Text(atlasText("$periodSummary · consultation sécurisée", "$periodSummary · secure view", "$periodSummary · عرض آمن"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
                     IconButton(onClick = { printReport(context, webView, activeTitle) }, enabled = webView != null) {
-                        Icon(Icons.Outlined.Print, contentDescription = "Imprimer ou enregistrer en PDF")
+                        Icon(Icons.Outlined.Print, contentDescription = atlasText("Imprimer ou enregistrer en PDF"))
                     }
                 }
                 if (tabKeys.size > 1) {
@@ -285,14 +301,14 @@ fun CombinedReportWebViewDialog(
                     }
                 }
                 Text(
-                    "Utilisez le bouton d'impression Atlas pour enregistrer en PDF. Retour ferme le rapport et vous ramène à l'écran précédent.",
+                    atlasText("Utilisez le bouton d'impression Atlas pour enregistrer en PDF. Retour ferme le rapport et vous ramène à l'écran précédent."),
                     modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 14.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (!permittedScheme || permittedHost.isBlank()) {
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text("Lien de rapport non sécurisé refusé.", color = MaterialTheme.colorScheme.error)
+                        Text(atlasText("Lien de rapport non sécurisé refusé."), color = MaterialTheme.colorScheme.error)
                     }
                 } else {
                     AndroidView(
@@ -358,5 +374,5 @@ private fun printReport(context: Context, webView: WebView?, title: String) {
             view.createPrintDocumentAdapter(title),
             PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build(),
         )
-    }.onFailure { Toast.makeText(context, "Impossible d'ouvrir l'impression : ${it.message.orEmpty()}", Toast.LENGTH_LONG).show() }
+    }.onFailure { Toast.makeText(context, atlasText("Impossible d'ouvrir l'impression."), Toast.LENGTH_LONG).show() }
 }

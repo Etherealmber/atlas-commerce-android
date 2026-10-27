@@ -9,13 +9,13 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
@@ -59,7 +59,6 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Mic
@@ -76,6 +75,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -91,19 +91,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
-import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdown
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
@@ -122,6 +124,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AgentScreen(
     onToast: (String) -> Unit,
@@ -132,9 +135,20 @@ fun AgentScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val isImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    // While composing, Android Back should dismiss the keyboard before MainShell's
-    // tab-level handler can leave Atlas Agent.
-    BackHandler(enabled = isActive && isImeVisible) {
+    var protectAgentWhileImeCloses by remember { mutableStateOf(false) }
+    LaunchedEffect(isActive, isImeVisible) {
+        if (!isActive) {
+            protectAgentWhileImeCloses = false
+        } else if (isImeVisible) {
+            protectAgentWhileImeCloses = true
+        } else if (protectAgentWhileImeCloses) {
+            // Some keyboards dispatch a final Back while their inset is disappearing.
+            // Keep the Agent handler active briefly so Send cannot pop the screen.
+            delay(600)
+            protectAgentWhileImeCloses = false
+        }
+    }
+    BackHandler(enabled = isActive && (isImeVisible || protectAgentWhileImeCloses)) {
         focusManager.clearFocus()
     }
     val selectedAppLanguage = LocalAtlasLanguage.current
@@ -170,12 +184,11 @@ fun AgentScreen(
     }
     var showHistoryDialog by remember { mutableStateOf(false) }
     var composerExpanded by rememberSaveable { mutableStateOf(true) }
-    var showQuotaDetails by rememberSaveable { mutableStateOf(false) }
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             readAgentAttachment(context, uri).fold(
                 onSuccess = viewModel::addAttachment,
-                onFailure = { error -> onToast(error.message ?: "Impossible de lire le fichier.") },
+                onFailure = { error -> onToast(error.message?.takeIf { it.isNotBlank() } ?: atlasText("Impossible de lire le fichier.", "Could not read the file.", "تعذّرت قراءة الملف.")) },
             )
         }
     }
@@ -347,22 +360,21 @@ fun AgentScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(density.itemGap),
                 ) {
-                    item(key = "agent_header") {
-                        AtlasEntrance {
-                            AtlasCard {
+                    stickyHeader(key = "agent_header") {
+                        AtlasCard(animateSize = false) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     AtlasAgentMascot(Modifier.size(42.dp))
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(
-                                            text = "Atlas Agent IA",
+                                            text = atlasText("Atlas Agent IA", "Atlas AI Agent", "مساعد Atlas للذكاء الاصطناعي"),
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.SemiBold,
                                             maxLines = 1,
                                         )
                                         Text(
                                             text = state.activeThreadTitle.takeIf { it.isNotBlank() }
-                                                ?: "Stock, ventes et assistance",
+                                                ?: atlasText("Stock, ventes et assistance", "Inventory, sales, and support", "المخزون والمبيعات والدعم"),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
@@ -374,7 +386,7 @@ fun AgentScreen(
                                     }
                                     IconButton(onClick = {
                                         viewModel.startNewConversation()
-                                        onToast("Nouvelle discussion prête.")
+                                        onToast(atlasText("Nouvelle discussion prête.", "New conversation ready.", "المحادثة الجديدة جاهزة."))
                                     }) {
                                         Icon(Icons.Outlined.AddComment, contentDescription = atlasText("Nouvelle discussion", "New conversation", "محادثة جديدة"))
                                     }
@@ -386,10 +398,10 @@ fun AgentScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     AtlasChip(
                                         text = when {
-                                            quotaLocked -> "Quota atteint"
-                                            state.status?.configured == true -> "En ligne"
-                                            state.status?.configured == false -> "En pause"
-                                            else -> "Vérification…"
+                                            quotaLocked -> atlasText("Quota atteint", "Quota reached", "تم بلوغ الحصة")
+                                            state.status?.configured == true -> atlasText("En ligne", "Online", "متصل")
+                                            state.status?.configured == false -> atlasText("En pause", "Paused", "متوقف مؤقتًا")
+                                            else -> atlasText("Vérification…", "Checking…", "جارٍ التحقق…")
                                         },
                                         tone = when {
                                             quotaLocked -> AtlasTone.DANGER
@@ -400,11 +412,17 @@ fun AgentScreen(
                                     )
                                     Spacer(Modifier.width(8.dp))
                                     val policy = state.policy
+                                    val quotaLocale = Locale.forLanguageTag(selectedAppLanguage.tag)
+                                    val nf = remember(quotaLocale) { NumberFormat.getIntegerInstance(quotaLocale) }
                                     Text(
                                         text = when {
-                                            policy == null -> "Quota IA indisponible"
-                                            policy.isAdmin -> "Quota IA illimité"
-                                            else -> "${NumberFormat.getIntegerInstance(Locale.FRANCE).format(policy.dailyUsed)} / ${NumberFormat.getIntegerInstance(Locale.FRANCE).format(policy.dailyLimit)} jetons aujourd'hui"
+                                            policy == null -> atlasText("Quota IA indisponible", "AI quota unavailable", "حصة الذكاء الاصطناعي غير متاحة")
+                                            policy.isAdmin -> atlasText("Quota IA illimité", "Unlimited AI quota", "حصة ذكاء اصطناعي غير محدودة")
+                                            else -> atlasText(
+                                                "${nf.format(policy.dailyUsed)} / ${nf.format(policy.dailyLimit)} jetons aujourd'hui",
+                                                "${nf.format(policy.dailyUsed)} / ${nf.format(policy.dailyLimit)} tokens today",
+                                                "${nf.format(policy.dailyUsed)} / ${nf.format(policy.dailyLimit)} رمز اليوم",
+                                            )
                                         },
                                         modifier = Modifier.weight(1f),
                                         style = MaterialTheme.typography.labelSmall,
@@ -412,47 +430,19 @@ fun AgentScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
-                                    IconButton(
-                                        onClick = { showQuotaDetails = !showQuotaDetails },
-                                        modifier = Modifier.size(36.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = if (showQuotaDetails) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
-                                            contentDescription = if (showQuotaDetails) "Masquer les détails du quota" else "Afficher les détails du quota",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
                                 }
-                                if (showQuotaDetails) {
-                                    state.policy?.let { policy ->
-                                        Spacer(Modifier.height(6.dp))
-                                        AtlasDivider()
-                                        Spacer(Modifier.height(6.dp))
-                                        AgentQuotaBarsContent(policy = policy, compact = true)
-                                    }
-                                }
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = Atlas.palette.warningSoft,
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(11.dp),
-                                        verticalAlignment = Alignment.Top,
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Info,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                            tint = Atlas.palette.warning,
-                                        )
-                                        Spacer(Modifier.width(9.dp))
-                                        Text(
-                                            "L'IA peut se tromper. Vérifiez les faits importants et évitez les données sensibles.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                        )
-                                    }
+                                Spacer(Modifier.height(6.dp))
+                                AtlasDivider()
+                                Spacer(Modifier.height(6.dp))
+                                val visiblePolicy = state.policy
+                                if (visiblePolicy == null) {
+                                    Text(
+                                        text = atlasText("Chargement des quotas…", "Loading quotas…", "جارٍ تحميل الحصص…"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                } else {
+                                    AgentQuotaBarsContent(policy = visiblePolicy, compact = true)
                                 }
 
                                 if (state.loadingThread) {
@@ -478,7 +468,6 @@ fun AgentScreen(
                                         }
                                     }
                                 }
-                            }
                         }
                     }
 
@@ -517,35 +506,31 @@ fun AgentScreen(
                     }
 
                     items(state.messages, key = { it.id }) { msg ->
-                        AtlasEntrance(offsetY = 10.dp) {
-                            ChatBubbleRow(
-                                message = msg,
-                                approvingId = state.approvingId,
-                                onCopy = {
-                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                    cm?.setPrimaryClip(ClipData.newPlainText("Atlas Agent", msg.text))
-                                    onToast("Réponse copiée.")
-                                },
-                                onApprove = { proposalId -> viewModel.approveProposal(msg.id, proposalId) },
-                            )
-                        }
+                        ChatBubbleRow(
+                            message = msg,
+                            approvingId = state.approvingId,
+                            onCopy = {
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                cm?.setPrimaryClip(ClipData.newPlainText("Atlas Agent", msg.text))
+                                onToast(atlasText("Réponse copiée.", "Response copied.", "تم نسخ الرد."))
+                            },
+                            onApprove = { proposalId -> viewModel.approveProposal(msg.id, proposalId) },
+                        )
                     }
 
                     if (state.streamingReply.isNotBlank()) {
                         item(key = "agent_streaming_reply") {
-                            AtlasEntrance(offsetY = 8.dp) {
-                                ChatBubbleRow(
-                                    message = AgentViewModel.ChatMessage(fromUser = false, text = state.streamingReply),
-                                    approvingId = state.approvingId,
-                                    onCopy = {
-                                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                        cm?.setPrimaryClip(ClipData.newPlainText("Atlas Agent", state.streamingReply))
-                                        onToast("Réponse copiée.")
-                                    },
-                                    onApprove = {},
-                                    isStreaming = state.sending,
-                                )
-                            }
+                            ChatBubbleRow(
+                                message = AgentViewModel.ChatMessage(fromUser = false, text = state.streamingReply),
+                                approvingId = state.approvingId,
+                                onCopy = {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    cm?.setPrimaryClip(ClipData.newPlainText("Atlas Agent", state.streamingReply))
+                                    onToast(atlasText("Réponse copiée.", "Response copied.", "تم نسخ الرد."))
+                                },
+                                onApprove = {},
+                                isStreaming = state.sending,
+                            )
                         }
                     }
 
@@ -592,7 +577,7 @@ fun AgentScreen(
                 }
             }
 
-            Box(Modifier.fillMaxWidth().animateContentSize()) {
+            Box(Modifier.fillMaxWidth()) {
                 if (composerExpanded) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -609,7 +594,7 @@ fun AgentScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    "Écrire à Atlas Agent",
+                                    atlasText("Écrire à Atlas Agent", "Write to Atlas Agent", "اكتب إلى مساعد Atlas"),
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -639,17 +624,23 @@ fun AgentScreen(
                                     }
                                 }
                             }
-                            Text(
-                                text = atlasText(
-                                    "Dictée via le service vocal Android, sans frais de dictée facturés par Atlas. Le texte envoyé à Atlas Agent utilise l'IA cloud configurée et peut être soumis à ses coûts et quotas.",
-                                    "Dictation uses your Android speech service; Atlas does not charge for dictation. Text sent to Atlas Agent uses the configured cloud AI and may be subject to its costs and quotas.",
-                                    "يستخدم الإملاء خدمة الكلام في Android دون رسوم إملاء من Atlas. ويستخدم النص المرسل إلى مساعد Atlas الذكاء الاصطناعي السحابي المُعدّ، وقد يخضع لتكاليفه وحصصه.",
-                                ),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 4.dp),
-                            )
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = {
+                                        onToast(atlasText(
+                                            "La dictée Android est gratuite dans Atlas ; l'IA cloud peut entraîner des coûts ou quotas.",
+                                            "Android dictation is free in Atlas; cloud AI may have costs or quotas.",
+                                            "الإملاء عبر Android مجاني في Atlas؛ وقد تترتب تكاليف أو حصص على الذكاء الاصطناعي السحابي.",
+                                        ))
+                                    },
+                                    modifier = Modifier.size(40.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Info,
+                                        contentDescription = atlasText("Informations sur les coûts de la voix", "Voice cost information", "معلومات عن تكلفة الصوت"),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                                 IconButton(
                                     onClick = {
                                         val speechIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -688,6 +679,9 @@ fun AgentScreen(
                                     imeAction = ImeAction.Send,
                                     enabled = !state.sending && !state.loadingThread && !quotaLocked,
                                     onDone = { viewModel.sendPrompt(responseLanguage = selectedAppLanguage) },
+                                    // Keep the chat focused after IME Send; dismissing the keyboard here
+                                    // could race the shell's back handler and navigate away from Agent.
+                                    clearFocusOnSend = false,
                                     singleLine = false,
                                     modifier = Modifier.weight(1f).heightIn(min = 58.dp, max = if (compactComposer) 92.dp else 132.dp),
                                 )
@@ -707,7 +701,7 @@ fun AgentScreen(
                     }
                 } else {
                     Surface(
-                        modifier = Modifier.fillMaxWidth().animateContentSize(),
+                        modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(22.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
                         tonalElevation = 2.dp,
@@ -890,9 +884,17 @@ fun AgentQuotaBarsContent(
 
     if (policy.isDailyExhausted || policy.isWeeklyExhausted) {
         val waitText = if (policy.isDailyExhausted) {
-            "Limite quotidienne atteinte — veuillez patienter ${formatQuotaWait(policy.dailyResetsAt, "minuit UTC")}."
+            atlasText(
+                "Limite quotidienne atteinte — réinitialisation ${formatQuotaWait(policy.dailyResetsAt, "minuit UTC")}",
+                "Daily limit reached — resets ${formatQuotaWait(policy.dailyResetsAt, "at midnight UTC")}",
+                "تم بلوغ الحد اليومي — يُعاد الضبط ${formatQuotaWait(policy.dailyResetsAt, "منتصف الليل UTC")}",
+            )
         } else {
-            "Limite hebdomadaire atteinte — veuillez patienter ${formatQuotaWait(policy.weeklyResetsAt, "lundi 00:00 UTC")}."
+            atlasText(
+                "Limite hebdomadaire atteinte — réinitialisation ${formatQuotaWait(policy.weeklyResetsAt, "lundi 00:00 UTC")}",
+                "Weekly limit reached — resets ${formatQuotaWait(policy.weeklyResetsAt, "Monday at 00:00 UTC")}",
+                "تم بلوغ الحد الأسبوعي — يُعاد الضبط ${formatQuotaWait(policy.weeklyResetsAt, "الاثنين 00:00 UTC")}",
+            )
         }
         Surface(
             shape = RoundedCornerShape(10.dp),
@@ -972,7 +974,11 @@ fun AgentQuotaBarsContent(
     if (!compact) {
         Spacer(Modifier.height(3.dp))
         Text(
-            text = "Renouvellement ${formatQuotaWait(policy.dailyResetsAt, "à minuit UTC chaque jour")}",
+            text = atlasText(
+                "Renouvellement ${formatQuotaWait(policy.dailyResetsAt, "à minuit UTC chaque jour")}",
+                "Resets ${formatQuotaWait(policy.dailyResetsAt, "at midnight UTC each day")}",
+                "يُعاد الضبط ${formatQuotaWait(policy.dailyResetsAt, "منتصف الليل UTC يوميًا")}",
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1022,30 +1028,50 @@ fun AgentQuotaBarsContent(
     if (!compact) {
         Spacer(Modifier.height(3.dp))
         Text(
-            text = "Renouvellement ${formatQuotaWait(policy.weeklyResetsAt, "lundi à 00:00 UTC")}",
+            text = atlasText(
+                "Renouvellement ${formatQuotaWait(policy.weeklyResetsAt, "lundi à 00:00 UTC")}",
+                "Resets ${formatQuotaWait(policy.weeklyResetsAt, "Monday at 00:00 UTC")}",
+                "يُعاد الضبط ${formatQuotaWait(policy.weeklyResetsAt, "الاثنين 00:00 UTC")}",
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
+@Composable
 private fun formatQuotaWait(iso: String?, fallback: String): String {
-    if (iso.isNullOrBlank()) return "prévu à $fallback"
-    return runCatching {
+    val language = LocalAtlasLanguage.current
+    val locale = Locale.forLanguageTag(language.tag)
+    val scheduledText = atlasText("prévu à $fallback", "scheduled for $fallback", "مجدول في $fallback")
+    if (iso.isNullOrBlank()) return scheduledText
+    val wait = runCatching {
         val target = Instant.parse(iso)
-        val now = Instant.now()
-        val mins = Duration.between(now, target).toMinutes()
-        val stamp = DateTimeFormatter.ofPattern("dd/MM HH:mm 'UTC'", Locale.FRANCE)
+        val minutes = Duration.between(Instant.now(), target).toMinutes()
+        val pattern = if (language == ma.etherealmber.atlascommerce.core.AppLanguage.FRENCH) {
+            "dd/MM HH:mm 'UTC'"
+        } else {
+            "MMM d, HH:mm 'UTC'"
+        }
+        val stamp = DateTimeFormatter.ofPattern(pattern, locale)
             .withZone(ZoneOffset.UTC)
             .format(target)
-        if (mins > 0) {
-            val h = mins / 60
-            val m = mins % 60
-            if (h > 0) "dans ${h}h ${m}min ($stamp)" else "dans ${m} min ($stamp)"
-        } else {
-            "à $stamp"
-        }
-    }.getOrElse { "prévu à $fallback" }
+        minutes to stamp
+    }.getOrNull() ?: return scheduledText
+
+    val (minutes, stamp) = wait
+    if (minutes <= 0) return atlasText("à $stamp", "at $stamp", "في $stamp")
+    val hours = minutes / 60
+    val remainder = minutes % 60
+    return if (hours > 0) {
+        atlasText(
+            "dans ${hours}h ${remainder}min ($stamp)",
+            "in ${hours}h ${remainder}m ($stamp)",
+            "خلال ${hours} س و${remainder} د ($stamp)",
+        )
+    } else {
+        atlasText("dans ${remainder} min ($stamp)", "in ${remainder} min ($stamp)", "خلال ${remainder} د ($stamp)")
+    }
 }
 
 @Composable
@@ -1066,162 +1092,162 @@ private fun ChatBubbleRow(
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
     ) {
         if (!isUser) {
-            AgentAvatar(isUser = false)
+            AgentAvatar()
             Spacer(Modifier.width(8.dp))
         }
-        Column(
-            modifier = Modifier.weight(1f),
-            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
-        ) {
-            Text(
-                text = if (isUser) "Vous" else "Atlas Agent",
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = if (isUser) userInk else MaterialTheme.colorScheme.primary,
-            )
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth(if (isUser) 0.88f else 1f)
-                    .animateContentSize(),
-                shape = RoundedCornerShape(
-                    topStart = 16.dp,
-                    topEnd = 16.dp,
-                    bottomEnd = if (isUser) 5.dp else 16.dp,
-                    bottomStart = if (isUser) 16.dp else 5.dp,
-                ),
-                color = if (isUser) userGreen else MaterialTheme.colorScheme.surfaceContainerHigh,
+        val messageDirection = messageTextDirection(message.text)
+        CompositionLocalProvider(LocalLayoutDirection provides messageDirection) {
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = if (isUser == (messageDirection == LayoutDirection.Ltr)) Alignment.End else Alignment.Start,
             ) {
-                Column(Modifier.padding(14.dp)) {
-                    if (isUser) {
-                        Text(
-                            text = message.text,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = userInk,
-                        )
-                        if (message.attachmentNames.isNotEmpty()) {
-                            Spacer(Modifier.height(6.dp))
+                Text(
+                    text = if (isUser) atlasText("Vous", "You", "أنت") else atlasText("Atlas Agent", "Atlas Agent", "مساعد Atlas"),
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isUser) userInk else MaterialTheme.colorScheme.primary,
+                )
+                Surface(
+                    modifier = Modifier.fillMaxWidth(if (isUser) 0.88f else 1f),
+                    shape = RoundedCornerShape(
+                        topStart = 16.dp,
+                        topEnd = 16.dp,
+                        bottomEnd = if (isUser) 5.dp else 16.dp,
+                        bottomStart = if (isUser) 16.dp else 5.dp,
+                    ),
+                    color = if (isUser) userGreen else MaterialTheme.colorScheme.surfaceContainerHigh,
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        if (isUser) {
                             Text(
-                                "📎 ${message.attachmentNames.joinToString()}",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = message.text,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = userInk,
                             )
-                        }
-                    } else {
-                        AtlasMarkdown(
-                            markdown = message.text,
-                            textColor = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-
-                    if (message.tools.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            message.tools.take(3).forEach { tool ->
-                                AtlasChip(
-                                    text = tool.name,
-                                    tone = if (tool.ok) AtlasTone.INFO else AtlasTone.WARNING,
+                            if (message.attachmentNames.isNotEmpty()) {
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    "📎 ${message.attachmentNames.joinToString()}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = userInk,
                                 )
                             }
+                        } else {
+                            AtlasMarkdown(
+                                markdown = message.text,
+                                textColor = MaterialTheme.colorScheme.onSurface,
+                            )
                         }
-                    }
 
-                    message.proposals.forEach { proposal ->
-                        val proposalId = proposal.proposalId.orEmpty()
-                        if (proposalId.isNotBlank()) {
-                            val approved = proposalId in message.approvedIds
+                        if (message.tools.isNotEmpty()) {
                             Spacer(Modifier.height(8.dp))
-                            AtlasCard(padding = 10.dp) {
-                                Text(
-                                    text = proposal.title ?: atlasText("Action proposée", "Suggested action", "إجراء مقترح"),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                if (!proposal.summary.isNullOrBlank()) {
-                                    Text(
-                                        text = proposal.summary,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                message.tools.take(3).forEach { tool ->
+                                    AtlasChip(
+                                        text = tool.name,
+                                        tone = if (tool.ok) AtlasTone.INFO else AtlasTone.WARNING,
                                     )
                                 }
-                                Spacer(Modifier.height(6.dp))
-                                if (approved) {
-                                    AtlasChip(
-                                        text = atlasText("Approuvée", "Approved", "تمت الموافقة"),
-                                        tone = AtlasTone.POSITIVE,
-                                        icon = Icons.Outlined.CheckCircle,
+                            }
+                        }
+
+                        message.proposals.forEach { proposal ->
+                            val proposalId = proposal.proposalId.orEmpty()
+                            if (proposalId.isNotBlank()) {
+                                val approved = proposalId in message.approvedIds
+                                Spacer(Modifier.height(8.dp))
+                                AtlasCard(padding = 10.dp) {
+                                    Text(
+                                        text = proposal.title ?: atlasText("Action proposée", "Suggested action", "إجراء مقترح"),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
                                     )
-                                } else {
-                                    TextButton(
-                                        onClick = { onApprove(proposalId) },
-                                        enabled = approvingId == null,
-                                    ) {
-                                        Text(atlasText("Approuver et exécuter", "Approve and run", "الموافقة والتنفيذ"))
+                                    if (!proposal.summary.isNullOrBlank()) {
+                                        Text(
+                                            text = proposal.summary,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                    if (approved) {
+                                        AtlasChip(
+                                            text = atlasText("Approuvée", "Approved", "تمت الموافقة"),
+                                            tone = AtlasTone.POSITIVE,
+                                            icon = Icons.Outlined.CheckCircle,
+                                        )
+                                    } else {
+                                        TextButton(
+                                            onClick = { onApprove(proposalId) },
+                                            enabled = approvingId == null,
+                                        ) {
+                                            Text(atlasText("Approuver et exécuter", "Approve and run", "الموافقة والتنفيذ"))
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    if (isStreaming) {
-                        Row(
-                            modifier = Modifier.padding(top = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            AtlasTypingDots()
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = atlasText("Réponse en cours…", "Replying…", "جارٍ الرد…"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-
-                    if (!isUser) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                        ) {
-                            TextButton(onClick = onCopy) {
-                                Icon(
-                                    imageVector = Icons.Outlined.ContentCopy,
-                                    contentDescription = atlasText("Copier la réponse", "Copy reply", "نسخ الرد"),
-                                    modifier = Modifier.size(14.dp),
+                        if (isStreaming) {
+                            Row(
+                                modifier = Modifier.padding(top = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AtlasTypingDots()
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = atlasText("Réponse en cours…", "Replying…", "جارٍ الرد…"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                Spacer(Modifier.width(4.dp))
-                                Text(atlasText("Copier", "Copy", "نسخ"), style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+
+                        if (!isUser) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                TextButton(onClick = onCopy) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ContentCopy,
+                                        contentDescription = atlasText("Copier la réponse", "Copy reply", "نسخ الرد"),
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(atlasText("Copier", "Copy", "نسخ"), style = MaterialTheme.typography.labelSmall)
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        if (isUser) {
-            Spacer(Modifier.width(8.dp))
-            AgentAvatar(isUser = true)
-        }
     }
 }
 
+/** Align each message's text to its actual script, independently of the app's UI language. */
+private fun messageTextDirection(text: String): LayoutDirection {
+    for (character in text) {
+        if (character in '\u0590'..'\u08FF' || character in '\uFB1D'..'\uFEFC') {
+            return LayoutDirection.Rtl
+        }
+        if (character.isLetter()) return LayoutDirection.Ltr
+    }
+    return LayoutDirection.Ltr
+}
+
 @Composable
-private fun AgentAvatar(isUser: Boolean) {
+private fun AgentAvatar() {
     Surface(
         modifier = Modifier.size(32.dp),
         shape = CircleShape,
-        color = if (isUser) Atlas.palette.positiveSoft else MaterialTheme.colorScheme.primaryContainer,
-        contentColor = if (isUser) Atlas.palette.positive else MaterialTheme.colorScheme.onPrimaryContainer,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
     ) {
         Box(contentAlignment = Alignment.Center) {
-            if (isUser) {
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = atlasText("Message de l'utilisateur", "User message", "رسالة المستخدم"),
-                    modifier = Modifier.size(19.dp),
-                )
-            } else {
-                AtlasMark(size = 19.dp)
-            }
+            AtlasMark(size = 19.dp)
         }
     }
 }
@@ -1232,11 +1258,11 @@ private fun AgentTypingIndicator(label: String) {
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top,
     ) {
-        AgentAvatar(isUser = false)
+        AgentAvatar()
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                text = "Atlas Agent",
+                text = atlasText("Atlas Agent", "Atlas Agent", "مساعد Atlas"),
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,

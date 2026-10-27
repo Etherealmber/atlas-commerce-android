@@ -659,19 +659,13 @@ jobs:
               --latest
           fi
 
-      - name: Sync signed APK & latest.json to CDN 1 (Cloudflare REST API v4 -> R2 S3 -> Wrangler -> Worker HTTPS)
+      - name: Publish release through policy-aware backend Worker ingestion
         env:
           UPLOAD_TOKEN: ${{ secrets.ATLAS_RELEASE_UPLOAD_TOKEN }}
           UPLOAD_URL: ${{ vars.ATLAS_RELEASE_API_URL || 'https://stock.afmarbre.com/api/admin/android-release' }}
           WORKER_DIRECT_URL: ${{ secrets.ATLAS_WORKER_DIRECT_URL || vars.ATLAS_WORKER_DIRECT_URL || '' }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID || '' }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET || '' }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || '' }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || secrets.R2_ACCOUNT_ID || '' }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || '' }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || '' }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || '' }}
-          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME || 'company-stock-images' }}
           VERSION_NAME: ${{ needs.build.outputs.version_name }}
           VERSION_CODE: ${{ needs.build.outputs.version_code }}
           SHA256: ${{ steps.manifest.outputs.sha256 }}
@@ -679,84 +673,14 @@ jobs:
           MANDATORY: ${{ steps.manifest.outputs.mandatory }}
           NOTES_B64: ${{ steps.manifest.outputs.notes_b64 }}
         run: |
-          CDN_SYNCED="false"
+          WORKER_ACCEPTED="false"
           CDN_METHOD=""
           CF_WAF_BLOCKED="false"
-          CF_API_DETAIL=""
+          POLICY_AWARE_WORKER_USED="false"
 
-          if [ -n "${CLOUDFLARE_API_TOKEN}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID}" ]; then
-            echo "Uploading directly to Cloudflare R2 bucket '${R2_BUCKET_NAME}' via Cloudflare REST API v4..."
-            CF_BASE="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${R2_BUCKET_NAME}/objects"
-
-            cf_put() {
-              local key="$1"
-              local file="$2"
-              local ctype="$3"
-              local cctrl="$4"
-              curl --silent --show-error --output "$RUNNER_TEMP/cf-r2-resp.json" \
-                --write-out "%{http_code}" --retry 3 --retry-delay 2 \
-                -X PUT "${CF_BASE}/${key}" \
-                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-                -H "Content-Type: ${ctype}" \
-                -H "Cache-Control: ${cctrl}" \
-                --data-binary "@${file}"
-            }
-
-            C1=$(cf_put "app-updates/android/atlas-commerce-v${VERSION_NAME}.apk" "signed-apk/atlas-commerce.apk" "application/vnd.android.package-archive" "public, max-age=31536000, immutable")
-            C2=$(cf_put "app-updates/android/latest.apk" "signed-apk/atlas-commerce.apk" "application/vnd.android.package-archive" "public, max-age=60")
-            C3=$(cf_put "app-updates/android/latest.json" "signed-apk/latest.json" "application/json; charset=utf-8" "no-cache, max-age=0, must-revalidate")
-            echo "Cloudflare REST API v4 HTTP status codes: versioned_apk=$C1 latest_apk=$C2 latest_json=$C3"
-
-            if [ "$C1" = "200" ] && [ "$C2" = "200" ] && [ "$C3" = "200" ]; then
-              CDN_SYNCED="true"
-              CDN_METHOD="Cloudflare REST API v4 Direct R2 (${R2_BUCKET_NAME})"
-            else
-              CF_API_DETAIL="REST API HTTP codes ($C1/$C2/$C3)"
-              echo "Cloudflare REST API detail: $(head -c 300 "$RUNNER_TEMP/cf-r2-resp.json" 2>/dev/null || true)"
-            fi
-          fi
-
-          if [ "$CDN_SYNCED" != "true" ] && [ -n "${R2_ACCOUNT_ID}" ] && [ -n "${AWS_ACCESS_KEY_ID}" ] && [ -n "${AWS_SECRET_ACCESS_KEY}" ]; then
-            echo "Uploading directly to Cloudflare R2 bucket '${R2_BUCKET_NAME}' via S3 API..."
-            ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-            if aws s3 cp signed-apk/atlas-commerce.apk \
-                "s3://${R2_BUCKET_NAME}/app-updates/android/atlas-commerce-v${VERSION_NAME}.apk" \
-                --endpoint-url "$ENDPOINT" --region auto \
-                --content-type "application/vnd.android.package-archive" && \
-               aws s3 cp signed-apk/atlas-commerce.apk \
-                "s3://${R2_BUCKET_NAME}/app-updates/android/latest.apk" \
-                --endpoint-url "$ENDPOINT" --region auto \
-                --content-type "application/vnd.android.package-archive" \
-                --cache-control "public, max-age=60" && \
-               aws s3 cp signed-apk/latest.json \
-                "s3://${R2_BUCKET_NAME}/app-updates/android/latest.json" \
-                --endpoint-url "$ENDPOINT" --region auto \
-                --content-type "application/json; charset=utf-8" \
-                --cache-control "no-cache, max-age=0, must-revalidate"; then
-              CDN_SYNCED="true"
-              CDN_METHOD="Cloudflare R2 Direct S3 API (${R2_BUCKET_NAME})"
-            fi
-          fi
-
-          if [ "$CDN_SYNCED" != "true" ] && [ -n "${CLOUDFLARE_API_TOKEN}" ]; then
-            echo "Uploading directly to Cloudflare R2 bucket '${R2_BUCKET_NAME}' via Wrangler API..."
-            if npx --yes wrangler@4 r2 object put "${R2_BUCKET_NAME}/app-updates/android/atlas-commerce-v${VERSION_NAME}.apk" \
-                --file signed-apk/atlas-commerce.apk \
-                --content-type "application/vnd.android.package-archive" --remote && \
-               npx --yes wrangler@4 r2 object put "${R2_BUCKET_NAME}/app-updates/android/latest.apk" \
-                --file signed-apk/atlas-commerce.apk \
-                --content-type "application/vnd.android.package-archive" \
-                --cache-control "public, max-age=60" --remote && \
-               npx --yes wrangler@4 r2 object put "${R2_BUCKET_NAME}/app-updates/android/latest.json" \
-                --file signed-apk/latest.json \
-                --content-type "application/json; charset=utf-8" \
-                --cache-control "no-cache, max-age=0, must-revalidate" --remote; then
-              CDN_SYNCED="true"
-              CDN_METHOD="Cloudflare Wrangler R2 API (${R2_BUCKET_NAME})"
-            fi
-          fi
-
-          if [ "$CDN_SYNCED" != "true" ] && [ -n "${UPLOAD_TOKEN}" ]; then
+          # Only the Worker ingestion path can merge backend-controlled app_config policy into latest.json.
+          # Never write the generated policy-free manifest directly to R2 as a fallback.
+          if [ -n "${UPLOAD_TOKEN}" ]; then
             for TARGET_URL in "${WORKER_DIRECT_URL}" "${UPLOAD_URL}"; do
               [ -z "$TARGET_URL" ] && continue
               echo "Posting signed APK & release notes to Worker endpoint: $TARGET_URL"
@@ -782,8 +706,9 @@ jobs:
                 --data-binary "@signed-apk/atlas-commerce.apk" || echo "000")
 
               if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-                CDN_SYNCED="true"
+                WORKER_ACCEPTED="true"
                 CDN_METHOD="Worker HTTPS API ($TARGET_URL)"
+                POLICY_AWARE_WORKER_USED="true"
                 echo "Worker upload succeeded ($HTTP_CODE): $(cat "$RUNNER_TEMP/worker-upload-resp.txt")"
                 break
               elif grep -Fq "__cf_chl_opt" "$RUNNER_TEMP/worker-upload-resp.txt" 2>/dev/null || grep -Fiq "Just a moment" "$RUNNER_TEMP/worker-upload-resp.txt" 2>/dev/null; then
@@ -795,47 +720,146 @@ jobs:
             done
           fi
 
+
+          if [ "$WORKER_ACCEPTED" != "true" ]; then
+            echo "Policy-safe CDN behavior: Worker ingestion did not succeed; leaving latest.json untouched. GitHub Releases remains available."
+          fi
+
           {
             echo "## 🚀 Atlas Commerce Android \`v${VERSION_NAME}\` (build \`${VERSION_CODE}\`) — Publication Summary"
             echo ""
             echo "| Distribution Channel | Status | Details |"
             echo "| :--- | :--- | :--- |"
             echo "| **GitHub Releases** | ✅ Published | Single asset \`atlas-commerce.apk\` + \`latest.json\` (\`SHA-256: ${SHA256}\`) |"
-            if [ "$CDN_SYNCED" = "true" ]; then
-              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ✅ Synced | Uploaded via **${CDN_METHOD}** |"
+            if [ "$WORKER_ACCEPTED" = "true" ]; then
+              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ✅ Submitted | Backend Worker accepted the policy-aware release ingestion request via **${CDN_METHOD}**; public metadata is captured below for verification. |"
             elif [ "$CF_WAF_BLOCKED" = "true" ]; then
-              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ⚠️ Blocked by Cloudflare Bot Fight / WAF | Add \`CLOUDFLARE_API_TOKEN\` + \`CLOUDFLARE_ACCOUNT_ID\` or a WAF Skip rule for \`/api/admin/android-release\`. |"
+              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ⚠️ Not updated (policy-safe) | Worker endpoint blocked by Cloudflare WAF. Direct \`latest.json\` writes are disabled to protect backend version policy; GitHub Release is available. |"
             else
-              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ℹ️ Skipped / Not configured | Add \`CLOUDFLARE_API_TOKEN\` + \`CLOUDFLARE_ACCOUNT_ID\` (recommended) or disable Free Bot Fight Mode. |"
+              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ⚠️ Not updated (policy-safe) | Worker ingestion unavailable. Direct \`latest.json\` writes are disabled to protect backend version policy; GitHub Release is available. |"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-          CDN_SYNCED="$CDN_SYNCED" CDN_METHOD="$CDN_METHOD" CF_WAF_BLOCKED="$CF_WAF_BLOCKED" \
-          CF_API_DETAIL="$CF_API_DETAIL" INPUT_CDN_URL="${{ github.event.inputs.cdn_url || '' }}" \
+          WORKER_ACCEPTED="$WORKER_ACCEPTED" CDN_METHOD="$CDN_METHOD" POLICY_AWARE_WORKER_USED="$POLICY_AWARE_WORKER_USED" CF_WAF_BLOCKED="$CF_WAF_BLOCKED" \
+          INPUT_CDN_URL="${{ github.event.inputs.cdn_url || '' }}" \
           DEFAULT_CDN_VAR="${{ vars.CDN1_PUBLIC_BASE_URL || 'https://cdn1.afmarbre.com/app-updates/android' }}" \
+          EXPECTED_VERSION_NAME="${{ needs.build.outputs.version_name }}" \
+          EXPECTED_VERSION_CODE="${{ needs.build.outputs.version_code }}" \
+          VERIFY_NONCE="${{ github.run_id }}" \
           python3 - <<'PY'
-          import json, os, urllib.request
+          import json, os, time, urllib.request
 
           live_cdn = None
           cdn_base = (os.environ.get("INPUT_CDN_URL", "").strip() or os.environ.get("DEFAULT_CDN_VAR", "https://cdn1.afmarbre.com/app-updates/android")).rstrip("/")
+          expected_code = int(os.environ.get("EXPECTED_VERSION_CODE", "0") or "0")
+          expected_name = os.environ.get("EXPECTED_VERSION_NAME", "").lstrip("vV")
+          fetch_error = None
+          github_manifest = None
+          github_fetch_error = None
+          repo = os.environ.get("GITHUB_REPOSITORY", "")
           try:
-              req = urllib.request.Request(
-                  f"{cdn_base}/latest.json",
+              github_url = f"https://github.com/{repo}/releases/download/v{expected_name}/latest.json?verify={os.environ.get('VERIFY_NONCE', 'manual')}"
+              github_req = urllib.request.Request(
+                  github_url,
                   headers={"User-Agent": "Mozilla/5.0 AtlasVerify/1.0", "Cache-Control": "no-cache"},
               )
-              with urllib.request.urlopen(req, timeout=10) as r:
-                  live_cdn = json.loads(r.read().decode("utf-8"))
+              with urllib.request.urlopen(github_req, timeout=15) as r:
+                  github_manifest = json.loads(r.read().decode("utf-8"))
           except Exception as e:
-              live_cdn = {"fetchError": str(e)}
+              github_fetch_error = str(e)
+              github_manifest = {"fetchError": github_fetch_error}
 
+          for attempt in range(4):
+              try:
+                  req = urllib.request.Request(
+                      f"{cdn_base}/latest.json?verify={os.environ.get('VERIFY_NONCE', 'manual')}-{attempt}",
+                      headers={"User-Agent": "Mozilla/5.0 AtlasVerify/1.0", "Cache-Control": "no-cache"},
+                  )
+                  with urllib.request.urlopen(req, timeout=10) as r:
+                      live_cdn = json.loads(r.read().decode("utf-8"))
+                  fetch_error = None
+              except Exception as e:
+                  fetch_error = str(e)
+                  live_cdn = {"fetchError": fetch_error}
+
+              try:
+                  observed_code = int(live_cdn.get("versionCode", live_cdn.get("version_code", 0)) or 0)
+                  observed_name = str(live_cdn.get("versionName", live_cdn.get("version_name", "")) or "").lstrip("vV")
+              except (AttributeError, TypeError, ValueError):
+                  observed_code, observed_name = 0, ""
+              if observed_code == expected_code and (not observed_name or observed_name == expected_name):
+                  break
+              if attempt < 3 and os.environ.get("WORKER_ACCEPTED") == "true":
+                  time.sleep(5)
+
+          live_code = 0
+          live_name = ""
+          policy_fields = {}
+          if isinstance(live_cdn, dict):
+              try:
+                  live_code = int(live_cdn.get("versionCode", live_cdn.get("version_code", 0)) or 0)
+              except (TypeError, ValueError):
+                  live_code = 0
+              live_name = str(live_cdn.get("versionName", live_cdn.get("version_name", "")) or "")
+              for key in (
+                  "minimumSupportedVersionCode", "minimum_supported_version_code",
+                  "minimumVersionCode", "minimum_version_code",
+                  "minimumVersionName", "minimum_version_name",
+                  "minimumVersionMandatory", "minimum_version_mandatory", "mandatory",
+              ):
+                  if key in live_cdn:
+                      policy_fields[key] = live_cdn[key]
+
+          public_match = (
+              live_code == expected_code and expected_code > 0
+              and (not live_name or live_name.lstrip("vV") == expected_name)
+          )
+          github_code = 0
+          github_name = ""
+          if isinstance(github_manifest, dict):
+              try:
+                  github_code = int(github_manifest.get("versionCode", github_manifest.get("version_code", 0)) or 0)
+              except (TypeError, ValueError):
+                  github_code = 0
+              github_name = str(github_manifest.get("versionName", github_manifest.get("version_name", "")) or "")
+          github_match = (
+              github_code == expected_code and expected_code > 0
+              and (not github_name or github_name.lstrip("vV") == expected_name)
+          )
+          minimum_policy_present = any(
+              key in policy_fields for key in (
+                  "minimumSupportedVersionCode", "minimum_supported_version_code",
+                  "minimumVersionCode", "minimum_version_code",
+              )
+          )
           with open("signed-apk/publish-status.json", "w", encoding="utf-8") as fh:
               json.dump({
-                  "cdnSynced": os.environ.get("CDN_SYNCED") == "true",
+                  "workerAccepted": os.environ.get("WORKER_ACCEPTED") == "true",
+                  "githubReleaseMatchesRelease": github_match,
+                  "githubReleaseLatestJson": github_manifest,
                   "cdnMethod": os.environ.get("CDN_METHOD", ""),
+                  "policyAwareWorkerUsed": os.environ.get("POLICY_AWARE_WORKER_USED") == "true",
+                  "publicCdnMatchesRelease": public_match,
+                  "minimumVersionPolicyFieldsPresent": minimum_policy_present,
+                  "publicCdnPolicyFields": policy_fields,
                   "cfWafBlocked": os.environ.get("CF_WAF_BLOCKED") == "true",
-                  "cfApiDetail": os.environ.get("CF_API_DETAIL", ""),
                   "liveCdnLatestJson": live_cdn,
               }, fh, ensure_ascii=False, indent=2)
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as summary:
+                  gh_result = "matches" if github_match else "does not match"
+                  result = "matches" if public_match else "does not match"
+                  summary.write(f"\n### Independent release metadata verification\n- GitHub Release latest.json {gh_result} the release ({github_name or 'unknown'} / {github_code}).\n")
+                  summary.write(f"- Public CDN latest.json {result} the release ({live_name or 'unknown'} / {live_code}).\n")
+                  summary.write(f"- Minimum-version policy fields present: `{minimum_policy_present}`\n")
+                  summary.write(f"- Policy fields observed: `{json.dumps(policy_fields, ensure_ascii=False, sort_keys=True) if policy_fields else 'none'}`\n")
+          if not github_match:
+              print("::error::GitHub Release latest.json does not match the published release version/build.")
+              raise SystemExit(1)
+          if os.environ.get("WORKER_ACCEPTED") == "true" and (not public_match or not minimum_policy_present):
+              print("::error::Worker accepted the release but public CDN latest.json failed version/policy verification.")
+              raise SystemExit(1)
           PY
 
       - name: Upload publication verification summary

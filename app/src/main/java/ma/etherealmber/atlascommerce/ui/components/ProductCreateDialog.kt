@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.components
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -123,15 +124,15 @@ fun ProductCreateDialog(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = if (canCreateDirectly && modeDirect) {
-                        "Nouveau produit (Création Admin)"
+                        atlasText("Nouveau produit (Création Admin)")
                     } else {
-                        "Nouveau produit · Envoi à l'Admin"
+                        atlasText("Nouveau produit · Envoi à l'Admin")
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "Éléments requis : $completedCount/${checks.size} complétés",
+                    text = atlasText("Éléments requis : $completedCount/${checks.size} complétés", "Required items: $completedCount/${checks.size} complete", "العناصر المطلوبة: $completedCount/${checks.size} مكتملة"),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (allValid) {
                         MaterialTheme.colorScheme.primary
@@ -165,7 +166,7 @@ fun ProductCreateDialog(
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                text = "Création directe réservée à l'Admin : cette fiche est envoyée immédiatement à l'Administrateur pour validation.",
+                                text = atlasText("Création directe réservée à l'Admin : cette fiche est envoyée immédiatement à l'Administrateur pour validation."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = toneForeground(AtlasTone.INFO),
                             )
@@ -204,12 +205,12 @@ fun ProductCreateDialog(
                         FilterChip(
                             selected = !adminWantsRequestOnly,
                             onClick = { adminWantsRequestOnly = false },
-                            label = { Text("Créer au stock") },
+                            label = { Text(atlasText("Créer au stock")) },
                         )
                         FilterChip(
                             selected = adminWantsRequestOnly,
                             onClick = { adminWantsRequestOnly = true },
-                            label = { Text("Demande en file") },
+                            label = { Text(atlasText("Demande en file")) },
                         )
                     }
                 }
@@ -217,7 +218,11 @@ fun ProductCreateDialog(
                 OutlinedTextField(
                     value = barcode,
                     onValueChange = { barcode = it },
-                    label = { Text(if (modeDirect) "Code-barres (EAN / QR)" else "Code-barres / EAN *") },
+                    label = {
+                        Text(
+                            if (modeDirect) atlasText("Code-barres (EAN / QR)") else atlasText("Code-barres / EAN *"),
+                        )
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -225,7 +230,7 @@ fun ProductCreateDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Nom du produit *") },
+                    label = { Text(atlasText("Nom du produit *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -234,7 +239,7 @@ fun ProductCreateDialog(
                     OutlinedTextField(
                         value = sku,
                         onValueChange = { sku = it },
-                        label = { Text("Référence SKU *") },
+                        label = { Text(atlasText("Référence SKU *")) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -251,7 +256,7 @@ fun ProductCreateDialog(
                             sku = "$base-$tail"
                         },
                     ) {
-                        Icon(Icons.Outlined.AutoFixHigh, contentDescription = "Générer un SKU")
+                        Icon(Icons.Outlined.AutoFixHigh, contentDescription = atlasText("Générer un SKU"))
                     }
                 }
 
@@ -269,7 +274,7 @@ fun ProductCreateDialog(
                     OutlinedTextField(
                         value = rawQty,
                         onValueChange = { s -> rawQty = s.filter { it.isDigit() || it == '.' || it == ',' } },
-                        label = { Text("Quantité *") },
+                        label = { Text(atlasText("Quantité *")) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
@@ -277,7 +282,7 @@ fun ProductCreateDialog(
                     OutlinedTextField(
                         value = rawPrice,
                         onValueChange = { s -> rawPrice = s.filter { it.isDigit() || it == '.' || it == ',' } },
-                        label = { Text("Prix MAD *") },
+                        label = { Text(atlasText("Prix MAD *")) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
@@ -288,7 +293,7 @@ fun ProductCreateDialog(
                     OutlinedTextField(
                         value = category,
                         onValueChange = { category = it },
-                        label = { Text("Catégorie") },
+                        label = { Text(atlasText("Catégorie")) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -297,7 +302,7 @@ fun ProductCreateDialog(
                         onValueChange = { s ->
                             rawThreshold = s.filter { it.isDigit() || it == '.' || it == ',' }
                         },
-                        label = { Text("Seuil alerte") },
+                        label = { Text(atlasText("Seuil alerte")) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
@@ -308,7 +313,7 @@ fun ProductCreateDialog(
                     OutlinedTextField(
                         value = note,
                         onValueChange = { note = it },
-                        label = { Text("Note pour l'Administrateur") },
+                        label = { Text(atlasText("Note pour l'Administrateur")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -362,9 +367,9 @@ fun ProductCreateDialog(
                 }
                 Text(
                     when {
-                        !canCreateDirectly -> "Envoyer à l'Admin"
-                        modeDirect -> "Créer le produit"
-                        else -> "Enregistrer la demande"
+                        !canCreateDirectly -> atlasText("Envoyer à l'Admin")
+                        modeDirect -> atlasText("Créer le produit")
+                        else -> atlasText("Enregistrer la demande")
                     },
                 )
             }
@@ -376,7 +381,7 @@ fun ProductCreateDialog(
                     contentDescription = null,
                     modifier = Modifier.padding(end = 4.dp),
                 )
-                Text("Annuler")
+                Text(atlasText("Annuler"))
             }
         },
     )

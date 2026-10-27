@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.settings
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Build
@@ -85,12 +86,12 @@ fun DeveloperDiagnosticsScreen(
     Scaffold(
         topBar = {
             AtlasTopBar(
-                title = "Diagnostics développeur",
-                subtitle = "Outils locaux · secrets masqués",
+                title = atlasText("Diagnostics développeur"),
+                subtitle = atlasText("Outils locaux · secrets masqués"),
                 onBack = onBack,
                 actions = {
                     IconButton(onClick = ::refreshLogs, enabled = !loadingLogs) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = "Rafraîchir les journaux")
+                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Rafraîchir les journaux"))
                     }
                 },
             )
@@ -108,9 +109,9 @@ fun DeveloperDiagnosticsScreen(
             AtlasCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Mode développeur", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(atlasText("Mode développeur"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Le mode est uniquement local à cet appareil.",
+                            atlasText("Le mode est uniquement local à cet appareil."),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -128,7 +129,7 @@ fun DeveloperDiagnosticsScreen(
                 AtlasInfoRow("Appareil", "${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE ?: "?"}")
                 AtlasInfoRow("Passkeys", if (passkeyAvailable) "Disponibles selon le serveur" else "Voir le diagnostic complet")
                 TextButton(onClick = { showTechnicalDetails = !showTechnicalDetails }) {
-                    Text(if (showTechnicalDetails) "Masquer les détails techniques" else "Afficher les détails techniques")
+                    Text(if (showTechnicalDetails) atlasText("Masquer les détails techniques") else atlasText("Afficher les détails techniques"))
                 }
                 if (showTechnicalDetails) {
                     AtlasInfoRow("Serveur sélectionné", ServerUrl.origin(server?.baseUrl) ?: "Aucun")
@@ -144,7 +145,7 @@ fun DeveloperDiagnosticsScreen(
                         },
                     )
                     Text(
-                        "Android limite les journaux accessibles à l'application. Les événements Atlas, les réponses HTTP et les traces de son processus restent inclus; le bruit graphique courant est regroupé.",
+                        atlasText("Android limite les journaux accessibles à l'application. Les événements Atlas, les réponses HTTP et les traces de son processus restent inclus; le bruit graphique courant est regroupé."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -154,9 +155,17 @@ fun DeveloperDiagnosticsScreen(
             AtlasCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Journaux de diagnostic", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(atlasText("Journaux de diagnostic"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Text(
-                            if (loadingLogs) "Capture en cours…" else "${logs.lineSequence().count()} lignes · expurgées des secrets",
+                            if (loadingLogs) {
+                                atlasText("Capture en cours…", "Capturing…", "جارٍ الالتقاط…")
+                            } else {
+                                atlasText(
+                                    "${logs.lineSequence().count()} lignes · expurgées des secrets",
+                                    "${logs.lineSequence().count()} lines · secrets redacted",
+                                    "${logs.lineSequence().count()} سطراً · تمت إزالة الأسرار",
+                                )
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -165,11 +174,11 @@ fun DeveloperDiagnosticsScreen(
                         onClick = {
                             val clipboard = context.getSystemService(ClipboardManager::class.java)
                             clipboard?.setPrimaryClip(ClipData.newPlainText("Journaux Atlas assainis", logs))
-                            onToast("Journaux de diagnostic copiés.")
+                            onToast(atlasText("Journaux de diagnostic copiés."))
                         },
                         enabled = logs.isNotBlank() && !loadingLogs,
                     ) {
-                        Icon(Icons.Outlined.ContentCopy, contentDescription = "Copier tous les journaux")
+                        Icon(Icons.Outlined.ContentCopy, contentDescription = atlasText("Copier tous les journaux"))
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -180,10 +189,10 @@ fun DeveloperDiagnosticsScreen(
                     ) {
                         Icon(Icons.Outlined.Refresh, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
-                        Text("Actualiser")
+                        Text(atlasText("Actualiser"))
                     }
                     TextButton(onClick = { showFullLogs = !showFullLogs }) {
-                        Text(if (showFullLogs) "Masquer" else "Voir les journaux")
+                        Text(if (showFullLogs) atlasText("Masquer") else atlasText("Voir les journaux", "View logs", "عرض السجلات"))
                     }
                 }
                 if (showFullLogs) {

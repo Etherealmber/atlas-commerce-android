@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.sale
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -91,9 +92,12 @@ fun SaleScreen(
             if (!canSell) {
                 item {
                     AtlasErrorCard(
-                        title = "Rôle en lecture seule",
-                        message = "Votre rôle permet de consulter le stock, pas de créer une vente. " +
-                            "Demandez à un gérant d'encaisser, ou utilisez le web.",
+                        title = atlasText("Rôle en lecture seule"),
+                        message = atlasText(
+                            "Votre rôle permet de consulter le stock, pas de créer une vente. Demandez à un gérant d'encaisser, ou utilisez le web.",
+                            "Your role can view stock but cannot create sales. Ask a manager to process the sale, or use the web app.",
+                            "يتيح دورك عرض المخزون، وليس إنشاء المبيعات. اطلب من المدير إتمام البيع أو استخدم تطبيق الويب.",
+                        ),
                     )
                 }
             }
@@ -101,18 +105,18 @@ fun SaleScreen(
             item {
                 AtlasCard {
                     AtlasSectionHeader(
-                        title = "Panier",
-                        subtitle = if (lines.isEmpty()) null else "${lines.size} article(s)",
-                        actionLabel = if (lines.isEmpty()) null else "Vider",
+                        title = atlasText("Panier"),
+                        subtitle = if (lines.isEmpty()) null else atlasText("${lines.size} article(s)", "${lines.size} items", "${lines.size} عنصر"),
+                        actionLabel = if (lines.isEmpty()) null else atlasText("Vider"),
                         onAction = if (lines.isEmpty()) null else viewModel::clearCart,
                     )
                     Spacer(Modifier.height(6.dp))
                     if (lines.isEmpty()) {
                         AtlasEmptyState(
-                            title = "Panier vide",
-                            message = "Ajoutez des produits depuis le catalogue ou en scannant un code-barres.",
+                            title = atlasText("Panier vide"),
+                            message = atlasText("Ajoutez des produits depuis le catalogue ou en scannant un code-barres."),
                             icon = Icons.Outlined.ShoppingCart,
-                            actionLabel = "Parcourir les produits",
+                            actionLabel = atlasText("Parcourir les produits"),
                             onAction = onOpenProducts,
                         )
                     } else {
@@ -132,14 +136,14 @@ fun SaleScreen(
             item {
                 AtlasCard {
                     AtlasSectionHeader(
-                        title = "Client du ticket",
-                        subtitle = "Le nom apparaît sur le ticket VR",
+                        title = atlasText("Client du ticket"),
+                        subtitle = atlasText("Le nom apparaît sur le ticket VR"),
                     )
                     Spacer(Modifier.height(10.dp))
                     AtlasTextField(
                         value = state.clientName,
                         onValueChange = viewModel::onClientNameChange,
-                        label = "Nom du client *",
+                        label = atlasText("Nom du client *"),
                         leadingIcon = Icons.Outlined.Person,
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Next,
@@ -149,7 +153,7 @@ fun SaleScreen(
                     AtlasTextField(
                         value = state.clientPhone,
                         onValueChange = viewModel::onClientPhoneChange,
-                        label = "Téléphone (facultatif)",
+                        label = atlasText("Téléphone (facultatif)"),
                         leadingIcon = Icons.Outlined.Phone,
                         keyboardType = KeyboardType.Phone,
                         imeAction = ImeAction.Done,
@@ -161,14 +165,14 @@ fun SaleScreen(
             item {
                 AtlasCard {
                     Text(
-                        text = "Note interne (facultatif)",
+                        text = atlasText("Note interne (facultatif)"),
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Spacer(Modifier.height(8.dp))
                     AtlasTextField(
                         value = state.note,
                         onValueChange = viewModel::onNoteChange,
-                        label = "Note",
+                        label = atlasText("Note"),
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Done,
                         singleLine = false,
@@ -180,7 +184,7 @@ fun SaleScreen(
             if (!state.error.isNullOrBlank()) {
                 item {
                     AtlasErrorCard(
-                        title = "Vente non enregistrée",
+                        title = atlasText("Vente non enregistrée"),
                         message = state.error.orEmpty(),
                     )
                 }
@@ -188,9 +192,9 @@ fun SaleScreen(
 
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AtlasChip(text = "Ticket VR", tone = AtlasTone.INFO)
-                    AtlasChip(text = "Sans TVA", tone = AtlasTone.NEUTRAL)
-                    AtlasChip(text = "À encaisser", tone = AtlasTone.WARNING)
+                    AtlasChip(text = atlasText("Ticket VR"), tone = AtlasTone.INFO)
+                    AtlasChip(text = atlasText("Sans TVA"), tone = AtlasTone.NEUTRAL)
+                    AtlasChip(text = atlasText("À encaisser"), tone = AtlasTone.WARNING)
                 }
             }
         }
@@ -207,7 +211,7 @@ fun SaleScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = "TOTAL",
+                            text = atlasText("TOTAL"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -218,7 +222,7 @@ fun SaleScreen(
                         )
                     }
                     Text(
-                        text = "Sans TVA",
+                        text = atlasText("Sans TVA"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -240,7 +244,7 @@ fun SaleScreen(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "La vente est créée sur le serveur ; l'encaissement se fait depuis la caisse web.",
+                    text = atlasText("La vente est créée sur le serveur ; l'encaissement se fait depuis la caisse web."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -251,11 +255,19 @@ fun SaleScreen(
     if (showConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showConfirmDialog = false },
-            title = { Text("Confirmer la création du ticket ?") },
+            title = { Text(atlasText("Confirmer la création du ticket ?")) },
             text = {
                 Text(
-                    "Client : ${state.clientName.trim()}\n" +
-                        "Articles : ${lines.size} · Total : ${AtlasFormat.money(total, state.currency)}",
+                    atlasText(
+                        "Client : ${state.clientName.trim()}\n",
+                        "Customer: ${state.clientName.trim()}\n",
+                        "العميل: ${state.clientName.trim()}\n",
+                    ) +
+                        atlasText(
+                            "Articles : ${lines.size} · Total : ${AtlasFormat.money(total, state.currency)}",
+                            "Items: ${lines.size} · Total: ${AtlasFormat.money(total, state.currency)}",
+                            "العناصر: ${lines.size} · الإجمالي: ${AtlasFormat.money(total, state.currency)}",
+                        ),
                 )
             },
             confirmButton = {
@@ -269,7 +281,7 @@ fun SaleScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showConfirmDialog = false }) {
-                    Text("Annuler")
+                    Text(atlasText("Annuler"))
                 }
             },
         )
@@ -288,28 +300,36 @@ fun SaleScreen(
                         modifier = Modifier.size(20.dp),
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Ticket créé")
+                    Text(atlasText("Ticket créé"))
                 }
             },
             text = {
                 Column {
                     Text(
-                        text = "Ticket ${created.number ?: "#${created.id}"}",
+                        text = atlasText(
+                            "Ticket ${created.number ?: "#${created.id}"}",
+                            "Receipt ${created.number ?: "#${created.id}"}",
+                            "إيصال ${created.number ?: "#${created.id}"}",
+                        ),
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "Total ${AtlasFormat.money(created.total, state.currency)} · en attente d'encaissement.",
+                        text = atlasText(
+                            "Total ${AtlasFormat.money(created.total, state.currency)} · en attente d'encaissement.",
+                            "Total ${AtlasFormat.money(created.total, state.currency)} · awaiting payment collection.",
+                            "الإجمالي ${AtlasFormat.money(created.total, state.currency)} · بانتظار تحصيل المبلغ.",
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             },
             confirmButton = {
-                TextButton(onClick = viewModel::dismissCreated) { Text("Nouveau ticket") }
+                TextButton(onClick = viewModel::dismissCreated) { Text(atlasText("Nouveau ticket")) }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::dismissCreated) { Text("Fermer") }
+                TextButton(onClick = viewModel::dismissCreated) { Text(atlasText("Fermer")) }
             },
         )
     }
@@ -348,7 +368,7 @@ private fun CartLineRow(
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onDecrement, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Outlined.Remove, contentDescription = "Diminuer", modifier = Modifier.size(16.dp))
+                    Icon(Icons.Outlined.Remove, contentDescription = atlasText("Diminuer"), modifier = Modifier.size(16.dp))
                 }
                 Text(
                     text = AtlasFormat.quantity(line.quantity),
@@ -357,14 +377,14 @@ private fun CartLineRow(
                     modifier = Modifier.width(36.dp),
                 )
                 IconButton(onClick = onIncrement, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Outlined.Add, contentDescription = "Augmenter", modifier = Modifier.size(16.dp))
+                    Icon(Icons.Outlined.Add, contentDescription = atlasText("Augmenter"), modifier = Modifier.size(16.dp))
                 }
             }
         }
         IconButton(onClick = onRemove) {
             Icon(
                 imageVector = Icons.Outlined.DeleteOutline,
-                contentDescription = "Retirer",
+                contentDescription = atlasText("Retirer"),
                 tint = MaterialTheme.colorScheme.error,
             )
         }

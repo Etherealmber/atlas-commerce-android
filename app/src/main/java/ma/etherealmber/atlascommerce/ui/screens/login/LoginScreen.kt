@@ -85,6 +85,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasServerChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.i18n.AtlasLanguageSelector
+import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
@@ -309,7 +310,11 @@ fun LoginScreen(
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = if (compact) "Session chiffrée · ${AppDetails.VERSION_NAME}" else "Sessions chiffrées et isolées par utilisateur · ${AppDetails.VERSION_NAME}",
+                            text = if (compact) {
+                                atlasText("Session chiffrée · ${AppDetails.VERSION_NAME}", "Encrypted session · ${AppDetails.VERSION_NAME}", "جلسة مشفّرة · ${AppDetails.VERSION_NAME}")
+                            } else {
+                                atlasText("Sessions chiffrées et isolées par utilisateur · ${AppDetails.VERSION_NAME}", "Encrypted sessions isolated per user · ${AppDetails.VERSION_NAME}", "جلسات مشفّرة ومعزولة لكل مستخدم · ${AppDetails.VERSION_NAME}")
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -438,12 +443,16 @@ private fun SavedAccountsCard(
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = "@${acc.username} · ${Roles.label(acc.role)}",
+                                text = atlasText(
+                                    "@${acc.username} · ${atlasRoleLabel(acc.role)}",
+                                    "@${acc.username} · ${atlasRoleLabel(acc.role)}",
+                                    "@${acc.username} · ${atlasRoleLabel(acc.role)}",
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        AtlasChip(text = Roles.label(acc.role), tone = AtlasTone.NEUTRAL)
+                        AtlasChip(text = atlasRoleLabel(acc.role), tone = AtlasTone.NEUTRAL)
                         IconButton(
                             onClick = { onForget(acc) },
                             enabled = !loading,
@@ -483,7 +492,7 @@ private fun SavedAccountsCompact(
                         enabled = !loading,
                     )
                     IconButton(onClick = { onForget(account) }, enabled = !loading, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Oublier ${account.username}", modifier = Modifier.size(16.dp))
+                        Icon(Icons.Outlined.Close, contentDescription = atlasText("Oublier ${account.username}", "Forget ${account.username}", "نسيان ${account.username}"), modifier = Modifier.size(16.dp))
                     }
                 }
             }
