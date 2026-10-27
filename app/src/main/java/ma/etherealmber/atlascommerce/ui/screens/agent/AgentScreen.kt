@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.speech.RecognizerIntent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
@@ -25,6 +26,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -86,6 +89,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -127,6 +131,12 @@ fun AgentScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    val isImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    // While composing, Android Back should dismiss the keyboard before MainShell's
+    // tab-level handler can leave Atlas Agent.
+    BackHandler(enabled = isActive && isImeVisible) {
+        focusManager.clearFocus()
+    }
     val selectedSpeechLanguage = LocalAtlasLanguage.current.tag
     val quickPrompts = listOf(
         atlasText("Quels articles sont en rupture ou à réapprovisionner ?", "Which items are out of stock or need replenishment?", "ما المنتجات التي نفدت أو تحتاج إلى إعادة التخزين؟"),

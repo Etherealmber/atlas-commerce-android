@@ -302,6 +302,7 @@ fun MainShell(
     }
 
     BackHandler(enabled = isForeground && tab != MainTab.HOME) {
+        AtlasLogBuffer.log("NAVIGATION", "System Back handled by shell on tab=${tab.name}")
         when (tab) {
             MainTab.SETTINGS -> setTabName(MainTab.PROFILE.name)
             MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> setTabName(lastBottomTabName)
