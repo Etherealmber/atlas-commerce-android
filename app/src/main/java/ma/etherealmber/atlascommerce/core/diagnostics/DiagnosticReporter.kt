@@ -47,6 +47,9 @@ object AtlasLogBuffer {
     private val jwtRegex = Regex("(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}")
     private val githubTokenRegex = Regex("\\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\\b")
     private val emailRegex = Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
+    private val ipv4Regex = Regex("""(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])""")
+    private val macAddressRegex = Regex("""(?i)(?<![0-9a-f])(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}(?![0-9a-f])""")
+    private val ipv6CandidateRegex = Regex("""(?i)(?<![0-9a-f:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![0-9a-f:])""")
     private val lowSignalPlatformNoise = listOf(
         Regex("EGL_BAD_MATCH", RegexOption.IGNORE_CASE),
         Regex("Unable to match the desired swap behavior", RegexOption.IGNORE_CASE),
@@ -60,6 +63,17 @@ object AtlasLogBuffer {
             .replace(jwtRegex, "[REDACTED_JWT]")
             .replace(githubTokenRegex, "[REDACTED_GITHUB_TOKEN]")
             .replace(emailRegex, "[REDACTED_EMAIL]")
+            .replace(ipv4Regex, "[REDACTED_IP]")
+            .replace(macAddressRegex, "[REDACTED_MAC]")
+            .replace(ipv6CandidateRegex) { match ->
+                val candidate = match.value
+                // Avoid treating ordinary HH:mm:ss log timestamps as IPv6 addresses.
+                if (candidate.count { it == ':' } >= 3 || "::" in candidate || candidate.any { it.lowercaseChar() in 'a'..'f' }) {
+                    "[REDACTED_IP]"
+                } else {
+                    candidate
+                }
+            }
 
     fun log(tag: String, message: String, level: String = "INFO") {
         val stamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
@@ -445,7 +459,37 @@ object DiagnosticReporter {
         if (summary.length + suffix.length >= maxChars) return (summary + suffix).take(maxChars)
         val safeLogs = AtlasLogBuffer.sanitize(logs).ifBlank { "Aucun journal récent." }
         val logBudget = maxChars - summary.length - suffix.length
-        return summary + safeLogs.takeLast(logBudget) + suffix
+        val crashMatch = Regex("(?s)=== LAST CRASH TRACE ===\s*(.*?)(?=\n=== |$)").find(safeLogs)
+        val reportLogs = if (crashMatch == null) {
+            safeLogs.takeLast(logBudget)
+        } else {
+            // The captured crash block appears near the start of the full local diagnostics.
+            // A plain takeLast(logBudget) silently discarded it from the short Worker payload.
+            // Reserve space for the tail of the stack trace, then use the remainder for recent events.
+            val crashLabel = "\n=== LAST CRASH TRACE ===\n"
+            val eventsLabel = "\n=== RECENT DIAGNOSTICS ===\n"
+            if (logBudget <= crashLabel.length + eventsLabel.length) {
+                safeLogs.takeLast(logBudget)
+            } else {
+                val remainingForBodies = logBudget - crashLabel.length - eventsLabel.length
+                val crashBudget = minOf(1_000, remainingForBodies * 2 / 3)
+                val rawCrash = crashMatch.groupValues[1].trim()
+                val truncationMarker = "\n… [stack trace excerpt] …\n"
+                val crashExcerpt = when {
+                    rawCrash.length <= crashBudget -> rawCrash
+                    crashBudget <= truncationMarker.length -> rawCrash.take(crashBudget)
+                    else -> {
+                        val headBudget = minOf(320, (crashBudget - truncationMarker.length) / 3)
+                        val tailBudget = crashBudget - headBudget - truncationMarker.length
+                        rawCrash.take(headBudget) + truncationMarker + rawCrash.takeLast(tailBudget)
+                    }
+                }
+                val withoutCrash = safeLogs.removeRange(crashMatch.range).trim()
+                val eventsBudget = (logBudget - crashLabel.length - eventsLabel.length - crashExcerpt.length).coerceAtLeast(0)
+                crashLabel + crashExcerpt + eventsLabel + withoutCrash.takeLast(eventsBudget)
+            }
+        }
+        return summary + reportLogs + suffix
     }
 
     fun copyFullReportToClipboard(context: Context, fullMarkdown: String) {

@@ -1,7 +1,5 @@
 package ma.etherealmber.atlascommerce.ui.screens.legal
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,7 +18,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,11 +29,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.PhotoLibrary
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -47,7 +42,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -103,9 +97,10 @@ private val DiagnosticCategories = listOf(
  * Interactive in-app Diagnostic & Problem Reporter dialog:
  * - Captures sanitized app + own-PID Android logcat traces, anonymized Device ID,
  *   Android SDK/model/screen DPI/fontScale, and version build automatically.
- * - Lets users attach up to **3 images** (`MAX_ATTACHMENTS = 3`), automatically downscaling
- *   and JPEG-compressing any image over `1 MB` down to `<= 1 MB` (`1,000,000` bytes).
- * - Sends through the authenticated Atlas Worker report queue; GitHub delivery is server-side,
+ * - Lets users prepare up to **3 images** (`MAX_ATTACHMENTS = 3`) for a separate Android share action,
+ *   automatically downscaling and JPEG-compressing any image over `1 MB` to `<= 1 MB`.
+ *   Images are not uploaded with the authenticated report request.
+ * - Sends the text report through the authenticated Atlas Worker queue; GitHub delivery is server-side,
  *   so users never leave the app or need a GitHub login. Reports remain queued if GitHub delivery is unavailable.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -125,11 +120,8 @@ fun ProblemReportDialog(
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var steps by remember { mutableStateOf("") }
-    var logsPreview by remember { mutableStateOf("") }
-    var showLogsPreview by remember { mutableStateOf(false) }
     var compressing by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
-    var loadingLogs by remember { mutableStateOf(true) }
     var submitError by remember { mutableStateOf<String?>(null) }
     val attachments = remember { mutableStateListOf<CompressedReportAttachment>() }
 
@@ -141,11 +133,6 @@ fun ProblemReportDialog(
             role = activeRole,
             screenOrigin = screenOrigin,
         )
-    }
-
-    LaunchedEffect(Unit) {
-        logsPreview = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 32_000)
-        loadingLogs = false
     }
 
     val multiImagePicker = rememberLauncherForActivityResult(
@@ -276,15 +263,19 @@ fun ProblemReportDialog(
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     text = atlasText(
-                                        "Captures jointes (${attachments.size}/${DiagnosticReporter.MAX_ATTACHMENTS})",
-                                        "Attached screenshots (${attachments.size}/${DiagnosticReporter.MAX_ATTACHMENTS})",
-                                        "لقطات الشاشة المرفقة (${attachments.size}/${DiagnosticReporter.MAX_ATTACHMENTS})",
+                                        "Captures à partager séparément (${attachments.size}/${DiagnosticReporter.MAX_ATTACHMENTS})",
+                                        "Screenshots to share separately (${attachments.size}/${DiagnosticReporter.MAX_ATTACHMENTS})",
+                                        "لقطات شاشة للمشاركة بشكل منفصل (${attachments.size}/${DiagnosticReporter.MAX_ATTACHMENTS})",
                                     ),
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    text = atlasText("Max 3 images · compression auto ≤ 1 Mo chacune"),
+                                    text = atlasText(
+                                        "Non envoyées avec le rapport · 3 max · compression auto ≤ 1 Mo chacune",
+                                        "Not sent with the report · up to 3 · auto-compressed to ≤ 1 MB each",
+                                        "لا تُرسل مع البلاغ · حتى 3 · ضغط تلقائي إلى ≤ 1 ميغابايت لكل صورة",
+                                    ),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -348,82 +339,27 @@ fun ProblemReportDialog(
                     }
                 }
 
-                // Compact diagnostic summary with explicit copy/refresh controls.
                 Surface(
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.surfaceContainerLow,
                     border = BorderStroke(1.dp, Atlas.palette.cardBorder),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = atlasText("Diagnostics inclus automatiquement"),
+                            text = atlasText("Diagnostics protégés", "Diagnostics stay private", "التشخيصات محمية"),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = if (loadingLogs) {
-                                        atlasText("Capture en cours…", "Capturing…", "جارٍ الالتقاط…")
-                                    } else {
-                                        atlasText(
-                                            "${logsPreview.lineSequence().count()} lignes · ${snapshot.appVersion}",
-                                            "${logsPreview.lineSequence().count()} lines · ${snapshot.appVersion}",
-                                            "${logsPreview.lineSequence().count()} سطراً · ${snapshot.appVersion}",
-                                        )
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                                Text(
-                                    text = atlasText("Journaux expurgés des secrets · les captures restent privées"),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            IconButton(
-                                onClick = {
-                                    scope.launch {
-                                        loadingLogs = true
-                                        logsPreview = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 32_000)
-                                        loadingLogs = false
-                                    }
-                                },
-                                enabled = !submitting && !loadingLogs,
-                            ) {
-                                Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Rafraîchir les journaux"))
-                            }
-                            IconButton(
-                                onClick = {
-                                    val clipboard = context.getSystemService(ClipboardManager::class.java)
-                                    clipboard?.setPrimaryClip(ClipData.newPlainText("Journaux Atlas assainis", logsPreview))
-                                    onToast("Journaux assainis copiés.")
-                                },
-                                enabled = logsPreview.isNotBlank() && !loadingLogs,
-                            ) {
-                                Icon(Icons.Outlined.ContentCopy, contentDescription = atlasText("Copier les journaux"))
-                            }
-                            TextButton(onClick = { showLogsPreview = !showLogsPreview }) {
-                                Text(if (showLogsPreview) atlasText("Masquer") else atlasText("Voir"))
-                            }
-                        }
-                        if (showLogsPreview) {
-                            Surface(
-                                shape = MaterialTheme.shapes.small,
-                                color = MaterialTheme.colorScheme.surface,
-                                modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp),
-                            ) {
-                                Column(Modifier.verticalScroll(rememberScrollState()).padding(8.dp)) {
-                                    Text(
-                                        text = logsPreview.ifBlank { atlasText("Aucun journal récent.") },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
+                        Text(
+                            text = atlasText(
+                                "Aucun journal brut n'est affiché. Un résumé expurgé sera joint uniquement si vous envoyez ce rapport.",
+                                "Raw logs are not shown. A redacted summary is attached only if you send this report.",
+                                "لا تُعرض السجلات الخام. لن يُرفق ملخص منقح إلا عند إرسال هذا البلاغ.",
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
 
@@ -434,7 +370,11 @@ fun ProblemReportDialog(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            text = error,
+                            text = atlasText(
+                                "Envoi impossible. Vérifiez votre connexion et réessayez.",
+                                "Could not send the report. Check your connection and try again.",
+                                "تعذّر إرسال البلاغ. تحقق من اتصالك وحاول مجدداً.",
+                            ),
                             modifier = Modifier.padding(12.dp),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer,
@@ -445,26 +385,22 @@ fun ProblemReportDialog(
                 if (attachments.isNotEmpty()) {
                     AtlasOutlinedButton(
                         text = atlasText(
-                            "Partager captures & logs (${attachments.size} img ≤ 1 Mo)",
-                            "Share screenshots & logs (${attachments.size} images, ≤ 1 MB)",
-                            "مشاركة لقطات الشاشة والسجلات (${attachments.size} صورة، ≤ 1 ميغابايت)",
+                            "Partager les captures séparément (${attachments.size})",
+                            "Share screenshots separately (${attachments.size})",
+                            "مشاركة لقطات الشاشة بشكل منفصل (${attachments.size})",
                         ),
                         icon = Icons.Outlined.Share,
                         onClick = {
-                            val fullMd = DiagnosticReporter.buildMarkdownReport(
-                                category = category,
-                                title = title.ifBlank { category },
-                                description = description,
-                                stepsToReproduce = steps,
-                                snapshot = snapshot,
-                                logs = logsPreview,
-                                attachments = attachments.toList(),
-                            )
+                            val shareText = buildString {
+                                appendLine("[Atlas Commerce] ${title.ifBlank { category }.take(120)}")
+                                appendLine("Category: $category")
+                                if (description.isNotBlank()) appendLine(description.trim().take(800))
+                            }
                             if (!DiagnosticReporter.shareBundleWithAttachments(
                                     context = context,
                                     title = title.ifBlank { category },
-                                    fullMarkdown = fullMd,
-                                    logs = logsPreview,
+                                    fullMarkdown = shareText,
+                                    logs = "",
                                     attachments = attachments.toList(),
                                 )
                             ) {
@@ -478,14 +414,13 @@ fun ProblemReportDialog(
         },
         confirmButton = {
             AtlasButton(
-                text = atlasText("Envoyer à Atlas Bot", "Send to Atlas Bot", "إرسال إلى Atlas Bot"),
+                text = atlasText("Envoyer le rapport à Atlas", "Send report to Atlas", "إرسال البلاغ إلى Atlas"),
                 loading = submitting,
                 onClick = {
                     scope.launch {
                         submitting = true
                         submitError = null
                         val freshLogs = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 32_000)
-                        logsPreview = freshLogs
                         val reportKind = when (category) {
                             "Demande de fonctionnalité" -> "idea"
                             "Autre anomalie" -> "other"
@@ -548,7 +483,12 @@ fun ProblemReportDialog(
                             }
                             is ApiResult.Failure -> {
                                 submitting = false
-                                submitError = "Envoi impossible (${result.code}${result.httpStatus?.let { " · HTTP $it" } ?: ""}) : ${AtlasLogBuffer.sanitize(result.message)}"
+                                AtlasLogBuffer.log(
+                                    "REPORT",
+                                    "User report submission failed: code=${result.code}; http=${result.httpStatus ?: "none"}; message=${AtlasLogBuffer.sanitize(result.message).take(180)}",
+                                    "ERROR",
+                                )
+                                submitError = "report_send_failed"
                             }
                         }
                     }

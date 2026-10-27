@@ -44,14 +44,45 @@ class DiagnosticReportMessageTest {
     }
 
     @Test
+    fun `short Worker report preserves crash trace before recent log tail`() {
+        val logs = buildString {
+            appendLine("=== LAST CRASH TRACE ===")
+            appendLine("java.lang.IllegalStateException: CRASH_TRACE_ROOT_CAUSE")
+            appendLine("at ma.atlas.checkout.Screen(Checkout.kt:42)")
+            appendLine()
+            appendLine("=== APP EVENTS / NETWORK / AUTH (200) ===")
+            (1..200).forEach { appendLine("AUTH event=$it") }
+        }
+
+        val message = DiagnosticReporter.buildUserReportMessage(
+            kind = "bug",
+            category = "Crash",
+            title = "App closed unexpectedly",
+            description = "The app crashed.",
+            stepsToReproduce = "Open checkout.",
+            snapshot = snapshot,
+            logs = logs,
+        )
+
+        assertTrue(message.length <= 2_000)
+        assertTrue(message.contains("=== LAST CRASH TRACE ==="))
+        assertTrue(message.contains("CRASH_TRACE_ROOT_CAUSE"))
+        assertTrue(message.contains("AUTH event=200"))
+    }
+
+    @Test
     fun `log sanitizer removes bearer tokens JWTs email and report tickets`() {
         val jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature0123456789"
-        val raw = "Authorization: Bearer superSecret123 rt=reportTicket456 jwt=$jwt user=person@example.com"
+        val raw = "Authorization: Bearer superSecret123 rt=reportTicket456 jwt=$jwt user=person@example.com ip=192.168.1.55 mac=aa:bb:cc:dd:ee:ff ipv6=2001:db8::1 time=12:34:56"
         val clean = AtlasLogBuffer.sanitize(raw)
 
         assertFalse(clean.contains("superSecret123"))
         assertFalse(clean.contains("reportTicket456"))
         assertFalse(clean.contains(jwt))
         assertFalse(clean.contains("person@example.com"))
+        assertFalse(clean.contains("192.168.1.55"))
+        assertFalse(clean.contains("aa:bb:cc:dd:ee:ff"))
+        assertFalse(clean.contains("2001:db8::1"))
+        assertTrue(clean.contains("12:34:56"))
     }
 }

@@ -1,6 +1,9 @@
 package ma.etherealmber.atlascommerce.ui.screens.sale
 
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
+import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
+import ma.etherealmber.atlascommerce.ui.i18n.atlasQuantity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -216,7 +219,7 @@ fun SaleScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            text = AtlasFormat.money(total, state.currency),
+                            text = atlasMoney(total, state.currency),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                         )
@@ -264,9 +267,9 @@ fun SaleScreen(
                         "العميل: ${state.clientName.trim()}\n",
                     ) +
                         atlasText(
-                            "Articles : ${lines.size} · Total : ${AtlasFormat.money(total, state.currency)}",
-                            "Items: ${lines.size} · Total: ${AtlasFormat.money(total, state.currency)}",
-                            "العناصر: ${lines.size} · الإجمالي: ${AtlasFormat.money(total, state.currency)}",
+                            "Articles : ${lines.size} · Total : ${atlasMoney(total, state.currency)}",
+                            "Items: ${lines.size} · Total: ${atlasMoney(total, state.currency)}",
+                            "العناصر: ${lines.size} · الإجمالي: ${atlasMoney(total, state.currency)}",
                         ),
                 )
             },
@@ -316,9 +319,9 @@ fun SaleScreen(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = atlasText(
-                            "Total ${AtlasFormat.money(created.total, state.currency)} · en attente d'encaissement.",
-                            "Total ${AtlasFormat.money(created.total, state.currency)} · awaiting payment collection.",
-                            "الإجمالي ${AtlasFormat.money(created.total, state.currency)} · بانتظار تحصيل المبلغ.",
+                            "Total ${atlasMoney(created.total, state.currency)} · en attente d'encaissement.",
+                            "Total ${atlasMoney(created.total, state.currency)} · awaiting payment collection.",
+                            "الإجمالي ${atlasMoney(created.total, state.currency)} · بانتظار تحصيل المبلغ.",
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -357,9 +360,9 @@ private fun CartLineRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = "${AtlasFormat.quantity(line.quantity)} × " +
-                    "${AtlasFormat.money(line.product.price, currency)} = " +
-                    AtlasFormat.money(line.lineTotal, currency),
+                text = "${atlasQuantity(line.quantity)} × " +
+                    "${atlasMoney(line.product.price, currency)} = " +
+                    atlasMoney(line.lineTotal, currency),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -371,7 +374,7 @@ private fun CartLineRow(
                     Icon(Icons.Outlined.Remove, contentDescription = atlasText("Diminuer"), modifier = Modifier.size(16.dp))
                 }
                 Text(
-                    text = AtlasFormat.quantity(line.quantity),
+                    text = atlasQuantity(line.quantity),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.width(36.dp),

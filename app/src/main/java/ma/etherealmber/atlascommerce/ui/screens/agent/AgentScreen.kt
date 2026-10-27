@@ -2,10 +2,10 @@ package ma.etherealmber.atlascommerce.ui.screens.agent
 
 import android.app.Activity
 import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
 import android.speech.RecognizerIntent
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -53,15 +53,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.AddComment
 import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
@@ -105,7 +105,6 @@ import kotlinx.coroutines.flow.first
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
-import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdown
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
@@ -167,6 +166,8 @@ fun AgentScreen(
     )
     val density = Atlas.density
     val scope = rememberCoroutineScope()
+    var showHistoryDialog by remember { mutableStateOf(false) }
+    var composerExpanded by rememberSaveable { mutableStateOf(true) }
     val speechRecognitionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
@@ -182,8 +183,6 @@ fun AgentScreen(
             }
         }
     }
-    var showHistoryDialog by remember { mutableStateOf(false) }
-    var composerExpanded by rememberSaveable { mutableStateOf(true) }
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             readAgentAttachment(context, uri).fold(
@@ -323,9 +322,9 @@ fun AgentScreen(
             title = { Text(atlasText("Vérifiez avant d'envoyer", "Review before sending", "راجِع قبل الإرسال")) },
             text = {
                 Text(atlasText(
-                    "Atlas Agent peut se tromper. Votre message et les fichiers joints seront transmis au serveur Atlas et au fournisseur IA configuré. N'envoyez pas de mots de passe ni de données personnelles inutiles.",
+                    "Atlas Agent peut se tromper. Votre message et les pièces jointes seront transmis au serveur Atlas et au fournisseur IA configuré. N'envoyez pas de mots de passe ni de données personnelles inutiles.",
                     "Atlas Agent can make mistakes. Your message and attachments will be sent to the Atlas server and configured AI provider. Do not include passwords or unnecessary personal data.",
-                    "قد يخطئ مساعد Atlas. ستُرسل رسالتك والملفات المرفقة إلى خادم Atlas ومزوّد الذكاء الاصطناعي المُعدّ. لا ترسل كلمات مرور أو بيانات شخصية غير ضرورية.",
+                    "قد يخطئ مساعد Atlas. ستُرسل رسالتك والمرفقات إلى خادم Atlas ومزوّد الذكاء الاصطناعي المُعدّ. لا ترسل كلمات مرور أو بيانات شخصية غير ضرورية.",
                 ))
             },
             confirmButton = { TextButton(onClick = viewModel::confirmSensitivePrompt) { Text(atlasText("Envoyer quand même", "Send anyway", "إرسال على أي حال")) } },
@@ -410,39 +409,6 @@ fun AgentScreen(
                                             else -> AtlasTone.NEUTRAL
                                         },
                                     )
-                                    Spacer(Modifier.width(8.dp))
-                                    val policy = state.policy
-                                    val quotaLocale = Locale.forLanguageTag(selectedAppLanguage.tag)
-                                    val nf = remember(quotaLocale) { NumberFormat.getIntegerInstance(quotaLocale) }
-                                    Text(
-                                        text = when {
-                                            policy == null -> atlasText("Quota IA indisponible", "AI quota unavailable", "حصة الذكاء الاصطناعي غير متاحة")
-                                            policy.isAdmin -> atlasText("Quota IA illimité", "Unlimited AI quota", "حصة ذكاء اصطناعي غير محدودة")
-                                            else -> atlasText(
-                                                "${nf.format(policy.dailyUsed)} / ${nf.format(policy.dailyLimit)} jetons aujourd'hui",
-                                                "${nf.format(policy.dailyUsed)} / ${nf.format(policy.dailyLimit)} tokens today",
-                                                "${nf.format(policy.dailyUsed)} / ${nf.format(policy.dailyLimit)} رمز اليوم",
-                                            )
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                AtlasDivider()
-                                Spacer(Modifier.height(6.dp))
-                                val visiblePolicy = state.policy
-                                if (visiblePolicy == null) {
-                                    Text(
-                                        text = atlasText("Chargement des quotas…", "Loading quotas…", "جارٍ تحميل الحصص…"),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                } else {
-                                    AgentQuotaBarsContent(policy = visiblePolicy, compact = true)
                                 }
 
                                 if (state.loadingThread) {
@@ -645,9 +611,7 @@ fun AgentScreen(
                                             putExtra(RecognizerIntent.EXTRA_PROMPT, speechPromptText)
                                         }
                                         runCatching { speechRecognitionLauncher.launch(speechIntent) }
-                                            .onFailure {
-                                                onToast(speechUnavailableText)
-                                            }
+                                            .onFailure { onToast(speechUnavailableText) }
                                     },
                                     enabled = !state.sending && !state.loadingThread && !quotaLocked,
                                 ) {

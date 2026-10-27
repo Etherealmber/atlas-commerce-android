@@ -86,6 +86,9 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.ProductCreateDialog
 import ma.etherealmber.atlascommerce.ui.components.ScanFeedback
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
+import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
+import ma.etherealmber.atlascommerce.ui.i18n.atlasQuantity
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 /**
@@ -353,7 +356,7 @@ fun ScanScreen(
                                 },
                                 label = {
                                     Text(
-                                        text = atlasText("${item.name} · manque ${AtlasFormat.quantity(item.neededQuantity)}", "${item.name} · short by ${AtlasFormat.quantity(item.neededQuantity)}", "${item.name} · النقص ${AtlasFormat.quantity(item.neededQuantity)}"),
+                                        text = atlasText("${item.name} · manque ${atlasQuantity(item.neededQuantity)}", "${item.name} · short by ${atlasQuantity(item.neededQuantity)}", "${item.name} · النقص ${atlasQuantity(item.neededQuantity)}"),
                                         style = MaterialTheme.typography.labelSmall,
                                     )
                                 },
@@ -519,12 +522,12 @@ private fun ScanResultPanel(
                             )
                             Text(
                                 text = buildString {
-                                    append(AtlasFormat.money(product.price))
+                                    append(atlasMoney(product.price))
                                     append(stockLabel)
-                                    append(AtlasFormat.quantity(product.stock))
+                                    append(atlasQuantity(product.stock))
                                     if (product.neededQuantity > 0.0) {
                                         append(shortLabel)
-                                        append(AtlasFormat.quantity(product.neededQuantity))
+                                        append(atlasQuantity(product.neededQuantity))
                                         append(")")
                                     }
                                 },

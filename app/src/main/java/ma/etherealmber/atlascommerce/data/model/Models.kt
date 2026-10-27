@@ -126,14 +126,19 @@ data class WebAuthnAndroidCapabilityDto(
     @Json(name = "package") val packageName: String? = null,
     val origin: String? = null,
     @Json(name = "origin_legacy") val originLegacy: String? = null,
-)
+    @Json(name = "origins_android") val originsAndroid: List<String> = emptyList(),
+) {
+    val configuredOrigins: List<String>
+        get() = (originsAndroid + listOfNotNull(origin, originLegacy))
+            .filter(String::isNotBlank)
+            .distinct()
+}
 
 /**
- * Gate Android passkeys on the selected server's explicit capability, matching app package, and
- * an allowed origin. Prefer the exact installed signing-certificate origin when available (check
- * both current SHA-256 and legacy SHA-1 forms). This app also passes the selected HTTPS web origin
- * to Credential Manager; on that path the backend requires crossOrigin plus androidPackageName,
- * so an upload/debug signing certificate mismatch must not hide an otherwise configured feature.
+ * Gate native Android passkeys on the selected server's explicit capability, exact package name,
+ * selected relying-party web origin, and a signing-certificate origin the server advertises.
+ * Credential Manager supplies the native Android origin itself; the app must not impersonate the
+ * HTTPS website origin, which is reserved for privileged browser-style callers.
  */
 fun WebAuthnCapabilitiesDto.supportsAndroid(
     packageName: String,
@@ -141,24 +146,14 @@ fun WebAuthnCapabilitiesDto.supportsAndroid(
     selectedServerOrigin: String?,
 ): Boolean {
     val androidCapability = android ?: return false
-    val advertisedAndroidOrigins = listOfNotNull(androidCapability.origin, androidCapability.originLegacy)
-        .filter { it.isNotBlank() }
-    val hasMatchingInstalledSigningOrigin = advertisedAndroidOrigins.any { it in signingOrigins }
+    val hasMatchingInstalledSigningOrigin = androidCapability.configuredOrigins.any(signingOrigins::contains)
     val hasAllowedSelectedWebOrigin = !selectedServerOrigin.isNullOrBlank() && selectedServerOrigin in origins
-
-    val packageBoundWebOriginSupported =
-        hasAllowedSelectedWebOrigin && androidCapability.packageName == packageName
-    val originRouteSupported = if (hasMatchingInstalledSigningOrigin) {
-        hasAllowedSelectedWebOrigin
-    } else {
-        packageBoundWebOriginSupported
-    }
 
     return enabled &&
         androidCapability.enabled &&
         androidCapability.packageName == packageName &&
-        advertisedAndroidOrigins.isNotEmpty() &&
-        originRouteSupported
+        hasMatchingInstalledSigningOrigin &&
+        hasAllowedSelectedWebOrigin
 }
 
 @JsonClass(generateAdapter = true)

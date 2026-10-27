@@ -18,6 +18,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.WindowInsets
@@ -46,6 +47,7 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -81,6 +83,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -103,6 +106,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
 import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.components.ShakeGestureEffect
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
+import ma.etherealmber.atlascommerce.ui.screens.agent.AgentQuotaBarsContent
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentScreen
 import ma.etherealmber.atlascommerce.ui.screens.agent.AtlasAgentMascot
 import ma.etherealmber.atlascommerce.ui.screens.legal.ProblemReportDialog
@@ -186,6 +190,7 @@ fun MainShell(
     val shakeToReportEnabled by appViewModel.shakeToReportEnabled.collectAsStateWithLifecycle()
     val notificationCount by shellViewModel.notificationCount.collectAsStateWithLifecycle()
     val serverBaseUrl by shellViewModel.serverBaseUrl.collectAsStateWithLifecycle()
+    val agentPolicy by appViewModel.agentPolicy.collectAsStateWithLifecycle()
 
     val roleTabs = MainTab.bottomTabsForRole(user.role)
     val resolvedInitial = roleTabs
@@ -217,6 +222,10 @@ fun MainShell(
     val scope = rememberCoroutineScope()
     var showProblemReportDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showShakeReportPrompt by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
+    var showAgentQuotaDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
+    LaunchedEffect(tab) {
+        if (tab != MainTab.AGENT) showAgentQuotaDialog = false
+    }
 
     val shakeDisabledMessage = atlasText(
         "Raccourci secouer pour signaler désactivé.",
@@ -329,7 +338,7 @@ fun MainShell(
     )
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             AtlasTopBar(
                 title = tab.localizedLabel(),
@@ -353,20 +362,19 @@ fun MainShell(
                     }
                     when (tab) {
                         MainTab.AGENT -> {
-                            AtlasAvatar(
-                                avatarUrl = user.avatarUrl,
-                                label = user.displayName.ifBlank { user.username },
-                                size = 34.dp,
-                                serverBaseUrl = serverBaseUrl,
-                                borderColor = MaterialTheme.colorScheme.outlineVariant,
-                                clickContentDescription = atlasText(
-                                    "Ouvrir le profil de ${user.displayName.ifBlank { user.username }}",
-                                    "Open profile for ${user.displayName.ifBlank { user.username }}",
-                                    "فتح الملف الشخصي لـ ${user.displayName.ifBlank { user.username }}",
-                                ),
-                                onClick = { switchTab(MainTab.PROFILE) },
-                            )
-                            Spacer(Modifier.width(8.dp))
+                            IconButton(
+                                onClick = {
+                                    showAgentQuotaDialog = true
+                                    appViewModel.refreshAgentPolicy()
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.HourglassBottom,
+                                    contentDescription = atlasText("Afficher le quota IA", "Show AI quota", "عرض حصة الذكاء الاصطناعي"),
+                                    tint = if (agentPolicy?.isExhausted == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Spacer(Modifier.width(6.dp))
                         }
 
                         MainTab.SALE, MainTab.SETTINGS -> Unit
@@ -416,7 +424,12 @@ fun MainShell(
             )
         },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(MaterialTheme.colorScheme.background),
+        ) {
         val showRail = useRail && tab !in BackStackTabs
         if (showRail) {
             NavigationRail(modifier = Modifier.align(Alignment.CenterStart), containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
@@ -436,7 +449,7 @@ fun MainShell(
             VerticalDivider(modifier = Modifier.align(Alignment.CenterStart).padding(start = 79.dp).fillMaxHeight(), color = MaterialTheme.colorScheme.outlineVariant)
         }
         val floatingNavBottomInset = if (!useRail && tab !in BackStackTabs) {
-            88.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            104.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         } else {
             0.dp
         }
@@ -514,6 +527,29 @@ fun MainShell(
             }
         }
         }
+    }
+    if (showAgentQuotaDialog && tab == MainTab.AGENT) {
+        AlertDialog(
+            onDismissRequest = { showAgentQuotaDialog = false },
+            title = { Text(atlasText("Utilisation de l'IA", "AI usage", "استخدام الذكاء الاصطناعي")) },
+            text = {
+                if (agentPolicy == null) {
+                    Text(atlasText("Chargement du quota…", "Loading quota…", "جارٍ تحميل الحصة…"))
+                } else {
+                    AgentQuotaBarsContent(policy = agentPolicy!!, compact = false)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAgentQuotaDialog = false }) {
+                    Text(atlasText("Fermer", "Close", "إغلاق"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = appViewModel::refreshAgentPolicy) {
+                    Text(atlasText("Actualiser", "Refresh", "تحديث"))
+                }
+            },
+        )
     }
     AnimatedVisibility(
         visible = !useRail && tab !in BackStackTabs,

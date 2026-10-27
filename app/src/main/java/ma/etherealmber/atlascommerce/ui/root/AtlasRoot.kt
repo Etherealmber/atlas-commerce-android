@@ -576,7 +576,7 @@ private fun AtlasGate(
                 AlertDialog(
                     onDismissRequest = viewModel::dismissPasskeyRegistrationMessage,
                     title = { Text(atlasText("Passkey Android")) },
-                    text = { Text(message) },
+                    text = { Text(atlasNotice(message, atlasLanguage)) },
                     confirmButton = {
                         TextButton(onClick = viewModel::dismissPasskeyRegistrationMessage) { Text(atlasText("OK")) }
                     },

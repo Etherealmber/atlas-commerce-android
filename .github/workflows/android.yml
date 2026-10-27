@@ -462,7 +462,8 @@ jobs:
           [ -z "$REPO_BASE_URL" ] && REPO_BASE_URL="https://github.com/${GITHUB_REPOSITORY}"
           CDN1_BASE="${INPUT_CDN_URL%/}"
           [ -z "$CDN1_BASE" ] && CDN1_BASE="${DEFAULT_CDN_VAR%/}"
-          CDN1_VERSIONED_URL="${CDN1_BASE%/}/atlas-commerce-${TAG}.apk"
+          # Add a per-build query token so a previously cached 404 cannot mask the new R2 object.
+          CDN1_VERSIONED_URL="${CDN1_BASE%/}/atlas-commerce-${TAG}.apk?v=${VERSION_CODE}"
           GITHUB_VERSIONED_URL="${REPO_BASE_URL%/}/releases/download/${TAG}/atlas-commerce.apk"
           PRIMARY_APK_URL="${INPUT_DOWNLOAD_URL:-$CDN1_VERSIONED_URL}"
 
@@ -659,13 +660,19 @@ jobs:
               --latest
           fi
 
-      - name: Publish release through policy-aware backend Worker ingestion
+      - name: Publish release through policy-aware Worker or Cloudflare R2 API
         env:
           UPLOAD_TOKEN: ${{ secrets.ATLAS_RELEASE_UPLOAD_TOKEN }}
           UPLOAD_URL: ${{ vars.ATLAS_RELEASE_API_URL || 'https://stock.afmarbre.com/api/admin/android-release' }}
           WORKER_DIRECT_URL: ${{ secrets.ATLAS_WORKER_DIRECT_URL || vars.ATLAS_WORKER_DIRECT_URL || '' }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID || '' }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || '' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID || '' }}
+          CLOUDFLARE_R2_BUCKET: ${{ vars.CLOUDFLARE_R2_BUCKET || 'company-stock-images' }}
+          ATLAS_API_BASE_URL: ${{ vars.ATLAS_API_BASE_URL || 'https://stock.afmarbre.com' }}
+          INPUT_CDN_URL: ${{ github.event.inputs.cdn_url || '' }}
+          DEFAULT_CDN_VAR: ${{ vars.CDN1_PUBLIC_BASE_URL || 'https://cdn1.afmarbre.com/app-updates/android' }}
           VERSION_NAME: ${{ needs.build.outputs.version_name }}
           VERSION_CODE: ${{ needs.build.outputs.version_code }}
           SHA256: ${{ steps.manifest.outputs.sha256 }}
@@ -674,12 +681,18 @@ jobs:
           NOTES_B64: ${{ steps.manifest.outputs.notes_b64 }}
         run: |
           WORKER_ACCEPTED="false"
+          CLOUDFLARE_API_PUBLISHED="false"
+          POLICY_SAFE_DIRECT_API_USED="false"
+          CDN_PUBLISHED="false"
           CDN_METHOD=""
           CF_WAF_BLOCKED="false"
           POLICY_AWARE_WORKER_USED="false"
 
-          # Only the Worker ingestion path can merge backend-controlled app_config policy into latest.json.
-          # Never write the generated policy-free manifest directly to R2 as a fallback.
+          # Prefer the backend Worker because it owns release policy. If Cloudflare's API token is
+          # configured, the REST fallback first reads the public update endpoint's live policy and
+          # copies those fields into latest.json before writing to R2. If that policy read fails,
+          # the fallback fails closed and does not replace latest.json. Cloudflare's REST endpoint
+          # requires an Admin Read & Write token; bucket-scoped Object Read & Write tokens are S3-only.
           if [ -n "${UPLOAD_TOKEN}" ]; then
             for TARGET_URL in "${WORKER_DIRECT_URL}" "${UPLOAD_URL}"; do
               [ -z "$TARGET_URL" ] && continue
@@ -707,6 +720,7 @@ jobs:
 
               if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
                 WORKER_ACCEPTED="true"
+                CDN_PUBLISHED="true"
                 CDN_METHOD="Worker HTTPS API ($TARGET_URL)"
                 POLICY_AWARE_WORKER_USED="true"
                 echo "Worker upload succeeded ($HTTP_CODE): $(cat "$RUNNER_TEMP/worker-upload-resp.txt")"
@@ -721,8 +735,144 @@ jobs:
           fi
 
 
-          if [ "$WORKER_ACCEPTED" != "true" ]; then
-            echo "Policy-safe CDN behavior: Worker ingestion did not succeed; leaving latest.json untouched. GitHub Releases remains available."
+          if [ "$CDN_PUBLISHED" != "true" ] && [ -n "${CLOUDFLARE_API_TOKEN}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "Worker ingestion did not complete; trying the configured Cloudflare R2 REST API with live backend policy."
+            if python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          import uuid
+          from pathlib import Path
+
+          token = os.environ["CLOUDFLARE_API_TOKEN"].strip()
+          account_id = os.environ["CLOUDFLARE_ACCOUNT_ID"].strip()
+          bucket = os.environ["CLOUDFLARE_R2_BUCKET"].strip()
+          api_base = os.environ["ATLAS_API_BASE_URL"].strip().rstrip("/")
+          version_code = os.environ["VERSION_CODE"].strip()
+          version_name = os.environ["VERSION_NAME"].strip()
+          cdn_base = (os.environ.get("INPUT_CDN_URL", "").strip() or os.environ.get("DEFAULT_CDN_VAR", "")).rstrip("/")
+          if not all((token, account_id, bucket, api_base, cdn_base)):
+              raise SystemExit("Cloudflare R2 fallback needs API token, account ID, bucket, API base, and CDN base.")
+
+          def read_json(url):
+              request = urllib.request.Request(
+                  url,
+                  headers={
+                      "Accept": "application/json",
+                      "Cache-Control": "no-cache",
+                      "User-Agent": "AtlasReleaseSync/1.0",
+                      "X-Atlas-Client": "android",
+                  },
+              )
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  return json.loads(response.read().decode("utf-8"))
+
+          query = urllib.parse.urlencode({"versionCode": version_code, "versionName": version_name})
+          policy_url = f"{api_base}/api/app/android-update?{query}"
+          print(f"Reading the current minimum-version policy from {api_base}/api/app/android-update")
+          policy_response = read_json(policy_url)
+          policy = policy_response.get("data") if isinstance(policy_response.get("data"), dict) else policy_response
+          if not isinstance(policy, dict):
+              raise SystemExit("The public Android update endpoint returned an invalid policy object; refusing direct latest.json write.")
+          success_values = (
+              policy_response.get("success"), policy_response.get("ok"),
+              policy.get("success"), policy.get("ok"),
+          )
+          if any(value is False for value in success_values) or not any(value is True for value in success_values):
+              raise SystemExit("The public Android update endpoint did not return a successful policy response; refusing direct latest.json write.")
+
+          policy_keys = (
+              "minimumVersionEnabled", "minimum_version_enabled",
+              "minimumSupportedVersionCode", "minimum_supported_version_code",
+              "minimumVersionCode", "minimum_version_code",
+              "minimumVersionName", "minimum_version_name",
+              "minimumVersionRequired", "minimum_version_required",
+              "minimumVersionMandatory", "minimum_version_mandatory", "mandatory",
+          )
+          preserved_policy = {key: policy[key] for key in policy_keys if key in policy}
+          minimum_code_keys = (
+              "minimumSupportedVersionCode", "minimum_supported_version_code",
+              "minimumVersionCode", "minimum_version_code",
+          )
+          present_minimum_codes = [key for key in minimum_code_keys if key in preserved_policy]
+          if not present_minimum_codes:
+              raise SystemExit("The backend response contains no minimum-version policy field; refusing direct latest.json write.")
+          if any(
+              isinstance(preserved_policy[key], bool)
+              or not isinstance(preserved_policy[key], int)
+              or preserved_policy[key] < 0
+              for key in present_minimum_codes
+          ):
+              raise SystemExit("The backend minimum-version code is not a non-negative integer; refusing direct latest.json write.")
+          for flag_key in (
+              "minimumVersionEnabled", "minimum_version_enabled",
+              "minimumVersionRequired", "minimum_version_required",
+              "minimumVersionMandatory", "minimum_version_mandatory", "mandatory",
+          ):
+              if flag_key in preserved_policy and not isinstance(preserved_policy[flag_key], bool):
+                  raise SystemExit(f"The backend policy flag {flag_key} is not boolean; refusing direct latest.json write.")
+
+          manifest_path = Path("signed-apk/latest.json")
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          manifest.update(preserved_policy)
+          manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + chr(10), encoding="utf-8")
+          print("Preserved backend-owned minimum-version policy fields: " + ", ".join(sorted(preserved_policy)))
+
+          prefix = urllib.parse.urlparse(cdn_base).path.strip("/")
+          if not prefix:
+              raise SystemExit("CDN base URL has no R2 object prefix; refusing to guess the public key path.")
+          version_tag = f"v{version_name}"
+          objects = (
+              (f"{prefix}/atlas-commerce-{version_tag}.apk", Path("signed-apk/atlas-commerce.apk"), "application/vnd.android.package-archive", "public, max-age=31536000, immutable"),
+              (f"{prefix}/latest.apk", Path("signed-apk/atlas-commerce.apk"), "application/vnd.android.package-archive", "public, max-age=0, no-cache, must-revalidate"),
+              (f"{prefix}/latest.json", manifest_path, "application/json", "public, max-age=0, no-cache, must-revalidate"),
+          )
+
+          for key, file_path, content_type, cache_control in objects:
+              encoded_key = urllib.parse.quote(key, safe="/")
+              url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/r2/buckets/{urllib.parse.quote(bucket, safe='')}/objects/{encoded_key}"
+              boundary = "----AtlasCommerceR2" + uuid.uuid4().hex
+              filename = file_path.name.replace('"', "")
+              object_bytes = file_path.read_bytes()
+              multipart_body = (
+                  f"--{boundary}\r\n"
+                  f'Content-Disposition: form-data; name="body"; filename="{filename}"\r\n'
+                  f"Content-Type: {content_type}\r\n"
+                  f"Cache-Control: {cache_control}\r\n\r\n"
+              ).encode("utf-8") + object_bytes + f"\r\n--{boundary}--\r\n".encode("ascii")
+              request = urllib.request.Request(
+                  url,
+                  data=multipart_body,
+                  method="PUT",
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/json",
+                      "Content-Type": f"multipart/form-data; boundary={boundary}",
+                      "Cache-Control": cache_control,
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=180) as response:
+                      result = json.loads(response.read().decode("utf-8"))
+                      if response.status < 200 or response.status >= 300 or result.get("success") is not True:
+                          raise RuntimeError(f"Cloudflare API rejected R2 object {key} (HTTP {response.status}).")
+              except urllib.error.HTTPError as error:
+                  detail = error.read(500).decode("utf-8", "replace")
+                  raise RuntimeError(f"Cloudflare R2 REST upload failed for {key} (HTTP {error.code}): {detail}") from error
+              print(f"Uploaded R2 object {key} ({file_path.stat().st_size} bytes).")
+          PY
+            then
+              CLOUDFLARE_API_PUBLISHED="true"
+              POLICY_SAFE_DIRECT_API_USED="true"
+              CDN_PUBLISHED="true"
+              CDN_METHOD="Cloudflare R2 REST API (backend policy preserved)"
+            else
+              echo "Cloudflare R2 API upload failed. latest.json was not confirmed; GitHub Releases remains available."
+            fi
+          elif [ "$CDN_PUBLISHED" != "true" ]; then
+            echo "No policy-safe CDN route succeeded. Configure CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (or restore the Worker route); GitHub Releases remains available."
           fi
 
           {
@@ -731,16 +881,16 @@ jobs:
             echo "| Distribution Channel | Status | Details |"
             echo "| :--- | :--- | :--- |"
             echo "| **GitHub Releases** | ✅ Published | Single asset \`atlas-commerce.apk\` + \`latest.json\` (\`SHA-256: ${SHA256}\`) |"
-            if [ "$WORKER_ACCEPTED" = "true" ]; then
-              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ✅ Submitted | Backend Worker accepted the policy-aware release ingestion request via **${CDN_METHOD}**; public metadata is captured below for verification. |"
+            if [ "$CDN_PUBLISHED" = "true" ]; then
+              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ✅ Uploaded | Published via **${CDN_METHOD}**; the public manifest is verified below against backend minimum-version policy. |"
             elif [ "$CF_WAF_BLOCKED" = "true" ]; then
-              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ⚠️ Not updated (policy-safe) | Worker endpoint blocked by Cloudflare WAF. Direct \`latest.json\` writes are disabled to protect backend version policy; GitHub Release is available. |"
+              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ⚠️ Not updated (fail-closed) | Worker was intercepted by Cloudflare WAF and direct Cloudflare API publication did not complete with backend policy preserved. GitHub Release is available. |"
             else
-              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ⚠️ Not updated (policy-safe) | Worker ingestion unavailable. Direct \`latest.json\` writes are disabled to protect backend version policy; GitHub Release is available. |"
+              echo "| **CDN 1 (\`cdn1.afmarbre.com\`)** | ⚠️ Not updated (fail-closed) | Neither policy-aware Worker nor configured Cloudflare R2 API completed publication. GitHub Release is available. |"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-          WORKER_ACCEPTED="$WORKER_ACCEPTED" CDN_METHOD="$CDN_METHOD" POLICY_AWARE_WORKER_USED="$POLICY_AWARE_WORKER_USED" CF_WAF_BLOCKED="$CF_WAF_BLOCKED" \
+          WORKER_ACCEPTED="$WORKER_ACCEPTED" CLOUDFLARE_API_PUBLISHED="$CLOUDFLARE_API_PUBLISHED" CDN_PUBLISHED="$CDN_PUBLISHED" POLICY_SAFE_DIRECT_API_USED="$POLICY_SAFE_DIRECT_API_USED" CDN_METHOD="$CDN_METHOD" POLICY_AWARE_WORKER_USED="$POLICY_AWARE_WORKER_USED" CF_WAF_BLOCKED="$CF_WAF_BLOCKED" \
           INPUT_CDN_URL="${{ github.event.inputs.cdn_url || '' }}" \
           DEFAULT_CDN_VAR="${{ vars.CDN1_PUBLIC_BASE_URL || 'https://cdn1.afmarbre.com/app-updates/android' }}" \
           EXPECTED_VERSION_NAME="${{ needs.build.outputs.version_name }}" \
@@ -748,6 +898,7 @@ jobs:
           VERIFY_NONCE="${{ github.run_id }}" \
           python3 - <<'PY'
           import json, os, time, urllib.error, urllib.request
+          from urllib.parse import urlsplit
 
           live_cdn = None
           cdn_base = (os.environ.get("INPUT_CDN_URL", "").strip() or os.environ.get("DEFAULT_CDN_VAR", "https://cdn1.afmarbre.com/app-updates/android")).rstrip("/")
@@ -791,7 +942,10 @@ jobs:
                   observed_code, observed_name = 0, ""
               if observed_code == expected_code and (not observed_name or observed_name == expected_name):
                   break
-              if attempt < 3 and os.environ.get("WORKER_ACCEPTED") == "true":
+              if attempt < 3 and (
+                  os.environ.get("WORKER_ACCEPTED") == "true"
+                  or os.environ.get("CLOUDFLARE_API_PUBLISHED") == "true"
+              ):
                   time.sleep(5)
 
           live_code = 0
@@ -804,9 +958,11 @@ jobs:
                   live_code = 0
               live_name = str(live_cdn.get("versionName", live_cdn.get("version_name", "")) or "")
               for key in (
+                  "minimumVersionEnabled", "minimum_version_enabled",
                   "minimumSupportedVersionCode", "minimum_supported_version_code",
                   "minimumVersionCode", "minimum_version_code",
                   "minimumVersionName", "minimum_version_name",
+                  "minimumVersionRequired", "minimum_version_required",
                   "minimumVersionMandatory", "minimum_version_mandatory", "mandatory",
               ):
                   if key in live_cdn:
@@ -865,7 +1021,8 @@ jobs:
                   apk_probe_error = str(e)
           cdn_apk_exists = apk_status_code is not None and 200 <= apk_status_code < 300
           apk_cache_normalized = apk_cache_control.lower().replace(" ", "")
-          versioned_cdn_apk = apk_url.startswith(cdn_base + "/") and "-v" in apk_url and apk_url.lower().endswith(".apk")
+          apk_path = urlsplit(apk_url).path.lower()
+          versioned_cdn_apk = apk_url.startswith(cdn_base + "/") and "-v" in apk_path and apk_path.endswith(".apk")
           versioned_apk_cache_control_ok = (
               not versioned_cdn_apk
               or ("immutable" in apk_cache_normalized and "max-age=31536000" in apk_cache_normalized)
@@ -874,6 +1031,9 @@ jobs:
           with open("signed-apk/publish-status.json", "w", encoding="utf-8") as fh:
               json.dump({
                   "workerAccepted": os.environ.get("WORKER_ACCEPTED") == "true",
+                  "cloudflareApiPublished": os.environ.get("CLOUDFLARE_API_PUBLISHED") == "true",
+                  "cdnPublished": os.environ.get("CDN_PUBLISHED") == "true",
+                  "policySafeDirectApiUsed": os.environ.get("POLICY_SAFE_DIRECT_API_USED") == "true",
                   "githubReleaseMatchesRelease": github_match,
                   "githubReleaseLatestJson": github_manifest,
                   "cdnMethod": os.environ.get("CDN_METHOD", ""),
@@ -900,6 +1060,7 @@ jobs:
                   summary.write(f"\n### Independent release metadata verification\n- GitHub Release latest.json {gh_result} the release ({github_name or 'unknown'} / {github_code}).\n")
                   summary.write(f"- Public CDN latest.json {result} the release ({live_name or 'unknown'} / {live_code}).\n")
                   summary.write(f"- Policy-aware Worker accepted ingestion: `{os.environ.get('WORKER_ACCEPTED') == 'true'}`\n")
+                  summary.write(f"- Policy-safe Cloudflare R2 API upload completed: `{os.environ.get('CLOUDFLARE_API_PUBLISHED') == 'true'}`\n")
                   summary.write(f"- Minimum-version policy fields present: `{minimum_policy_present}`\n")
                   summary.write(f"- Manifest cache headers safe: `{manifest_cache_control_ok}` (`{cdn_cache_control or 'missing'}`)\n")
                   summary.write(f"- Referenced CDN APK exists: `{cdn_apk_exists}` ({apk_status_code or 'no status'}; `{apk_url or 'no apkUrl'}`)\n")
@@ -908,8 +1069,8 @@ jobs:
           if not github_match:
               print("::error::GitHub Release latest.json does not match the published release version/build.")
               raise SystemExit(1)
-          if os.environ.get("WORKER_ACCEPTED") != "true":
-              print("::error::Policy-aware Worker did not accept the release; CDN publication is unconfirmed. Direct R2 writes are disabled to preserve backend version policy.")
+          if os.environ.get("CDN_PUBLISHED") != "true":
+              print("::error::Neither the policy-aware Worker nor the backend-policy-preserving Cloudflare R2 API completed publication; CDN publication is unconfirmed.")
               raise SystemExit(1)
           if (
               not public_match

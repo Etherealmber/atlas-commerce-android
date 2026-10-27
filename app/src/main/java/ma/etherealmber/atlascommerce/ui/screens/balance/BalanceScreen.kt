@@ -73,12 +73,12 @@ import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
+import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.components.CombinedReportWebViewDialog
 import ma.etherealmber.atlascommerce.ui.components.FinancePdfViewerDialog
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelection
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelectionDialog
 import java.io.File
-import java.text.NumberFormat
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
@@ -982,5 +982,5 @@ private fun EntryDropdown(label: String, selected: String, options: List<String>
     }
 }
 
-private fun formatMoney(value: Double, currency: String): String =
-    "${NumberFormat.getNumberInstance(Locale.FRANCE).apply { maximumFractionDigits = 2; minimumFractionDigits = 0 }.format(value)} $currency"
+@Composable
+private fun formatMoney(value: Double, currency: String): String = atlasMoney(value, currency)
