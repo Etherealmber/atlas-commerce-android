@@ -85,6 +85,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.time.LocalTime
+import java.time.ZoneId
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
@@ -169,6 +171,11 @@ fun ProfileScreen(
     val otherSavedAccounts = savedAccounts.filterNot {
         it.username.equals(user.username, ignoreCase = true)
     }
+    val profileGreeting = if (LocalTime.now(ZoneId.systemDefault()).hour in 5..17) {
+        atlasText("Bonjour", "Good morning", "صباح الخير")
+    } else {
+        atlasText("Bonsoir", "Good evening", "مساء الخير")
+    }
 
     Column(
         modifier = Modifier
@@ -234,7 +241,7 @@ fun ProfileScreen(
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = "Mon compte",
+                            text = profileGreeting,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -304,7 +311,7 @@ fun ProfileScreen(
                                         fontWeight = FontWeight.SemiBold,
                                     )
                                     Text(
-                                        text = "@${acc.username} · ${Roles.label(acc.role)}",
+                                        text = "@${acc.username} · ${profileRoleLabel(acc.role)}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -1260,6 +1267,15 @@ fun SettingsScreen(
             )
         }
     }
+}
+
+@Composable
+private fun profileRoleLabel(role: String): String = when (Roles.normalize(role)) {
+    Roles.OWNER -> atlasText("Compte principal", "Primary account", "الحساب الرئيسي")
+    Roles.ADMIN -> atlasText("Administrateur", "Administrator", "مدير")
+    Roles.SECRETARY -> atlasText("Secrétariat", "Sales secretary", "السكرتارية")
+    Roles.STOCK -> atlasText("Stock", "Stock", "المخزون")
+    else -> atlasText("Opérateur", "Operator", "مشغّل")
 }
 
 @Composable

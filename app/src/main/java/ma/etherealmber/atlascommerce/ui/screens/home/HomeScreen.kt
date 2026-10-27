@@ -355,7 +355,12 @@ private fun HomeContent(
     // dashboard's financial fields after that protected endpoint has authorized us.
     val canDisplayFinance = isAdmin && state.finance != null
     val invoices = dashboard.recentInvoices.take(5)
-    val greeting = if (LocalTime.now(ZoneId.systemDefault()).hour in 5..17) "Bonjour" else "Bonsoir"
+    val isDaytimeGreeting = LocalTime.now(ZoneId.systemDefault()).hour in 5..17
+    val greeting = if (isDaytimeGreeting) {
+        atlasText("Bonjour", "Good morning", "صباح الخير")
+    } else {
+        atlasText("Bonsoir", "Good evening", "مساء الخير")
+    }
 
     LazyColumn(
         contentPadding = PaddingValues(
