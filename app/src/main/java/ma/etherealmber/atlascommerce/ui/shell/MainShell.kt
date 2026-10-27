@@ -299,7 +299,7 @@ fun MainShell(
     }
     val switchTab: (MainTab) -> Unit = { target ->
         if (target == MainTab.SALE && !Roles.canCreateDocuments(user.role)) {
-            onToast(atlasText("Accès Vente réservé aux rôles Administrateur et Secrétaire."))
+            onToast("Accès Vente réservé aux rôles Administrateur et Secrétaire.")
         } else {
             if (roleTabs.contains(target)) setLastBottomTabName(target.name)
             setTabName(target.name)

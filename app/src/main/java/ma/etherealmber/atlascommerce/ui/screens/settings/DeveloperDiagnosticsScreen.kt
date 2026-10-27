@@ -174,7 +174,7 @@ fun DeveloperDiagnosticsScreen(
                         onClick = {
                             val clipboard = context.getSystemService(ClipboardManager::class.java)
                             clipboard?.setPrimaryClip(ClipData.newPlainText("Journaux Atlas assainis", logs))
-                            onToast(atlasText("Journaux de diagnostic copiés."))
+                            onToast("Journaux de diagnostic copiés.")
                         },
                         enabled = logs.isNotBlank() && !loadingLogs,
                     ) {

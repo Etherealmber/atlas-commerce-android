@@ -334,6 +334,7 @@ private val commonTranslations = mapOf(
     "Maximum 3 captures autorisées par rapport." to ("A maximum of 3 screenshots is allowed per report." to "يُسمح بثلاث لقطات شاشة كحد أقصى لكل تقرير."),
     "Journaux assainis copiés." to ("Sanitized logs copied." to "تم نسخ السجلات المنقحة."),
     "Partage indisponible sur cet appareil." to ("Sharing is unavailable on this device." to "المشاركة غير متاحة على هذا الجهاز."),
+    "Rapport reçu par Atlas. Impossible d'ouvrir le suivi sur cet appareil." to ("Atlas received the report. Could not open tracking on this device." to "استلم Atlas البلاغ. تعذّر فتح صفحة المتابعة على هذا الجهاز."),
     "Ouvrez Paramètres Android > Applications > Atlas Commerce > Notifications." to ("Open Android Settings > Apps > Atlas Commerce > Notifications." to "افتح إعدادات Android > التطبيقات > Atlas Commerce > الإشعارات."),
     "Client par défaut enregistré." to ("Default customer saved." to "تم حفظ العميل الافتراضي."),
     "Mode développeur activé. Ouverture des outils développeur." to ("Developer mode enabled. Opening developer tools." to "تم تفعيل وضع المطوّر. جارٍ فتح أدوات المطوّر."),
@@ -342,6 +343,10 @@ private val commonTranslations = mapOf(
     "L'administrateur doit configurer Firebase Crashlytics pour cette version." to ("The administrator must configure Firebase Crashlytics for this version." to "يجب على المسؤول إعداد Firebase Crashlytics لهذا الإصدار."),
     "Ouvrez Paramètres Android > Mots de passe et clés d'accès, puis choisissez un fournisseur." to ("Open Android Settings > Passwords and passkeys, then choose a provider." to "افتح إعدادات Android > كلمات المرور ومفاتيح المرور، ثم اختر مزوّداً."),
     "Aucun navigateur disponible." to ("No browser is available." to "لا يتوفر متصفح."),
+    "Impossible de lire le fichier." to ("Could not read the file." to "تعذّرت قراءة الملف."),
+    "Nouvelle discussion prête." to ("New conversation ready." to "المحادثة الجديدة جاهزة."),
+    "Réponse copiée." to ("Response copied." to "تم نسخ الرد."),
+    "La dictée Android est gratuite dans Atlas ; l'IA cloud peut entraîner des coûts ou quotas." to ("Android speech recognition is free in Atlas; cloud AI may incur costs or quotas." to "الإملاء الصوتي عبر Android مجاني في Atlas؛ وقد تترتب تكاليف أو حصص استخدام على الذكاء الاصطناعي السحابي."),
     "Journaux de diagnostic copiés." to ("Diagnostic logs copied." to "تم نسخ سجلات التشخيص."),
     "Accès Vente réservé aux rôles Administrateur et Secrétaire." to ("Sales access is restricted to Administrator and Secretary roles." to "الوصول إلى المبيعات مخصّص لدوري المسؤول والسكرتير."),
     "Votre rôle ne permet pas d'ajouter au panier de vente." to ("Your role cannot add items to the sales cart." to "لا يسمح دورك بإضافة منتجات إلى سلة المبيعات."),
@@ -530,14 +535,32 @@ fun atlasNotice(message: String, language: AppLanguage): String {
         AppLanguage.ENGLISH -> english
         AppLanguage.ARABIC -> arabic
     }
-    commonTranslations[message]?.let { (english, arabic) ->
-        return choose(message, english, arabic)
-    }
     fun template(pattern: Regex, render: (MatchResult) -> Triple<String, String, String>): String? {
         val match = pattern.matchEntire(message) ?: return null
         val (french, english, arabic) = render(match)
         return choose(french, english, arabic)
     }
+    commonTranslations[message]?.let { (english, arabic) ->
+        return choose(message, english, arabic)
+    }
+    template(Regex("^Seules les (\\d+) premières images ont été retenues \\(max 3\\)\\.$")) { m ->
+        Triple(m.value, "Only the first ${m.groupValues[1]} images were kept (maximum 3).", "تم الاحتفاظ بأول ${m.groupValues[1]} صور فقط (الحد الأقصى 3).")
+    }?.let { return it }
+    template(Regex("^Ticket GitHub créé et ouvert( · .+)?\\.$")) { m ->
+        Triple(m.value, "GitHub issue created and opened${m.groupValues[1]}.", "تم إنشاء بلاغ GitHub وفتحه${m.groupValues[1] ?: ""}.")
+    }?.let { return it }
+    template(Regex("^Ticket créé( · .+)?, mais aucun navigateur n'est disponible\\.$")) { m ->
+        Triple(m.value, "Issue created${m.groupValues[1]}, but no browser is available.", "تم إنشاء البلاغ${m.groupValues[1] ?: ""}، لكن لا يتوفر متصفح.")
+    }?.let { return it }
+    template(Regex("^Rapport reçu par Atlas( · .+)?\\. Le formulaire GitHub prérempli est ouvert; envoyez-le pour créer l'issue\\.$")) { m ->
+        Triple(m.value, "Atlas received the report${m.groupValues[1]}. The prefilled GitHub form is open; submit it to create the issue.", "استلم Atlas البلاغ${m.groupValues[1] ?: ""}. نموذج GitHub المعبأ مسبقاً مفتوح؛ أرسله لإنشاء البلاغ.")
+    }?.let { return it }
+    template(Regex("^Rapport reçu · (.+)\\. Impossible d'ouvrir le suivi sur cet appareil\\.$")) { m ->
+        Triple(m.value, "Report received · ${m.groupValues[1]}. Could not open tracking on this device.", "تم استلام البلاغ · ${m.groupValues[1]}. تعذّر فتح صفحة المتابعة على هذا الجهاز.")
+    }?.let { return it }
+    template(Regex("^Rapport reçu par Atlas\\. Impossible d'ouvrir le suivi sur cet appareil\\.$")) { m ->
+        Triple(m.value, "Atlas received the report. Could not open tracking on this device.", "استلم Atlas البلاغ. تعذّر فتح صفحة المتابعة على هذا الجهاز.")
+    }?.let { return it }
     return template(Regex("^(.+) · ajouté automatiquement au panier$")) { m ->
         Triple(m.value, "${m.groupValues[1]} · added to cart automatically", "${m.groupValues[1]} · أُضيف تلقائياً إلى السلة")
     } ?: template(Regex("^(.+) · ajouté au panier$")) { m ->

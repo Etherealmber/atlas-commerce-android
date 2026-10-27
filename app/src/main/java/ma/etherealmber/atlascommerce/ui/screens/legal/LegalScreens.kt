@@ -154,16 +154,12 @@ fun ProblemReportDialog(
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         val remainingSlots = DiagnosticReporter.MAX_ATTACHMENTS - attachments.size
         if (remainingSlots <= 0) {
-            onToast(atlasText("Maximum 3 captures autorisées par rapport."))
+            onToast("Maximum 3 captures autorisées par rapport.")
             return@rememberLauncherForActivityResult
         }
         val selected = uris.take(remainingSlots)
         if (uris.size > remainingSlots) {
-            onToast(atlasText(
-                "Seules les $remainingSlots premières images ont été retenues (max 3).",
-                "Only the first $remainingSlots images were kept (maximum 3).",
-                "تم الاحتفاظ بأول $remainingSlots صور فقط (الحد الأقصى 3).",
-            ))
+            onToast("Seules les $remainingSlots premières images ont été retenues (max 3).")
         }
         scope.launch {
             compressing = true
@@ -402,7 +398,7 @@ fun ProblemReportDialog(
                                 onClick = {
                                     val clipboard = context.getSystemService(ClipboardManager::class.java)
                                     clipboard?.setPrimaryClip(ClipData.newPlainText("Journaux Atlas assainis", logsPreview))
-                                    onToast(atlasText("Journaux assainis copiés."))
+                                    onToast("Journaux assainis copiés.")
                                 },
                                 enabled = logsPreview.isNotBlank() && !loadingLogs,
                             ) {
@@ -472,7 +468,7 @@ fun ProblemReportDialog(
                                     attachments = attachments.toList(),
                                 )
                             ) {
-                                onToast(atlasText("Partage indisponible sur cet appareil."))
+                                onToast("Partage indisponible sur cet appareil.")
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -541,31 +537,11 @@ fun ProblemReportDialog(
                                 val opened = openExternal(context, issueUrl ?: fallbackIssueUrl)
                                 onToast(
                                     when {
-                                        created && opened -> atlasText(
-                                            "Ticket GitHub créé et ouvert${reference?.let { " · $it" } ?: ""}.",
-                                            "GitHub issue created and opened${reference?.let { " · $it" } ?: ""}.",
-                                            "تم إنشاء بلاغ GitHub وفتحه${reference?.let { " · $it" } ?: ""}.",
-                                        )
-                                        created -> atlasText(
-                                            "Ticket créé${reference?.let { " · $it" } ?: ""}, mais aucun navigateur n'est disponible.",
-                                            "Issue created${reference?.let { " · $it" } ?: ""}, but no browser is available.",
-                                            "تم إنشاء البلاغ${reference?.let { " · $it" } ?: ""}، لكن لا يتوفر متصفح.",
-                                        )
-                                        opened -> atlasText(
-                                            "Rapport reçu par Atlas${reference?.let { " · $it" } ?: ""}. Le formulaire GitHub prérempli est ouvert; envoyez-le pour créer l'issue.",
-                                            "Atlas received the report${reference?.let { " · $it" } ?: ""}. The prefilled GitHub form is open; submit it to create the issue.",
-                                            "استلم Atlas البلاغ${reference?.let { " · $it" } ?: ""}. نموذج GitHub المعبأ مسبقاً مفتوح؛ أرسله لإنشاء البلاغ.",
-                                        )
-                                        reference != null -> atlasText(
-                                            "Rapport reçu · $reference. Impossible d'ouvrir le suivi sur cet appareil.",
-                                            "Report received · $reference. Could not open tracking on this device.",
-                                            "تم استلام البلاغ · $reference. تعذّر فتح صفحة المتابعة على هذا الجهاز.",
-                                        )
-                                        else -> atlasText(
-                                            "Rapport reçu par Atlas. Impossible d'ouvrir le suivi sur cet appareil.",
-                                            "Atlas received the report. Could not open tracking on this device.",
-                                            "استلم Atlas البلاغ. تعذّر فتح صفحة المتابعة على هذا الجهاز.",
-                                        )
+                                        created && opened -> "Ticket GitHub créé et ouvert${reference?.let { " · $it" } ?: ""}."
+                                        created -> "Ticket créé${reference?.let { " · $it" } ?: ""}, mais aucun navigateur n'est disponible."
+                                        opened -> "Rapport reçu par Atlas${reference?.let { " · $it" } ?: ""}. Le formulaire GitHub prérempli est ouvert; envoyez-le pour créer l'issue."
+                                        reference != null -> "Rapport reçu · $reference. Impossible d'ouvrir le suivi sur cet appareil."
+                                        else -> "Rapport reçu par Atlas. Impossible d'ouvrir le suivi sur cet appareil."
                                     },
                                 )
                                 onDismiss()

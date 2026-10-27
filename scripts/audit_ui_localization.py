@@ -75,6 +75,11 @@ LOCALIZED_NOTICE_TEMPLATES = {
     "{value} révoqué.",
     "Données locales supprimées.{value} Les données de l'entreprise sur le serveur n'ont pas été modifiées.",
     "{value} rapport(s) PDF temporaire(s) supprimé(s).",
+    "Seules les {value} premières images ont été retenues (max 3).",
+    "Ticket GitHub créé et ouvert{value}.",
+    "Ticket créé{value}, mais aucun navigateur n'est disponible.",
+    "Rapport reçu par Atlas{value}. Le formulaire GitHub prérempli est ouvert; envoyez-le pour créer l'issue.",
+    "Rapport reçu · {value}. Impossible d'ouvrir le suivi sur cet appareil.",
 }
 
 catalog_source = (UI_ROOT / "i18n/AtlasLocalization.kt").read_text(encoding="utf-8")
@@ -213,6 +218,15 @@ for path in sorted(UI_ROOT.rglob("*.kt")):
                         joined_matches_catalog = static_joined in CATALOG_KEYS
                         copy_literals = [
                             (literal, localized or joined_matches_catalog or ("$" not in value and value in CATALOG_KEYS), value)
+                            for literal, localized, value in copy_literals
+                        ]
+                    if widget in {"onToast", "Toast.makeText"}:
+                        copy_literals = [
+                            (
+                                literal,
+                                localized or value in CATALOG_KEYS or re.sub(r"\$\{(?:[^{}]|\{[^{}]*\})*\}|\$[A-Za-z_]\w*", "{value}", value) in LOCALIZED_NOTICE_TEMPLATES,
+                                value,
+                            )
                             for literal, localized, value in copy_literals
                         ]
                     interpolated = any("$" in value for _, _, value in copy_literals)

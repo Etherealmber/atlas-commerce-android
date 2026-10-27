@@ -112,8 +112,8 @@ fun BalanceScreen(
             runCatching {
                 context.contentResolver.openOutputStream(uri, "wt")?.use { out -> file.inputStream().buffered().use { it.copyTo(out) } }
                     ?: error("Impossible d'écrire le PDF sélectionné.")
-            }.onSuccess { onToast(atlasText("Copie PDF enregistrée.")) }
-                .onFailure { onToast(atlasText("Impossible d'enregistrer le PDF.")) }
+            }.onSuccess { onToast("Copie PDF enregistrée.") }
+                .onFailure { onToast("Impossible d'enregistrer le PDF.") }
         }
         pendingPdfFile = null
     }
@@ -175,7 +175,7 @@ fun BalanceScreen(
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
                     context.startActivity(Intent.createChooser(intent, "Partager le rapport PDF"))
-                }.onFailure { onToast(atlasText("Impossible de partager le PDF.")) }
+                }.onFailure { onToast("Impossible de partager le PDF.") }
             },
             onSave = {
                 pendingPdfFile = file
@@ -184,7 +184,7 @@ fun BalanceScreen(
             onDelete = {
                 file.delete()
                 pdfViewerFile = null
-                onToast(atlasText("Rapport temporaire supprimé."))
+                onToast("Rapport temporaire supprimé.")
             },
         )
     }
@@ -199,7 +199,7 @@ fun BalanceScreen(
                     when (result) {
                         is ApiResult.Success -> {
                             showEntryDialog = false
-                            onToast(atlasText("Écriture enregistrée dans la balance."))
+                            onToast("Écriture enregistrée dans la balance.")
                         }
                         is ApiResult.Failure -> onToast(result.message)
                     }
@@ -468,7 +468,7 @@ fun BalanceScreen(
                                         when (result) {
                                             is ApiResult.Success -> {
                                                 pdfViewerFile = result.data
-                                                onToast(atlasText("PDF téléchargé et ouvert dans Atlas."))
+                                                onToast("PDF téléchargé et ouvert dans Atlas.")
                                             }
                                             is ApiResult.Failure -> onToast(result.message)
                                         }

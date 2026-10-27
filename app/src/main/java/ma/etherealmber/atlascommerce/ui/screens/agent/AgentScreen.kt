@@ -188,7 +188,7 @@ fun AgentScreen(
         if (uri != null) scope.launch {
             readAgentAttachment(context, uri).fold(
                 onSuccess = viewModel::addAttachment,
-                onFailure = { error -> onToast(error.message?.takeIf { it.isNotBlank() } ?: atlasText("Impossible de lire le fichier.", "Could not read the file.", "تعذّرت قراءة الملف.")) },
+                onFailure = { error -> onToast(error.message?.takeIf { it.isNotBlank() } ?: "Impossible de lire le fichier.") },
             )
         }
     }
@@ -386,7 +386,7 @@ fun AgentScreen(
                                     }
                                     IconButton(onClick = {
                                         viewModel.startNewConversation()
-                                        onToast(atlasText("Nouvelle discussion prête.", "New conversation ready.", "المحادثة الجديدة جاهزة."))
+                                        onToast("Nouvelle discussion prête.")
                                     }) {
                                         Icon(Icons.Outlined.AddComment, contentDescription = atlasText("Nouvelle discussion", "New conversation", "محادثة جديدة"))
                                     }
@@ -512,7 +512,7 @@ fun AgentScreen(
                             onCopy = {
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                 cm?.setPrimaryClip(ClipData.newPlainText("Atlas Agent", msg.text))
-                                onToast(atlasText("Réponse copiée.", "Response copied.", "تم نسخ الرد."))
+                                onToast("Réponse copiée.")
                             },
                             onApprove = { proposalId -> viewModel.approveProposal(msg.id, proposalId) },
                         )
@@ -526,7 +526,7 @@ fun AgentScreen(
                                 onCopy = {
                                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                     cm?.setPrimaryClip(ClipData.newPlainText("Atlas Agent", state.streamingReply))
-                                    onToast(atlasText("Réponse copiée.", "Response copied.", "تم نسخ الرد."))
+                                    onToast("Réponse copiée.")
                                 },
                                 onApprove = {},
                                 isStreaming = state.sending,
@@ -627,11 +627,7 @@ fun AgentScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 IconButton(
                                     onClick = {
-                                        onToast(atlasText(
-                                            "La dictée Android est gratuite dans Atlas ; l'IA cloud peut entraîner des coûts ou quotas.",
-                                            "Android dictation is free in Atlas; cloud AI may have costs or quotas.",
-                                            "الإملاء عبر Android مجاني في Atlas؛ وقد تترتب تكاليف أو حصص على الذكاء الاصطناعي السحابي.",
-                                        ))
+                                        onToast("La dictée Android est gratuite dans Atlas ; l'IA cloud peut entraîner des coûts ou quotas.")
                                     },
                                     modifier = Modifier.size(40.dp),
                                 ) {

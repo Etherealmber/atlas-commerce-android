@@ -454,7 +454,7 @@ fun ProfileScreen(
                             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                                 .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
                         )
-                    }.onFailure { onToast(atlasText("Ouvrez Paramètres Android > Applications > Atlas Commerce > Notifications.")) }
+                    }.onFailure { onToast("Ouvrez Paramètres Android > Applications > Atlas Commerce > Notifications.") }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -536,7 +536,7 @@ fun ProfileScreen(
                         imeAction = ImeAction.Done,
                         onDone = {
                             appViewModel.setDefaultClientName(draftClientName)
-                            onToast(atlasText("Client par défaut enregistré."))
+                            onToast("Client par défaut enregistré.")
                         },
                         modifier = Modifier.weight(1f),
                     )
@@ -545,7 +545,7 @@ fun ProfileScreen(
                         text = atlasText("OK"),
                         onClick = {
                             appViewModel.setDefaultClientName(draftClientName)
-                            onToast(atlasText("Client par défaut enregistré."))
+                            onToast("Client par défaut enregistré.")
                         },
                     )
                 }
@@ -699,10 +699,10 @@ fun SettingsScreen(
             val enabled = !developerModeEnabled
             appViewModel.setDeveloperModeEnabled(enabled)
             if (enabled) {
-                onToast(atlasText("Mode développeur activé. Ouverture des outils développeur."))
+                onToast("Mode développeur activé. Ouverture des outils développeur.")
                 onOpenDeveloperTools()
             } else {
-                onToast(atlasText("Mode développeur désactivé."))
+                onToast("Mode développeur désactivé.")
             }
         }
     }
@@ -927,7 +927,7 @@ fun SettingsScreen(
                 onDownload = onStartUpdateDownload,
                 onInstall = {
                     if (!appViewModel.installDownloadedUpdate(context)) {
-                        onToast(atlasText("Impossible d'ouvrir l'installateur sur cet appareil."))
+                        onToast("Impossible d'ouvrir l'installateur sur cet appareil.")
                     }
                 },
             )
@@ -1109,7 +1109,7 @@ fun SettingsScreen(
                     icon = Icons.Outlined.BugReport,
                     title = "Rapports automatiques de plantage",
                     subtitle = "Indisponible : cette version n'est pas configurée avec Firebase Crashlytics.",
-                    onClick = { onToast(atlasText("L'administrateur doit configurer Firebase Crashlytics pour cette version.")) },
+                    onClick = { onToast("L'administrateur doit configurer Firebase Crashlytics pour cette version.") },
                 )
             }
             AtlasDivider(Modifier.padding(vertical = 8.dp))
@@ -1197,7 +1197,7 @@ fun SettingsScreen(
                             val openedCredentialSettings = runCatching { context.startActivity(credentialSettings) }.isSuccess
                             if (!openedCredentialSettings) {
                                 runCatching { context.startActivity(securitySettings) }
-                                    .onFailure { onToast(atlasText("Ouvrez Paramètres Android > Mots de passe et clés d'accès, puis choisissez un fournisseur.")) }
+                                    .onFailure { onToast("Ouvrez Paramètres Android > Mots de passe et clés d'accès, puis choisissez un fournisseur.") }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -1255,7 +1255,7 @@ fun SettingsScreen(
                 subtitle = "github.com/${AppDetails.GITHUB_HANDLE}",
                 onClick = {
                     if (!openExternal(context, AppDetails.GITHUB_PROFILE_URL)) {
-                        onToast(atlasText("Aucun navigateur disponible."))
+                        onToast("Aucun navigateur disponible.")
                     }
                 },
             )
@@ -1265,7 +1265,7 @@ fun SettingsScreen(
                 subtitle = "Etherealmber/atlas-commerce",
                 onClick = {
                     if (!openExternal(context, AppDetails.WEB_REPO)) {
-                        onToast(atlasText("Aucun navigateur disponible."))
+                        onToast("Aucun navigateur disponible.")
                     }
                 },
             )
@@ -1275,7 +1275,7 @@ fun SettingsScreen(
                 subtitle = "Etherealmber/atlas-commerce-android",
                 onClick = {
                     if (!openExternal(context, AppDetails.PROJECT_REPO)) {
-                        onToast(atlasText("Aucun navigateur disponible."))
+                        onToast("Aucun navigateur disponible.")
                     }
                 },
             )

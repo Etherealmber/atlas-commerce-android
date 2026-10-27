@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.components
 
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import android.content.Context
 import android.graphics.Bitmap
@@ -13,6 +15,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import ma.etherealmber.atlascommerce.BuildConfig
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -249,6 +252,7 @@ fun CombinedReportWebViewDialog(
 ) {
     BackHandler(onBack = onDismiss)
     val context = LocalContext.current
+    val atlasLanguage = LocalAtlasLanguage.current
     val originUri = Uri.parse(url)
     val permittedScheme = originUri.scheme == "https" || (BuildConfig.ALLOW_CLEARTEXT && originUri.scheme == "http")
     val permittedHost = originUri.host?.lowercase().orEmpty()
@@ -285,7 +289,7 @@ fun CombinedReportWebViewDialog(
                         Text(atlasText("Rapports · $activeTitle", "Reports · $activeTitle", "التقارير · $activeTitle"), style = MaterialTheme.typography.titleMedium, maxLines = 1)
                         Text(atlasText("$periodSummary · consultation sécurisée", "$periodSummary · secure view", "$periodSummary · عرض آمن"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
-                    IconButton(onClick = { printReport(context, webView, activeTitle) }, enabled = webView != null) {
+                    IconButton(onClick = { printReport(context, webView, activeTitle, atlasLanguage) }, enabled = webView != null) {
                         Icon(Icons.Outlined.Print, contentDescription = atlasText("Imprimer ou enregistrer en PDF"))
                     }
                 }
@@ -365,7 +369,7 @@ private fun reportSectionUrl(origin: Uri, section: FinanceReportSection): String
     return builder.build().toString()
 }
 
-private fun printReport(context: Context, webView: WebView?, title: String) {
+private fun printReport(context: Context, webView: WebView?, title: String, language: AppLanguage) {
     val view = webView ?: return
     runCatching {
         val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
@@ -374,5 +378,5 @@ private fun printReport(context: Context, webView: WebView?, title: String) {
             view.createPrintDocumentAdapter(title),
             PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build(),
         )
-    }.onFailure { Toast.makeText(context, atlasText("Impossible d'ouvrir l'impression."), Toast.LENGTH_LONG).show() }
+    }.onFailure { Toast.makeText(context, atlasNotice("Impossible d'ouvrir l'impression.", language), Toast.LENGTH_LONG).show() }
 }

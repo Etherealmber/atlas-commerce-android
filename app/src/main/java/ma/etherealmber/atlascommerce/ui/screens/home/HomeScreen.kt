@@ -167,8 +167,8 @@ fun HomeScreen(
                 context.contentResolver.openOutputStream(destinationUri, "wt")?.use { output ->
                     file.inputStream().buffered().use { input -> input.copyTo(output) }
                 } ?: error("Impossible d'écrire le fichier choisi.")
-            }.onSuccess { onToast(atlasText("Copie PDF enregistrée.")) }
-                .onFailure { onToast(atlasText("Impossible d'enregistrer le PDF.")) }
+            }.onSuccess { onToast("Copie PDF enregistrée.") }
+                .onFailure { onToast("Impossible d'enregistrer le PDF.") }
         }
         pendingReportFile = null
     }
@@ -193,7 +193,7 @@ fun HomeScreen(
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "Partager le rapport PDF"))
-                }.onFailure { onToast(atlasText("Impossible de partager le PDF.")) }
+                }.onFailure { onToast("Impossible de partager le PDF.") }
                 pendingReportFile = null
             },
             onSave = {
@@ -204,7 +204,7 @@ fun HomeScreen(
                 showReportActions = false
                 reportFile.delete()
                 pendingReportFile = null
-                onToast(atlasText("Rapport temporaire supprimé."))
+                onToast("Rapport temporaire supprimé.")
             },
         )
     }
@@ -222,15 +222,15 @@ fun HomeScreen(
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "Partager le rapport PDF"))
-                }.onFailure { onToast(atlasText("Impossible de partager le PDF.")) }
+                }.onFailure { onToast("Impossible de partager le PDF.") }
             },
             onSave = { pendingReportFile = reportFile; saveReportLauncher.launch(reportFile.name) },
-            onDelete = { reportFile.delete(); pdfViewerFile = null; onToast(atlasText("Rapport temporaire supprimé.")) },
+            onDelete = { reportFile.delete(); pdfViewerFile = null; onToast("Rapport temporaire supprimé.") },
         )
     }
 
     LaunchedEffect(state.offline) {
-        if (state.offline) onToast(atlasText("Hors ligne — dernières données affichées."))
+        if (state.offline) onToast("Hors ligne — dernières données affichées.")
     }
 
     when {
