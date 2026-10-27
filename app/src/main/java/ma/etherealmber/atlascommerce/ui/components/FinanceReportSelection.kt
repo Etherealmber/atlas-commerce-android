@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.components
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import android.app.DatePickerDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -116,7 +117,7 @@ fun FinanceReportSelectionDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
-                Text("Personnaliser le rapport", style = MaterialTheme.typography.titleLarge)
+                Text(atlasText("Personnaliser le rapport"), style = MaterialTheme.typography.titleLarge)
             }
         },
         text = {
@@ -127,8 +128,8 @@ fun FinanceReportSelectionDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("Choisissez une période et les rubriques à consulter.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("PÉRIODE", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text(atlasText("Choisissez une période et les rubriques à consulter."), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(atlasText("PÉRIODE"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     presets.chunked(2).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -156,21 +157,21 @@ fun FinanceReportSelectionDialog(
                             }
                         }
                         if (!customRangeValid) {
-                            Text("Vérifiez les dates : début avant fin, et aucune date future.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            Text(atlasText("Vérifiez les dates : début avant fin, et aucune date future."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                         }
                     }
                 } else {
                     Text(
                         text = when (period) {
-                            "year" -> "Du 1er janvier à aujourd'hui, selon le fuseau financier du serveur."
-                            "month" -> "Mois en cours jusqu'à aujourd'hui ; les périodes passées couvrent le mois complet."
-                            else -> "Période calculée par le serveur dans le fuseau financier configuré."
+                            "year" -> atlasText("Du 1er janvier à aujourd'hui, selon le fuseau financier du serveur.")
+                            "month" -> atlasText("Mois en cours jusqu'à aujourd'hui ; les périodes passées couvrent le mois complet.")
+                            else -> atlasText("Période calculée par le serveur dans le fuseau financier configuré.")
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Text("RUBRIQUES", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text(atlasText("RUBRIQUES"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 FinanceReportSection.entries.chunked(2).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         row.forEach { report ->
@@ -187,7 +188,7 @@ fun FinanceReportSelectionDialog(
                     }
                 }
                 Text(
-                    "Le lien d'accès est temporaire (30 min). Les rubriques sélectionnées s'ouvrent dans Atlas.",
+                    atlasText("Le lien d'accès est temporaire (30 min). Les rubriques sélectionnées s'ouvrent dans Atlas."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -195,10 +196,10 @@ fun FinanceReportSelectionDialog(
         },
         confirmButton = {
             Button(onClick = { onGenerate(FinanceReportSelection(period, from.takeIf { period == "custom" }, to.takeIf { period == "custom" }, selectedSections.toList())) }, enabled = canGenerate) {
-                Text("Préparer")
+                Text(atlasText("Préparer"))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(atlasText("Annuler")) } },
     )
 }
 
@@ -256,28 +257,36 @@ fun FinanceReportActionsDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(10.dp))
-                    Text("Rapport prêt", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, contentDescription = "Fermer") }
+                    Text(atlasText("Rapport prêt"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, contentDescription = atlasText("Fermer")) }
                 }
-                Text("${fileName}\nPDF temporaire conservé en privé sur cet appareil pendant 7 jours maximum.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    atlasText(
+                        "${fileName}\nPDF temporaire conservé en privé sur cet appareil pendant 7 jours maximum.",
+                        "${fileName}\nTemporary PDF is stored privately on this device for up to 7 days.",
+                        "${fileName}\nيُحفظ ملف PDF مؤقتاً وبشكل خاص على هذا الجهاز لمدة تصل إلى 7 أيام.",
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(4.dp))
                 Button(onClick = onRead, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 14.dp)) {
-                    Text("Lire dans Atlas", fontWeight = FontWeight.SemiBold)
+                    Text(atlasText("Lire dans Atlas"), fontWeight = FontWeight.SemiBold)
                 }
                 OutlinedButton(onClick = onShare, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 12.dp)) {
                     Icon(Icons.Outlined.Share, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Partager le PDF")
+                    Text(atlasText("Partager le PDF"))
                 }
                 OutlinedButton(onClick = onSave, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 12.dp)) {
                     Icon(Icons.Outlined.FileDownload, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Enregistrer une copie")
+                    Text(atlasText("Enregistrer une copie"))
                 }
                 TextButton(onClick = onDelete, modifier = Modifier.align(Alignment.End), colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
                     Icon(Icons.Outlined.DeleteOutline, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
-                    Text("Supprimer le rapport temporaire")
+                    Text(atlasText("Supprimer le rapport temporaire"))
                 }
             }
         }

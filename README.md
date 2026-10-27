@@ -127,19 +127,17 @@ Version numbers and releases are **never** bumped or published automatically on 
    - **`repo_url`** *(optional)* — custom GitHub repository URL (defaults to `https://github.com/Etherealmber/atlas-commerce-android` if left blank)
    - **`cdn_url`** *(optional)* — custom CDN base URL (defaults to `https://cdn1.afmarbre.com/app-updates/android` if left blank)
    - **`release_notes`** *(optional)* — custom short note (concise minimal notes are generated in `latest.json` automatically if left blank)
-3. The workflow compiles & signs **a single APK (`atlas-commerce.apk`)**, verifies launch & upgrade on an **Android 14 (API 34)** emulator, syncs `app/build.gradle.kts`, publishes the GitHub Release, and syncs `CDN 1`.
+3. The workflow compiles & signs **a single APK (`atlas-commerce.apk`)**, verifies launch & upgrade on an **Android 14 (API 34)** emulator, syncs `app/build.gradle.kts`, publishes the GitHub Release, and submits the release to the policy-aware backend Worker. Update checks query the configured backend at `GET /api/app/android-update` and also inspect CDN 1 and GitHub `latest.json`; the backend minimum-version policy is retained when evaluating mirror manifests.
+4. Direct R2 writes of `latest.json` are intentionally disabled: a generated release manifest does not contain backend-owned minimum-version policy. If Worker ingestion is unavailable, the workflow leaves CDN metadata unchanged and GitHub Releases remains available; it does not publish a policy-stripped manifest.
 
 ### 2. Fixing Cloudflare `403 Just a moment...` on `CDN 1` Upload (30-Second Setup)
-If Cloudflare Zone Bot Fight Mode challenges `POST /api/admin/android-release` from GitHub Actions runners (`HTTP 403 Just a moment...`), use **either** of these two permanent options (both already supported automatically in `.github/workflows/android.yml`):
+If Cloudflare Zone Bot Fight Mode challenges `POST /api/admin/android-release` from GitHub Actions runners (`HTTP 403 Just a moment...`), add a WAF Skip rule for the authenticated release-ingestion route:
 
-- **Option A — Direct Cloudflare API Token (Recommended, Zero WAF Involvement)**:
-  1. In Cloudflare Dashboard → **My Profile → API Tokens → Create Token**, grant **Account → Workers R2 Storage → Edit** on bucket `company-stock-images`.
-  2. Add repository secret **`CLOUDFLARE_API_TOKEN`** (and **`CLOUDFLARE_ACCOUNT_ID`**) in `Settings → Secrets and variables → Actions`. The workflow uploads `atlas-commerce-v<ver>.apk`, `latest.apk`, and `latest.json` straight to R2!
-- **Option B — One Cloudflare WAF Skip Rule**:
-  1. In Cloudflare Dashboard → **Security → WAF → Custom rules → Create rule**:
-     - Expression: `(http.request.uri.path eq "/api/admin/android-release")`
-     - Action: **Skip** → check *All remaining custom rules* + *All Super Bot Fight Mode rules*.
-  2. The endpoint remains protected by `Authorization: Bearer <ATLAS_RELEASE_UPLOAD_TOKEN>`.
+1. In Cloudflare Dashboard → **Security → WAF → Custom rules → Create rule**:
+   - Expression: `(http.request.uri.path eq "/api/admin/android-release")`
+   - Action: **Skip** → check *All remaining custom rules* + *All Super Bot Fight Mode rules*.
+2. The endpoint remains protected by `Authorization: Bearer <ATLAS_RELEASE_UPLOAD_TOKEN>` (and optional Cloudflare Access service-token headers).
+3. The workflow verifies GitHub Release and public CDN `latest.json` separately, records the policy fields observed, and fails the publish job if a successful Worker ingestion does not produce matching CDN release metadata with minimum-version fields.
 
 ### 3. Automated Bug & Health Issue Creator (`.github/workflows/bug-hunter.yml`)
 - Runs automatically twice every week **and** on demand under **Actions → Bug & Health Audit (Auto Issue Creator) → Run workflow**.

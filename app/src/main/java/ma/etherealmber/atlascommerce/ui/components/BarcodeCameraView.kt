@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.components
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import android.annotation.SuppressLint
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -119,7 +120,7 @@ fun BarcodeCameraView(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = "Caméra en veille",
+                text = atlasText("Caméra en veille"),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (style == CameraVisualStyle.QR_DEVICE_SECURITY) {
                     Color(0xFF94A3B8)
@@ -264,7 +265,7 @@ fun BarcodeCameraView(
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             ) {
                 Text(
-                    text = "QR SÉCURITÉ POSTE PC UNIQUEMENT",
+                    text = atlasText("QR SÉCURITÉ POSTE PC UNIQUEMENT"),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF38BDF8),
@@ -281,7 +282,7 @@ fun BarcodeCameraView(
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             ) {
                 Text(
-                    text = "Alignez le code-barres produit dans le cadre",
+                    text = atlasText("Alignez le code-barres produit dans le cadre"),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                 )

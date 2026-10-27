@@ -131,9 +131,15 @@ fun HomeScreen(
     if (showCombinedReportConfirm) {
         AlertDialog(
             onDismissRequest = { showCombinedReportConfirm = false },
-            title = { Text("Ouvrir le pack de rapports ?") },
+            title = { Text(atlasText("Ouvrir le pack de rapports ?")) },
             text = {
-                Text("${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. Atlas ouvrira les rubriques choisies avec un ticket temporaire de 30 minutes. Ne partagez pas le lien ni l'écran.")
+                Text(
+                    atlasText(
+                        "${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. Atlas ouvrira les rubriques choisies avec un ticket temporaire de 30 minutes. Ne partagez pas le lien ni l'écran.",
+                        "${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. Atlas will open the selected sections using a temporary 30-minute access token. Do not share the link or screen.",
+                        "${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. سيفتح Atlas الأقسام المحددة برمز وصول مؤقت لمدة 30 دقيقة. لا تشارك الرابط أو الشاشة.",
+                    ),
+                )
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -144,9 +150,9 @@ fun HomeScreen(
                             is ApiResult.Success -> combinedReportUrl = result.data
                         }
                     }
-                }) { Text("Continuer") }
+                }) { Text(atlasText("Continuer")) }
             },
-            dismissButton = { TextButton(onClick = { showCombinedReportConfirm = false }) { Text("Annuler") } },
+            dismissButton = { TextButton(onClick = { showCombinedReportConfirm = false }) { Text(atlasText("Annuler")) } },
         )
     }
     combinedReportUrl?.let { url ->
@@ -162,7 +168,7 @@ fun HomeScreen(
                     file.inputStream().buffered().use { input -> input.copyTo(output) }
                 } ?: error("Impossible d'écrire le fichier choisi.")
             }.onSuccess { onToast("Copie PDF enregistrée.") }
-                .onFailure { onToast("Enregistrement impossible : ${it.message.orEmpty()}") }
+                .onFailure { onToast("Impossible d'enregistrer le PDF.") }
         }
         pendingReportFile = null
     }
@@ -187,7 +193,7 @@ fun HomeScreen(
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "Partager le rapport PDF"))
-                }.onFailure { onToast("Impossible de partager le PDF : ${it.message.orEmpty()}") }
+                }.onFailure { onToast("Impossible de partager le PDF.") }
                 pendingReportFile = null
             },
             onSave = {
@@ -216,7 +222,7 @@ fun HomeScreen(
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "Partager le rapport PDF"))
-                }.onFailure { onToast("Impossible de partager le PDF : ${it.message.orEmpty()}") }
+                }.onFailure { onToast("Impossible de partager le PDF.") }
             },
             onSave = { pendingReportFile = reportFile; saveReportLauncher.launch(reportFile.name) },
             onDelete = { reportFile.delete(); pdfViewerFile = null; onToast("Rapport temporaire supprimé.") },
@@ -292,36 +298,40 @@ private fun HomeErrorContent(
         }
         item {
             AtlasErrorCard(
-                title = "Tableau de bord indisponible",
+                title = atlasText("Tableau de bord indisponible", "Dashboard unavailable", "لوحة المعلومات غير متاحة"),
                 message = message,
                 onRetry = onRetry,
             )
         }
         item {
             AtlasCard {
-                Text("Que faire maintenant ?", style = MaterialTheme.typography.titleSmall)
+                Text(atlasText("Que faire maintenant ?", "What can I do now?", "ماذا يمكنني أن أفعل الآن؟"), style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Vous pouvez consulter le catalogue hors ligne ou scanner un article en attendant le retour de la connexion.",
+                    text = atlasText(
+                        "Vous pouvez consulter le catalogue hors ligne ou scanner un article en attendant le retour de la connexion.",
+                        "Browse the catalog offline or scan an item while waiting for the connection to return.",
+                        "يمكنك تصفح الكتالوج دون اتصال أو مسح منتج ضوئيًا حتى عودة الاتصال.",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AtlasOutlinedButton(
-                        text = "Produits",
+                        text = atlasText("Produits", "Products", "المنتجات"),
                         onClick = onOpenProducts,
                         icon = Icons.Outlined.Inventory2,
                     )
                     if (canSell) {
                         AtlasOutlinedButton(
-                            text = "Vente",
+                            text = atlasText("Vente", "Sales", "المبيعات"),
                             onClick = onOpenSale,
                             icon = Icons.Outlined.PointOfSale,
                         )
                     } else {
                         AtlasOutlinedButton(
-                            text = "Scanner",
+                            text = atlasText("Scanner", "Scan", "مسح ضوئي"),
                             onClick = onOpenScan,
                             icon = Icons.Outlined.QrCodeScanner,
                         )
@@ -382,7 +392,7 @@ private fun HomeContent(
                         color = MaterialTheme.colorScheme.onBackground,
                     )
                     Text(
-                        text = "Voici l'essentiel de votre activité.",
+                        text = atlasText("Voici l'essentiel de votre activité.", "Here is a snapshot of your business.", "إليك لمحة عن نشاطك التجاري."),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -400,7 +410,7 @@ private fun HomeContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Résumé du jour",
+                    text = atlasText("Résumé du jour", "Today's overview", "ملخص اليوم"),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -409,13 +419,13 @@ private fun HomeContent(
                 )
                 if (state.refreshing) {
                     Text(
-                        text = "Actualisation…",
+                        text = atlasText("Actualisation…", "Refreshing…", "جارٍ التحديث…"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
                     IconButton(onClick = onRefresh) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser")
+                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser", "Refresh", "تحديث"))
                     }
                 }
             }
@@ -460,7 +470,7 @@ private fun HomeContent(
                         )
                     }
                     AtlasOutlinedButton(
-                        text = "Produits",
+                        text = atlasText("Produits", "Products", "المنتجات"),
                         onClick = onOpenProducts,
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.Inventory2,
@@ -487,19 +497,23 @@ private fun HomeContent(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
-                                text = if (isAdmin) "Demandes & notifications" else "Notifications",
+                                text = if (isAdmin) atlasText("Demandes & notifications", "Requests & notifications", "الطلبات والإشعارات") else atlasText("Notifications", "Notifications", "الإشعارات"),
 
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = "Retrouvez ici vos demandes et notifications récentes.",
+                                text = atlasText(
+                                    "Retrouvez ici vos demandes et notifications récentes.",
+                                    "Your recent requests and notifications appear here.",
+                                    "ستظهر طلباتك وإشعاراتك الأخيرة هنا.",
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         AtlasChip(
-                            text = "Ouvrir",
+                            text = atlasText("Ouvrir", "Open", "فتح"),
                             tone = AtlasTone.INFO,
                         )
                     }
@@ -511,24 +525,24 @@ private fun HomeContent(
             AtlasEntrance(delayMillis = 105) {
                 Row(horizontalArrangement = Arrangement.spacedBy(density.itemGap)) {
                     AtlasStatTile(
-                        label = "Produits",
+                        label = atlasText("Produits", "Products", "المنتجات"),
                         value = AtlasFormat.integer(dashboard.productCount.toDouble()),
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.Inventory2,
                     )
                     if (canDisplayFinance) {
                         AtlasStatTile(
-                            label = "Valeur du stock",
+                            label = atlasText("Valeur du stock", "Inventory value", "قيمة المخزون"),
                             value = AtlasFormat.moneyCompact(dashboard.stockValue, state.currency),
                             modifier = Modifier.weight(1f),
                             icon = Icons.Outlined.TrendingUp,
                         )
                     } else {
                         AtlasStatTile(
-                            label = "Stock faible",
+                            label = atlasText("Stock faible", "Low stock", "مخزون منخفض"),
                             value = AtlasFormat.integer(dashboard.lowStockCount.toDouble()),
                             modifier = Modifier.weight(1f),
-                            hint = if (dashboard.lowStockCount > 0) "À vérifier" else "Optimal",
+                            hint = if (dashboard.lowStockCount > 0) atlasText("À vérifier", "Needs review", "يحتاج إلى مراجعة") else atlasText("Optimal", "Optimal", "مثالي"),
                             tone = if (dashboard.lowStockCount > 0) AtlasTone.WARNING else AtlasTone.POSITIVE,
                             icon = Icons.Outlined.Warning,
                         )
@@ -542,18 +556,18 @@ private fun HomeContent(
                 AtlasEntrance(delayMillis = 135) {
                     Row(horizontalArrangement = Arrangement.spacedBy(density.itemGap)) {
                         AtlasStatTile(
-                            label = "Stock faible",
+                            label = atlasText("Stock faible", "Low stock", "مخزون منخفض"),
                             value = AtlasFormat.integer(dashboard.lowStockCount.toDouble()),
                             modifier = Modifier.weight(1f),
-                            hint = if (dashboard.lowStockCount > 0) "À réapprovisionner" else "Tout est bon",
+                            hint = if (dashboard.lowStockCount > 0) atlasText("À réapprovisionner", "Reorder needed", "يلزم إعادة الطلب") else atlasText("Tout est bon", "All good", "كل شيء على ما يرام"),
                             tone = if (dashboard.lowStockCount > 0) AtlasTone.WARNING else AtlasTone.POSITIVE,
                             icon = Icons.Outlined.Warning,
                         )
                         AtlasStatTile(
-                            label = "Créances clients",
+                            label = atlasText("Créances clients", "Customer receivables", "مستحقات العملاء"),
                             value = AtlasFormat.moneyCompact(dashboard.unpaidSales.total, state.currency),
                             modifier = Modifier.weight(1f),
-                            hint = "${dashboard.unpaidSales.count} facture(s)",
+                            hint = atlasText("${dashboard.unpaidSales.count} facture(s)", "${dashboard.unpaidSales.count} invoice(s)", "${dashboard.unpaidSales.count} فاتورة"),
                             tone = if (dashboard.unpaidSales.overdue > 0) AtlasTone.DANGER else AtlasTone.INFO,
                             icon = Icons.Outlined.ReceiptLong,
                         )
@@ -596,13 +610,17 @@ private fun HomeContent(
             item {
                 AtlasCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        AtlasChip(text = "Alerte stock", tone = AtlasTone.WARNING, icon = Icons.Outlined.Warning)
+                        AtlasChip(text = atlasText("Alerte stock", "Low-stock alert", "تنبيه انخفاض المخزون"), tone = AtlasTone.WARNING, icon = Icons.Outlined.Warning)
                         Spacer(Modifier.weight(1f))
-                        TextButton(onClick = onOpenProducts) { Text("Voir") }
+                        TextButton(onClick = onOpenProducts) { Text(atlasText("Voir", "View", "عرض")) }
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "${dashboard.lowStockCount} produit(s) sont au niveau ou sous le seuil d'alerte.",
+                        text = atlasText(
+                        "${dashboard.lowStockCount} produit(s) sont au niveau ou sous le seuil d'alerte.",
+                        "${dashboard.lowStockCount} product(s) are at or below the low-stock threshold.",
+                        "${dashboard.lowStockCount} منتج عند حد المخزون المنخفض أو دونه.",
+                    ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -614,16 +632,16 @@ private fun HomeContent(
             item {
                 AtlasCard {
                     AtlasSectionHeader(
-                        title = "Derniers documents",
-                        subtitle = if (invoices.isEmpty()) null else "${invoices.size} récent(s)",
+                        title = atlasText("Derniers documents", "Recent documents", "المستندات الأخيرة"),
+                        subtitle = if (invoices.isEmpty()) null else atlasText("${invoices.size} récent(s)", "${invoices.size} recent", "${invoices.size} حديث"),
                     )
                     Spacer(Modifier.height(6.dp))
                     if (invoices.isEmpty()) {
                         AtlasEmptyState(
-                            title = "Aucun document",
-                            message = "Les ventes et factures apparaîtront ici.",
+                            title = atlasText("Aucun document", "No documents", "لا توجد مستندات"),
+                            message = atlasText("Les ventes et factures apparaîtront ici.", "Sales and invoices will appear here.", "ستظهر المبيعات والفواتير هنا."),
                             icon = Icons.Outlined.ReceiptLong,
-                            actionLabel = "Créer une vente",
+                            actionLabel = atlasText("Créer une vente", "Create a sale", "إنشاء عملية بيع"),
                             onAction = onOpenSale,
                         )
                     } else {
@@ -631,7 +649,7 @@ private fun HomeContent(
                             InvoiceRow(invoice = invoice, currency = state.currency)
                         }
                         Spacer(Modifier.height(4.dp))
-                        TextButton(onClick = onOpenProducts) { Text("Voir le catalogue") }
+                        TextButton(onClick = onOpenProducts) { Text(atlasText("Voir le catalogue", "View catalog", "عرض الكتالوج")) }
                     }
                 }
             }
@@ -650,8 +668,8 @@ private fun MonthlySalesTrendCard(points: List<MonthlyPointDto>, currency: Strin
     AtlasCard(padding = 14.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Tendance des ventes", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text("Données réelles · ${recent.size} périodes", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(atlasText("Tendance des ventes", "Sales trend", "اتجاه المبيعات"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(atlasText("Données réelles · ${recent.size} périodes", "Live data · ${recent.size} periods", "بيانات مباشرة · ${recent.size} فترة"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.Outlined.TrendingUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         }
@@ -803,9 +821,11 @@ private fun FinanceAdminCard(
     AtlasCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Solde & mouvements", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(atlasText("Solde & mouvements"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(
-                    text = summary?.timezone?.takeIf { it.isNotBlank() }?.let { "Relevé mensuel · $it" } ?: "Relevé mensuel",
+                    text = summary?.timezone?.takeIf { it.isNotBlank() }?.let {
+                        atlasText("Relevé mensuel · $it", "Monthly statement · $it", "الكشف الشهري · $it")
+                    } ?: atlasText("Relevé mensuel", "Monthly statement", "الكشف الشهري"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -814,16 +834,20 @@ private fun FinanceAdminCard(
                 androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             } else {
                 IconButton(onClick = onRefresh) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les finances")
+                    Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les finances"))
                 }
             }
         }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Période du relevé", style = MaterialTheme.typography.labelMedium)
+                Text(atlasText("Période du relevé"), style = MaterialTheme.typography.labelMedium)
                 Text(
-                    if (activePeriod == currentFinancePeriod) "Le mois en cours est disponible avant clôture." else "Consultez un mois passé ou en cours.",
+                    if (activePeriod == currentFinancePeriod) {
+                        atlasText("Le mois en cours est disponible avant clôture.", "The current month is available before closing.", "الشهر الحالي متاح قبل الإغلاق.")
+                    } else {
+                        atlasText("Consultez un mois passé ou en cours.", "View a past or current month.", "اعرض شهراً سابقاً أو الشهر الحالي.")
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -836,16 +860,20 @@ private fun FinanceAdminCard(
         }
         Spacer(Modifier.height(8.dp))
         AtlasDivider()
-        Text("Rapports PDF", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Text(atlasText("Rapports PDF"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
         Text(
-            "Relevé bancaire du mois sélectionné, y compris le mois en cours.",
+            atlasText("Relevé bancaire du mois sélectionné, y compris le mois en cours."),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(8.dp))
         AtlasOutlinedButton(
-            text = if (reportGenerating) "Préparation du relevé…" else "Télécharger le PDF · ${financeMonthLabel(activePeriod)}",
+            text = if (reportGenerating) {
+                atlasText("Préparation du relevé…", "Preparing statement…", "جارٍ إعداد الكشف…")
+            } else {
+                atlasText("Télécharger le PDF · ${financeMonthLabel(activePeriod)}", "Download PDF · ${financeMonthLabel(activePeriod)}", "تنزيل PDF · ${financeMonthLabel(activePeriod)}")
+            },
             onClick = { onExportReport(activePeriod) },
             enabled = !reportGenerating && !loading,
             modifier = Modifier.fillMaxWidth(),
@@ -853,14 +881,14 @@ private fun FinanceAdminCard(
         )
         Spacer(Modifier.height(6.dp))
         AtlasOutlinedButton(
-            text = "Pack rapports détaillés · ouvrir dans Atlas",
+            text = atlasText("Pack rapports détaillés · ouvrir dans Atlas"),
             onClick = onOpenCombinedReport,
             enabled = !reportGenerating && !loading,
             modifier = Modifier.fillMaxWidth(),
             icon = Icons.Outlined.ReceiptLong,
         )
         Text(
-            "Choisissez les rubriques et la période : mois, année en cours, derniers mois ou dates personnalisées. Le PDF bancaire reste mensuel.",
+            atlasText("Choisissez les rubriques et la période : mois, année en cours, derniers mois ou dates personnalisées. Le PDF bancaire reste mensuel."),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -868,14 +896,14 @@ private fun FinanceAdminCard(
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AtlasStatTile(
-                    label = "Solde clôture",
+                    label = atlasText("Solde clôture"),
                     value = AtlasFormat.moneyCompact(summary.closingBalance, summary.currency),
                     modifier = Modifier.weight(1f),
                     hint = "Ouverture ${AtlasFormat.moneyCompact(summary.openingBalance, summary.currency)}",
                     tone = AtlasTone.POSITIVE,
                 )
                 AtlasStatTile(
-                    label = "Paie à verser",
+                    label = atlasText("Paie à verser"),
                     value = AtlasFormat.moneyCompact(summary.payroll.totalDue, summary.currency),
                     modifier = Modifier.weight(1f),
                     hint = "${summary.payroll.employees} employé(s)",
@@ -885,14 +913,14 @@ private fun FinanceAdminCard(
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AtlasStatTile(
-                    label = "Clients à recevoir",
+                    label = atlasText("Clients à recevoir"),
                     value = AtlasFormat.moneyCompact(summary.receivables.totalOutstanding, summary.currency),
                     modifier = Modifier.weight(1f),
                     hint = "${summary.receivables.count} facture(s) · ${AtlasFormat.moneyCompact(summary.receivables.totalOverdue, summary.currency)} en retard",
                     tone = if (summary.receivables.totalOverdue > 0.0) AtlasTone.DANGER else AtlasTone.INFO,
                 )
                 AtlasStatTile(
-                    label = "Fournisseurs à payer",
+                    label = atlasText("Fournisseurs à payer"),
                     value = AtlasFormat.moneyCompact(summary.payables.totalOutstanding, summary.currency),
                     modifier = Modifier.weight(1f),
                     hint = "${summary.payables.count} facture(s) · ${AtlasFormat.moneyCompact(summary.payables.totalOverdue, summary.currency)} en retard",
@@ -921,7 +949,7 @@ private fun FinanceAdminCard(
             )
 
             Spacer(Modifier.height(8.dp))
-            Text("Équipe · paie à préparer", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(atlasText("Équipe · paie à préparer"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             when {
                 loading && payroll == null -> {
                     Spacer(Modifier.height(8.dp))
@@ -929,11 +957,11 @@ private fun FinanceAdminCard(
                 }
                 payroll == null && error != null -> {
                     Spacer(Modifier.height(4.dp))
-                    Text("La liste de paie n'a pas pu être chargée.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(atlasText("La liste de paie n'a pas pu être chargée."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 payroll == null || payroll.rows.isEmpty() -> {
                     Spacer(Modifier.height(4.dp))
-                    Text("Aucun versement dû pour cette période.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(atlasText("Aucun versement dû pour cette période."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 else -> payroll.rows.forEach { employee ->
                     AtlasDivider(Modifier.padding(vertical = 4.dp))
@@ -942,8 +970,10 @@ private fun FinanceAdminCard(
                             Text(employee.displayName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                             Text(
                                 text = buildString {
-                                    append("Échéance ${AtlasFormat.shortDate(employee.dueDate)}")
-                                    employee.lastPayment?.let { append(" · Dernier versement ${AtlasFormat.shortDate(it.paidAt)}") }
+                                    append(atlasText("Échéance ${AtlasFormat.shortDate(employee.dueDate)}", "Due ${AtlasFormat.shortDate(employee.dueDate)}", "الاستحقاق ${AtlasFormat.shortDate(employee.dueDate)}"))
+                                    employee.lastPayment?.let {
+                                        append(atlasText(" · Dernier versement ${AtlasFormat.shortDate(it.paidAt)}", " · Last payment ${AtlasFormat.shortDate(it.paidAt)}", " · آخر دفعة ${AtlasFormat.shortDate(it.paidAt)}"))
+                                    }
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -954,9 +984,9 @@ private fun FinanceAdminCard(
                             val isFutureDue = employee.status.equals("paid", ignoreCase = true) &&
                                 employee.dueDate?.let { it > payroll.asOf } == true
                             val statusLabel = when {
-                                isFutureDue -> "À venir"
-                                employee.status.equals("paid", ignoreCase = true) -> "Payé"
-                                else -> "À payer"
+                                isFutureDue -> atlasText("À venir", "Upcoming", "قادم")
+                                employee.status.equals("paid", ignoreCase = true) -> atlasText("Payé", "Paid", "مدفوع")
+                                else -> atlasText("À payer", "To pay", "مستحق الدفع")
                             }
                             AtlasChip(
                                 text = statusLabel,
@@ -974,7 +1004,7 @@ private fun FinanceAdminCard(
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "${payroll.rows.size} sur ${payroll.total} employés",
+                        atlasText("${payroll.rows.size} sur ${payroll.total} employés", "${payroll.rows.size} of ${payroll.total} employees", "${payroll.rows.size} من أصل ${payroll.total} موظف"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
@@ -983,7 +1013,7 @@ private fun FinanceAdminCard(
                         if (payrollLoadingMore) {
                             androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         } else {
-                            Text("Afficher plus")
+                            Text(atlasText("Afficher plus"))
                         }
                     }
                 }
@@ -993,9 +1023,17 @@ private fun FinanceAdminCard(
                 val currentMonth = activePeriod == currentFinancePeriod
                 Text(
                     text = if (currentMonth) {
-                        "Mois en cours · arrêté au ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}"
+                        atlasText(
+                            "Mois en cours · arrêté au ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}",
+                            "Current month · as of ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}",
+                            "الشهر الحالي · حتى ${AtlasFormat.shortDate(date)} · المصدر ${summary.reconciliation.source}",
+                        )
                     } else {
-                        "Période ${financeMonthLabel(activePeriod)} · données au ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}"
+                        atlasText(
+                            "Période ${financeMonthLabel(activePeriod)} · données au ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}",
+                            "Period ${financeMonthLabel(activePeriod)} · data as of ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}",
+                            "الفترة ${financeMonthLabel(activePeriod)} · البيانات حتى ${AtlasFormat.shortDate(date)} · المصدر ${summary.reconciliation.source}",
+                        )
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1003,7 +1041,7 @@ private fun FinanceAdminCard(
             }
         } else if (error == null && !loading) {
             Spacer(Modifier.height(6.dp))
-            Text("Aucune donnée financière reçue.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(atlasText("Aucune donnée financière reçue."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -1062,7 +1100,7 @@ private fun FinanceObligationsList(
     Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
     if (documents.isEmpty()) {
         Spacer(Modifier.height(4.dp))
-        Text("Aucun montant en attente.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(atlasText("Aucun montant en attente."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     documents.take(5).forEach { document ->
@@ -1091,9 +1129,9 @@ private fun FinanceObligationsList(
                 }
                 AtlasChip(
                     text = when (document.state.lowercase()) {
-                        "overdue" -> "En retard"
-                        "partial" -> "Partiel"
-                        else -> "À régler"
+                        "overdue" -> atlasText("En retard", "Overdue", "متأخر")
+                        "partial" -> atlasText("Partiel", "Partial", "جزئي")
+                        else -> atlasText("À régler", "To pay", "مستحق الدفع")
                     },
                     tone = tone,
                 )
@@ -1101,7 +1139,7 @@ private fun FinanceObligationsList(
         }
     }
     if (documents.size > 5) {
-        Text("${documents.size - 5} autre(s) document(s) dans le rapport.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(atlasText("${documents.size - 5} autre(s) document(s) dans le rapport.", "${documents.size - 5} more document(s) in the report.", "${documents.size - 5} مستندات إضافية في التقرير."), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1121,7 +1159,7 @@ private fun BalanceHero(
             .padding(18.dp),
     ) {
         Text(
-            text = "SOLDE DE TRÉSORERIE",
+            text = atlasText("SOLDE DE TRÉSORERIE"),
             style = MaterialTheme.typography.labelSmall,
             color = Color.White.copy(alpha = 0.68f),
         )
@@ -1154,13 +1192,17 @@ private fun OperationsHero(
             .padding(18.dp),
     ) {
         Text(
-            text = "CATALOGUE & STOCK",
+            text = atlasText("CATALOGUE & STOCK"),
             style = MaterialTheme.typography.labelSmall,
             color = Color.White.copy(alpha = 0.72f),
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "${AtlasFormat.integer(productCount.toDouble())} articles actifs",
+            text = atlasText(
+                "${AtlasFormat.integer(productCount.toDouble())} articles actifs",
+                "${AtlasFormat.integer(productCount.toDouble())} active products",
+                "${AtlasFormat.integer(productCount.toDouble())} منتج نشط",
+            ),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = Color.White,
@@ -1205,7 +1247,7 @@ private fun InvoiceRow(invoice: InvoiceDto, currency: String) {
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                text = invoice.number?.takeIf { it.isNotBlank() } ?: "Document #${invoice.id}",
+                text = invoice.number?.takeIf { it.isNotBlank() } ?: atlasText("Document #${invoice.id}", "Document #${invoice.id}", "مستند رقم ${invoice.id}"),
                 style = MaterialTheme.typography.titleSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

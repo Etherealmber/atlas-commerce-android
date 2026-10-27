@@ -236,13 +236,14 @@ fun AtlasCard(
     modifier: Modifier = Modifier,
     padding: Dp = Atlas.density.cardPadding,
     onClick: (() -> Unit)? = null,
+    animateSize: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val border = BorderStroke(1.dp, Atlas.palette.cardBorder)
     val shape = MaterialTheme.shapes.large
     val color = MaterialTheme.colorScheme.surface
     val motionEnabled = LocalAtlasAnimationsEnabled.current
-    val contentModifier = if (motionEnabled) {
+    val contentModifier = if (motionEnabled && animateSize) {
         Modifier
             .padding(padding)
             .animateContentSize(spring(dampingRatio = 0.88f, stiffness = 480f))
@@ -299,20 +300,20 @@ fun AtlasSectionHeader(
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                text = title,
+                text = atlasText(title),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             if (!subtitle.isNullOrBlank()) {
                 Text(
-                    text = subtitle,
+                    text = atlasText(subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
         if (actionLabel != null && onAction != null) {
-            TextButton(onClick = onAction) { Text(actionLabel) }
+            TextButton(onClick = onAction) { Text(atlasText(actionLabel)) }
         }
     }
 }
@@ -344,7 +345,7 @@ fun AtlasStatTile(
                     Spacer(Modifier.width(6.dp))
                 }
                 Text(
-                    text = label.uppercase(),
+                    text = atlasText(label).uppercase(),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -363,7 +364,7 @@ fun AtlasStatTile(
             if (!hint.isNullOrBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = hint,
+                    text = atlasText(hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = toneForeground(tone),
                     maxLines = 1,
@@ -400,7 +401,7 @@ fun AtlasChip(
                 Spacer(Modifier.width(4.dp))
             }
             Text(
-                text = text,
+                text = atlasText(text),
                 style = MaterialTheme.typography.labelSmall,
                 color = toneForeground(tone),
                 maxLines = 1,
@@ -455,7 +456,7 @@ fun AtlasButton(
             Spacer(Modifier.width(8.dp))
         }
         Text(
-            text = text,
+            text = atlasText(text),
             style = MaterialTheme.typography.labelLarge,
             textAlign = TextAlign.Center,
         )
@@ -497,7 +498,7 @@ fun AtlasOutlinedButton(
             Spacer(Modifier.width(8.dp))
         }
         Text(
-            text = text,
+            text = atlasText(text),
             style = MaterialTheme.typography.labelLarge,
             textAlign = TextAlign.Center,
         )
@@ -519,6 +520,7 @@ fun AtlasTextField(
     enabled: Boolean = true,
     singleLine: Boolean = true,
     onDone: (() -> Unit)? = null,
+    clearFocusOnSend: Boolean = true,
 ) {
     var revealed by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -526,12 +528,12 @@ fun AtlasTextField(
     val placeholderContent: (@Composable () -> Unit)? = if (placeholder == null) {
         null
     } else {
-        { Text(text = placeholder) }
+        { Text(text = atlasText(placeholder)) }
     }
     val supportingContent: (@Composable () -> Unit)? = if (supportingText == null) {
         null
     } else {
-        { Text(text = supportingText) }
+        { Text(text = atlasText(supportingText)) }
     }
     val leadingContent: (@Composable () -> Unit)? = if (leadingIcon == null) {
         null
@@ -545,7 +547,7 @@ fun AtlasTextField(
             IconButton(onClick = { revealed = !revealed }) {
                 Icon(
                     imageVector = if (revealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                    contentDescription = if (revealed) "Masquer" else "Afficher",
+                    contentDescription = if (revealed) atlasText("Masquer") else atlasText("Afficher"),
                 )
             }
         }
@@ -555,7 +557,7 @@ fun AtlasTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
-        label = { Text(label) },
+        label = { Text(atlasText(label)) },
         placeholder = placeholderContent,
         leadingIcon = leadingContent,
         trailingIcon = trailingContent,
@@ -572,7 +574,7 @@ fun AtlasTextField(
                 onDone?.invoke()
             },
             onSend = {
-                focusManager.clearFocus()
+                if (clearFocusOnSend) focusManager.clearFocus()
                 onDone?.invoke()
             },
         ),
@@ -600,7 +602,7 @@ fun AtlasTopBar(
                 }
                 Column {
                     Text(
-                        text = title,
+                        text = atlasText(title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -608,7 +610,7 @@ fun AtlasTopBar(
                     )
                     if (!subtitle.isNullOrBlank()) {
                         Text(
-                            text = subtitle,
+                            text = atlasText(subtitle),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -621,7 +623,7 @@ fun AtlasTopBar(
         navigationIcon = {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Retour")
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour"))
                 }
             }
         },
@@ -664,7 +666,7 @@ fun AtlasLoading(message: String = "Chargement…", modifier: Modifier = Modifie
         CircularProgressIndicator(strokeWidth = 3.dp)
         Spacer(Modifier.height(14.dp))
         Text(
-            text = message,
+            text = atlasText(message),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -693,20 +695,20 @@ fun AtlasErrorCard(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = title,
+                    text = atlasText(title),
                     style = MaterialTheme.typography.titleSmall,
                     color = toneForeground(AtlasTone.DANGER),
                 )
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                text = message,
+                text = atlasText(message),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             if (onRetry != null) {
                 Spacer(Modifier.height(4.dp))
-                TextButton(onClick = onRetry) { Text("Réessayer") }
+                TextButton(onClick = onRetry) { Text(atlasText("Réessayer")) }
             }
         }
     }
@@ -731,7 +733,7 @@ fun AtlasOfflineBanner(message: String = "Mode hors ligne — données enregistr
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = message,
+                text = atlasText(message),
                 style = MaterialTheme.typography.bodySmall,
                 color = toneForeground(AtlasTone.WARNING),
             )
@@ -762,19 +764,19 @@ fun AtlasEmptyState(
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            text = title,
+            text = atlasText(title),
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = message,
+            text = atlasText(message),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(8.dp))
-            TextButton(onClick = onAction) { Text(actionLabel) }
+            TextButton(onClick = onAction) { Text(atlasText(actionLabel)) }
         }
     }
 }
@@ -788,7 +790,7 @@ fun AtlasInfoRow(label: String, value: String, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = label,
+            text = atlasText(label),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
@@ -822,7 +824,7 @@ fun AtlasBullet(text: String, modifier: Modifier = Modifier) {
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            text = text,
+            text = atlasText(text),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -1729,7 +1731,7 @@ private fun MarkdownTableCard(
                         horizontalArrangement = Arrangement.End,
                     ) {
                         Text(
-                            text = "⇄ Glisser horizontalement ($colCount colonnes)",
+                            text = atlasText("⇄ Glisser horizontalement ($colCount colonnes)", "⇄ Swipe horizontally ($colCount columns)", "⇄ مرّر أفقياً ($colCount أعمدة)"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -1831,7 +1833,7 @@ private fun CodeBlockCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = language.ifBlank { "code" },
+                    text = language.ifBlank { atlasText("code", "code", "رمز") },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
@@ -1848,7 +1850,7 @@ private fun CodeBlockCard(
                         modifier = Modifier.size(14.dp),
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text("Copier", style = MaterialTheme.typography.labelSmall)
+                    Text(atlasText("Copier"), style = MaterialTheme.typography.labelSmall)
                 }
             }
             Box(
@@ -1956,7 +1958,7 @@ fun AtlasBootSplashScreen(
 
             Spacer(Modifier.height(14.dp))
             AtlasChip(
-                text = "v${AppDetails.VERSION_NAME} · Initialisation sécurisée",
+                text = atlasText("v${AppDetails.VERSION_NAME} · Initialisation sécurisée", "v${AppDetails.VERSION_NAME} · Secure startup", "v${AppDetails.VERSION_NAME} · بدء تشغيل آمن"),
                 tone = AtlasTone.INFO,
             )
         }
@@ -2066,7 +2068,7 @@ private fun AtlasDemoPreviewScreen(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AtlasOutlinedButton(
-                    text = "Admin",
+                    text = atlasText("Admin"),
                     onClick = { adminPreview = true },
                     modifier = Modifier.weight(1f),
                     icon = Icons.Outlined.AdminPanelSettings,
@@ -2095,7 +2097,7 @@ private fun AtlasDemoPreviewScreen(
                     AtlasChip(atlasText("RAPPORT MENSUEL", "MONTHLY REPORT", "التقرير الشهري"), tone = AtlasTone.POSITIVE)
                     Spacer(Modifier.height(6.dp))
                     Text(atlasText("À suivre cette semaine", "This week", "هذا الأسبوع"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Text("• Client Atlas BTP doit régler 3 200 DH.\n• Client Marbre Plus a payé sa facture.\n• Facture fournisseur de 1 450 DH à payer.\n• Paie de l’équipe à préparer avant le 3.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(atlasText("• Client Atlas BTP doit régler 3 200 DH.\n• Client Marbre Plus a payé sa facture.\n• Facture fournisseur de 1 450 DH à payer.\n• Paie de l’équipe à préparer avant le 3."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2242,7 +2244,7 @@ fun AtlasWelcomeOnboardingScreen(
                                 AtlasChip(text = current.badge, tone = current.tone)
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    text = "Étape ${activeIndex + 1} sur $total",
+                                    text = atlasText("Étape ${activeIndex + 1} sur $total", "Step ${activeIndex + 1} of $total", "الخطوة ${activeIndex + 1} من $total"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -2309,7 +2311,7 @@ fun AtlasWelcomeOnboardingScreen(
             ) {
                 if (step > 0) {
                     AtlasOutlinedButton(
-                        text = "Précédent",
+                        text = atlasText("Précédent"),
                         onClick = { step = (step - 1).coerceAtLeast(0) },
                         modifier = Modifier.weight(1f),
                     )

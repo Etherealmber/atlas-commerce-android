@@ -353,7 +353,7 @@ fun ScanScreen(
                                 },
                                 label = {
                                     Text(
-                                        text = "${item.name} · manque ${AtlasFormat.quantity(item.neededQuantity)}",
+                                        text = atlasText("${item.name} · manque ${AtlasFormat.quantity(item.neededQuantity)}", "${item.name} · short by ${AtlasFormat.quantity(item.neededQuantity)}", "${item.name} · النقص ${AtlasFormat.quantity(item.neededQuantity)}"),
                                         style = MaterialTheme.typography.labelSmall,
                                     )
                                 },
@@ -649,7 +649,7 @@ private fun ScanResultPanel(
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Text(
-                        text = "Scannez un code-barres EAN / SKU pour vérifier ou vendre, ou annulez à tout moment si vous ne souhaitez pas enregistrer l'objet.",
+                        text = atlasText("Scannez un code-barres EAN / SKU pour vérifier ou vendre, ou annulez à tout moment si vous ne souhaitez pas enregistrer l'objet."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

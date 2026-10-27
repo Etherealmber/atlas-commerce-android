@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.products
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -107,18 +108,18 @@ fun ProductsScreen(
                         AtlasTextField(
                             value = state.query,
                             onValueChange = viewModel::onQueryChange,
-                            label = "Rechercher un produit",
-                            placeholder = "Nom, SKU ou code-barres",
+                            label = atlasText("Rechercher un produit"),
+                            placeholder = atlasText("Nom, SKU ou code-barres"),
                             leadingIcon = Icons.Outlined.Search,
                             imeAction = ImeAction.Search,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { showCreateDialog = true }) {
-                                Icon(if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send, contentDescription = if (isAdmin) "Créer un produit" else "Demander un produit à l'Admin")
+                                Icon(if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send, contentDescription = if (isAdmin) atlasText("Créer un produit") else atlasText("Demander un produit à l'Admin"))
                             }
-                            IconButton(onClick = onOpenScan) { Icon(Icons.Outlined.QrCodeScanner, contentDescription = "Scanner un code-barres") }
-                            IconButton(onClick = viewModel::refresh) { Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser") }
+                            IconButton(onClick = onOpenScan) { Icon(Icons.Outlined.QrCodeScanner, contentDescription = atlasText("Scanner un code-barres")) }
+                            IconButton(onClick = viewModel::refresh) { Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser")) }
                         }
                     }
                 } else {
@@ -126,17 +127,17 @@ fun ProductsScreen(
                         AtlasTextField(
                             value = state.query,
                             onValueChange = viewModel::onQueryChange,
-                            label = "Rechercher un produit",
-                            placeholder = "Nom, SKU ou code-barres",
+                            label = atlasText("Rechercher un produit"),
+                            placeholder = atlasText("Nom, SKU ou code-barres"),
                             leadingIcon = Icons.Outlined.Search,
                             imeAction = ImeAction.Search,
                             modifier = Modifier.weight(1f),
                         )
                         IconButton(onClick = { showCreateDialog = true }) {
-                            Icon(if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send, contentDescription = if (isAdmin) "Créer un produit" else "Demander un produit à l'Admin")
+                            Icon(if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send, contentDescription = if (isAdmin) atlasText("Créer un produit") else atlasText("Demander un produit à l'Admin"))
                         }
-                        IconButton(onClick = onOpenScan) { Icon(Icons.Outlined.QrCodeScanner, contentDescription = "Scanner un code-barres") }
-                        IconButton(onClick = viewModel::refresh) { Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser") }
+                        IconButton(onClick = onOpenScan) { Icon(Icons.Outlined.QrCodeScanner, contentDescription = atlasText("Scanner un code-barres")) }
+                        IconButton(onClick = viewModel::refresh) { Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser")) }
                     }
                 }
             }
@@ -148,22 +149,34 @@ fun ProductsScreen(
                 FilterChip(
                     selected = state.filter == ProductsViewModel.FilterMode.ALL,
                     onClick = { viewModel.setFilter(ProductsViewModel.FilterMode.ALL) },
-                    label = { Text("Tous") },
+                    label = { Text(atlasText("Tous")) },
                 )
                 FilterChip(
                     selected = state.filter == ProductsViewModel.FilterMode.NEEDED,
                     onClick = { viewModel.setFilter(ProductsViewModel.FilterMode.NEEDED) },
-                    label = { Text("À réappro. (${state.lowStockCount})") },
+                    label = { Text(atlasText("À réappro. (${state.lowStockCount})", "Low stock (${state.lowStockCount})", "مخزون منخفض (${state.lowStockCount})")) },
                 )
                 FilterChip(
                     selected = state.filter == ProductsViewModel.FilterMode.REQUESTS,
                     onClick = { viewModel.setFilter(ProductsViewModel.FilterMode.REQUESTS) },
-                    label = { Text(if (isAdmin) "À valider (${state.openRequests.size})" else "Mes demandes (${state.openRequests.size})") },
+                    label = {
+                        Text(
+                            if (isAdmin) {
+                                atlasText("À valider (${state.openRequests.size})", "To approve (${state.openRequests.size})", "بانتظار الموافقة (${state.openRequests.size})")
+                            } else {
+                                atlasText("Mes demandes (${state.openRequests.size})", "My requests (${state.openRequests.size})", "طلباتي (${state.openRequests.size})")
+                            },
+                        )
+                    },
                 )
             }
             if (state.filter != ProductsViewModel.FilterMode.REQUESTS && !state.loading) {
                 Text(
-                    "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue en direct",
+                    atlasText(
+                        "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue en direct",
+                        "${state.visibleProducts.size} results · live catalog",
+                        "${state.visibleProducts.size} نتيجة · الكتالوج المباشر",
+                    ),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -187,14 +200,14 @@ fun ProductsScreen(
             state.filter == ProductsViewModel.FilterMode.REQUESTS -> {
                 if (state.openRequests.isEmpty()) {
                     AtlasEmptyState(
-                        title = "Aucune demande en attente",
+                        title = atlasText("Aucune demande en attente"),
                         message = if (isAdmin) {
-                            "Les demandes d'ajout envoyées par l'équipe apparaissent ici pour création immédiate."
+                            atlasText("Les demandes d'ajout envoyées par l'équipe apparaissent ici pour création immédiate.")
                         } else {
-                            "Vos fiches produits transmises à l'Administrateur apparaissent ici."
+                            atlasText("Vos fiches produits transmises à l'Administrateur apparaissent ici.")
                         },
                         icon = Icons.Outlined.Inventory2,
-                        actionLabel = if (isAdmin) "Créer un produit" else "Demander à l'Admin",
+                        actionLabel = if (isAdmin) atlasText("Créer un produit") else atlasText("Demander à l'Admin"),
                         onAction = { showCreateDialog = true },
                     )
                 } else {
@@ -218,18 +231,18 @@ fun ProductsScreen(
             }
 
             state.visibleProducts.isEmpty() -> AtlasEmptyState(
-                title = if (state.query.isBlank()) "Aucun produit" else "Aucun résultat",
+                title = if (state.query.isBlank()) atlasText("Aucun produit") else atlasText("Aucun résultat"),
                 message = if (state.query.isBlank()) {
                     if (isAdmin) {
-                        "Créez un produit directement avec le bouton + ou scannez son code-barres."
+                        atlasText("Créez un produit directement avec le bouton + ou scannez son code-barres.")
                     } else {
-                        "Envoyez une demande de création à l'Administrateur avec le bouton d'envoi."
+                        atlasText("Envoyez une demande de création à l'Administrateur avec le bouton d'envoi.")
                     }
                 } else {
-                    "Essayez un autre nom, SKU ou code-barres."
+                    atlasText("Essayez un autre nom, SKU ou code-barres.")
                 },
                 icon = Icons.Outlined.Inventory2,
-                actionLabel = if (isAdmin) "Créer un produit" else "Demander à l'Admin",
+                actionLabel = if (isAdmin) atlasText("Créer un produit") else atlasText("Demander à l'Admin"),
                 onAction = { showCreateDialog = true },
             )
 
@@ -248,7 +261,7 @@ fun ProductsScreen(
                                     AtlasChip(text = Roles.label(user.role), tone = AtlasTone.INFO)
                                     Spacer(Modifier.width(8.dp))
                                     Text(
-                                        text = "Nouveaux produits soumis à validation Admin",
+                                        text = atlasText("Nouveaux produits soumis à validation Admin"),
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.SemiBold,
                                     )
@@ -367,15 +380,17 @@ private fun ProductRequestRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = request.name?.takeIf { it.isNotBlank() } ?: "Code ${request.code}",
+                    text = request.name?.takeIf { it.isNotBlank() } ?: atlasText("Code ${request.code}", "Code ${request.code}", "الرمز ${request.code}"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     text = listOfNotNull(
-                        "Code ${request.code}",
+                        atlasText("Code ${request.code}", "Code ${request.code}", "الرمز ${request.code}"),
                         request.sku?.takeIf { it.isNotBlank() }?.let { "SKU $it" },
-                        request.quantity?.let { "${AtlasFormat.quantity(it)} ${request.unit ?: "unité"}" },
+                        request.quantity?.let {
+                            "${AtlasFormat.quantity(it)} ${request.unit ?: atlasText("unité", "unit", "وحدة")}"
+                        },
                     ).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -389,15 +404,15 @@ private fun ProductRequestRow(
                 }
             }
             AtlasChip(
-                text = if (isAdmin) "À valider" else "Chez l'Admin",
+                text = if (isAdmin) atlasText("À valider") else atlasText("Chez l'Admin"),
                 tone = AtlasTone.WARNING,
             )
         }
         if (isAdmin) {
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onFulfill) { Text("Créer au stock") }
-                TextButton(onClick = onDismiss) { Text("Refuser") }
+                TextButton(onClick = onFulfill) { Text(atlasText("Créer au stock")) }
+                TextButton(onClick = onDismiss) { Text(atlasText("Refuser")) }
             }
         }
     }
@@ -430,7 +445,7 @@ private fun ProductRow(
                 }
                 if (canSell) {
                     IconButton(onClick = onAdd) {
-                        Icon(Icons.Outlined.AddShoppingCart, contentDescription = "Ajouter au panier", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Outlined.AddShoppingCart, contentDescription = atlasText("Ajouter au panier"), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -440,7 +455,7 @@ private fun ProductRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AtlasChip(
-                    text = "Stock ${AtlasFormat.quantity(product.stock)}",
+                    text = atlasText("Stock ${AtlasFormat.quantity(product.stock)}", "Stock ${AtlasFormat.quantity(product.stock)}", "المخزون ${AtlasFormat.quantity(product.stock)}"),
                     tone = when {
                         product.isOutOfStock -> AtlasTone.DANGER
                         product.isLowStock -> AtlasTone.WARNING
@@ -448,7 +463,7 @@ private fun ProductRow(
                     },
                 )
                 if (product.neededQuantity > 0.0) {
-                    AtlasChip(text = "Manque ${AtlasFormat.quantity(product.neededQuantity)}", tone = if (product.isOutOfStock) AtlasTone.DANGER else AtlasTone.WARNING)
+                    AtlasChip(text = atlasText("Manque ${AtlasFormat.quantity(product.neededQuantity)}", "Short by ${AtlasFormat.quantity(product.neededQuantity)}", "النقص ${AtlasFormat.quantity(product.neededQuantity)}"), tone = if (product.isOutOfStock) AtlasTone.DANGER else AtlasTone.WARNING)
                 }
                 AtlasChip(text = AtlasFormat.money(product.price, currency))
             }
@@ -489,22 +504,22 @@ private fun ProductDetailDialog(
                     Spacer(Modifier.height(10.dp))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AtlasChip(text = "Prix ${AtlasFormat.money(product.price, currency)}")
+                    AtlasChip(text = atlasText("Prix ${AtlasFormat.money(product.price, currency)}", "Price ${AtlasFormat.money(product.price, currency)}", "السعر ${AtlasFormat.money(product.price, currency)}"))
                     AtlasChip(
-                        text = "Stock ${AtlasFormat.quantity(product.stock)}",
+                        text = atlasText("Stock ${AtlasFormat.quantity(product.stock)}", "Stock ${AtlasFormat.quantity(product.stock)}", "المخزون ${AtlasFormat.quantity(product.stock)}"),
                         tone = if (product.isLowStock) AtlasTone.WARNING else AtlasTone.POSITIVE,
                     )
                 }
                 if (canSell) {
                     Spacer(Modifier.height(16.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Quantité", style = MaterialTheme.typography.bodyMedium)
+                        Text(atlasText("Quantité"), style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.weight(1f))
                         IconButton(
                             onClick = { if (quantity > 1.0) quantity -= 1.0 },
                             enabled = quantity > 1.0,
                         ) {
-                            Icon(Icons.Outlined.Remove, contentDescription = "Réduire")
+                            Icon(Icons.Outlined.Remove, contentDescription = atlasText("Réduire"))
                         }
                         Text(
                             text = AtlasFormat.quantity(quantity),
@@ -513,12 +528,16 @@ private fun ProductDetailDialog(
                             modifier = Modifier.width(44.dp),
                         )
                         IconButton(onClick = { quantity += 1.0 }) {
-                            Icon(Icons.Outlined.AddShoppingCart, contentDescription = "Augmenter")
+                            Icon(Icons.Outlined.AddShoppingCart, contentDescription = atlasText("Augmenter"))
                         }
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "Total ${AtlasFormat.money(product.price * quantity, currency)} · sans TVA (ticket VR)",
+                        text = atlasText(
+                            "Total ${AtlasFormat.money(product.price * quantity, currency)} · sans TVA (ticket VR)",
+                            "Total ${AtlasFormat.money(product.price * quantity, currency)} · no VAT (VR receipt)",
+                            "الإجمالي ${AtlasFormat.money(product.price * quantity, currency)} · بدون ضريبة (إيصال VR)",
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -528,7 +547,7 @@ private fun ProductDetailDialog(
         confirmButton = {
             if (canSell) {
                 TextButton(onClick = { onAdd(quantity) }) {
-                    Text("Ajouter au panier")
+                    Text(atlasText("Ajouter au panier"))
                 }
             }
         },
@@ -539,12 +558,12 @@ private fun ProductDetailDialog(
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
                 if (product.trackInventory && canAdjustStock) {
-                    TextButton(onClick = onAdjustStock) { Text("Ajuster stock", maxLines = 1, softWrap = false) }
+                    TextButton(onClick = onAdjustStock) { Text(atlasText("Ajuster stock"), maxLines = 1, softWrap = false) }
                 }
                 if (canSell) {
-                    TextButton(onClick = onOpenSale) { Text("Voir le panier", maxLines = 1, softWrap = false) }
+                    TextButton(onClick = onOpenSale) { Text(atlasText("Voir le panier"), maxLines = 1, softWrap = false) }
                 }
-                TextButton(onClick = onDismiss) { Text("Fermer", maxLines = 1, softWrap = false) }
+                TextButton(onClick = onDismiss) { Text(atlasText("Fermer"), maxLines = 1, softWrap = false) }
             }
         },
     )
@@ -563,7 +582,7 @@ private fun StockAdjustDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Ajuster le stock") },
+        title = { Text(atlasText("Ajuster le stock")) },
         text = {
             Column {
                 Text(
@@ -573,7 +592,11 @@ private fun StockAdjustDialog(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "Stock actuel : ${AtlasFormat.quantity(product.stock)}",
+                    text = atlasText(
+                        "Stock actuel : ${AtlasFormat.quantity(product.stock)}",
+                        "Current stock: ${AtlasFormat.quantity(product.stock)}",
+                        "المخزون الحالي: ${AtlasFormat.quantity(product.stock)}",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -582,12 +605,12 @@ private fun StockAdjustDialog(
                     FilterChip(
                         selected = !isOut,
                         onClick = { isOut = false },
-                        label = { Text("Entrée") },
+                        label = { Text(atlasText("Entrée")) },
                     )
                     FilterChip(
                         selected = isOut,
                         onClick = { isOut = true },
-                        label = { Text("Sortie") },
+                        label = { Text(atlasText("Sortie")) },
                     )
                 }
                 Spacer(Modifier.height(10.dp))
@@ -596,7 +619,7 @@ private fun StockAdjustDialog(
                     onValueChange = { input ->
                         rawQuantity = input.filter { it.isDigit() || it == '.' || it == ',' }
                     },
-                    label = { Text("Quantité") },
+                    label = { Text(atlasText("Quantité")) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
@@ -605,7 +628,7 @@ private fun StockAdjustDialog(
                 OutlinedTextField(
                     value = reason,
                     onValueChange = { reason = it },
-                    label = { Text("Motif (facultatif)") },
+                    label = { Text(atlasText("Motif (facultatif)")) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     modifier = Modifier.fillMaxWidth(),
@@ -616,10 +639,10 @@ private fun StockAdjustDialog(
             TextButton(
                 onClick = { onSubmit(quantity, isOut, reason) },
                 enabled = quantity > 0.0,
-            ) { Text("Valider") }
+            ) { Text(atlasText("Valider")) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuler") }
+            TextButton(onClick = onDismiss) { Text(atlasText("Annuler")) }
         },
     )
 }

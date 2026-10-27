@@ -34,10 +34,15 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.core.AppDetails
 import okhttp3.OkHttpClient
@@ -266,6 +271,7 @@ fun AtlasAvatar(
     size: Dp = 36.dp,
     serverBaseUrl: String? = null,
     borderColor: Color = MaterialTheme.colorScheme.outlineVariant,
+    clickContentDescription: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
     val cleanUrl = avatarUrl?.trim().orEmpty()
@@ -278,6 +284,11 @@ fun AtlasAvatar(
         }
     }
 
+    val accessibleDescription = clickContentDescription ?: atlasText(
+        "Photo de profil de $label",
+        "Profile photo of $label",
+        "الصورة الشخصية لـ $label",
+    )
     val initials = remember(label) {
         label.trim()
             .split(Regex("\\s+"))
@@ -288,6 +299,10 @@ fun AtlasAvatar(
     }
 
     val boxModifier = modifier
+        .semantics(mergeDescendants = true) {
+            contentDescription = accessibleDescription
+            if (onClick != null) role = Role.Button
+        }
         .size(size)
         .clip(CircleShape)
         .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
@@ -302,7 +317,7 @@ fun AtlasAvatar(
         if (img != null) {
             Image(
                 bitmap = img,
-                contentDescription = "Photo de profil de $label",
+                contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()

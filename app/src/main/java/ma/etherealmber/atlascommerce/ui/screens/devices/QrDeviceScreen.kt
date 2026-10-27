@@ -78,6 +78,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.BarcodeCameraView
 import ma.etherealmber.atlascommerce.ui.components.CameraVisualStyle
 import ma.etherealmber.atlascommerce.ui.components.ScanFeedback
+import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
@@ -266,7 +267,11 @@ fun QrDeviceScreen(
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Text(
-                                    text = "@${currentUser.username} · ${Roles.label(currentUser.role)}",
+                                    text = atlasText(
+                                    "@${currentUser.username} · ${atlasRoleLabel(currentUser.role)}",
+                                    "@${currentUser.username} · ${atlasRoleLabel(currentUser.role)}",
+                                    "@${currentUser.username} · ${atlasRoleLabel(currentUser.role)}",
+                                ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -374,6 +379,8 @@ fun QrDeviceScreen(
                                         Spacer(Modifier.height(14.dp))
                                         Button(
                                             onClick = startQrCameraExplicitly,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                         ) {
                                             Icon(
@@ -383,7 +390,14 @@ fun QrDeviceScreen(
                                                 modifier = Modifier.size(18.dp),
                                             )
                                             Spacer(Modifier.width(6.dp))
-                                            Text(atlasText("Démarrer la caméra QR", "Start QR camera", "بدء كاميرا QR"), color = MaterialTheme.colorScheme.onPrimary)
+                                            Text(
+                                                text = atlasText("Démarrer la caméra QR", "Start QR camera", "بدء كاميرا QR"),
+                                                modifier = Modifier.weight(1f),
+                                                color = MaterialTheme.colorScheme.onPrimary,
+                                                textAlign = TextAlign.Center,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
                                         }
                                     }
                                 }

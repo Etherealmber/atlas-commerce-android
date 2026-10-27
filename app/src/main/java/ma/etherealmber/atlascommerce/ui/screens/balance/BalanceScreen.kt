@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.balance
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import android.content.ClipData
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -112,7 +113,7 @@ fun BalanceScreen(
                 context.contentResolver.openOutputStream(uri, "wt")?.use { out -> file.inputStream().buffered().use { it.copyTo(out) } }
                     ?: error("Impossible d'écrire le PDF sélectionné.")
             }.onSuccess { onToast("Copie PDF enregistrée.") }
-                .onFailure { onToast("Enregistrement impossible : ${it.message.orEmpty()}") }
+                .onFailure { onToast("Impossible d'enregistrer le PDF.") }
         }
         pendingPdfFile = null
     }
@@ -132,8 +133,16 @@ fun BalanceScreen(
     if (confirmCombined) {
         AlertDialog(
             onDismissRequest = { confirmCombined = false },
-            title = { Text("Ouvrir le rapport combiné ?") },
-            text = { Text("${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. Le lien HMAC est temporaire (30 min) et privé : ne le partagez pas.") },
+            title = { Text(atlasText("Ouvrir le rapport combiné ?")) },
+            text = {
+                Text(
+                    atlasText(
+                        "${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. Le lien HMAC est temporaire (30 min) et privé : ne le partagez pas.",
+                        "${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. The HMAC link is private and expires in 30 minutes. Do not share it.",
+                        "${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. رابط HMAC خاص ومؤقت لمدة 30 دقيقة. لا تشاركه.",
+                    ),
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     confirmCombined = false
@@ -143,9 +152,9 @@ fun BalanceScreen(
                             is ApiResult.Failure -> onToast(result.message)
                         }
                     }
-                }) { Text("Continuer") }
+                }) { Text(atlasText("Continuer")) }
             },
-            dismissButton = { TextButton(onClick = { confirmCombined = false }) { Text("Annuler") } },
+            dismissButton = { TextButton(onClick = { confirmCombined = false }) { Text(atlasText("Annuler")) } },
         )
     }
 
@@ -166,7 +175,7 @@ fun BalanceScreen(
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
                     context.startActivity(Intent.createChooser(intent, "Partager le rapport PDF"))
-                }.onFailure { onToast("Impossible de partager le PDF : ${it.message.orEmpty()}") }
+                }.onFailure { onToast("Impossible de partager le PDF.") }
             },
             onSave = {
                 pendingPdfFile = file
@@ -201,7 +210,7 @@ fun BalanceScreen(
 
     if (!state.isAdmin) {
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-            Text("Les soldes et relevés financiers sont réservés aux rôles owner/admin.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(atlasText("Les soldes et relevés financiers sont réservés aux rôles owner/admin."), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         return
     }
@@ -214,7 +223,7 @@ fun BalanceScreen(
         BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Trésorerie · créances · mouvements",
+                    atlasText("Trésorerie · créances · mouvements"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
@@ -224,7 +233,7 @@ fun BalanceScreen(
                 MonthSelector(selectedPeriod = state.selectedPeriod, onSelect = viewModel::selectPeriod)
                 IconButton(onClick = viewModel::refresh, enabled = !state.refreshing) {
                     if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser les soldes")
+                    else Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les soldes"))
                 }
             }
         }
@@ -282,7 +291,11 @@ fun BalanceScreen(
                         } ?: state.periodBreakdownError?.let { detailError ->
                             item(key = "cash-bank-unavailable") {
                                 Text(
-                                    "Ventilation caisse/banque indisponible sur ce serveur. Les soldes détaillés ne sont pas estimés. ${detailError.take(100)}",
+                                    atlasText(
+                                        "Ventilation caisse/banque indisponible sur ce serveur. Les soldes détaillés ne sont pas estimés. ${detailError.take(100)}",
+                                        "Cash/bank breakdown is unavailable on this server. Detailed balances are not estimated. ${detailError.take(100)}",
+                                        "تفصيل الصندوق والبنك غير متاح على هذا الخادم. لم يتم تقدير الأرصدة التفصيلية. ${detailError.take(100)}",
+                                    ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -336,7 +349,7 @@ fun BalanceScreen(
                                     OutlinedTextField(
                                         value = movementSearch,
                                         onValueChange = { movementSearch = it },
-                                        label = { Text("Rechercher") },
+                                        label = { Text(atlasText("Rechercher")) },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth(),
                                     )
@@ -349,7 +362,7 @@ fun BalanceScreen(
                                     OutlinedTextField(
                                         value = movementSearch,
                                         onValueChange = { movementSearch = it },
-                                        label = { Text("Rechercher") },
+                                        label = { Text(atlasText("Rechercher")) },
                                         singleLine = true,
                                         modifier = Modifier.weight(1.4f),
                                     )
@@ -358,8 +371,16 @@ fun BalanceScreen(
                         }
                         item(key = "movement-heading") {
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text("Transactions récentes", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                                Text("Derniers mouvements de trésorerie · ${state.statement?.pageSize ?: 50} par page", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(atlasText("Transactions récentes"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    atlasText(
+                                        "Derniers mouvements de trésorerie · ${state.statement?.pageSize ?: 50} par page",
+                                        "Recent cash transactions · ${state.statement?.pageSize ?: 50} per page",
+                                        "حركات الخزينة الأخيرة · ${state.statement?.pageSize ?: 50} لكل صفحة",
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                         val filteredRows = state.rows.filter { row ->
@@ -383,7 +404,7 @@ fun BalanceScreen(
                             item(key = "load-more") {
                                 OutlinedButton(onClick = viewModel::loadMore, enabled = !state.loadingMore, modifier = Modifier.fillMaxWidth()) {
                                     if (state.loadingMore) CircularProgressIndicator(Modifier.width(18.dp), strokeWidth = 2.dp)
-                                    else Text("Charger les mouvements suivants")
+                                    else Text(atlasText("Charger les mouvements suivants"))
                                 }
                             }
                         }
@@ -403,10 +424,10 @@ fun BalanceScreen(
                         else items(receivableDocuments, key = { "receivable-${it.id}" }) { document ->
                             ReceivableCard(document, state.finance?.currency ?: "MAD")
                         }
-                        if (bucket?.truncated == true) item(key = "truncated") { Text("Liste partielle : le serveur limite les documents affichés.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+                        if (bucket?.truncated == true) item(key = "truncated") { Text(atlasText("Liste partielle : le serveur limite les documents affichés."), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
 
                         val payables = state.finance?.payables
-                        item(key = "suppliers-title") { Text("Dettes fournisseurs", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+                        item(key = "suppliers-title") { Text(atlasText("Dettes fournisseurs"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
                         item(key = "suppliers-total") {
                             SummaryAmountCard(
                                 title = "À payer",
@@ -432,7 +453,7 @@ fun BalanceScreen(
                     }
                     BalanceSection.REPORTS -> {
                         item(key = "report-heading") {
-                            Text("Rapports financiers", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(atlasText("Rapports financiers"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         }
                         item(key = "month-pdf") {
                             ReportActionCard(
@@ -465,7 +486,7 @@ fun BalanceScreen(
                             ) { showReportSelection = true }
                         }
                         item(key = "report-note") {
-                            Text("Les chiffres proviennent des API financières du serveur sélectionné. Aucun solde n'est calculé ou codé en dur dans l'application.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(atlasText("Les chiffres proviennent des API financières du serveur sélectionné. Aucun solde n'est calculé ou codé en dur dans l'application."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -482,8 +503,8 @@ private fun MonthSelector(selectedPeriod: String?, onSelect: (String) -> Unit) {
     val current = selectedPeriod?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
     Box {
         OutlinedButton(onClick = { expanded = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp)) {
-            Text(current?.let(::monthLabel) ?: "Mois", style = MaterialTheme.typography.labelLarge)
-            Icon(Icons.Outlined.ExpandMore, contentDescription = "Choisir un mois")
+            Text(current?.let(::monthLabel) ?: atlasText("Mois"), style = MaterialTheme.typography.labelLarge)
+            Icon(Icons.Outlined.ExpandMore, contentDescription = atlasText("Choisir un mois"))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             periods.forEach { month ->
@@ -508,10 +529,10 @@ private fun BalanceClosingCard(closing: Double, currency: String, modifier: Modi
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                 Spacer(Modifier.width(8.dp))
-                Text("SOLDE DE CLÔTURE", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text(atlasText("SOLDE DE CLÔTURE"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             Text(formatMoney(closing, currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("Après les mouvements comptabilisés", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f))
+            Text(atlasText("Après les mouvements comptabilisés"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f))
         }
     }
 }
@@ -577,7 +598,11 @@ private fun CashBankDashboard(data: FinancePeriodDto, currency: String) {
     }
     if (data.outflows.notRecorded > 0.0) {
         Text(
-            "Mode de paiement non enregistré (paie) : ${formatMoney(data.outflows.notRecorded, currency)} — non attribué à la caisse ni à la banque.",
+            atlasText(
+                "Mode de paiement non enregistré (paie) : ${formatMoney(data.outflows.notRecorded, currency)} — non attribué à la caisse ni à la banque.",
+                "Unrecorded payment method (payroll): ${formatMoney(data.outflows.notRecorded, currency)} — not assigned to cash or bank.",
+                "طريقة الدفع غير مسجّلة (الرواتب): ${formatMoney(data.outflows.notRecorded, currency)} — غير منسوبة إلى الصندوق أو البنك.",
+            ),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -585,7 +610,7 @@ private fun CashBankDashboard(data: FinancePeriodDto, currency: String) {
     }
     if (!data.statement.consistentWithBreakdown) {
         Text(
-            "La ventilation diffère du relevé; vérifiez la cohérence des données serveur.",
+            atlasText("La ventilation diffère du relevé; vérifiez la cohérence des données serveur."),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
@@ -598,10 +623,23 @@ private fun CashAccountCard(title: String, incoming: Double, outgoing: Double, c
     Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title.uppercase(Locale.FRENCH), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Entrées  +${formatMoney(incoming, currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-            Text("Sorties  −${formatMoney(outgoing, currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            Text(
+                atlasText("Entrées  +${formatMoney(incoming, currency)}", "Incoming  +${formatMoney(incoming, currency)}", "الوارد  +${formatMoney(incoming, currency)}"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(atlasText("Sorties  −${formatMoney(outgoing, currency)}", "Outgoing  −${formatMoney(outgoing, currency)}", "الصادر  −${formatMoney(outgoing, currency)}"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             val net = incoming - outgoing
-            Text("Net  ${if (net >= 0.0) "+" else "−"}${formatMoney(kotlin.math.abs(net), currency)}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = if (net >= 0.0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+            Text(
+                atlasText(
+                    "Net  ${if (net >= 0.0) "+" else "−"}${formatMoney(kotlin.math.abs(net), currency)}",
+                    "Net  ${if (net >= 0.0) "+" else "−"}${formatMoney(kotlin.math.abs(net), currency)}",
+                    "الصافي  ${if (net >= 0.0) "+" else "−"}${formatMoney(kotlin.math.abs(net), currency)}",
+                ),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (net >= 0.0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
         }
     }
 }
@@ -617,7 +655,15 @@ private fun OwnerMovementCard(title: String, amount: Double, count: Int, positiv
                 fontWeight = FontWeight.Bold,
                 color = if (positive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
             )
-            Text("$count mouvement(s) · hors solde caisse/banque", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                atlasText(
+                    "$count mouvement(s) · hors solde caisse/banque",
+                    "$count transactions · excluded from cash/bank balances",
+                    "$count حركة · غير مشمولة في أرصدة الصندوق والبنك",
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -659,8 +705,21 @@ private fun ReconciliationNotice(balanced: Boolean?, status: String, asOf: Strin
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
-                Text(if (balanced == true) "Relevé réconcilié" else "Réconciliation indisponible", style = MaterialTheme.typography.titleSmall, color = color, fontWeight = FontWeight.SemiBold)
-                Text("${if (status == "open") "Mois en cours" else "Période clôturée"} · arrêté au $asOf", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (balanced == true) atlasText("Relevé réconcilié") else atlasText("Réconciliation indisponible", "Reconciliation unavailable", "المطابقة غير متاحة"),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = color,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    if (status == "open") {
+                        atlasText("Mois en cours · arrêté au $asOf", "Current month · as of $asOf", "الشهر الحالي · حتى $asOf")
+                    } else {
+                        atlasText("Période clôturée · arrêté au $asOf", "Closed period · as of $asOf", "فترة مغلقة · حتى $asOf")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = color)
         }
@@ -687,7 +746,11 @@ private fun StatementRowCard(row: FinanceStatementRowDto, currency: String) {
             Column(horizontalAlignment = Alignment.End) {
                 val amount = if (row.credit > 0.0) "+${formatMoney(row.credit, currency)}" else "−${formatMoney(row.debit, currency)}"
                 Text(amount, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = if (row.credit > 0.0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
-                Text("Solde ${formatMoney(row.runningBalance, currency)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    atlasText("Solde ${formatMoney(row.runningBalance, currency)}", "Balance ${formatMoney(row.runningBalance, currency)}", "الرصيد ${formatMoney(row.runningBalance, currency)}"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -698,13 +761,21 @@ private fun ReceivableCard(document: FinanceOutstandingDocumentDto, currency: St
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(document.party.ifBlank { "Client" }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text(document.party.ifBlank { atlasText("Client") }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                 Text(document.state.replaceFirstChar { it.uppercase(Locale.FRENCH) }, style = MaterialTheme.typography.labelMedium, color = if (document.state == "overdue") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
             }
-            Text("${document.number} · échéance ${document.dueDate ?: "non définie"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                atlasText(
+                    "${document.number} · échéance ${document.dueDate ?: "non définie"}",
+                    "${document.number} · due ${document.dueDate ?: "not set"}",
+                    "${document.number} · الاستحقاق ${document.dueDate ?: "غير محدد"}",
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             HorizontalDivider(Modifier.padding(vertical = 3.dp))
-            Text("Restant dû  ${formatMoney(document.remaining, currency)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-            Text("Payé ${formatMoney(document.paid, currency)} / Total ${formatMoney(document.total, currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(atlasText("Restant dû  ${formatMoney(document.remaining, currency)}", "Remaining due  ${formatMoney(document.remaining, currency)}", "المتبقي المستحق  ${formatMoney(document.remaining, currency)}"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+            Text(atlasText("Payé ${formatMoney(document.paid, currency)} / Total ${formatMoney(document.total, currency)}", "Paid ${formatMoney(document.paid, currency)} / Total ${formatMoney(document.total, currency)}", "المدفوع ${formatMoney(document.paid, currency)} / الإجمالي ${formatMoney(document.total, currency)}"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -767,17 +838,32 @@ private fun NewEntryDialog(
     val parsedAmount = amount.replace(',', '.').toDoubleOrNull()
     val validDate = runCatching { java.time.LocalDate.parse(date).toString() == date }.getOrDefault(false)
     val canSave = !saving && description.isNotBlank() && parsedAmount != null && parsedAmount > 0.0 && validDate
+    val localizedKindLabel = when (kind) {
+        EntryKind.EXPENSE -> atlasText("Dépense", "Expense", "مصروف")
+        EntryKind.INCOME -> atlasText("Recette", "Income", "إيراد")
+        EntryKind.OWNER_CONTRIB -> atlasText("Apport propriétaire", "Owner contribution", "مساهمة المالك")
+        EntryKind.OWNER_DRAW -> atlasText("Prélèvement propriétaire", "Owner withdrawal", "سحب المالك")
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nouvelle écriture — ${kind.label}", fontWeight = FontWeight.SemiBold) },
+        title = {
+            Text(
+                atlasText("Nouvelle écriture — ${kind.label}", "New entry — $localizedKindLabel", "قيد جديد — $localizedKindLabel"),
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    if (step == 0) "Étape 1/2 · Type et libellé" else "Étape 2/2 · Montant et règlement",
+                    if (step == 0) {
+                        atlasText("Étape 1/2 · Type et libellé", "Step 1/2 · Type and description", "الخطوة 1/2 · النوع والوصف")
+                    } else {
+                        atlasText("Étape 2/2 · Montant et règlement", "Step 2/2 · Amount and payment", "الخطوة 2/2 · المبلغ والدفع")
+                    },
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -792,17 +878,17 @@ private fun NewEntryDialog(
                     OutlinedTextField(
                         value = description,
                         onValueChange = { description = it },
-                        label = { Text("Libellé *") },
-                        placeholder = { Text("Ex. Loyer entrepôt octobre") },
+                        label = { Text(atlasText("Libellé *")) },
+                        placeholder = { Text(atlasText("Ex. Loyer entrepôt octobre")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    if (description.isBlank()) Text("La description est obligatoire.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                    if (description.isBlank()) Text(atlasText("La description est obligatoire."), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
                 } else {
                     OutlinedTextField(
                         value = amount,
                         onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch == '.' || ch == ',' } },
-                        label = { Text("Montant *") },
+                        label = { Text(atlasText("Montant *")) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -810,7 +896,7 @@ private fun NewEntryDialog(
                     OutlinedTextField(
                         value = date,
                         onValueChange = { date = it.take(10) },
-                        label = { Text("Date (AAAA-MM-JJ)") },
+                        label = { Text(atlasText("Date (AAAA-MM-JJ)")) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -824,25 +910,25 @@ private fun NewEntryDialog(
                     OutlinedTextField(
                         value = vendor,
                         onValueChange = { vendor = it },
-                        label = { Text("Bénéficiaire / fournisseur (facultatif)") },
+                        label = { Text(atlasText("Bénéficiaire / fournisseur (facultatif)")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
                         value = notes,
                         onValueChange = { notes = it },
-                        label = { Text("Notes (facultatif)") },
+                        label = { Text(atlasText("Notes (facultatif)")) },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
                     )
-                    if (parsedAmount == null || parsedAmount <= 0.0) Text("Saisissez un montant supérieur à zéro.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
-                    if (!validDate) Text("La date doit être une date valide au format AAAA-MM-JJ.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                    if (parsedAmount == null || parsedAmount <= 0.0) Text(atlasText("Saisissez un montant supérieur à zéro."), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                    if (!validDate) Text(atlasText("La date doit être une date valide au format AAAA-MM-JJ."), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
                 }
             }
         },
         confirmButton = {
             if (step == 0) {
-                Button(onClick = { if (description.isNotBlank()) step = 1 }, enabled = description.isNotBlank() && !saving) { Text("Continuer") }
+                Button(onClick = { if (description.isNotBlank()) step = 1 }, enabled = description.isNotBlank() && !saving) { Text(atlasText("Continuer")) }
             } else {
                 Button(
                     onClick = {
@@ -863,14 +949,14 @@ private fun NewEntryDialog(
                     enabled = canSave,
                 ) {
                     if (saving) CircularProgressIndicator(Modifier.width(18.dp), strokeWidth = 2.dp)
-                    else Text("Enregistrer")
+                    else Text(atlasText("Enregistrer"))
                 }
             }
         },
         dismissButton = {
             Row {
-                if (step == 1) TextButton(onClick = { step = 0 }, enabled = !saving) { Text("Retour") }
-                TextButton(onClick = onDismiss, enabled = !saving) { Text("Annuler") }
+                if (step == 1) TextButton(onClick = { step = 0 }, enabled = !saving) { Text(atlasText("Retour")) }
+                TextButton(onClick = onDismiss, enabled = !saving) { Text(atlasText("Annuler")) }
             }
         },
     )
@@ -880,14 +966,17 @@ private fun NewEntryDialog(
 private fun EntryDropdown(label: String, selected: String, options: List<String>, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Column {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(atlasText(label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Box {
             OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(selected, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Icon(Icons.Outlined.ExpandMore, contentDescription = "Choisir $label")
+                Text(atlasText(selected), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Icon(
+                    Icons.Outlined.ExpandMore,
+                    contentDescription = atlasText("Choisir $label", "Choose ${atlasText(label)}", "اختر ${atlasText(label)}"),
+                )
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                options.forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { expanded = false; onSelect(option) }) }
+                options.forEach { option -> DropdownMenuItem(text = { Text(atlasText(option)) }, onClick = { expanded = false; onSelect(option) }) }
             }
         }
     }

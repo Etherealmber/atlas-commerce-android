@@ -20,11 +20,14 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Row
@@ -49,7 +52,6 @@ import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
-import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -112,6 +114,8 @@ import ma.etherealmber.atlascommerce.ui.screens.sale.SaleScreen
 import ma.etherealmber.atlascommerce.ui.screens.scan.ScanScreen
 import ma.etherealmber.atlascommerce.ui.screens.settings.ProfileScreen
 import ma.etherealmber.atlascommerce.ui.screens.settings.SettingsScreen
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
 enum class MainTab(val label: String, val icon: ImageVector) {
@@ -177,6 +181,7 @@ fun MainShell(
     shellViewModel: ShellViewModel = hiltViewModel(),
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
+    val atlasLanguage = LocalAtlasLanguage.current
     val cartCount by shellViewModel.cartCount.collectAsStateWithLifecycle()
     val shakeToReportEnabled by appViewModel.shakeToReportEnabled.collectAsStateWithLifecycle()
     val notificationCount by shellViewModel.notificationCount.collectAsStateWithLifecycle()
@@ -290,7 +295,7 @@ fun MainShell(
     }
 
     val onToast: (String) -> Unit = { message ->
-        scope.launch { snackbarHostState.showSnackbar(message) }
+        scope.launch { snackbarHostState.showSnackbar(atlasNotice(message, atlasLanguage)) }
     }
     val switchTab: (MainTab) -> Unit = { target ->
         if (target == MainTab.SALE && !Roles.canCreateDocuments(user.role)) {
@@ -346,21 +351,19 @@ fun MainShell(
                     if (hasHiddenDownload && tab !in BackStackTabs) {
                         Spacer(Modifier.width(6.dp))
                     }
-                    if (tab in BackStackTabs) IconButton(onClick = { showProblemReportDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Outlined.BugReport,
-                            contentDescription = atlasText("Signaler un problème", "Report a problem", "الإبلاغ عن مشكلة"),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
                     when (tab) {
                         MainTab.AGENT -> {
                             AtlasAvatar(
                                 avatarUrl = user.avatarUrl,
-                                label = user.username,
+                                label = user.displayName.ifBlank { user.username },
                                 size = 34.dp,
                                 serverBaseUrl = serverBaseUrl,
                                 borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                clickContentDescription = atlasText(
+                                    "Ouvrir le profil de ${user.displayName.ifBlank { user.username }}",
+                                    "Open profile for ${user.displayName.ifBlank { user.username }}",
+                                    "فتح الملف الشخصي لـ ${user.displayName.ifBlank { user.username }}",
+                                ),
                                 onClick = { switchTab(MainTab.PROFILE) },
                             )
                             Spacer(Modifier.width(8.dp))
@@ -372,7 +375,7 @@ fun MainShell(
                             IconButton(onClick = { switchTab(MainTab.SETTINGS) }) {
                                 Icon(
                                     imageVector = Icons.Outlined.Settings,
-                                    contentDescription = "Paramètres",
+                                    contentDescription = atlasText("Paramètres", "Settings", "الإعدادات"),
                                 )
                             }
                             Spacer(Modifier.width(4.dp))
@@ -389,16 +392,21 @@ fun MainShell(
                             IconButton(onClick = { switchTab(MainTab.AGENT) }) {
                                 Icon(
                                     imageVector = MainTab.AGENT.icon,
-                                    contentDescription = "Ouvrir Atlas Agent",
+                                    contentDescription = atlasText("Ouvrir Atlas Agent", "Open Atlas Agent", "فتح مساعد Atlas"),
                                     tint = MaterialTheme.colorScheme.primary,
                                 )
                             }
                             AtlasAvatar(
                                 avatarUrl = user.avatarUrl,
-                                label = user.username,
+                                label = user.displayName.ifBlank { user.username },
                                 size = 34.dp,
                                 serverBaseUrl = serverBaseUrl,
                                 borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                clickContentDescription = atlasText(
+                                    "Ouvrir le profil de ${user.displayName.ifBlank { user.username }}",
+                                    "Open profile for ${user.displayName.ifBlank { user.username }}",
+                                    "فتح الملف الشخصي لـ ${user.displayName.ifBlank { user.username }}",
+                                ),
                                 onClick = { switchTab(MainTab.PROFILE) },
                             )
                             Spacer(Modifier.width(10.dp))
@@ -427,12 +435,17 @@ fun MainShell(
             }
             VerticalDivider(modifier = Modifier.align(Alignment.CenterStart).padding(start = 79.dp).fillMaxHeight(), color = MaterialTheme.colorScheme.outlineVariant)
         }
+        val floatingNavBottomInset = if (!useRail && tab !in BackStackTabs) {
+            88.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        } else {
+            0.dp
+        }
         AtlasPageTransition(
             targetState = tab,
             indexSelector = { it.ordinal },
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = if (showRail) 80.dp else 0.dp),
+                .padding(start = if (showRail) 80.dp else 0.dp, bottom = floatingNavBottomInset),
         ) { currentTab ->
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 Box(Modifier.widthIn(max = if (useRail) 1200.dp else 840.dp).fillMaxSize()) {
@@ -771,7 +784,7 @@ private fun TopBarQuickActionsMenu(
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     Icon(
                         imageVector = Icons.Outlined.KeyboardArrowDown,
-                        contentDescription = "Menu rapide (Notifications et Vente)",
+                        contentDescription = atlasText("Menu rapide (Notifications et Vente)"),
                         tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier
                             .size(20.dp)
@@ -789,12 +802,12 @@ private fun TopBarQuickActionsMenu(
                 text = {
                     Column {
                         Text(
-                            text = "Notifications",
+                            text = atlasText("Notifications"),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                         )
                         Text(
-                            text = "Boîte d'alertes & activité",
+                            text = atlasText("Boîte d'alertes & activité"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -825,8 +838,8 @@ private fun TopBarQuickActionsMenu(
                 DropdownMenuItem(
                     text = {
                         Column {
-                            Text("Vente", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                            Text("Nouvelle vente / caisse", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(atlasText("Vente"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                            Text(atlasText("Nouvelle vente / caisse"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     },
                     leadingIcon = { Icon(Icons.Outlined.ShoppingCart, contentDescription = null) },
