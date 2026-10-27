@@ -1,8 +1,14 @@
 package ma.etherealmber.atlascommerce.core.net
 
+import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
 import okhttp3.Interceptor
+import okhttp3.Request
 import okhttp3.Response
+
+internal fun Request.Builder.addAtlasAppVersionHeaders(): Request.Builder =
+    header("X-Atlas-App-Version-Code", AppDetails.VERSION_CODE.toString())
+        .header("X-Atlas-App-Version-Name", AppDetails.VERSION_NAME)
 
 /**
  * Adds the headers the worker expects.
@@ -21,8 +27,7 @@ class AtlasHeaderInterceptor(
         val request = chain.request().newBuilder()
             .header("Accept", "application/json")
             .header("X-Atlas-Client", "android")
-            .header("X-Atlas-App-Version-Code", ma.etherealmber.atlascommerce.BuildConfig.VERSION_CODE.toString())
-            .header("X-Atlas-App-Version-Name", ma.etherealmber.atlascommerce.BuildConfig.VERSION_NAME)
+            .addAtlasAppVersionHeaders()
             .header("X-Device-Fingerprint", deviceIdentity.fingerprint)
             .header("User-Agent", deviceIdentity.userAgent)
             .apply {
