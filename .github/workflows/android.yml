@@ -747,13 +747,14 @@ jobs:
           EXPECTED_VERSION_CODE="${{ needs.build.outputs.version_code }}" \
           VERIFY_NONCE="${{ github.run_id }}" \
           python3 - <<'PY'
-          import json, os, time, urllib.request
+          import json, os, time, urllib.error, urllib.request
 
           live_cdn = None
           cdn_base = (os.environ.get("INPUT_CDN_URL", "").strip() or os.environ.get("DEFAULT_CDN_VAR", "https://cdn1.afmarbre.com/app-updates/android")).rstrip("/")
           expected_code = int(os.environ.get("EXPECTED_VERSION_CODE", "0") or "0")
           expected_name = os.environ.get("EXPECTED_VERSION_NAME", "").lstrip("vV")
           fetch_error = None
+          cdn_cache_control = ""
           github_manifest = None
           github_fetch_error = None
           repo = os.environ.get("GITHUB_REPOSITORY", "")
@@ -777,6 +778,7 @@ jobs:
                   )
                   with urllib.request.urlopen(req, timeout=10) as r:
                       live_cdn = json.loads(r.read().decode("utf-8"))
+                      cdn_cache_control = r.headers.get("Cache-Control", "")
                   fetch_error = None
               except Exception as e:
                   fetch_error = str(e)
@@ -832,6 +834,43 @@ jobs:
                   "minimumVersionCode", "minimum_version_code",
               )
           )
+          cache_control_normalized = cdn_cache_control.lower().replace(" ", "")
+          manifest_cache_control_ok = all(
+              directive in cache_control_normalized
+              for directive in ("no-cache", "max-age=0", "must-revalidate")
+          )
+
+          apk_url = ""
+          apk_status_code = None
+          apk_cache_control = ""
+          apk_probe_error = None
+          live_apk = live_cdn.get("cdn1Url") or live_cdn.get("apkUrl") if isinstance(live_cdn, dict) else None
+          if isinstance(live_apk, str):
+              apk_url = live_apk.strip()
+          if apk_url:
+              try:
+                  apk_req = urllib.request.Request(
+                      apk_url,
+                      method="HEAD",
+                      headers={"User-Agent": "Mozilla/5.0 AtlasVerify/1.0", "Cache-Control": "no-cache"},
+                  )
+                  with urllib.request.urlopen(apk_req, timeout=15) as r:
+                      apk_status_code = r.getcode()
+                      apk_cache_control = r.headers.get("Cache-Control", "")
+              except urllib.error.HTTPError as e:
+                  apk_status_code = e.code
+                  apk_cache_control = e.headers.get("Cache-Control", "") if e.headers else ""
+                  apk_probe_error = str(e)
+              except Exception as e:
+                  apk_probe_error = str(e)
+          cdn_apk_exists = apk_status_code is not None and 200 <= apk_status_code < 300
+          apk_cache_normalized = apk_cache_control.lower().replace(" ", "")
+          versioned_cdn_apk = apk_url.startswith(cdn_base + "/") and "-v" in apk_url and apk_url.lower().endswith(".apk")
+          versioned_apk_cache_control_ok = (
+              not versioned_cdn_apk
+              or ("immutable" in apk_cache_normalized and "max-age=31536000" in apk_cache_normalized)
+          )
+
           with open("signed-apk/publish-status.json", "w", encoding="utf-8") as fh:
               json.dump({
                   "workerAccepted": os.environ.get("WORKER_ACCEPTED") == "true",
@@ -842,6 +881,14 @@ jobs:
                   "publicCdnMatchesRelease": public_match,
                   "minimumVersionPolicyFieldsPresent": minimum_policy_present,
                   "publicCdnPolicyFields": policy_fields,
+                  "manifestCacheControl": cdn_cache_control,
+                  "manifestCacheControlSafe": manifest_cache_control_ok,
+                  "publicCdnApkUrl": apk_url,
+                  "publicCdnApkExists": cdn_apk_exists,
+                  "publicCdnApkStatusCode": apk_status_code,
+                  "publicCdnApkProbeError": apk_probe_error,
+                  "versionedApkCacheControl": apk_cache_control,
+                  "versionedApkCacheControlImmutable": versioned_apk_cache_control_ok,
                   "cfWafBlocked": os.environ.get("CF_WAF_BLOCKED") == "true",
                   "liveCdnLatestJson": live_cdn,
               }, fh, ensure_ascii=False, indent=2)
@@ -852,13 +899,31 @@ jobs:
                   result = "matches" if public_match else "does not match"
                   summary.write(f"\n### Independent release metadata verification\n- GitHub Release latest.json {gh_result} the release ({github_name or 'unknown'} / {github_code}).\n")
                   summary.write(f"- Public CDN latest.json {result} the release ({live_name or 'unknown'} / {live_code}).\n")
+                  summary.write(f"- Policy-aware Worker accepted ingestion: `{os.environ.get('WORKER_ACCEPTED') == 'true'}`\n")
                   summary.write(f"- Minimum-version policy fields present: `{minimum_policy_present}`\n")
+                  summary.write(f"- Manifest cache headers safe: `{manifest_cache_control_ok}` (`{cdn_cache_control or 'missing'}`)\n")
+                  summary.write(f"- Referenced CDN APK exists: `{cdn_apk_exists}` ({apk_status_code or 'no status'}; `{apk_url or 'no apkUrl'}`)\n")
+                  summary.write(f"- Versioned APK immutable cache headers: `{versioned_apk_cache_control_ok}` (`{apk_cache_control or 'missing'}`)\n")
                   summary.write(f"- Policy fields observed: `{json.dumps(policy_fields, ensure_ascii=False, sort_keys=True) if policy_fields else 'none'}`\n")
           if not github_match:
               print("::error::GitHub Release latest.json does not match the published release version/build.")
               raise SystemExit(1)
-          if os.environ.get("WORKER_ACCEPTED") == "true" and (not public_match or not minimum_policy_present):
-              print("::error::Worker accepted the release but public CDN latest.json failed version/policy verification.")
+          if os.environ.get("WORKER_ACCEPTED") != "true":
+              print("::error::Policy-aware Worker did not accept the release; CDN publication is unconfirmed. Direct R2 writes are disabled to preserve backend version policy.")
+              raise SystemExit(1)
+          if (
+              not public_match
+              or not minimum_policy_present
+              or not manifest_cache_control_ok
+              or not cdn_apk_exists
+              or not versioned_apk_cache_control_ok
+          ):
+              print(
+                  "::error::Public CDN publication is incomplete: "
+                  f"version_match={public_match}, policy_fields={minimum_policy_present}, "
+                  f"manifest_no_cache={manifest_cache_control_ok}, apk_exists={cdn_apk_exists}, "
+                  f"versioned_apk_immutable={versioned_apk_cache_control_ok}."
+              )
               raise SystemExit(1)
           PY
 
