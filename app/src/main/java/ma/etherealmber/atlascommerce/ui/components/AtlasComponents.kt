@@ -3,7 +3,12 @@ package ma.etherealmber.atlascommerce.ui.components
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.media.AudioManager
+import android.os.SystemClock
 import android.media.ToneGenerator
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -68,7 +73,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AdminPanelSettings
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
@@ -98,11 +103,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -137,7 +144,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlin.math.sqrt
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.ui.i18n.AtlasLanguageSelector
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 /** Semantic tone shared by chips, tiles and banners. */
@@ -578,33 +588,40 @@ fun AtlasTopBar(
     title: String,
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
+    titleLeading: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
         title = {
-            Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (!subtitle.isNullOrBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (titleLeading != null) {
+                    titleLeading()
+                    Spacer(Modifier.width(8.dp))
+                }
+                Column {
                     Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         },
         navigationIcon = {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Outlined.ArrowBack, contentDescription = "Retour")
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Retour")
                 }
             }
         },
@@ -818,6 +835,44 @@ fun AtlasBullet(text: String, modifier: Modifier = Modifier) {
 
 /** Global toggle allowing users to enable/reduce UI motion in Réglages. */
 val LocalAtlasAnimationsEnabled = compositionLocalOf { true }
+
+/** Foreground-only shake gesture; it only invokes a local prompt and never sends diagnostics. */
+@Composable
+fun ShakeGestureEffect(
+    enabled: Boolean,
+    onShake: () -> Unit,
+) {
+    val context = LocalContext.current
+    val currentOnShake by rememberUpdatedState(onShake)
+
+    DisposableEffect(context, enabled) {
+        val manager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val accelerometer = manager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        var lastTriggerAt = 0L
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent?) {
+                val values = event?.values ?: return
+                if (values.size < 3) return
+                val x = values[0] / SensorManager.GRAVITY_EARTH
+                val y = values[1] / SensorManager.GRAVITY_EARTH
+                val z = values[2] / SensorManager.GRAVITY_EARTH
+                val gForce = sqrt(x * x + y * y + z * z)
+                val now = SystemClock.elapsedRealtime()
+                if (gForce >= 2.7f && now - lastTriggerAt >= 1_800L) {
+                    lastTriggerAt = now
+                    currentOnShake()
+                }
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+        }
+        val registered = enabled && manager != null && accelerometer != null &&
+            manager.registerListener(listener, accelerometer, SensorManager.SENSOR_DELAY_UI)
+        onDispose {
+            if (registered) manager?.unregisterListener(listener)
+        }
+    }
+}
 
 /**
  * Staggered smooth entrance for landing screens, cards, and sections.
@@ -1993,17 +2048,18 @@ private fun AtlasDemoPreviewScreen(
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Atlas Commerce", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("Aperçu interactif · mode démo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(atlasText("Aperçu interactif · mode démo", "Interactive preview · demo mode", "معاينة تفاعلية · وضع تجريبي"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TextButton(onClick = onSkip) { Text("Passer") }
+                AtlasLanguageSelector()
+                TextButton(onClick = onSkip) { Text(atlasText("Passer", "Skip", "تخطي")) }
             }
             AtlasCard {
-                AtlasChip("DÉMO — DONNÉES FICTIVES", tone = AtlasTone.INFO)
+                AtlasChip(atlasText("DÉMO — DONNÉES FICTIVES", "DEMO — SAMPLE DATA", "تجربة — بيانات توضيحية"), tone = AtlasTone.INFO)
                 Spacer(Modifier.height(8.dp))
-                Text("Découvrez votre espace avant de connecter votre serveur.", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(atlasText("Découvrez votre espace avant de connecter votre serveur.", "Explore your workspace before connecting your server.", "استكشف مساحة العمل قبل ربط الخادم."), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Tout ce qui apparaît ici est un exemple local : aucune connexion réseau, aucune écriture et aucun envoi à votre base de données.",
+                    atlasText("Tout ce qui apparaît ici est un exemple local : aucune connexion réseau, aucune écriture et aucun envoi à votre base de données.", "Everything here is a local example: no network connection, writes, or data sent to your database.", "كل ما تراه هنا مثال محلي: لا يوجد اتصال بالشبكة أو كتابة أو إرسال بيانات إلى قاعدة بياناتك."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -2016,7 +2072,7 @@ private fun AtlasDemoPreviewScreen(
                     icon = Icons.Outlined.AdminPanelSettings,
                 )
                 AtlasOutlinedButton(
-                    text = "Employé",
+                    text = atlasText("Employé", "Employee", "موظف"),
                     onClick = { adminPreview = false },
                     modifier = Modifier.weight(1f),
                     icon = Icons.Outlined.Inventory2,
@@ -2024,40 +2080,40 @@ private fun AtlasDemoPreviewScreen(
             }
             if (adminPreview) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AtlasStatTile("À recevoir", "8 450 DH", modifier = Modifier.weight(1f), hint = "3 clients", tone = AtlasTone.INFO)
-                    AtlasStatTile("À payer", "5 200 DH", modifier = Modifier.weight(1f), hint = "fournisseurs + paie", tone = AtlasTone.WARNING)
+                    AtlasStatTile(atlasText("À recevoir", "Receivables", "مبالغ مستحقة"), "8 450 DH", modifier = Modifier.weight(1f), hint = atlasText("3 clients", "3 customers", "٣ عملاء"), tone = AtlasTone.INFO)
+                    AtlasStatTile(atlasText("À payer", "Payables", "مبالغ واجبة الدفع"), "5 200 DH", modifier = Modifier.weight(1f), hint = "fournisseurs + paie", tone = AtlasTone.WARNING)
                 }
                 AtlasCard {
-                    Text("Tableau de bord Admin", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(atlasText("Tableau de bord Admin", "Admin dashboard", "لوحة تحكم المسؤول"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     AtlasDivider(Modifier.padding(vertical = 8.dp))
-                    AtlasInfoRow("Salaire équipe à verser", "12 600 DH")
-                    AtlasInfoRow("Client Atlas BTP · échéance 2 nov.", "3 200 DH")
-                    AtlasInfoRow("Facture fournisseur · échéance 3 nov.", "1 450 DH")
-                    AtlasInfoRow("Rapport mensuel", "Prêt à exporter en PDF")
+                    AtlasInfoRow(atlasText("Salaire équipe à verser", "Team payroll due", "رواتب الفريق المستحقة"), "12 600 DH")
+                    AtlasInfoRow(atlasText("Client Atlas BTP · échéance 2 nov.", "Atlas BTP customer · due Nov 2", "عميل Atlas BTP · الاستحقاق ٢ نوفمبر"), "3 200 DH")
+                    AtlasInfoRow(atlasText("Facture fournisseur · échéance 3 nov.", "Supplier invoice · due Nov 3", "فاتورة مورد · الاستحقاق ٣ نوفمبر"), "1 450 DH")
+                    AtlasInfoRow(atlasText("Rapport mensuel", "Monthly report", "التقرير الشهري"), atlasText("Prêt à exporter en PDF", "Ready to export as PDF", "جاهز للتصدير بصيغة PDF"))
                 }
                 AtlasCard {
-                    AtlasChip("RAPPORT MENSUEL", tone = AtlasTone.POSITIVE)
+                    AtlasChip(atlasText("RAPPORT MENSUEL", "MONTHLY REPORT", "التقرير الشهري"), tone = AtlasTone.POSITIVE)
                     Spacer(Modifier.height(6.dp))
-                    Text("À suivre cette semaine", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(atlasText("À suivre cette semaine", "This week", "هذا الأسبوع"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Text("• Client Atlas BTP doit régler 3 200 DH.\n• Client Marbre Plus a payé sa facture.\n• Facture fournisseur de 1 450 DH à payer.\n• Paie de l’équipe à préparer avant le 3.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AtlasStatTile("Mon salaire", "4 200 DH", modifier = Modifier.weight(1f), hint = "Exemple uniquement", tone = AtlasTone.INFO)
-                    AtlasStatTile("Prochaine paie", "3 nov.", modifier = Modifier.weight(1f), hint = "Dans 9 jours", tone = AtlasTone.POSITIVE)
+                    AtlasStatTile(atlasText("Mon salaire", "My pay", "راتبي"), "4 200 DH", modifier = Modifier.weight(1f), hint = atlasText("Exemple uniquement", "Example only", "مثال فقط"), tone = AtlasTone.INFO)
+                    AtlasStatTile(atlasText("Prochaine paie", "Next payday", "موعد الراتب القادم"), "3 nov.", modifier = Modifier.weight(1f), hint = atlasText("Dans 9 jours", "In 9 days", "بعد ٩ أيام"), tone = AtlasTone.POSITIVE)
                 }
                 AtlasCard {
-                    Text("Mon espace Employé", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(atlasText("Mon espace Employé", "My employee workspace", "مساحة الموظف الخاصة بي"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     AtlasDivider(Modifier.padding(vertical = 8.dp))
-                    AtlasInfoRow("Statut de la paie", "À venir")
-                    AtlasInfoRow("Mes tâches", "2 à traiter")
+                    AtlasInfoRow(atlasText("Statut de la paie", "Payroll status", "حالة الرواتب"), atlasText("À venir", "Upcoming", "قادم"))
+                    AtlasInfoRow(atlasText("Mes tâches", "My tasks", "مهامي"), atlasText("2 à traiter", "2 to do", "مهمتان قيد المعالجة"))
                     Spacer(Modifier.height(6.dp))
-                    Text("Les employés ne voient que leurs propres informations. Les montants affichés ici sont fictifs.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(atlasText("Les employés ne voient que leurs propres informations. Les montants affichés ici sont fictifs.", "Employees only see their own information. Amounts shown here are examples.", "لا يرى الموظفون سوى معلوماتهم الخاصة. المبالغ المعروضة هنا أمثلة توضيحية."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            AtlasButton(text = "Continuer vers la présentation", onClick = onContinue, modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.RocketLaunch)
+            AtlasButton(text = atlasText("Continuer vers la présentation", "Continue to introduction", "متابعة إلى المقدمة"), onClick = onContinue, modifier = Modifier.fillMaxWidth(), icon = Icons.Outlined.RocketLaunch)
             TextButton(onClick = onSkip, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                Text("Ignorer et configurer mon serveur")
+                Text(atlasText("Ignorer et configurer mon serveur", "Skip and configure my server", "تخطي وإعداد الخادم"))
             }
         }
     }
@@ -2103,14 +2159,15 @@ fun AtlasWelcomeOnboardingScreen(
                         color = MaterialTheme.colorScheme.onBackground,
                     )
                     Text(
-                        text = "Configuration de bienvenue · ${step + 1}/$total",
+                        text = atlasText("Configuration de bienvenue · ${step + 1}/$total", "Welcome setup · ${step + 1}/$total", "إعداد الترحيب · ${step + 1}/$total"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                AtlasLanguageSelector()
                 if (step < total - 1) {
                     TextButton(onClick = onComplete) {
-                        Text("Passer")
+                        Text(atlasText("Passer", "Skip", "تخطي"))
                     }
                 }
             }
@@ -2258,7 +2315,7 @@ fun AtlasWelcomeOnboardingScreen(
                     )
                 }
                 AtlasButton(
-                    text = if (step < total - 1) "Continuer" else "Commencer",
+                    text = if (step < total - 1) atlasText("Continuer", "Continue", "متابعة") else "Commencer",
                     onClick = {
                         if (step < total - 1) {
                             step += 1

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import org.json.JSONArray
@@ -67,10 +68,12 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         val SAVED_SERVERS = stringPreferencesKey("saved_servers_v1")
         val SAVED_ACCOUNTS = stringPreferencesKey("saved_accounts_v1")
         val THEME = stringPreferencesKey("theme_mode")
+        val LANGUAGE = stringPreferencesKey("app_language")
         val DENSITY = stringPreferencesKey("density_mode")
         val ANIMATIONS_ENABLED = booleanPreferencesKey("animations_enabled")
         val DEVELOPER_MODE_ENABLED = booleanPreferencesKey("developer_mode_enabled")
         val AUTO_OPEN_CAMERA = booleanPreferencesKey("auto_open_camera")
+        val SHAKE_TO_REPORT = booleanPreferencesKey("shake_to_report_enabled")
         val SCAN_HAPTIC = booleanPreferencesKey("scan_haptic_enabled")
         val SCAN_SOUND = booleanPreferencesKey("scan_sound_enabled")
         val AUTO_ADD_CART_ON_SCAN = booleanPreferencesKey("auto_add_cart_on_scan")
@@ -149,6 +152,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         }
         .distinctUntilChanged()
 
+    val appLanguage: Flow<AppLanguage> = safeData
+        .map { prefs -> AppLanguage.fromTag(prefs.safeString(Keys.LANGUAGE.name)) }
+        .distinctUntilChanged()
+
     val densityMode: Flow<DensityMode> = safeData
         .map { prefs ->
             when (val raw = prefs.rawByName(Keys.DENSITY.name)) {
@@ -171,6 +178,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
     /** Strictly false by default so entering Scan / Scan Device never starts camera immediately. */
     val autoOpenCamera: Flow<Boolean> = safeData
         .map { it.safeBoolean(Keys.AUTO_OPEN_CAMERA.name) ?: false }
+        .distinctUntilChanged()
+
+    val shakeToReportEnabled: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.SHAKE_TO_REPORT.name) ?: true }
         .distinctUntilChanged()
 
     val scanHapticEnabled: Flow<Boolean> = safeData
@@ -304,6 +315,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         safeEdit { prefs -> prefs.putClean(Keys.THEME, mode.storageKey) }
     }
 
+    suspend fun setAppLanguage(language: AppLanguage) {
+        safeEdit { prefs -> prefs.putClean(Keys.LANGUAGE, language.tag) }
+    }
+
     suspend fun setDensityMode(mode: DensityMode) {
         safeEdit { prefs -> prefs.putClean(Keys.DENSITY, mode.storageKey) }
     }
@@ -323,6 +338,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
 
     suspend fun setAutoOpenCamera(enabled: Boolean) {
         safeEdit { prefs -> prefs.putClean(Keys.AUTO_OPEN_CAMERA, enabled) }
+    }
+
+    suspend fun setShakeToReportEnabled(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.SHAKE_TO_REPORT, enabled) }
     }
 
     suspend fun setScanHapticEnabled(enabled: Boolean) {

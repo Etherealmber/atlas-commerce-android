@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.session.SessionManager
@@ -32,6 +33,19 @@ import java.text.Normalizer
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+
+/** Preserve any draft edited after Send while clearing the submitted text (including its whitespace). */
+internal fun clearSubmittedAgentDraft(currentInput: String, submittedInput: String): String =
+    if (currentInput.trim() == submittedInput) "" else currentInput
+
+/** API timestamps are ISO-8601 strings, so lexicographic descending order is chronological. */
+internal fun newestAgentThreadsFirst(threads: List<AgentThreadSummaryDto>): List<AgentThreadSummaryDto> =
+    threads.withIndex()
+        .sortedWith(
+            compareByDescending<IndexedValue<AgentThreadSummaryDto>> { it.value.updatedAt.orEmpty() }
+                .thenBy { it.index },
+        )
+        .map { it.value }
 
 @HiltViewModel
 class AgentViewModel @Inject constructor(
@@ -78,6 +92,7 @@ class AgentViewModel @Inject constructor(
     val state: StateFlow<UiState> = _state.asStateFlow()
     private var pendingSensitivePrompt: String? = null
     private var pendingSensitiveAttachments: List<AgentAttachment> = emptyList()
+    private var pendingSensitiveResponseLanguage: AppLanguage = AppLanguage.FRENCH
     @Volatile private var activeSendRequestId: String? = null
     @Volatile private var activeThreadLoadId: String? = null
 
@@ -241,7 +256,7 @@ class AgentViewModel @Inject constructor(
             val nextRes = nextDef.await()
             val threadsRes = threadsDef.await()
 
-            val remoteThreads = (threadsRes as? ApiResult.Success)?.data.orEmpty()
+            val remoteThreads = newestAgentThreadsFirst((threadsRes as? ApiResult.Success)?.data.orEmpty())
             _state.update {
                 it.copy(
                     status = (statusRes as? ApiResult.Success)?.data ?: it.status,
@@ -288,10 +303,12 @@ class AgentViewModel @Inject constructor(
     fun confirmSensitivePrompt() {
         val prompt = pendingSensitivePrompt ?: return
         val attachments = pendingSensitiveAttachments
+        val responseLanguage = pendingSensitiveResponseLanguage
         pendingSensitivePrompt = null
         pendingSensitiveAttachments = emptyList()
+        pendingSensitiveResponseLanguage = AppLanguage.FRENCH
         _state.update { it.copy(sensitiveConfirmation = false) }
-        sendPrompt(prompt, attachments, sensitiveConfirmed = true)
+        sendPrompt(prompt, attachments, sensitiveConfirmed = true, responseLanguage = responseLanguage)
     }
 
     fun cancelSensitivePrompt() {
@@ -304,14 +321,21 @@ class AgentViewModel @Inject constructor(
         prompt: String = _state.value.input,
         attachments: List<AgentAttachment> = _state.value.attachments,
         sensitiveConfirmed: Boolean = false,
+        responseLanguage: AppLanguage = AppLanguage.FRENCH,
     ) {
         val typed = prompt.trim()
-        val clean = typed.ifBlank { if (attachments.isNotEmpty()) "Lis les fichiers joints et résume les informations importantes." else "" }
+        val attachmentOnlyPrompt = when (responseLanguage) {
+            AppLanguage.FRENCH -> "Lis les fichiers joints et résume les informations importantes."
+            AppLanguage.ENGLISH -> "Read the attached files and summarize the important information."
+            AppLanguage.ARABIC -> "اقرأ الملفات المرفقة ولخّص المعلومات المهمة."
+        }
+        val clean = typed.ifBlank { if (attachments.isNotEmpty()) attachmentOnlyPrompt else "" }
         val snapshot = _state.value
         if (clean.isBlank() || snapshot.sending || snapshot.loadingThread) return
         if (!sensitiveConfirmed && (requiresSensitiveConfirmation(clean) || attachments.isNotEmpty())) {
             pendingSensitivePrompt = clean
             pendingSensitiveAttachments = attachments
+            pendingSensitiveResponseLanguage = responseLanguage
             _state.update { it.copy(sensitiveConfirmation = true) }
             return
         }
@@ -346,11 +370,11 @@ class AgentViewModel @Inject constructor(
             attachmentNames = attachments.map { it.name },
         )
 
-        AtlasLogBuffer.log("AGENT", "Chat request started")
+        AtlasLogBuffer.log("AGENT", "Chat request started: request=${requestId.take(8)} thread=$activeId")
         val firstTokenLogged = AtomicBoolean(false)
         _state.update {
             it.copy(
-                input = if (typed == it.input) "" else it.input,
+                input = clearSubmittedAgentDraft(it.input, typed),
                 activeThreadTitle = resolvedTitle,
                 sending = true,
                 streamingReply = "",
@@ -375,6 +399,7 @@ class AgentViewModel @Inject constructor(
                     threadId = activeId,
                     images = attachments.flatMap { it.imageDataUrls }.take(4),
                     documents = attachments.flatMap { it.documentDataUrls }.take(2),
+                    responseLanguage = responseLanguage,
                     onToken = { delta ->
                         if (firstTokenLogged.compareAndSet(false, true)) {
                             AtlasLogBuffer.log("AGENT", "First response token received")

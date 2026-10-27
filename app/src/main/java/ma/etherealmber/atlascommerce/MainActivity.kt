@@ -1,6 +1,8 @@
 package ma.etherealmber.atlascommerce
 
 import android.content.Intent
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -32,6 +34,15 @@ class MainActivity : ComponentActivity() {
             intent?.action == AtlasApp.ACTION_ASSIST_NOTIFICATION
         openSettingsIntent = intent?.getBooleanExtra(AtlasApp.EXTRA_OPEN_SETTINGS, false) == true
         enableEdgeToEdge()
+        // Let the app surface/content draw behind Android's navigation area. The
+        // floating Atlas navigation pill itself remains opaque in MainShell.
+        window.navigationBarColor = Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.navigationBarDividerColor = Color.TRANSPARENT
+        }
         setContent {
             AtlasRoot(
                 deepLinkQrToken = deepLinkQrToken,

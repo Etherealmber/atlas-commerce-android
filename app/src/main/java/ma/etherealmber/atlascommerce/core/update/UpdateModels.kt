@@ -85,6 +85,15 @@ internal fun formatReleaseNotesForDisplay(rawBody: String, tagName: String): Str
         ?: "• Mise à jour $tagName — optimisations et correctifs."
 }
 
+internal fun minimumVersionRequiresUpdate(
+    installedVersionCode: Int,
+    minimumSupportedVersionCode: Int,
+    availableVersionCode: Int,
+): Boolean = minimumSupportedVersionCode > 0 &&
+    installedVersionCode < minimumSupportedVersionCode &&
+    availableVersionCode > installedVersionCode &&
+    availableVersionCode >= minimumSupportedVersionCode
+
 data class UpdateInfo(
     val versionCode: Int,
     val versionName: String,

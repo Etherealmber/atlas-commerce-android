@@ -1,8 +1,14 @@
 package ma.etherealmber.atlascommerce.core.net
 
+import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
 import okhttp3.Interceptor
+import okhttp3.Request
 import okhttp3.Response
+
+internal fun Request.Builder.addAtlasAppVersionHeaders(): Request.Builder =
+    header("X-Atlas-App-Version-Code", AppDetails.VERSION_CODE.toString())
+        .header("X-Atlas-App-Version-Name", AppDetails.VERSION_NAME)
 
 /**
  * Adds the headers the worker expects.
@@ -21,6 +27,7 @@ class AtlasHeaderInterceptor(
         val request = chain.request().newBuilder()
             .header("Accept", "application/json")
             .header("X-Atlas-Client", "android")
+            .addAtlasAppVersionHeaders()
             .header("X-Device-Fingerprint", deviceIdentity.fingerprint)
             .header("User-Agent", deviceIdentity.userAgent)
             .apply {
@@ -33,9 +40,22 @@ class AtlasHeaderInterceptor(
         return try {
             val resp = chain.proceed(request)
             val ms = ((System.nanoTime() - startNs) / 1_000_000L).coerceAtLeast(1L)
+            val apiError = if (resp.code >= 400) {
+                runCatching {
+                    API_ERROR_FIELD.findAll(resp.peekBody(2_048L).string())
+                        .mapNotNull { match ->
+                            val key = match.groupValues[1]
+                            val value = match.groupValues[2].trim().take(180)
+                            value.takeIf(String::isNotBlank)?.let { "$key=$it" }
+                        }
+                        .take(3)
+                        .joinToString("; ")
+                }.getOrDefault("")
+            } else ""
             ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
                 tag = "HTTP",
-                message = "${request.method} ${request.url.encodedPath} -> ${resp.code} (${ms}ms)",
+                message = "${request.method} ${request.url.encodedPath} -> ${resp.code} (${ms}ms)" +
+                    apiError.takeIf { it.isNotBlank() }?.let { "; $it" }.orEmpty(),
                 level = if (resp.code >= 400) "WARN" else "INFO",
             )
             resp
@@ -48,6 +68,10 @@ class AtlasHeaderInterceptor(
             )
             throw t
         }
+    }
+
+    private companion object {
+        val API_ERROR_FIELD = Regex("\\\"(code|error|message)\\\"\\s*:\\s*\\\"([^\\\"]{1,400})\\\"", RegexOption.IGNORE_CASE)
     }
 }
 
@@ -70,6 +94,11 @@ class SessionGuardInterceptor(
                 }
             }.getOrNull()
             if (code == null || code !in USER_MISTAKE_CODES) {
+                ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+                    tag = "AUTH",
+                    message = "Session guard received HTTP 401 for ${request.url.encodedPath}; code=${code ?: "missing"}; ending the authenticated session",
+                    level = "WARN",
+                )
                 sessionEvents.notifyExpired()
             }
         }

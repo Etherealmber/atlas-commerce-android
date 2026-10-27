@@ -85,6 +85,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.util.openExternal
@@ -143,7 +144,7 @@ fun ProblemReportDialog(
     }
 
     LaunchedEffect(Unit) {
-        logsPreview = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 16_000)
+        logsPreview = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 32_000)
         loadingLogs = false
     }
 
@@ -189,12 +190,16 @@ fun ProblemReportDialog(
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = "Signaler un problème",
+                        text = atlasText("Signaler un problème", "Report a problem", "الإبلاغ عن مشكلة"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "Envoi via Atlas · sans connexion GitHub",
+                        text = atlasText(
+                            "Envoi via Atlas Bot · le statut GitHub est confirmé après l'envoi.",
+                            "Sent via Atlas Bot · GitHub issue status is confirmed after submission.",
+                            "يُرسل عبر Atlas Bot · يتم تأكيد حالة GitHub بعد الإرسال.",
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -369,7 +374,7 @@ fun ProblemReportDialog(
                                 onClick = {
                                     scope.launch {
                                         loadingLogs = true
-                                        logsPreview = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 16_000)
+                                        logsPreview = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 32_000)
                                         loadingLogs = false
                                     }
                                 },
@@ -457,13 +462,13 @@ fun ProblemReportDialog(
         },
         confirmButton = {
             AtlasButton(
-                text = "Envoyer à @atlas-bot",
+                text = atlasText("Envoyer à Atlas Bot", "Send to Atlas Bot", "إرسال إلى Atlas Bot"),
                 loading = submitting,
                 onClick = {
                     scope.launch {
                         submitting = true
                         submitError = null
-                        val freshLogs = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 16_000)
+                        val freshLogs = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 32_000)
                         logsPreview = freshLogs
                         val reportKind = when (category) {
                             "Demande de fonctionnalité" -> "idea"
@@ -536,7 +541,7 @@ fun ProblemReportDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = !submitting) {
-                Text("Annuler")
+                Text(atlasText("Annuler", "Cancel", "إلغاء"))
             }
         },
     )

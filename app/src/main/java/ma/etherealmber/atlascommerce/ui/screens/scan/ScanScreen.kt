@@ -85,6 +85,7 @@ import ma.etherealmber.atlascommerce.ui.components.CameraVisualStyle
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.ProductCreateDialog
 import ma.etherealmber.atlascommerce.ui.components.ScanFeedback
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 /**
@@ -110,6 +111,11 @@ fun ScanScreen(
     val scanSound by viewModel.scanSoundEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val view = LocalView.current
+    val cameraPermissionDeniedMessage = atlasText(
+        "Caméra refusée — utilisez la saisie manuelle.",
+        "Camera permission denied — use manual entry instead.",
+        "تم رفض إذن الكاميرا — استخدم الإدخال اليدوي بدلًا من ذلك.",
+    )
     var showCreateDialog by remember { mutableStateOf(false) }
 
     val isAdmin = Roles.canCreateProductDirectly(user.role)
@@ -131,7 +137,7 @@ fun ScanScreen(
             viewModel.setCameraEnabled(true)
         } else {
             viewModel.setCameraEnabled(false)
-            onToast("Caméra refusée — utilisez la saisie manuelle.")
+            onToast(cameraPermissionDeniedMessage)
         }
     }
 
@@ -219,7 +225,7 @@ fun ScanScreen(
                     }
                     Spacer(Modifier.height(14.dp))
                     Text(
-                        text = "Caméra en veille",
+                        text = atlasText("Caméra en veille", "Camera is paused", "الكاميرا متوقفة مؤقتًا"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White,
@@ -227,14 +233,14 @@ fun ScanScreen(
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "La caméra ne s'ouvre plus automatiquement. Appuyez ci-dessous pour scanner un code-barres, ou saisissez le code manuellement.",
+                        text = atlasText("La caméra ne s'ouvre plus automatiquement. Appuyez ci-dessous pour scanner un code-barres, ou saisissez le code manuellement.", "The camera will no longer open automatically. Tap below to scan a barcode, or enter the code manually.", "لن تفتح الكاميرا تلقائيًا بعد الآن. اضغط أدناه لمسح الرمز الشريطي أو أدخل الرمز يدويًا."),
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.78f),
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(16.dp))
                     AtlasButton(
-                        text = "Démarrer la caméra",
+                        text = atlasText("Démarrer la caméra", "Start camera", "بدء الكاميرا"),
                         onClick = startCameraExplicitly,
                         icon = Icons.Outlined.Videocam,
                     )
@@ -259,13 +265,13 @@ fun ScanScreen(
                         ) {
                             Icon(
                                 Icons.Outlined.Close,
-                                contentDescription = "Annuler le scan",
+                                contentDescription = atlasText("Annuler le scan", "Cancel scan", "إلغاء المسح"),
                                 tint = Color.White,
                                 modifier = Modifier.size(16.dp),
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                text = "Annuler",
+                                text = atlasText("Annuler", "Cancel", "إلغاء"),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = Color.White,
                             )
@@ -286,7 +292,7 @@ fun ScanScreen(
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                text = if (isAdmin) "Nouveau produit" else "Demander à l'Admin",
+                                text = if (isAdmin) atlasText("Nouveau produit", "New product", "منتج جديد") else atlasText("Demander à l'Admin", "Ask an admin", "طلب من المسؤول"),
                                 color = Color.White,
                             )
                         }
@@ -294,7 +300,7 @@ fun ScanScreen(
                             IconButton(onClick = { viewModel.setCameraEnabled(false) }) {
                                 Icon(
                                     imageVector = Icons.Outlined.VideocamOff,
-                                    contentDescription = "Fermer la caméra",
+                                    contentDescription = atlasText("Fermer la caméra", "Close camera", "إغلاق الكاميرا"),
                                     tint = Color.White,
                                 )
                             }
@@ -316,7 +322,7 @@ fun ScanScreen(
                 // Needed items & open scan requests quick strip
                 if (state.neededItems.isNotEmpty() || state.openRequests.isNotEmpty()) {
                     Text(
-                        text = "Articles nécessaires & demandes ouvertes",
+                        text = atlasText("Articles nécessaires & demandes ouvertes", "Needed items & open requests", "الأصناف المطلوبة والطلبات المفتوحة"),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -332,7 +338,7 @@ fun ScanScreen(
                                 },
                                 label = {
                                     Text(
-                                        text = "Demande : ${req.name ?: req.code}",
+                                        text = atlasText("Demande : ${req.name ?: req.code}", "Request: ${req.name ?: req.code}", "الطلب: ${req.name ?: req.code}"),
                                         style = MaterialTheme.typography.labelSmall,
                                     )
                                 },
@@ -453,12 +459,12 @@ private fun ScanResultPanel(
                             Spacer(Modifier.width(8.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    text = "QR code de sécurité PC détecté",
+                                    text = atlasText("QR code de sécurité PC détecté", "PC sign-in QR detected", "تم اكتشاف رمز QR لتسجيل دخول الكمبيوتر"),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    text = "Cet onglet scanne les articles du stock. Ouvrez le scanner d'appareil PC ou annulez.",
+                                    text = atlasText("Cet onglet scanne les articles du stock. Ouvrez le scanner d'appareil PC ou annulez.", "This scanner is for inventory barcodes. Open the PC device scanner or cancel.", "هذا الماسح مخصص لرموز المخزون. افتح ماسح أجهزة الكمبيوتر أو ألغِ العملية."),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -467,14 +473,14 @@ private fun ScanResultPanel(
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             AtlasButton(
-                                text = "Scanner poste PC",
+                                text = atlasText("Scanner poste PC", "Open PC device scanner", "فتح ماسح أجهزة الكمبيوتر"),
                                 onClick = onOpenQrDevice,
                                 modifier = Modifier.weight(1f),
                             )
                             OutlinedButton(onClick = onCancelScan) {
                                 Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Annuler")
+                                Text(atlasText("Annuler", "Cancel", "إلغاء"))
                             }
                         }
                     }
@@ -488,7 +494,7 @@ private fun ScanResultPanel(
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            text = "Recherche de ${state.lastCode}…",
+                            text = atlasText("Recherche de ${state.lastCode}…", "Searching for ${state.lastCode}…", "جارٍ البحث عن ${state.lastCode}…"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f),
@@ -496,12 +502,14 @@ private fun ScanResultPanel(
                         OutlinedButton(onClick = onCancelScan) {
                             Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Annuler")
+                            Text(atlasText("Annuler", "Cancel", "إلغاء"))
                         }
                     }
                 }
 
                 product != null -> {
+                    val stockLabel = atlasText(" · Stock ", " · Stock ", " · المخزون ")
+                    val shortLabel = atlasText(" (manque ", " (short ", " (النقص ")
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(
@@ -512,10 +520,10 @@ private fun ScanResultPanel(
                             Text(
                                 text = buildString {
                                     append(AtlasFormat.money(product.price))
-                                    append(" · Stock ")
+                                    append(stockLabel)
                                     append(AtlasFormat.quantity(product.stock))
                                     if (product.neededQuantity > 0.0) {
-                                        append(" (manque ")
+                                        append(shortLabel)
                                         append(AtlasFormat.quantity(product.neededQuantity))
                                         append(")")
                                     }
@@ -525,10 +533,10 @@ private fun ScanResultPanel(
                             )
                         }
                         if (state.added) {
-                            AtlasChip(text = "Ajouté", tone = AtlasTone.POSITIVE, icon = Icons.Outlined.CheckCircle)
+                            AtlasChip(text = atlasText("Ajouté", "Added", "تمت الإضافة"), tone = AtlasTone.POSITIVE, icon = Icons.Outlined.CheckCircle)
                         } else {
                             AtlasChip(
-                                text = if (product.isLowStock) "À réappro." else "En stock",
+                                text = if (product.isLowStock) atlasText("À réappro.", "Restock", "إعادة التخزين") else atlasText("En stock", "In stock", "متوفر"),
                                 tone = if (product.isLowStock) AtlasTone.WARNING else AtlasTone.POSITIVE,
                             )
                         }
@@ -540,22 +548,22 @@ private fun ScanResultPanel(
                     ) {
                         if (canSell) {
                             AtlasButton(
-                                text = if (state.added) "Ajouter +" else "Ajouter au panier",
+                                text = if (state.added) atlasText("Ajouter +", "Add +", "إضافة +") else atlasText("Ajouter au panier", "Add to cart", "إضافة إلى السلة"),
                                 onClick = onAdd,
                                 modifier = Modifier.weight(1f),
                                 icon = Icons.Outlined.ShoppingCart,
                             )
-                            TextButton(onClick = onOpenSale) { Text("Panier") }
+                            TextButton(onClick = onOpenSale) { Text(atlasText("Panier", "Cart", "السلة")) }
                         } else {
                             TextButton(
                                 onClick = onOpenProducts,
                                 modifier = Modifier.weight(1f),
-                            ) { Text("Voir fiche stock") }
+                            ) { Text(atlasText("Voir fiche stock", "View stock item", "عرض تفاصيل المخزون")) }
                         }
                         OutlinedButton(onClick = onCancelScan) {
                             Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Annuler")
+                            Text(atlasText("Annuler", "Cancel", "إلغاء"))
                         }
                     }
                 }
@@ -572,20 +580,20 @@ private fun ScanResultPanel(
                         Column(Modifier.weight(1f)) {
                             Text(
                                 text = if (state.pendingApproval) {
-                                    "Code ${state.lastCode} transmis à l'Administrateur"
+                                    atlasText("Code ${state.lastCode} transmis à l'Administrateur", "Code ${state.lastCode} sent to the administrator", "تم إرسال الرمز ${state.lastCode} إلى المسؤول")
                                 } else {
-                                    "Code ${state.lastCode} introuvable"
+                                    atlasText("Code ${state.lastCode} introuvable", "Code ${state.lastCode} not found", "لم يتم العثور على الرمز ${state.lastCode}")
                                 },
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
                                 text = if (state.pendingApproval) {
-                                    "La demande est en attente de validation Admin. Vous pouvez continuer ou annuler ce scan."
+                                    atlasText("La demande est en attente de validation Admin. Vous pouvez continuer ou annuler ce scan.", "The request is waiting for administrator approval. You can continue or cancel this scan.", "الطلب بانتظار موافقة المسؤول. يمكنك المتابعة أو إلغاء هذا المسح.")
                                 } else if (isAdmin) {
-                                    "En tant qu'Admin, vous pouvez créer cet article directement ou annuler ce scan."
+                                    atlasText("En tant qu'Admin, vous pouvez créer cet article directement ou annuler ce scan.", "As an administrator, you can create this item directly or cancel this scan.", "بصفتك مسؤولًا، يمكنك إنشاء هذا الصنف مباشرة أو إلغاء المسح.")
                                 } else {
-                                    "Cet article sera envoyé immédiatement à l'Administrateur pour création, ou appuyez sur Annuler."
+                                    atlasText("Cet article sera envoyé immédiatement à l'Administrateur pour création, ou appuyez sur Annuler.", "This item will be sent to the administrator for creation, or tap Cancel.", "سيُرسل هذا الصنف إلى المسؤول لإنشائه، أو اضغط إلغاء.")
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -599,7 +607,7 @@ private fun ScanResultPanel(
                     ) {
                         if (!state.pendingApproval) {
                             AtlasButton(
-                                text = if (isAdmin) "Créer le produit" else "Envoyer à l'Admin",
+                                text = if (isAdmin) atlasText("Créer le produit", "Create product", "إنشاء منتج") else atlasText("Envoyer à l'Admin", "Send to admin", "إرسال إلى المسؤول"),
                                 onClick = onOpenCreateDialog,
                                 icon = if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send,
                                 modifier = Modifier.weight(1f),
@@ -608,19 +616,19 @@ private fun ScanResultPanel(
                             TextButton(
                                 onClick = onOpenProducts,
                                 modifier = Modifier.weight(1f),
-                            ) { Text("Voir catalogue") }
+                            ) { Text(atlasText("Voir catalogue", "View catalog", "عرض الكتالوج")) }
                         }
                         OutlinedButton(onClick = onCancelScan) {
                             Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Annuler")
+                            Text(atlasText("Annuler", "Cancel", "إلغاء"))
                         }
                     }
                 }
 
                 state.error != null -> {
                     AtlasErrorCard(
-                        title = "Recherche impossible",
+                        title = atlasText("Recherche impossible", "Search failed", "تعذّر البحث"),
                         message = state.error.orEmpty(),
                         onRetry = onRetry,
                     )
@@ -631,13 +639,13 @@ private fun ScanResultPanel(
                     ) {
                         Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Annuler")
+                        Text(atlasText("Annuler", "Cancel", "إلغاء"))
                     }
                 }
 
                 else -> {
                     Text(
-                        text = "Scanner un article du stock",
+                        text = atlasText("Scanner un article du stock", "Scan an inventory item", "مسح صنف من المخزون"),
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Text(
@@ -662,8 +670,8 @@ private fun ManualCodeField(
         AtlasTextField(
             value = code,
             onValueChange = { code = it },
-            label = "Saisie manuelle",
-            placeholder = "Code-barres / SKU",
+            label = atlasText("Saisie manuelle", "Manual entry", "إدخال يدوي"),
+            placeholder = atlasText("Code-barres / SKU", "Barcode / SKU", "الرمز الشريطي / SKU"),
             keyboardType = KeyboardType.Text,
             imeAction = ImeAction.Search,
             onDone = {
@@ -684,7 +692,7 @@ private fun ManualCodeField(
             },
             enabled = code.isNotBlank(),
         ) {
-            Text("Chercher")
+            Text(atlasText("Chercher", "Search", "بحث"))
         }
         if (code.isNotBlank() || hasActiveScan) {
             IconButton(
@@ -693,7 +701,7 @@ private fun ManualCodeField(
                     if (hasActiveScan) onClearScan()
                 },
             ) {
-                Icon(Icons.Outlined.Close, contentDescription = "Effacer et annuler")
+                Icon(Icons.Outlined.Close, contentDescription = atlasText("Effacer et annuler", "Clear and cancel", "مسح وإلغاء"))
             }
         }
     }
@@ -720,22 +728,22 @@ private fun CameraPermissionPane(
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "Accès caméra requis",
+            text = atlasText("Accès caméra requis", "Camera access required", "يلزم الوصول إلى الكاميرا"),
             style = MaterialTheme.typography.titleMedium,
             color = Color.White,
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "La caméra sert uniquement à lire les codes-barres et se coupe automatiquement dès que vous quittez l'onglet Scan.",
+            text = atlasText("La caméra sert uniquement à lire les codes-barres et se coupe automatiquement dès que vous quittez l'onglet Scan.", "The camera is used only to read barcodes and turns off automatically when you leave the Scan tab.", "تُستخدم الكاميرا لقراءة الرموز الشريطية فقط، وتتوقف تلقائيًا عند مغادرة علامة تبويب المسح."),
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.75f),
         )
         Spacer(Modifier.height(14.dp))
-        AtlasButton(text = "Autoriser la caméra", onClick = onRequest)
+        AtlasButton(text = atlasText("Autoriser la caméra", "Allow camera", "السماح بالكاميرا"), onClick = onRequest)
         if (askedOnce) {
             Spacer(Modifier.height(6.dp))
             TextButton(onClick = onOpenSettings) {
-                Text("Ouvrir les réglages", color = Color.White)
+                Text(atlasText("Ouvrir les réglages", "Open settings", "فتح الإعدادات"), color = Color.White)
             }
         }
     }

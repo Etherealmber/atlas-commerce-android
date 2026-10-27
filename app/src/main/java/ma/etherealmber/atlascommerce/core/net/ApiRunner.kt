@@ -85,19 +85,19 @@ class ApiRunner @Inject constructor(private val moshi: Moshi) {
         is JsonDataException -> notAtlas()
         is UnknownHostException -> ApiResult.Failure(
             CODE_NETWORK,
-            "Site introuvable — vérifiez attentivement que l'adresse du serveur saisie est bien écrite et que votre connexion est active.",
+            "Impossible de joindre ce serveur. Vérifiez votre connexion puis réessayez.",
         )
         is SocketTimeoutException -> ApiResult.Failure(
             CODE_NETWORK,
-            "Le serveur ne répond pas — vérifiez que l'adresse saisie est correcte et que votre site Atlas Commerce Web est en ligne.",
+            "La connexion prend trop de temps. Réessayez dans quelques instants.",
         )
         is IOException -> ApiResult.Failure(
             CODE_NETWORK,
-            "Serveur ou site indisponible. Vérifiez que ce que vous avez tapé est correct et que votre instance Atlas Commerce Web est accessible.",
+            "La connexion a été interrompue. Vérifiez votre réseau puis réessayez.",
         )
         else -> ApiResult.Failure(
             CODE_UNKNOWN,
-            t.message?.takeIf { it.isNotBlank() } ?: "Erreur inattendue — vérifiez votre saisie et réessayez.",
+            "Une erreur inattendue est survenue. Réessayez.",
         )
     }
 
@@ -114,9 +114,18 @@ class ApiRunner @Inject constructor(private val moshi: Moshi) {
         val payload = raw
             ?.takeIf { it.isNotBlank() }
             ?.let { body -> runCatching { errorAdapter.fromJson(body) }.getOrNull() }
-        val message = payload?.error
-            ?: payload?.message
-            ?: defaultMessage(status)
+        if (status == 426 || payload?.code == "APP_UPDATE_REQUIRED") {
+            return ApiResult.Failure(
+                code = "APP_UPDATE_REQUIRED",
+                message = "Une mise à jour est requise pour continuer. Téléchargez la dernière version.",
+                httpStatus = status,
+            )
+        }
+        val message = if (status in 500..599) {
+            "Une erreur du service est survenue. Réessayez plus tard."
+        } else {
+            (payload?.error ?: payload?.message ?: defaultMessage(status)).take(240)
+        }
         return ApiResult.Failure(
             code = payload?.code ?: "HTTP_$status",
             message = message,

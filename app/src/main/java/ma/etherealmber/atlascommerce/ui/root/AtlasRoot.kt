@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.root
 
 import android.Manifest
+import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.os.Build
 import android.content.Intent
@@ -38,8 +39,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -49,6 +53,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import java.util.Locale
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.update.UpdateState
@@ -59,6 +65,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasWelcomeOnboardingScreen
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.MandatoryUpdateScreen
 import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.LocalSetAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrDeviceScreen
 import ma.etherealmber.atlascommerce.ui.screens.settings.DeveloperDiagnosticsScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.AboutScreen
@@ -110,6 +118,7 @@ fun AtlasRoot(
 ) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val densityMode by viewModel.densityMode.collectAsStateWithLifecycle()
+    val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
     val appearanceLoaded by viewModel.appearanceLoaded.collectAsStateWithLifecycle()
     val animationsEnabled by viewModel.animationsEnabled.collectAsStateWithLifecycle()
     var appearanceTimedOut by remember { mutableStateOf(false) }
@@ -121,33 +130,49 @@ fun AtlasRoot(
         }
     }
 
-    CompositionLocalProvider(LocalAtlasAnimationsEnabled provides animationsEnabled) {
-        AtlasTheme(themeMode = themeMode, densityMode = densityMode) {
-            val dark = LocalAtlasDarkTheme.current
-            val activity = LocalContext.current.findActivity()
-            val view = LocalView.current
-            SideEffect {
-                val window = activity?.window ?: return@SideEffect
-                WindowCompat.getInsetsController(window, view).apply {
-                    isAppearanceLightStatusBars = !dark
-                    isAppearanceLightNavigationBars = !dark
+    val baseConfiguration = LocalConfiguration.current
+    val localizedConfiguration = remember(baseConfiguration, appLanguage) {
+        Configuration(baseConfiguration).apply {
+            setLocale(Locale.forLanguageTag(appLanguage.tag))
+        }
+    }
+
+    CompositionLocalProvider(
+        LocalAtlasAnimationsEnabled provides animationsEnabled,
+        LocalAtlasLanguage provides appLanguage,
+        LocalSetAtlasLanguage provides viewModel::setAppLanguage,
+    ) {
+        CompositionLocalProvider(
+            LocalConfiguration provides localizedConfiguration,
+            LocalLayoutDirection provides if (appLanguage.isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr,
+        ) {
+            AtlasTheme(themeMode = themeMode, densityMode = densityMode) {
+                val dark = LocalAtlasDarkTheme.current
+                val activity = LocalContext.current.findActivity()
+                val view = LocalView.current
+                SideEffect {
+                    val window = activity?.window ?: return@SideEffect
+                    WindowCompat.getInsetsController(window, view).apply {
+                        isAppearanceLightStatusBars = !dark
+                        isAppearanceLightNavigationBars = !dark
+                    }
                 }
-            }
-            if (!appearanceLoaded && !appearanceTimedOut) {
-                AtlasBootSplashScreen(holdUntilReady = true)
-            } else {
-                AtlasGate(
-                    deepLinkQrToken = deepLinkQrToken,
-                    onDeepLinkConsumed = onDeepLinkConsumed,
-                    deepLinkVerify = deepLinkVerify,
-                    onVerifyLinkConsumed = onVerifyLinkConsumed,
-                    deepLinkServerOrigin = deepLinkServerOrigin,
-                    openNotificationsRequested = openNotificationsRequested,
-                    onOpenNotificationsConsumed = onOpenNotificationsConsumed,
-                    openSettingsRequested = openSettingsRequested,
-                    onOpenSettingsConsumed = onOpenSettingsConsumed,
-                    viewModel = viewModel,
-                )
+                if (!appearanceLoaded && !appearanceTimedOut) {
+                    AtlasBootSplashScreen(holdUntilReady = true)
+                } else {
+                    AtlasGate(
+                        deepLinkQrToken = deepLinkQrToken,
+                        onDeepLinkConsumed = onDeepLinkConsumed,
+                        deepLinkVerify = deepLinkVerify,
+                        onVerifyLinkConsumed = onVerifyLinkConsumed,
+                        deepLinkServerOrigin = deepLinkServerOrigin,
+                        openNotificationsRequested = openNotificationsRequested,
+                        onOpenNotificationsConsumed = onOpenNotificationsConsumed,
+                        openSettingsRequested = openSettingsRequested,
+                        onOpenSettingsConsumed = onOpenSettingsConsumed,
+                        viewModel = viewModel,
+                    )
+                }
             }
         }
     }
@@ -314,8 +339,10 @@ private fun AtlasGate(
     val baseStage = when {
         !bootSplashFinished || loadingBackend -> RootStage.SPLASH
         !onboardingDone -> RootStage.ONBOARDING
-        server == null -> RootStage.SERVER_SETUP
         mandatoryBlocking -> RootStage.MANDATORY_UPDATE
+        // Server setup is a pre-login step. Never bounce an active session back
+        // to server selection after authentication.
+        server == null && session !is SessionState.Active -> RootStage.SERVER_SETUP
         session is SessionState.SignedOut -> RootStage.LOGIN
         activeUser != null -> RootStage.SHELL
         else -> RootStage.SPLASH

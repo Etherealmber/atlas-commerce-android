@@ -92,6 +92,7 @@ import ma.etherealmber.atlascommerce.ui.components.FinanceReportActionsDialog
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelection
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelectionDialog
 import ma.etherealmber.atlascommerce.ui.components.StatusChip
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 @Composable
@@ -354,7 +355,12 @@ private fun HomeContent(
     // dashboard's financial fields after that protected endpoint has authorized us.
     val canDisplayFinance = isAdmin && state.finance != null
     val invoices = dashboard.recentInvoices.take(5)
-    val greeting = if (LocalTime.now(ZoneId.systemDefault()).hour in 5..17) "Bonjour" else "Bonsoir"
+    val isDaytimeGreeting = LocalTime.now(ZoneId.systemDefault()).hour in 5..17
+    val greeting = if (isDaytimeGreeting) {
+        atlasText("Bonjour", "Good morning", "صباح الخير")
+    } else {
+        atlasText("Bonsoir", "Good evening", "مساء الخير")
+    }
 
     LazyColumn(
         contentPadding = PaddingValues(
@@ -696,6 +702,86 @@ private fun MonthlySalesTrendCard(points: List<MonthlyPointDto>, currency: Strin
     }
 }
 
+private data class FinanceChartEntry(
+    val label: String,
+    val amount: Double,
+    val color: Color,
+)
+
+@Composable
+private fun FinanceMiniBarChart(
+    title: String,
+    entries: List<FinanceChartEntry>,
+    currency: String,
+) {
+    if (entries.isEmpty()) return
+    val peak = entries.maxOfOrNull { kotlin.math.abs(it.amount) }?.takeIf { it > 0.0 } ?: 1.0
+    AtlasCard(padding = 12.dp) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        entries.forEach { entry ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = entry.label,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = AtlasFormat.moneyCompact(entry.amount, currency),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth((kotlin.math.abs(entry.amount) / peak).toFloat().coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .background(entry.color),
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun FinanceAdminCharts(summary: FinanceMonthlyDto) {
+    val palette = Atlas.palette
+    FinanceMiniBarChart(
+        title = atlasText("Trésorerie · ouverture et clôture", "Cash position · opening and closing", "النقد المتاح · الافتتاح والإغلاق"),
+        currency = summary.currency,
+        entries = listOf(
+            FinanceChartEntry(atlasText("Solde d'ouverture", "Opening balance", "رصيد الافتتاح"), summary.openingBalance, MaterialTheme.colorScheme.primary),
+            FinanceChartEntry(atlasText("Solde de clôture", "Closing balance", "رصيد الإغلاق"), summary.closingBalance, palette.positive),
+        ),
+    )
+    FinanceMiniBarChart(
+        title = atlasText("Factures ouvertes · clients et fournisseurs", "Open invoices · receivables and payables", "الفواتير المفتوحة · العملاء والموردون"),
+        currency = summary.currency,
+        entries = listOf(
+            FinanceChartEntry(atlasText("Clients · encours", "Receivables · outstanding", "مستحقات العملاء"), summary.receivables.totalOutstanding, MaterialTheme.colorScheme.primary),
+            FinanceChartEntry(atlasText("Clients · en retard", "Receivables · overdue", "مستحقات العملاء المتأخرة"), summary.receivables.totalOverdue, palette.danger),
+            FinanceChartEntry(atlasText("Fournisseurs · encours", "Payables · outstanding", "مستحقات الموردين"), summary.payables.totalOutstanding, palette.warning),
+            FinanceChartEntry(atlasText("Fournisseurs · en retard", "Payables · overdue", "مستحقات الموردين المتأخرة"), summary.payables.totalOverdue, palette.danger),
+        ),
+    )
+}
+
 @Composable
 private fun FinanceAdminCard(
     summary: FinanceMonthlyDto?,
@@ -813,6 +899,8 @@ private fun FinanceAdminCard(
                     tone = if (summary.payables.totalOverdue > 0.0) AtlasTone.DANGER else AtlasTone.WARNING,
                 )
             }
+            Spacer(Modifier.height(10.dp))
+            FinanceAdminCharts(summary)
             Spacer(Modifier.height(10.dp))
             AtlasDivider()
             AtlasInfoRow("Recettes encaissées", AtlasFormat.money(summary.salesReceived, summary.currency))

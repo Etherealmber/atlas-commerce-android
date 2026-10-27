@@ -78,19 +78,14 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.BarcodeCameraView
 import ma.etherealmber.atlascommerce.ui.components.CameraVisualStyle
 import ma.etherealmber.atlascommerce.ui.components.ScanFeedback
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
-private val SecurityBgTop = Color(0xFF070B19)
-private val SecurityBgBottom = Color(0xFF0F172A)
-private val SecurityCardBg = Color(0xFF111C38)
-private val SecurityCardBorder = Color(0xFF283B6B)
-private val SecurityCyan = Color(0xFF38BDF8)
-private val SecurityEmerald = Color(0xFF34D399)
-private val SecurityMuted = Color(0xFF94A3B8)
 
 /**
  * Dedicated QR Device Pairing & Connected Sessions screen.
  *
- * Designed with a midnight-indigo security cockpit aesthetic, square cyan/emerald QR reticle,
+ * Uses the Atlas surface and saffron palette, with a distinct QR reticle,
  * `FORMAT_QR_CODE`-only decoder, and explicit account verification card so operators NEVER
  * confuse pairing a workstation with scanning inventory barcodes.
  */
@@ -108,6 +103,11 @@ fun QrDeviceScreen(
     val scanSound by viewModel.scanSoundEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val view = LocalView.current
+    val cameraPermissionDeniedMessage = atlasText(
+        "Caméra refusée — collez le lien ou code QR ci-dessous.",
+        "Camera permission denied — paste a QR link or token below.",
+        "تم رفض إذن الكاميرا — الصق رابط QR أو الرمز أدناه.",
+    )
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -121,7 +121,7 @@ fun QrDeviceScreen(
     ) { allowed ->
         hasCameraPermission = allowed
         viewModel.setCameraEnabled(allowed)
-        if (!allowed) onToast("Caméra refusée — collez le lien ou code QR ci-dessous.")
+        if (!allowed) onToast(cameraPermissionDeniedMessage)
     }
 
     val startQrCameraExplicitly: () -> Unit = {
@@ -177,7 +177,7 @@ fun QrDeviceScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(SecurityBgTop, SecurityBgBottom)))
+            .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surface)))
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -191,36 +191,36 @@ fun QrDeviceScreen(
             IconButton(onClick = onClose) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = "Retour",
-                    tint = Color.White,
+                    contentDescription = atlasText("Retour", "Back", "رجوع"),
+                    tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
             Box(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(SecurityCyan.copy(alpha = 0.16f)),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Shield,
                     contentDescription = null,
-                    tint = SecurityCyan,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp),
                 )
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = if (currentUser != null) "Scanner un poste PC" else "Connexion mobile par QR",
+                    text = if (currentUser != null) atlasText("Scanner un poste PC", "Scan a PC sign-in QR", "امسح رمز تسجيل الدخول للكمبيوتر") else atlasText("Connexion mobile par QR", "Connect this phone with QR", "ربط هذا الهاتف عبر QR"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = "APPAIRAGE SÉCURISÉ · HORS CATALOGUE STOCK",
+                    text = atlasText("APPAIRAGE SÉCURISÉ · HORS CATALOGUE STOCK", "SECURE PAIRING · NOT AN INVENTORY SCAN", "اقتران آمن · ليس مسحًا للمخزون"),
                     style = MaterialTheme.typography.labelSmall,
-                    color = SecurityCyan,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
             IconButton(
@@ -234,8 +234,8 @@ fun QrDeviceScreen(
             ) {
                 Icon(
                     imageVector = if (state.cameraEnabled) Icons.Outlined.Videocam else Icons.Outlined.VideocamOff,
-                    contentDescription = if (state.cameraEnabled) "Couper la caméra" else "Activer la caméra",
-                    tint = if (state.cameraEnabled) SecurityEmerald else SecurityMuted,
+                    contentDescription = if (state.cameraEnabled) atlasText("Couper la caméra", "Turn camera off", "إيقاف الكاميرا") else atlasText("Activer la caméra", "Turn camera on", "تشغيل الكاميرا"),
+                    tint = if (state.cameraEnabled) Atlas.palette.positive else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -255,7 +255,7 @@ fun QrDeviceScreen(
                                 label = currentUser.displayName,
                                 size = 44.dp,
                                 serverBaseUrl = viewModel.serverUrl,
-                                borderColor = SecurityCyan,
+                                borderColor = MaterialTheme.colorScheme.primary,
                             )
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
@@ -263,24 +263,24 @@ fun QrDeviceScreen(
                                     text = currentUser.displayName,
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Text(
                                     text = "@${currentUser.username} · ${Roles.label(currentUser.role)}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = SecurityMuted,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(999.dp))
-                                    .background(SecurityEmerald.copy(alpha = 0.16f))
+                                    .background(Atlas.palette.positive.copy(alpha = 0.16f))
                                     .padding(horizontal = 10.dp, vertical = 4.dp),
                             ) {
                                 Text(
-                                    text = "Prêt à autoriser",
+                                    text = atlasText("Prêt à autoriser", "Ready to approve", "جاهز للموافقة"),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = SecurityEmerald,
+                                    color = Atlas.palette.positive,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                             }
@@ -310,7 +310,7 @@ fun QrDeviceScreen(
                     )
 
                     QrDeviceViewModel.Step.COMPLETED -> CompletedPairingCard(
-                        message = state.statusMessage ?: "Appareil synchronisé avec succès.",
+                        message = state.statusMessage ?: atlasText("Appareil synchronisé avec succès.", "Device connected successfully.", "تم ربط الجهاز بنجاح."),
                         onScanAnother = viewModel::resetScan,
                         onDone = onClose,
                     )
@@ -334,8 +334,8 @@ fun QrDeviceScreen(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .clip(RoundedCornerShape(24.dp))
-                                        .background(SecurityCardBg)
-                                        .border(1.dp, SecurityCardBorder, RoundedCornerShape(24.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp))
                                         .padding(20.dp),
                                     contentAlignment = Alignment.Center,
                                 ) {
@@ -345,45 +345,45 @@ fun QrDeviceScreen(
                                                 modifier = Modifier
                                                     .size(56.dp)
                                                     .clip(CircleShape)
-                                                    .background(SecurityCyan.copy(alpha = 0.16f)),
+                                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
                                                 contentAlignment = Alignment.Center,
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Outlined.QrCode2,
                                                     contentDescription = null,
-                                                    tint = SecurityCyan,
+                                                    tint = MaterialTheme.colorScheme.primary,
                                                     modifier = Modifier.size(30.dp),
                                                 )
                                             }
                                         }
                                         Spacer(Modifier.height(12.dp))
                                         Text(
-                                            text = "Lecteur QR en veille",
+                                            text = atlasText("Lecteur QR en veille", "QR scanner is paused", "ماسح QR متوقف مؤقتًا"),
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = Color.White,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             textAlign = TextAlign.Center,
                                         )
                                         Spacer(Modifier.height(6.dp))
                                         Text(
-                                            text = "Appuyez ci-dessous pour démarrer la caméra QR, ou collez directement le lien ci-dessous.",
+                                            text = atlasText("Appuyez ci-dessous pour démarrer la caméra QR, ou collez directement le lien ci-dessous.", "Start the QR camera below, or paste a QR link directly.", "ابدأ كاميرا QR أدناه أو الصق رابط QR مباشرة."),
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = SecurityMuted,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             textAlign = TextAlign.Center,
                                         )
                                         Spacer(Modifier.height(14.dp))
                                         Button(
                                             onClick = startQrCameraExplicitly,
-                                            colors = ButtonDefaults.buttonColors(containerColor = SecurityCyan),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Outlined.Videocam,
                                                 contentDescription = null,
-                                                tint = SecurityBgTop,
+                                                tint = MaterialTheme.colorScheme.onPrimary,
                                                 modifier = Modifier.size(18.dp),
                                             )
                                             Spacer(Modifier.width(6.dp))
-                                            Text("Démarrer la caméra QR", color = SecurityBgTop)
+                                            Text(atlasText("Démarrer la caméra QR", "Start QR camera", "بدء كاميرا QR"), color = MaterialTheme.colorScheme.onPrimary)
                                         }
                                     }
                                 }
@@ -393,12 +393,12 @@ fun QrDeviceScreen(
                         SecurityCard {
                             Text(
                                 text = if (currentUser != null) {
-                                    "Sur l'ordinateur, ouvrez l'écran de connexion Atlas Commerce puis cliquez sur « Connexion par QR »."
+                                    atlasText("Sur l'ordinateur, ouvrez l'écran de connexion Atlas Commerce puis cliquez sur « Connexion par QR ».", "On the computer, open Atlas Commerce sign-in and choose “Sign in with QR”.", "على الكمبيوتر، افتح تسجيل الدخول إلى Atlas Commerce واختر «تسجيل الدخول عبر QR».")
                                 } else {
-                                    "Sur un ordinateur déjà connecté, ouvrez Paramètres → Appareils → « Connecter un téléphone par QR »."
+                                    atlasText("Sur un ordinateur déjà connecté, ouvrez Paramètres → Appareils → « Connecter un téléphone par QR ».", "On a signed-in computer, open Settings → Devices → “Connect a phone with QR”.", "على كمبيوتر مسجّل الدخول، افتح الإعدادات ← الأجهزة ← «ربط هاتف عبر QR».")
                                 },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = SecurityMuted,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Spacer(Modifier.height(10.dp))
                             Row(
@@ -408,26 +408,26 @@ fun QrDeviceScreen(
                                 OutlinedTextField(
                                     value = state.manualInput,
                                     onValueChange = viewModel::onManualInputChange,
-                                    label = { Text("Lien ou jeton QR", color = SecurityMuted) },
-                                    placeholder = { Text("https://.../login-qr?t=…", color = SecurityMuted) },
+                                    label = { Text(atlasText("Lien ou jeton QR", "QR link or token", "رابط أو رمز QR"), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    placeholder = { Text("https://.../login-qr?t=…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                     leadingIcon = {
-                                        Icon(Icons.Outlined.Link, contentDescription = null, tint = SecurityCyan)
+                                        Icon(Icons.Outlined.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                     },
                                     singleLine = true,
                                     colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White,
-                                        focusedBorderColor = SecurityCyan,
-                                        unfocusedBorderColor = SecurityCardBorder,
+                                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
                                     ),
                                     modifier = Modifier.weight(1f),
                                 )
                                 Button(
                                     onClick = viewModel::submitManual,
                                     enabled = state.manualInput.isNotBlank() && !state.loading,
-                                    colors = ButtonDefaults.buttonColors(containerColor = SecurityCyan),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                 ) {
-                                    Text("Lier", color = SecurityBgTop, fontWeight = FontWeight.Bold)
+                                    Text(atlasText("Lier", "Link", "ربط"), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -438,13 +438,13 @@ fun QrDeviceScreen(
             if (!state.error.isNullOrBlank()) {
                 item {
                     Surface(
-                        color = Color(0xFF3B121E),
+                        color = MaterialTheme.colorScheme.errorContainer,
                         shape = RoundedCornerShape(16.dp),
                     ) {
                         Text(
                             text = state.error.orEmpty(),
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFFCA5A5),
+                            color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.padding(14.dp),
                         )
                     }
@@ -461,22 +461,22 @@ fun QrDeviceScreen(
                         Icon(
                             imageVector = Icons.Outlined.Devices,
                             contentDescription = null,
-                            tint = SecurityCyan,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "Appareils connectés (${state.devices.size})",
+                            text = atlasText("Appareils connectés (${state.devices.size})", "Connected devices (${state.devices.size})", "الأجهزة المتصلة (${state.devices.size})"),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f),
                         )
                         IconButton(onClick = viewModel::loadDevices) {
                             Icon(
                                 imageVector = Icons.Outlined.Refresh,
-                                contentDescription = "Actualiser les appareils",
-                                tint = SecurityMuted,
+                                contentDescription = atlasText("Actualiser les appareils", "Refresh devices", "تحديث الأجهزة"),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -485,16 +485,16 @@ fun QrDeviceScreen(
                 if (state.devicesLoading && state.devices.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = SecurityCyan, modifier = Modifier.size(22.dp))
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                         }
                     }
                 } else if (state.devices.isEmpty()) {
                     item {
                         SecurityCard {
                             Text(
-                                text = "Aucun autre appareil enregistré sur ce compte.",
+                                text = atlasText("Aucun autre appareil enregistré sur ce compte.", "No other devices are registered to this account.", "لا توجد أجهزة أخرى مسجّلة لهذا الحساب."),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = SecurityMuted,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -518,8 +518,8 @@ private fun SecurityCard(content: @Composable () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(SecurityCardBg)
-            .border(1.dp, SecurityCardBorder, RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
             .padding(14.dp),
     ) {
         content()
@@ -540,21 +540,25 @@ private fun PcApprovalCard(
             Icon(
                 imageVector = Icons.Outlined.Computer,
                 contentDescription = null,
-                tint = SecurityCyan,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(28.dp),
             )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = "Autoriser ce poste PC ?",
+                    text = atlasText("Autoriser ce poste PC ?", "Approve this PC?", "هل توافق على هذا الكمبيوتر؟"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = message ?: "Un navigateur demande l'accès à votre compte Atlas.",
+                    text = message ?: atlasText(
+                        "Un navigateur demande l'accès à votre compte Atlas. L'approbation est liée à cette session QR à usage unique.",
+                        "A browser is requesting access to your Atlas account. Approval is bound to this one-time QR session.",
+                        "يطلب متصفح الوصول إلى حساب Atlas. ترتبط الموافقة بجلسة QR هذه لمرة واحدة.",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
-                    color = SecurityMuted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (user != null) {
@@ -563,7 +567,7 @@ private fun PcApprovalCard(
                     label = user.displayName,
                     size = 40.dp,
                     serverBaseUrl = serverUrl,
-                    borderColor = SecurityEmerald,
+                    borderColor = Atlas.palette.positive,
                 )
             }
         }
@@ -574,22 +578,22 @@ private fun PcApprovalCard(
                 enabled = !loading,
                 modifier = Modifier.weight(1f),
             ) {
-                Icon(Icons.Outlined.Close, contentDescription = null, tint = Color(0xFFFCA5A5))
+                Icon(Icons.Outlined.Close, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.width(6.dp))
-                Text("Refuser", color = Color(0xFFFCA5A5))
+                Text(atlasText("Refuser", "Deny", "رفض"), color = MaterialTheme.colorScheme.error)
             }
             Button(
                 onClick = onApprove,
                 enabled = !loading,
-                colors = ButtonDefaults.buttonColors(containerColor = SecurityEmerald),
+                colors = ButtonDefaults.buttonColors(containerColor = Atlas.palette.positive),
                 modifier = Modifier.weight(1f),
             ) {
                 if (loading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = SecurityBgTop)
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 } else {
-                    Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = SecurityBgTop)
+                    Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
                     Spacer(Modifier.width(6.dp))
-                    Text("Autoriser le PC", color = SecurityBgTop, fontWeight = FontWeight.Bold)
+                    Text(atlasText("Autoriser le PC", "Approve this PC", "الموافقة على هذا الكمبيوتر"), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -615,27 +619,31 @@ private fun WaitingPcCard(
                     label = accountHint,
                     size = 56.dp,
                     serverBaseUrl = serverUrl,
-                    borderColor = SecurityCyan,
+                    borderColor = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = accountHint,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
                 )
             } else {
-                CircularProgressIndicator(color = SecurityCyan, modifier = Modifier.size(32.dp))
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                text = statusMessage ?: "En attente de confirmation sur l'ordinateur…",
+                text = statusMessage ?: atlasText(
+                    "En attente de confirmation sur l'ordinateur…",
+                    "Waiting for confirmation on the computer…",
+                    "بانتظار التأكيد على الكمبيوتر…",
+                ),
                 style = MaterialTheme.typography.bodyMedium,
-                color = SecurityMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(14.dp))
             OutlinedButton(onClick = onCancel) {
-                Text("Annuler", color = Color.White)
+                Text(atlasText("Annuler", "Cancel", "إلغاء"), color = MaterialTheme.colorScheme.onSurface)
             }
         }
     }
@@ -652,28 +660,28 @@ private fun CompletedPairingCard(
             Icon(
                 imageVector = Icons.Outlined.CheckCircle,
                 contentDescription = null,
-                tint = SecurityEmerald,
+                tint = Atlas.palette.positive,
                 modifier = Modifier.size(28.dp),
             )
             Spacer(Modifier.width(10.dp))
             Text(
                 text = message,
                 style = MaterialTheme.typography.titleSmall,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = onScanAnother, modifier = Modifier.weight(1f)) {
-                Text("Autre poste", color = Color.White)
+                Text(atlasText("Autre poste", "Another computer", "كمبيوتر آخر"), color = MaterialTheme.colorScheme.onSurface)
             }
             Button(
                 onClick = onDone,
-                colors = ButtonDefaults.buttonColors(containerColor = SecurityCyan),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 modifier = Modifier.weight(1f),
             ) {
-                Text("Terminé", color = SecurityBgTop, fontWeight = FontWeight.Bold)
+                Text(atlasText("Terminé", "Done", "تم"), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -692,7 +700,7 @@ private fun SecurityDeviceRow(
                     Text(
                         text = device.friendlyLabel,
                         style = MaterialTheme.typography.titleSmall,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -701,13 +709,13 @@ private fun SecurityDeviceRow(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
-                                .background(SecurityEmerald.copy(alpha = 0.2f))
+                                .background(Atlas.palette.positive.copy(alpha = 0.2f))
                                 .padding(horizontal = 8.dp, vertical = 2.dp),
                         ) {
                             Text(
-                                text = "Cet appareil",
+                                text = atlasText("Cet appareil", "This device", "هذا الجهاز"),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = SecurityEmerald,
+                                color = Atlas.palette.positive,
                             )
                         }
                     }
@@ -722,7 +730,7 @@ private fun SecurityDeviceRow(
                     Text(
                         text = meta,
                         style = MaterialTheme.typography.bodySmall,
-                        color = SecurityMuted,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -730,12 +738,12 @@ private fun SecurityDeviceRow(
             }
             IconButton(onClick = onRevoke, enabled = !revoking) {
                 if (revoking) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = SecurityCyan)
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                 } else {
                     Icon(
                         imageVector = Icons.Outlined.DeleteOutline,
-                        contentDescription = "Révoquer cet appareil",
-                        tint = Color(0xFFFCA5A5),
+                        contentDescription = atlasText("Révoquer cet appareil", "Revoke this device", "إلغاء صلاحية هذا الجهاز"),
+                        tint = MaterialTheme.colorScheme.error,
                     )
                 }
             }

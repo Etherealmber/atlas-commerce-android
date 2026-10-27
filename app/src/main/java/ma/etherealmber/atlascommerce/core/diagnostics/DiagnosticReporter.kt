@@ -36,7 +36,7 @@ import java.util.TimeZone
  * before retaining any line in memory or writing crash breadcrumbs.
  */
 object AtlasLogBuffer {
-    private const val MAX_ENTRIES = 600
+    private const val MAX_ENTRIES = 1_600
     private const val CRASH_FILE_NAME = "last_crash.txt"
     private val entries = ArrayDeque<String>(MAX_ENTRIES)
 
@@ -93,10 +93,10 @@ object AtlasLogBuffer {
         }
     }
 
-    suspend fun captureDiagnosticLogsAsync(context: Context, maxChars: Int = 16_000): String =
+    suspend fun captureDiagnosticLogsAsync(context: Context, maxChars: Int = 32_000): String =
         withContext(Dispatchers.IO) { captureDiagnosticLogs(context, maxChars) }
 
-    fun captureDiagnosticLogs(context: Context, maxChars: Int = 16_000): String {
+    fun captureDiagnosticLogs(context: Context, maxChars: Int = 32_000): String {
         val deviceSection = buildString {
             appendLine("=== APP / DEVICE ===")
             appendLine("App: ${AppDetails.NAME} ${AppDetails.VERSION_NAME} (versionCode ${AppDetails.VERSION_CODE})")
@@ -118,17 +118,20 @@ object AtlasLogBuffer {
 
         val ring = recentEntries()
         val ringHeader = "=== APP EVENTS / NETWORK / AUTH (${ring.size}) ===\n"
-        val ringBody = ring.takeLast(260).joinToString("\n") { sanitize(it) }
+        val ringBody = ring.takeLast(700).joinToString("\n") { sanitize(it) }
         // Keep structured events ahead of verbose logcat so passkey stages and HTTP status
         // details survive the final size limit even on very chatty devices.
-        val ringSection = if (ring.isEmpty()) "" else ringHeader + ringBody.takeLast(8_500) + "\n\n"
+        val ringBudget = (maxChars - deviceSection.length - crashSection.length - 2_000)
+            .coerceAtLeast(1_000)
+            .coerceAtMost(18_000)
+        val ringSection = if (ring.isEmpty()) "" else ringHeader + ringBody.takeLast(ringBudget) + "\n\n"
         val essentials = deviceSection + crashSection + ringSection
 
         // Android does not grant apps access to other processes' logcat without privileged
         // permissions. Capture our process only; structured app events above carry auth details.
         val pid = Process.myPid()
         val pidLogResult = runCatching {
-            val proc = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "500", "--pid=$pid")
+            val proc = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "1200", "--pid=$pid")
                 .redirectErrorStream(true)
                 .start()
             val out = proc.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
@@ -146,7 +149,7 @@ object AtlasLogBuffer {
             "\n=== PLATFORM NOISE ===\n${noiseLines.size} avertissements graphiques/fastpipe à faible signal omis; ils ne sont pas des erreurs passkey.\n"
         val logHeader = if (usefulLines.isEmpty()) "" else
             "\n=== ANDROID LOGCAT (APP PID $pid · ${usefulLines.size} lignes) ===\n"
-        val logBody = usefulLines.takeLast(300).joinToString("\n") { sanitize(it) }
+        val logBody = usefulLines.takeLast(700).joinToString("\n") { sanitize(it) }
         val logBudget = (maxChars - essentials.length - noiseSection.length - logHeader.length).coerceAtLeast(0)
         val logcatSection = logHeader + logBody.takeLast(logBudget)
 

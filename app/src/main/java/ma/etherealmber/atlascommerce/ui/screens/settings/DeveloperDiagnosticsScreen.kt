@@ -75,7 +75,7 @@ fun DeveloperDiagnosticsScreen(
         if (loadingLogs) return
         scope.launch {
             loadingLogs = true
-            logs = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 16_000)
+            logs = AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 32_000)
             loadingLogs = false
         }
     }
