@@ -35,7 +35,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesomeMotion
 import androidx.compose.material.icons.outlined.BugReport
-import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
@@ -1393,7 +1393,7 @@ private fun SettingsRow(
                 )
             }
             Icon(
-                imageVector = Icons.Outlined.ChevronRight,
+                imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )

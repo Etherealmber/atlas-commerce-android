@@ -58,6 +58,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -330,6 +332,7 @@ private fun LoginAtlasHero(
     modifier: Modifier = Modifier,
 ) {
     val palette = Atlas.palette
+    val horizontalDirection = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
     Box(
         modifier = modifier.background(
             Brush.linearGradient(listOf(palette.heroStart, palette.heroEnd)),
@@ -338,7 +341,7 @@ private fun LoginAtlasHero(
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(x = 92.dp, y = (-100).dp)
+                .offset(x = 92.dp * horizontalDirection, y = (-100).dp)
                 .size(280.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.32f)),
@@ -346,7 +349,7 @@ private fun LoginAtlasHero(
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .offset(x = 134.dp, y = 54.dp)
+                .offset(x = 134.dp * horizontalDirection, y = 54.dp)
                 .size(250.dp)
                 .clip(RoundedCornerShape(120.dp))
                 .background(
@@ -361,7 +364,7 @@ private fun LoginAtlasHero(
         Box(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .offset(x = (-150).dp, y = 118.dp)
+                .offset(x = (-150).dp * horizontalDirection, y = 118.dp)
                 .size(330.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.18f)),
@@ -369,7 +372,7 @@ private fun LoginAtlasHero(
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .offset(x = (-38).dp, y = 20.dp)
+                .offset(x = (-38).dp * horizontalDirection, y = 20.dp)
                 .size(if (compact) 42.dp else 56.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)),

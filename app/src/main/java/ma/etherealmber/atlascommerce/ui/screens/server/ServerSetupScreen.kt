@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
@@ -83,7 +83,7 @@ fun ServerSetupScreen(
         ) {
             if (onClose != null) {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
                 }
             } else {
                 Spacer(Modifier.width(48.dp))

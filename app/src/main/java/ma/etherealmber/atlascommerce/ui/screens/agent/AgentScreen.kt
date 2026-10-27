@@ -137,7 +137,8 @@ fun AgentScreen(
     BackHandler(enabled = isActive && isImeVisible) {
         focusManager.clearFocus()
     }
-    val selectedSpeechLanguage = LocalAtlasLanguage.current.tag
+    val selectedAppLanguage = LocalAtlasLanguage.current
+    val selectedSpeechLanguage = selectedAppLanguage.tag
     val quickPrompts = listOf(
         atlasText("Quels articles sont en rupture ou à réapprovisionner ?", "Which items are out of stock or need replenishment?", "ما المنتجات التي نفدت أو تحتاج إلى إعادة التخزين؟"),
         atlasText("Résumé des ventes et impayés du jour", "Summarize today's sales and unpaid invoices", "لخّص مبيعات اليوم والفواتير غير المدفوعة"),
@@ -369,16 +370,16 @@ fun AgentScreen(
                                         )
                                     }
                                     IconButton(onClick = { showHistoryDialog = true }) {
-                                        Icon(Icons.Outlined.History, contentDescription = "Historique des discussions")
+                                        Icon(Icons.Outlined.History, contentDescription = atlasText("Historique des discussions", "Conversation history", "سجل المحادثات"))
                                     }
                                     IconButton(onClick = {
                                         viewModel.startNewConversation()
                                         onToast("Nouvelle discussion prête.")
                                     }) {
-                                        Icon(Icons.Outlined.AddComment, contentDescription = "Nouvelle discussion")
+                                        Icon(Icons.Outlined.AddComment, contentDescription = atlasText("Nouvelle discussion", "New conversation", "محادثة جديدة"))
                                     }
                                     IconButton(onClick = viewModel::refreshContext) {
-                                        Icon(Icons.Outlined.Refresh, contentDescription = "Actualiser le contexte")
+                                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser le contexte", "Refresh context", "تحديث السياق"))
                                     }
                                 }
                                 Spacer(Modifier.height(6.dp))
@@ -471,7 +472,7 @@ fun AgentScreen(
                                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                         quickPrompts.forEach { prompt ->
                                             AssistChip(
-                                                onClick = { viewModel.sendPrompt(prompt) },
+                                                onClick = { viewModel.sendPrompt(prompt, responseLanguage = selectedAppLanguage) },
                                                 label = { Text(prompt, style = MaterialTheme.typography.bodySmall) },
                                             )
                                         }
@@ -489,8 +490,13 @@ fun AgentScreen(
                             items = state.nextActions,
                             key = { "suggestion_${it.title}_${it.priority}" },
                         ) { item ->
+                            val suggestionPrompt = atlasText(
+                                "Aide-moi sur : ${item.title} (${item.detail})",
+                                "Help me with: ${item.title} (${item.detail})",
+                                "ساعدني في: ${item.title} (${item.detail})",
+                            )
                             AtlasCard(
-                                onClick = { viewModel.sendPrompt("Aide-moi sur : ${item.title} (${item.detail})") },
+                                onClick = { viewModel.sendPrompt(suggestionPrompt, responseLanguage = selectedAppLanguage) },
                                 padding = 12.dp,
                             ) {
                                 Text(
@@ -547,9 +553,9 @@ fun AgentScreen(
                         item(key = "agent_typing") {
                             AgentTypingIndicator(
                                 label = if (state.attachments.isNotEmpty()) {
-                                    "Analyse des pièces jointes…"
+                                    atlasText("Analyse des pièces jointes…", "Reviewing attachments…", "جارٍ تحليل الملفات المرفقة…")
                                 } else {
-                                    "Atlas Agent réfléchit…"
+                                    atlasText("Atlas Agent réfléchit…", "Atlas Agent is thinking…", "مساعد Atlas يفكر…")
                                 },
                             )
                         }
@@ -558,7 +564,7 @@ fun AgentScreen(
                     if (!state.error.isNullOrBlank()) {
                         item(key = "agent_err") {
                             AtlasErrorCard(
-                                title = "Réponse IA indisponible",
+                                title = atlasText("Réponse IA indisponible", "AI response unavailable", "تعذّرت استجابة الذكاء الاصطناعي"),
                                 message = state.error.orEmpty(),
                             )
                         }
@@ -580,7 +586,7 @@ fun AgentScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.KeyboardArrowDown,
-                            contentDescription = "Aller aux derniers messages",
+                            contentDescription = atlasText("Aller aux derniers messages", "Jump to latest messages", "الانتقال إلى أحدث الرسائل"),
                         )
                     }
                 }
@@ -615,7 +621,7 @@ fun AgentScreen(
                                 },
                                     modifier = Modifier.size(34.dp),
                                 ) {
-                                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Masquer la zone de rédaction")
+                                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = atlasText("Masquer la zone de rédaction", "Hide message composer", "إخفاء حقل كتابة الرسالة"))
                                 }
                             }
                             if (state.attachments.isNotEmpty()) {
@@ -627,7 +633,7 @@ fun AgentScreen(
                                         AssistChip(
                                             onClick = { viewModel.removeAttachment(index) },
                                             label = { Text(attachment.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                            leadingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Retirer ${attachment.name}", modifier = Modifier.size(16.dp)) },
+                                            leadingIcon = { Icon(Icons.Outlined.Close, contentDescription = atlasText("Retirer ${attachment.name}", "Remove ${attachment.name}", "إزالة ${attachment.name}"), modifier = Modifier.size(16.dp)) },
                                             enabled = !state.sending && !state.loadingThread,
                                         )
                                     }
@@ -681,13 +687,13 @@ fun AgentScreen(
                                     placeholder = atlasText("Écrivez votre question…", "Write your question…", "اكتب سؤالك…"),
                                     imeAction = ImeAction.Send,
                                     enabled = !state.sending && !state.loadingThread && !quotaLocked,
-                                    onDone = { viewModel.sendPrompt() },
+                                    onDone = { viewModel.sendPrompt(responseLanguage = selectedAppLanguage) },
                                     singleLine = false,
                                     modifier = Modifier.weight(1f).heightIn(min = 58.dp, max = if (compactComposer) 92.dp else 132.dp),
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 IconButton(
-                                    onClick = { viewModel.sendPrompt() },
+                                    onClick = { viewModel.sendPrompt(responseLanguage = selectedAppLanguage) },
                                     enabled = (state.input.isNotBlank() || state.attachments.isNotEmpty()) && !state.sending && !state.loadingThread && !quotaLocked,
                                 ) {
                                     Icon(
@@ -1127,7 +1133,7 @@ private fun ChatBubbleRow(
                             Spacer(Modifier.height(8.dp))
                             AtlasCard(padding = 10.dp) {
                                 Text(
-                                    text = proposal.title ?: "Action proposée",
+                                    text = proposal.title ?: atlasText("Action proposée", "Suggested action", "إجراء مقترح"),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -1141,7 +1147,7 @@ private fun ChatBubbleRow(
                                 Spacer(Modifier.height(6.dp))
                                 if (approved) {
                                     AtlasChip(
-                                        text = "Approuvée",
+                                        text = atlasText("Approuvée", "Approved", "تمت الموافقة"),
                                         tone = AtlasTone.POSITIVE,
                                         icon = Icons.Outlined.CheckCircle,
                                     )
@@ -1150,7 +1156,7 @@ private fun ChatBubbleRow(
                                         onClick = { onApprove(proposalId) },
                                         enabled = approvingId == null,
                                     ) {
-                                        Text("Approuver et exécuter")
+                                        Text(atlasText("Approuver et exécuter", "Approve and run", "الموافقة والتنفيذ"))
                                     }
                                 }
                             }
@@ -1165,7 +1171,7 @@ private fun ChatBubbleRow(
                             AtlasTypingDots()
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                text = "Réponse en cours…",
+                                text = atlasText("Réponse en cours…", "Replying…", "جارٍ الرد…"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1180,11 +1186,11 @@ private fun ChatBubbleRow(
                             TextButton(onClick = onCopy) {
                                 Icon(
                                     imageVector = Icons.Outlined.ContentCopy,
-                                    contentDescription = "Copier la réponse",
+                                    contentDescription = atlasText("Copier la réponse", "Copy reply", "نسخ الرد"),
                                     modifier = Modifier.size(14.dp),
                                 )
                                 Spacer(Modifier.width(4.dp))
-                                Text("Copier", style = MaterialTheme.typography.labelSmall)
+                                Text(atlasText("Copier", "Copy", "نسخ"), style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
@@ -1210,7 +1216,7 @@ private fun AgentAvatar(isUser: Boolean) {
             if (isUser) {
                 Icon(
                     imageVector = Icons.Outlined.Person,
-                    contentDescription = "Message de l'utilisateur",
+                    contentDescription = atlasText("Message de l'utilisateur", "User message", "رسالة المستخدم"),
                     modifier = Modifier.size(19.dp),
                 )
             } else {

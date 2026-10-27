@@ -859,6 +859,7 @@ data class AssistChatRequest(
     @Json(name = "page_path") val pagePath: String? = "/agent",
     @Json(name = "page_title") val pageTitle: String? = "Atlas Agent",
     val source: String = "android",
+    @Json(name = "response_language") val responseLanguage: String = "fr",
     val images: List<String> = emptyList(),
     val documents: List<String> = emptyList(),
 )

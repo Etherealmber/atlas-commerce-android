@@ -73,7 +73,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AdminPanelSettings
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
@@ -621,7 +621,7 @@ fun AtlasTopBar(
         navigationIcon = {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Outlined.ArrowBack, contentDescription = "Retour")
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Retour")
                 }
             }
         },

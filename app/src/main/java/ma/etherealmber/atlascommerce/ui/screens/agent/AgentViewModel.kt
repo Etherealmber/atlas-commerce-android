@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.session.SessionManager
@@ -91,6 +92,7 @@ class AgentViewModel @Inject constructor(
     val state: StateFlow<UiState> = _state.asStateFlow()
     private var pendingSensitivePrompt: String? = null
     private var pendingSensitiveAttachments: List<AgentAttachment> = emptyList()
+    private var pendingSensitiveResponseLanguage: AppLanguage = AppLanguage.FRENCH
     @Volatile private var activeSendRequestId: String? = null
     @Volatile private var activeThreadLoadId: String? = null
 
@@ -301,10 +303,12 @@ class AgentViewModel @Inject constructor(
     fun confirmSensitivePrompt() {
         val prompt = pendingSensitivePrompt ?: return
         val attachments = pendingSensitiveAttachments
+        val responseLanguage = pendingSensitiveResponseLanguage
         pendingSensitivePrompt = null
         pendingSensitiveAttachments = emptyList()
+        pendingSensitiveResponseLanguage = AppLanguage.FRENCH
         _state.update { it.copy(sensitiveConfirmation = false) }
-        sendPrompt(prompt, attachments, sensitiveConfirmed = true)
+        sendPrompt(prompt, attachments, sensitiveConfirmed = true, responseLanguage = responseLanguage)
     }
 
     fun cancelSensitivePrompt() {
@@ -317,14 +321,21 @@ class AgentViewModel @Inject constructor(
         prompt: String = _state.value.input,
         attachments: List<AgentAttachment> = _state.value.attachments,
         sensitiveConfirmed: Boolean = false,
+        responseLanguage: AppLanguage = AppLanguage.FRENCH,
     ) {
         val typed = prompt.trim()
-        val clean = typed.ifBlank { if (attachments.isNotEmpty()) "Lis les fichiers joints et résume les informations importantes." else "" }
+        val attachmentOnlyPrompt = when (responseLanguage) {
+            AppLanguage.FRENCH -> "Lis les fichiers joints et résume les informations importantes."
+            AppLanguage.ENGLISH -> "Read the attached files and summarize the important information."
+            AppLanguage.ARABIC -> "اقرأ الملفات المرفقة ولخّص المعلومات المهمة."
+        }
+        val clean = typed.ifBlank { if (attachments.isNotEmpty()) attachmentOnlyPrompt else "" }
         val snapshot = _state.value
         if (clean.isBlank() || snapshot.sending || snapshot.loadingThread) return
         if (!sensitiveConfirmed && (requiresSensitiveConfirmation(clean) || attachments.isNotEmpty())) {
             pendingSensitivePrompt = clean
             pendingSensitiveAttachments = attachments
+            pendingSensitiveResponseLanguage = responseLanguage
             _state.update { it.copy(sensitiveConfirmation = true) }
             return
         }
@@ -388,6 +399,7 @@ class AgentViewModel @Inject constructor(
                     threadId = activeId,
                     images = attachments.flatMap { it.imageDataUrls }.take(4),
                     documents = attachments.flatMap { it.documentDataUrls }.take(2),
+                    responseLanguage = responseLanguage,
                     onToken = { delta ->
                         if (firstTokenLogged.compareAndSet(false, true)) {
                             AtlasLogBuffer.log("AGENT", "First response token received")

@@ -16,8 +16,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChevronLeft
-import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.CircularProgressIndicator
@@ -149,7 +149,7 @@ fun EmployeesScreen(
                         onClick = { viewModel.selectFinancePeriod(selectedMonth.minusMonths(1).toString()) },
                         enabled = !state.financeLoading,
                     ) {
-                        Icon(Icons.Outlined.ChevronLeft, contentDescription = "Mois précédent")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Mois précédent")
                     }
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(monthLabel, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -163,7 +163,7 @@ fun EmployeesScreen(
                         onClick = { viewModel.selectFinancePeriod(selectedMonth.plusMonths(1).toString()) },
                         enabled = !state.financeLoading && selectedMonth < currentMonth,
                     ) {
-                        Icon(Icons.Outlined.ChevronRight, contentDescription = "Mois suivant")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = "Mois suivant")
                     }
                 }
             }

@@ -12,6 +12,7 @@ import java.io.IOException
 import java.time.LocalDate
 import kotlin.coroutines.cancellation.CancellationException
 import ma.etherealmber.atlascommerce.core.RoleTarget
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.net.ApiErrorPayload
@@ -545,9 +546,10 @@ class CommerceRepository @Inject constructor(
         threadId: String = "live",
         images: List<String> = emptyList(),
         documents: List<String> = emptyList(),
+        responseLanguage: AppLanguage = AppLanguage.FRENCH,
     ): ApiResult<AssistChatResponseDto> {
         val cleanQuestion = message.trim()
-        val outboundPrompt = buildAssistOutboundPrompt(cleanQuestion, role, username)
+        val outboundPrompt = buildAssistOutboundPrompt(cleanQuestion, role, username, responseLanguage)
 
         return runner.envelope {
             apiProvider.api().assistChat(
@@ -555,6 +557,7 @@ class CommerceRepository @Inject constructor(
                     message = outboundPrompt,
                     userMessage = cleanQuestion,
                     threadId = threadId,
+                    responseLanguage = responseLanguage.tag,
                     images = images.take(4),
                     documents = documents.take(2),
                 ),
@@ -570,14 +573,16 @@ class CommerceRepository @Inject constructor(
         threadId: String = "live",
         images: List<String> = emptyList(),
         documents: List<String> = emptyList(),
+        responseLanguage: AppLanguage = AppLanguage.FRENCH,
         onToken: (String) -> Unit,
     ): ApiResult<AssistChatResponseDto> {
         val cleanQuestion = message.trim()
         if (cleanQuestion.isBlank()) return ApiResult.Failure("EMPTY_MESSAGE", "Message vide.")
         val request = AssistChatRequest(
-            message = buildAssistOutboundPrompt(cleanQuestion, role, username),
+            message = buildAssistOutboundPrompt(cleanQuestion, role, username, responseLanguage),
             userMessage = cleanQuestion,
             threadId = threadId,
+            responseLanguage = responseLanguage.tag,
             images = images.take(4),
             documents = documents.take(2),
         )
@@ -586,7 +591,15 @@ class CommerceRepository @Inject constructor(
                 val response = apiProvider.api().assistChatStream(request)
                 if (response.code() == 404) {
                     response.errorBody()?.close()
-                    val fallback = assistChat(cleanQuestion, role, username, threadId, images, documents)
+                    val fallback = assistChat(
+                        message = cleanQuestion,
+                        role = role,
+                        username = username,
+                        threadId = threadId,
+                        images = images,
+                        documents = documents,
+                        responseLanguage = responseLanguage,
+                    )
                     if (fallback is ApiResult.Success) onToken(fallback.data.reply)
                     return@withContext fallback
                 }
@@ -654,19 +667,23 @@ class CommerceRepository @Inject constructor(
         }
     }
 
-    private suspend fun buildAssistOutboundPrompt(cleanQuestion: String, role: String?, username: String?): String {
+    private suspend fun buildAssistOutboundPrompt(
+        cleanQuestion: String,
+        role: String?,
+        username: String?,
+        responseLanguage: AppLanguage,
+    ): String {
         val isGreeting = Regex(
             "^(bonjour|bonsoir|salut|hello|hi|hey|coucou|salam|bonne\\s*(journée|soirée)|merci)[\\s!.?]*$",
             RegexOption.IGNORE_CASE,
         ).matches(cleanQuestion)
-        if (isGreeting) return cleanQuestion
-        val snapshot = runCatching { buildLiveBusinessSnapshot(cleanQuestion, role, username) }.getOrDefault("")
-        if (snapshot.isBlank()) return cleanQuestion
+        val snapshot = if (isGreeting) "" else {
+            runCatching { buildLiveBusinessSnapshot(cleanQuestion, role, username) }.getOrDefault("")
+        }
         return buildString {
-            appendLine("RÈGLE STRICTE : Appuie-toi UNIQUEMENT sur les données réelles en direct de la boutique ci-dessous. N'invente JAMAIS aucun chiffre, stock, prix, facture ou client.")
-            appendLine(snapshot)
-            appendLine("Réponds clairement et naturellement en français (tableaux ou listes claires si pertinent) sans mentionner ce bloc technique.")
-            append("Question de l'utilisateur : $cleanQuestion")
+            appendLine(responseLanguage.agentContextInstruction)
+            if (snapshot.isNotBlank()) appendLine(snapshot)
+            append("${responseLanguage.agentQuestionLabel}: $cleanQuestion")
         }.take(2450)
     }
 
