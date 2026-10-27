@@ -459,7 +459,7 @@ object DiagnosticReporter {
         if (summary.length + suffix.length >= maxChars) return (summary + suffix).take(maxChars)
         val safeLogs = AtlasLogBuffer.sanitize(logs).ifBlank { "Aucun journal récent." }
         val logBudget = maxChars - summary.length - suffix.length
-        val crashMatch = Regex("(?s)=== LAST CRASH TRACE ===\s*(.*?)(?=\n=== |$)").find(safeLogs)
+        val crashMatch = Regex("""(?s)=== LAST CRASH TRACE ===\s*(.*?)(?=\n=== |$)""").find(safeLogs)
         val reportLogs = if (crashMatch == null) {
             safeLogs.takeLast(logBudget)
         } else {

@@ -689,16 +689,13 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { preferences.setDeveloperModeEnabled(enabled) }
     }
 
-    fun setAutomaticCrashReportsEnabled(enabled: Boolean, onDone: (String) -> Unit) {
+    fun setAutomaticCrashReportsEnabled(enabled: Boolean, onDone: (Boolean) -> Unit) {
         if (!CrashReportConsent.setEnabled(applicationContext, enabled)) {
-            onDone("Rapports automatiques indisponibles : Firebase Crashlytics n'est pas configuré pour cette version.")
+            onDone(false)
             return
         }
         _automaticCrashReportsEnabled.value = enabled
-        onDone(
-            if (enabled) "Rapports de plantage activés. Les prochains plantages seront envoyés automatiquement à Firebase Crashlytics."
-            else "Envoi automatique des rapports de plantage désactivé.",
-        )
+        onDone(true)
     }
 
     fun clearFinanceReportCache(onDone: (String) -> Unit) {

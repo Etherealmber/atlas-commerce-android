@@ -695,6 +695,21 @@ fun SettingsScreen(
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     val automaticCrashReportsEnabled by appViewModel.automaticCrashReportsEnabled.collectAsStateWithLifecycle()
     val automaticCrashReportsAvailable by appViewModel.automaticCrashReportsAvailable.collectAsStateWithLifecycle()
+    val crashReportsUnavailableToast = atlasText(
+        "Crashlytics n'est pas configuré pour cette version.",
+        "Crashlytics is not configured for this build.",
+        "لم يتم إعداد Crashlytics لهذا الإصدار.",
+    )
+    val crashReportsEnabledToast = atlasText(
+        "Rapports de plantage activés.",
+        "Crash reports enabled.",
+        "تم تفعيل تقارير الأعطال.",
+    )
+    val crashReportsDisabledToast = atlasText(
+        "Envoi automatique désactivé.",
+        "Automatic reporting disabled.",
+        "تم تعطيل الإرسال التلقائي.",
+    )
     val androidPasskeysAvailable by appViewModel.androidPasskeysAvailable.collectAsStateWithLifecycle()
     val registeringPasskey by appViewModel.registeringPasskey.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
@@ -1126,26 +1141,14 @@ fun SettingsScreen(
                     ),
                     checked = automaticCrashReportsEnabled,
                     onCheckedChange = { enabled ->
-                        appViewModel.setAutomaticCrashReportsEnabled(enabled) { result ->
-                            val toast = when {
-                                result.startsWith("Rapports automatiques indisponibles") ->
-                                    atlasText(
-                                        "Crashlytics n'est pas configuré pour cette version.",
-                                        "Crashlytics is not configured for this build.",
-                                        "لم يتم إعداد Crashlytics لهذا الإصدار.",
-                                    )
-                                enabled -> atlasText(
-                                    "Rapports de plantage activés.",
-                                    "Crash reports enabled.",
-                                    "تم تفعيل تقارير الأعطال.",
-                                )
-                                else -> atlasText(
-                                    "Envoi automatique désactivé.",
-                                    "Automatic reporting disabled.",
-                                    "تم تعطيل الإرسال التلقائي.",
-                                )
-                            }
-                            onToast(toast)
+                        appViewModel.setAutomaticCrashReportsEnabled(enabled) { succeeded ->
+                            onToast(
+                                when {
+                                    !succeeded -> crashReportsUnavailableToast
+                                    enabled -> crashReportsEnabledToast
+                                    else -> crashReportsDisabledToast
+                                },
+                            )
                         }
                     },
                 )
