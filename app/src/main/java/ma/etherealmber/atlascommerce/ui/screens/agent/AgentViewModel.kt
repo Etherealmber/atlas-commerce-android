@@ -33,6 +33,19 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
+/** Preserve any draft edited after Send while clearing the submitted text (including its whitespace). */
+internal fun clearSubmittedAgentDraft(currentInput: String, submittedInput: String): String =
+    if (currentInput.trim() == submittedInput) "" else currentInput
+
+/** API timestamps are ISO-8601 strings, so lexicographic descending order is chronological. */
+internal fun newestAgentThreadsFirst(threads: List<AgentThreadSummaryDto>): List<AgentThreadSummaryDto> =
+    threads.withIndex()
+        .sortedWith(
+            compareByDescending<IndexedValue<AgentThreadSummaryDto>> { it.value.updatedAt.orEmpty() }
+                .thenBy { it.index },
+        )
+        .map { it.value }
+
 @HiltViewModel
 class AgentViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
@@ -241,7 +254,7 @@ class AgentViewModel @Inject constructor(
             val nextRes = nextDef.await()
             val threadsRes = threadsDef.await()
 
-            val remoteThreads = (threadsRes as? ApiResult.Success)?.data.orEmpty()
+            val remoteThreads = newestAgentThreadsFirst((threadsRes as? ApiResult.Success)?.data.orEmpty())
             _state.update {
                 it.copy(
                     status = (statusRes as? ApiResult.Success)?.data ?: it.status,
@@ -350,7 +363,7 @@ class AgentViewModel @Inject constructor(
         val firstTokenLogged = AtomicBoolean(false)
         _state.update {
             it.copy(
-                input = if (typed == it.input) "" else it.input,
+                input = clearSubmittedAgentDraft(it.input, typed),
                 activeThreadTitle = resolvedTitle,
                 sending = true,
                 streamingReply = "",
