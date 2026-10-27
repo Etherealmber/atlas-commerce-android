@@ -533,10 +533,11 @@ fun MainShell(
             onDismissRequest = { showAgentQuotaDialog = false },
             title = { Text(atlasText("Utilisation de l'IA", "AI usage", "استخدام الذكاء الاصطناعي")) },
             text = {
-                if (agentPolicy == null) {
+                val currentPolicy = agentPolicy
+                if (currentPolicy == null) {
                     Text(atlasText("Chargement du quota…", "Loading quota…", "جارٍ تحميل الحصة…"))
                 } else {
-                    AgentQuotaBarsContent(policy = agentPolicy!!, compact = false)
+                    AgentQuotaBarsContent(policy = currentPolicy, compact = false)
                 }
             },
             confirmButton = {
