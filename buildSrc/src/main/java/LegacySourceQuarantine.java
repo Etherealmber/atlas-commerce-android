@@ -131,13 +131,16 @@ public final class LegacySourceQuarantine {
             "main/res/values/strings.xml",
             "main/res/values/themes.xml",
             "main/res/xml/file_paths.xml",
+            "test/java/ma/etherealmber/atlascommerce/AgentConversationStateTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/AppLanguageTest.kt",
             "test/java/ma/etherealmber/atlascommerce/AppUpdateManagerTest.kt",
             "test/java/ma/etherealmber/atlascommerce/AtlasFormatTest.kt",
             "test/java/ma/etherealmber/atlascommerce/DiagnosticReportMessageTest.kt",
             "test/java/ma/etherealmber/atlascommerce/FinanceReportCacheTest.kt",
             "test/java/ma/etherealmber/atlascommerce/QrDevicesAndModelsTest.kt",
             "test/java/ma/etherealmber/atlascommerce/ServerUrlTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/WebAuthnCapabilityTest.kt"
+            "test/java/ma/etherealmber/atlascommerce/WebAuthnCapabilityTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/core/net/AtlasVersionHeadersTest.kt"
         ))
     );
 
