@@ -10,12 +10,20 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.ui.i18n.notificationText
 
 @HiltAndroidApp
 class AtlasApp : Application() {
+
+    private val _activeLanguage = MutableStateFlow(AppLanguage.FRENCH)
+    val activeLanguage = _activeLanguage.asStateFlow()
+    private val _languageLoaded = MutableStateFlow(false)
+    val languageLoaded = _languageLoaded.asStateFlow()
 
     private val startupIoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -42,9 +50,21 @@ class AtlasApp : Application() {
         }
         ensureNotificationChannels(AppLanguage.FRENCH, cleanupLegacy = true)
         startupIoScope.launch {
-            AtlasPreferences(this@AtlasApp).appLanguage.collect { language ->
-                ensureNotificationChannels(language, cleanupLegacy = false)
-            }
+            val language = AtlasPreferences(this@AtlasApp).appLanguage.first()
+            _activeLanguage.value = language
+            _languageLoaded.value = true
+            ensureNotificationChannels(language, cleanupLegacy = false)
+        }
+    }
+
+    /** A new task after the user closes the app applies the saved language; rotations do not. */
+    fun prepareLanguageForFreshLaunch() {
+        _languageLoaded.value = false
+        startupIoScope.launch {
+            val language = AtlasPreferences(this@AtlasApp).appLanguage.first()
+            _activeLanguage.value = language
+            _languageLoaded.value = true
+            ensureNotificationChannels(language, cleanupLegacy = false)
         }
     }
 

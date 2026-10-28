@@ -147,7 +147,11 @@ enum class MainTab(val label: String, val icon: ImageVector) {
 
         /** Financial and employee data remain guarded by server-authorized roles. */
         fun bottomTabsForRole(role: String?): List<MainTab> =
-            if (Roles.isAdmin(role)) BottomBarTabs else listOf(HOME, PRODUCTS, SCAN, BALANCE)
+            when {
+                Roles.isAdmin(role) -> BottomBarTabs
+                Roles.normalize(role) == Roles.STOCK -> listOf(HOME, SCAN, PRODUCTS)
+                else -> listOf(HOME, PRODUCTS, SCAN, BALANCE)
+            }
     }
 }
 
@@ -159,7 +163,7 @@ private fun MainTab.localizedLabel(): String = when (this) {
     MainTab.SALE -> atlasText("Vente", "Sales", "المبيعات")
     MainTab.BALANCE -> atlasText("Balance", "Balance", "الرصيد")
     MainTab.EMPLOYEES -> atlasText("Employés", "Employees", "الموظفون")
-    MainTab.AGENT -> atlasText("Atlas Agent", "Atlas Agent", "مساعد Atlas")
+    MainTab.AGENT -> atlasText("Assistant Atlas", "Atlas Assistant", "مساعد Atlas")
     MainTab.PROFILE -> atlasText("Mon profil", "My profile", "ملفي الشخصي")
     MainTab.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
 }
@@ -224,9 +228,11 @@ fun MainShell(
     val tab = when {
         rawTab == MainTab.SALE && !Roles.canCreateDocuments(user.role) -> MainTab.HOME
         rawTab == MainTab.EMPLOYEES && !Roles.isAdmin(user.role) -> MainTab.HOME
+        rawTab == MainTab.BALANCE && Roles.normalize(user.role) == Roles.STOCK -> MainTab.HOME
         else -> rawTab
     }
     val scope = rememberCoroutineScope()
+    var showAvatarSurprise by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showProblemReportDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showShakeReportPrompt by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showAgentQuotaDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
@@ -244,6 +250,15 @@ fun MainShell(
         enabled = isForeground && shakeToReportEnabled && !showProblemReportDialog && !showShakeReportPrompt,
         onShake = { showShakeReportPrompt = true },
     )
+
+    if (showAvatarSurprise) {
+        AlertDialog(
+            onDismissRequest = { showAvatarSurprise = false },
+            title = { Text(atlasText("Une étoile pour vous", "A star for you", "نجمة لك")) },
+            text = { Text(atlasText("✨ Merci de faire partie de l’aventure Atlas !", "✨ Thanks for being part of the Atlas journey!", "✨ شكراً لكونك جزءاً من رحلة Atlas!")) },
+            confirmButton = { TextButton(onClick = { showAvatarSurprise = false }) { Text(atlasText("Fermer", "Close", "إغلاق")) } },
+        )
+    }
 
     if (showShakeReportPrompt) {
         AlertDialog(
@@ -292,6 +307,7 @@ fun MainShell(
             val targetAllowed = when (externalTabRequest) {
                 MainTab.SALE.name -> Roles.canCreateDocuments(user.role)
                 MainTab.EMPLOYEES.name -> Roles.isAdmin(user.role)
+                MainTab.BALANCE.name -> Roles.normalize(user.role) != Roles.STOCK
                 else -> true
             }
             val resolved = if (targetAllowed) externalTabRequest else MainTab.HOME.name
@@ -315,7 +331,9 @@ fun MainShell(
         scope.launch { snackbarHostState.showSnackbar(atlasNotice(message, atlasLanguage)) }
     }
     val switchTab: (MainTab) -> Unit = { target ->
-        if (target == MainTab.SALE && !Roles.canCreateDocuments(user.role)) {
+        if (target == MainTab.BALANCE && Roles.normalize(user.role) == Roles.STOCK) {
+            setTabName(MainTab.HOME.name)
+        } else if (target == MainTab.SALE && !Roles.canCreateDocuments(user.role)) {
             onToast("Accès Vente réservé aux rôles Administrateur et Secrétaire.")
         } else {
             if (roleTabs.contains(target)) setLastBottomTabName(target.name)
@@ -457,6 +475,8 @@ fun MainShell(
                                     "فتح الملف الشخصي لـ ${user.displayName.ifBlank { user.username }}",
                                 ),
                                 onClick = { switchTab(MainTab.PROFILE) },
+                                onLongClick = { showAvatarSurprise = true },
+                                longClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
                             )
                             Spacer(Modifier.width(10.dp))
                         }
@@ -681,24 +701,16 @@ private fun AtlasFloatingBottomBar(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                leftTabs.forEach { item ->
-                    FloatingBottomBarItem(
-                        item = item,
-                        selected = selected == item,
-                        motionEnabled = motionEnabled,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onSelect(item) },
-                    )
+                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    leftTabs.forEach { item ->
+                        FloatingBottomBarItem(item, selected == item, motionEnabled, Modifier.weight(1f)) { onSelect(item) }
+                    }
                 }
                 if (centerTab != null) Spacer(Modifier.width(64.dp))
-                rightTabs.forEach { item ->
-                    FloatingBottomBarItem(
-                        item = item,
-                        selected = selected == item,
-                        motionEnabled = motionEnabled,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onSelect(item) },
-                    )
+                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    rightTabs.forEach { item ->
+                        FloatingBottomBarItem(item, selected == item, motionEnabled, Modifier.weight(1f)) { onSelect(item) }
+                    }
                 }
             }
         }

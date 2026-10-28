@@ -15,13 +15,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.stateIn
-import ma.etherealmber.atlascommerce.core.AppLanguage
-import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSize
 import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSummary
@@ -49,13 +42,9 @@ interface UpdateNotifier {
 @Singleton
 class AndroidUpdateNotifier @Inject constructor(
     @ApplicationContext private val context: Context,
-    preferences: AtlasPreferences,
 ) : UpdateNotifier {
 
-    // Updates never block the main thread while DataStore is loading.
-    private val language = preferences.appLanguage.stateIn(
-        CoroutineScope(SupervisorJob() + Dispatchers.IO), SharingStarted.Eagerly, AppLanguage.FRENCH,
-    )
+    private val language = (context.applicationContext as AtlasApp).activeLanguage
 
     @Volatile
     private var lastNotifyRealtimeMs: Long = 0L

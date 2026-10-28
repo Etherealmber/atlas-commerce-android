@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.collectLatest
@@ -21,6 +22,9 @@ import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
+import ma.etherealmber.atlascommerce.core.diagnostics.PasskeyAutoReporter
+import ma.etherealmber.atlascommerce.core.diagnostics.PasskeyFailureStage
+import ma.etherealmber.atlascommerce.core.security.awaitPasskeyProvider
 import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyCredentials
 import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyOrigin
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
@@ -41,6 +45,7 @@ class LoginViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val deviceIdentity: DeviceIdentity,
     private val passkeySetupPrompt: PasskeySetupPrompt,
+    private val passkeyAutoReporter: PasskeyAutoReporter,
     @ApplicationContext private val applicationContext: Context,
 ) : ViewModel() {
 
@@ -118,7 +123,7 @@ class LoginViewModel @Inject constructor(
             )
             is ApiResult.Failure -> AtlasLogBuffer.log(
                 "PASSKEY",
-                "Login capability request failed: code=${result.code}; http=${result.httpStatus ?: "none"}; message=${result.message}",
+                "Login capability request failed: code=${result.code}; http=${result.httpStatus ?: "none"}",
                 "ERROR",
             )
         }
@@ -171,6 +176,7 @@ class LoginViewModel @Inject constructor(
     fun signInWithPasskey(context: Context) {
         val current = _state.value
         if (current.loading || !current.passkeyAvailable || current.step != Step.CREDENTIALS) return
+        val attemptServer = serverConfig.selection.value?.baseUrl
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null, passkeyError = null, info = null) }
             AtlasLogBuffer.log("PASSKEY", "Login flow started; usernameProvided=${current.username.isNotBlank()}")
@@ -184,6 +190,7 @@ class LoginViewModel @Inject constructor(
                 }
                 if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
                     AtlasLogBuffer.log("PASSKEY", "Login aborted: selected server no longer advertises Android passkeys", "ERROR")
+                    passkeyAutoReporter.record(PasskeyFailureStage.LOGIN_CAPABILITY, attemptServer = attemptServer)
                     reportPasskeyFailure("Les passkeys Android ne sont pas activées sur ce serveur.")
                     _state.update { it.copy(passkeyAvailable = false) }
                     return@launch
@@ -192,26 +199,40 @@ class LoginViewModel @Inject constructor(
                 when (val options = authRepository.webAuthnLoginOptions(current.username.trim().ifBlank { null })) {
                     is ApiResult.Failure -> {
                         logPasskeyFailure("login-options", options)
+                        passkeyAutoReporter.record(PasskeyFailureStage.LOGIN_OPTIONS, options.httpStatus, attemptServer)
                         reportPasskeyFailure(formatPasskeyFailure(options))
                     }
                     is ApiResult.Success -> {
                         AtlasLogBuffer.log("PASSKEY", "Login options received; credential JSON is intentionally not logged")
                         if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
+                            passkeyAutoReporter.record(PasskeyFailureStage.LOGIN_CAPABILITY, attemptServer = attemptServer)
                             reportPasskeyFailure("Les passkeys Android ne sont plus disponibles sur ce serveur.")
                             _state.update { it.copy(passkeyAvailable = false) }
                             return@launch
                         }
                         AtlasLogBuffer.log("PASSKEY", "Opening Android Credential Manager for login")
-                        val credentialJson = AndroidPasskeyCredentials.authenticate(context, options.data)
+                        val providerStarted = android.os.SystemClock.elapsedRealtime()
+                        val credentialJson = try {
+                            awaitPasskeyProvider { AndroidPasskeyCredentials.authenticate(context, options.data) }
+                        } finally {
+                            val elapsed = android.os.SystemClock.elapsedRealtime() - providerStarted
+                            AtlasLogBuffer.log("PASSKEY", "Login credential provider elapsedMs=$elapsed")
+                        }
+                        if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != selectedServerOrigin) {
+                            reportPasskeyFailure("Le serveur a changé. Recommencez la connexion par passkey.")
+                            return@launch
+                        }
                         AtlasLogBuffer.log("PASSKEY", "Credential Manager returned an assertion; sending it to selected Worker")
                         when (val verified = authRepository.verifyWebAuthnLogin(credentialJson, deviceIdentity.fingerprint)) {
                             is ApiResult.Failure -> {
                                 logPasskeyFailure("login-verify", verified)
+                                passkeyAutoReporter.record(PasskeyFailureStage.LOGIN_VERIFY, verified.httpStatus, attemptServer)
                                 reportPasskeyFailure(formatPasskeyFailure(verified))
                             }
                             is ApiResult.Success -> when (val signedIn = sessionManager.signInWithPasskey(verified.data)) {
                                 is ApiResult.Failure -> {
                                     logPasskeyFailure("session-finalize", signedIn)
+                                    passkeyAutoReporter.record(PasskeyFailureStage.LOGIN_SESSION, signedIn.httpStatus, attemptServer)
                                     reportPasskeyFailure(formatPasskeyFailure(signedIn))
                                 }
                                 is ApiResult.Success -> {
@@ -222,12 +243,20 @@ class LoginViewModel @Inject constructor(
                         }
                     }
                 }
+            } catch (timeout: TimeoutCancellationException) {
+                AtlasLogBuffer.log("PASSKEY", "Credential Manager login timed out", "ERROR")
+                passkeyAutoReporter.record(PasskeyFailureStage.LOGIN_TIMEOUT, attemptServer = attemptServer)
+                reportPasskeyFailure("Le gestionnaire Android n'a pas répondu. Vérifiez votre fournisseur de passkeys puis réessayez.")
             } catch (cancelled: CancellationException) {
+                _state.update { it.copy(loading = false) }
                 AtlasLogBuffer.log("PASSKEY", "Login coroutine cancelled")
                 throw cancelled
             } catch (error: Exception) {
-                val detail = "${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(240)}"
+                val detail = error.javaClass.simpleName
                 AtlasLogBuffer.log("PASSKEY", "Login failed in Credential Manager/client: $detail", "ERROR")
+                if (error !is androidx.credentials.exceptions.GetCredentialCancellationException) {
+                    passkeyAutoReporter.record(PasskeyFailureStage.LOGIN_PROVIDER, attemptServer = attemptServer)
+                }
                 reportPasskeyFailure(formatPasskeyClientError(error))
             }
         }
@@ -261,7 +290,7 @@ class LoginViewModel @Inject constructor(
     private fun logPasskeyFailure(stage: String, failure: ApiResult.Failure) {
         AtlasLogBuffer.log(
             "PASSKEY",
-            "$stage failed: code=${failure.code}; http=${failure.httpStatus ?: "none"}; message=${failure.message}",
+            "$stage failed: code=${failure.code}; http=${failure.httpStatus ?: "none"}",
             "ERROR",
         )
     }
@@ -269,7 +298,7 @@ class LoginViewModel @Inject constructor(
     private fun formatPasskeyFailure(failure: ApiResult.Failure): String {
         AtlasLogBuffer.log(
             "PASSKEY",
-            "Passkey request failed: code=${failure.code}; http=${failure.httpStatus ?: "none"}; message=${AtlasLogBuffer.sanitize(failure.message).take(180)}",
+            "Passkey request failed: code=${failure.code}; http=${failure.httpStatus ?: "none"}",
             "ERROR",
         )
         return if (failure.code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK) {

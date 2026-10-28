@@ -71,6 +71,26 @@ class DiagnosticReportMessageTest {
     }
 
     @Test
+    fun `structured passkey failure survives noisy logcat and remains redacted`() {
+        val logs = buildString {
+            appendLine("=== APP EVENTS / NETWORK / AUTH (3) ===")
+            appendLine("12:00:00 [INFO/PASSKEY] Opening Android Credential Manager")
+            appendLine("12:00:01 [ERROR/PASSKEY] Credential Manager failed: ProviderException token=secret123")
+            appendLine("12:00:02 [INFO/NAVIGATION] Home")
+            appendLine("=== ANDROID LOGCAT ===")
+            repeat(300) { appendLine("unrelated platform noise $it") }
+        }
+        val message = DiagnosticReporter.buildUserReportMessage(
+            kind = "bug", category = "Passkey", title = "Passkey failed",
+            description = "", stepsToReproduce = "", snapshot = snapshot, logs = logs,
+        )
+        assertTrue(message.length <= 2_000)
+        assertTrue(message.contains("Credential Manager failed: ProviderException"))
+        assertFalse(message.contains("secret123"))
+        assertTrue(message.contains("@atlas-bot"))
+    }
+
+    @Test
     fun `log sanitizer removes bearer tokens JWTs email and report tickets`() {
         val jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature0123456789"
         val raw = "Authorization: Bearer superSecret123 rt=reportTicket456 jwt=$jwt user=person@example.com ip=192.168.1.55 mac=aa:bb:cc:dd:ee:ff ipv6=2001:db8::1 time=12:34:56"

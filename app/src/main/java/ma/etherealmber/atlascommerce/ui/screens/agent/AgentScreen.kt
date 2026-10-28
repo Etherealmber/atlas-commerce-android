@@ -232,6 +232,8 @@ fun AgentScreen(
     val density = Atlas.density
     val scope = rememberCoroutineScope()
     var showHistoryDialog by remember { mutableStateOf(false) }
+    var mascotTaps by remember { mutableStateOf(0) }
+    var showMascotSurprise by remember { mutableStateOf(false) }
     val latestUserPrompt = state.messages.lastOrNull { it.fromUser }?.text.orEmpty()
     val navigationSuggestion = remember(latestUserPrompt) { detectAgentNavigationSuggestion(latestUserPrompt) }
 
@@ -286,6 +288,14 @@ fun AgentScreen(
         conversationListState.scrollToConversationEnd()
     }
 
+    if (showMascotSurprise) {
+        AlertDialog(
+            onDismissRequest = { showMascotSurprise = false },
+            title = { Text(atlasText("Une petite surprise !", "A little surprise!", "مفاجأة صغيرة!")) },
+            text = { Text(atlasText("✨ Vous avez trouvé la petite étoile d’Atlas !", "✨ You found Atlas’s little star!", "✨ لقد وجدت نجمة Atlas الصغيرة!")) },
+            confirmButton = { TextButton(onClick = { showMascotSurprise = false }) { Text(atlasText("Fermer", "Close", "إغلاق")) } },
+        )
+    }
     if (showHistoryDialog) {
         AlertDialog(
             onDismissRequest = { showHistoryDialog = false },
@@ -311,7 +321,7 @@ fun AgentScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
                                         Text(
-                                            text = thread.title.ifBlank { atlasText("Discussion", "Conversation", "محادثة") },
+                                            text = localizedAgentText(thread.title, selectedAppLanguage).ifBlank { atlasText("Discussion", "Conversation", "محادثة") },
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
                                             maxLines = 1,
@@ -405,17 +415,17 @@ fun AgentScreen(
                     stickyHeader(key = "agent_header") {
                         AtlasCard(animateSize = false) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    AtlasAgentMascot(Modifier.size(42.dp))
+                                    AtlasAgentMascot(Modifier.size(42.dp).clickable { mascotTaps++; if (mascotTaps >= 5) { mascotTaps = 0; showMascotSurprise = true } })
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(
-                                            text = atlasText("Atlas Agent IA", "Atlas AI Agent", "مساعد Atlas للذكاء الاصطناعي"),
+                                            text = atlasText("Assistant Atlas", "Atlas Assistant", "مساعد Atlas"),
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.SemiBold,
                                             maxLines = 1,
                                         )
                                         Text(
-                                            text = state.activeThreadTitle.takeIf { it.isNotBlank() }
+                                            text = localizedAgentText(state.activeThreadTitle, selectedAppLanguage).takeIf { it.isNotBlank() }
                                                 ?: atlasText("Stock, ventes et assistance", "Inventory, sales, and support", "المخزون والمبيعات والدعم"),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -520,7 +530,7 @@ fun AgentScreen(
                             approvingId = state.approvingId,
                             onCopy = {
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                cm?.setPrimaryClip(ClipData.newPlainText("Atlas Agent", msg.text))
+                                cm?.setPrimaryClip(ClipData.newPlainText("Atlas", if (msg.fromUser) msg.text else localizedAgentText(msg.text, selectedAppLanguage)))
                                 onToast("Réponse copiée.")
                             },
                             onApprove = { proposalId -> viewModel.approveProposal(msg.id, proposalId) },
@@ -634,7 +644,7 @@ fun AgentScreen(
                         label = if (quotaLocked) {
                             atlasText("Quota IA atteint — réinitialisation automatique…", "AI quota reached — resets automatically…", "تم بلوغ حصة الذكاء الاصطناعي — تُجدّد تلقائيًا…")
                         } else {
-                            atlasText("Message à Atlas Agent", "Message Atlas Agent", "رسالة إلى مساعد Atlas")
+                            atlasText("Message à l’assistant Atlas", "Message Atlas Assistant", "رسالة إلى مساعد Atlas")
                         },
                         placeholder = atlasText("Écrivez votre question…", "Write your question…", "اكتب سؤالك…"),
                         imeAction = ImeAction.Send,
@@ -1029,14 +1039,15 @@ private fun ChatBubbleRow(
             AgentAvatar()
             Spacer(Modifier.width(8.dp))
         }
-        val messageDirection = messageTextDirection(message.text)
+        val displayText = if (isUser || isStreaming) message.text else localizedAgentText(message.text, LocalAtlasLanguage.current)
+        val messageDirection = messageTextDirection(displayText)
         CompositionLocalProvider(LocalLayoutDirection provides messageDirection) {
             Column(
                 modifier = Modifier.weight(1f),
                 horizontalAlignment = if (isUser == (messageDirection == LayoutDirection.Ltr)) Alignment.End else Alignment.Start,
             ) {
                 Text(
-                    text = if (isUser) atlasText("Vous", "You", "أنت") else atlasText("Atlas Agent", "Atlas Agent", "مساعد Atlas"),
+                    text = if (isUser) atlasText("Vous", "You", "أنت") else atlasText("Assistant Atlas", "Atlas Assistant", "مساعد Atlas"),
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
@@ -1069,7 +1080,7 @@ private fun ChatBubbleRow(
                             }
                         } else {
                             AtlasMarkdown(
-                                markdown = message.text,
+                                markdown = displayText,
                                 textColor = MaterialTheme.colorScheme.onSurface,
                             )
                         }
@@ -1196,7 +1207,7 @@ private fun AgentTypingIndicator(label: String) {
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                text = atlasText("Atlas Agent", "Atlas Agent", "مساعد Atlas"),
+                text = atlasText("Assistant Atlas", "Atlas Assistant", "مساعد Atlas"),
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,

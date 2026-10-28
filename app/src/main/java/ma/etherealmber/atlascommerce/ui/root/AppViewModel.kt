@@ -25,13 +25,14 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
+import ma.etherealmber.atlascommerce.core.diagnostics.PasskeyAutoReporter
+import ma.etherealmber.atlascommerce.core.diagnostics.PasskeyFailureStage
 import ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
@@ -40,6 +41,7 @@ import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
+import ma.etherealmber.atlascommerce.core.security.awaitPasskeyProvider
 import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyCredentials
 import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyOrigin
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
@@ -85,6 +87,7 @@ class AppViewModel @Inject constructor(
     private val offlineCache: OfflineCache,
     private val deviceIdentity: DeviceIdentity,
     private val passkeySetupPrompt: PasskeySetupPrompt,
+    private val passkeyAutoReporter: PasskeyAutoReporter,
 ) : ViewModel() {
 
     val deviceShortId: String get() = deviceIdentity.shortId()
@@ -96,11 +99,17 @@ class AppViewModel @Inject constructor(
     val densityMode: StateFlow<DensityMode> = preferences.densityMode
         .stateIn(viewModelScope, SharingStarted.Eagerly, DensityMode.COMPACT)
 
-    val appLanguage: StateFlow<AppLanguage> = preferences.appLanguage
-        .stateIn(viewModelScope, SharingStarted.Eagerly, AppLanguage.FRENCH)
+    val appLanguage: StateFlow<AppLanguage> = (applicationContext as ma.etherealmber.atlascommerce.AtlasApp).activeLanguage
+    private val _languageRestartNotice = MutableStateFlow<AppLanguage?>(null)
+    val languageRestartNotice = _languageRestartNotice.asStateFlow()
+    private val _languageSaveFailed = MutableStateFlow(false)
+    val languageSaveFailed = _languageSaveFailed.asStateFlow()
+    fun dismissLanguageSaveFailed() { _languageSaveFailed.value = false }
+    fun dismissLanguageRestartNotice() { _languageRestartNotice.value = null }
 
-    val appearanceLoaded: StateFlow<Boolean> = preferences.appearanceLoaded
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val appearanceLoaded: StateFlow<Boolean> = kotlinx.coroutines.flow.combine(
+        preferences.appearanceLoaded, (applicationContext as ma.etherealmber.atlascommerce.AtlasApp).languageLoaded,
+    ) { ready, languageReady -> ready && languageReady }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val animationsEnabled: StateFlow<Boolean> = preferences.animationsEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -244,6 +253,7 @@ class AppViewModel @Inject constructor(
                     )
                 }
                 previous = next
+                if (next != null) viewModelScope.launch { passkeyAutoReporter.flush() }
             }
         }
     }
@@ -280,7 +290,7 @@ class AppViewModel @Inject constructor(
             )
             is ApiResult.Failure -> AtlasLogBuffer.log(
                 "PASSKEY",
-                "$source capability request failed: code=${result.code}; http=${result.httpStatus ?: "none"}; message=${result.message}",
+                "$source capability request failed: code=${result.code}; http=${result.httpStatus ?: "none"}",
                 "ERROR",
             )
         }
@@ -317,6 +327,12 @@ class AppViewModel @Inject constructor(
             _passkeyRegistrationMessage.value = message
             onDone(message)
         }
+        val attemptServer = serverConfig.selection.value?.baseUrl
+        val fail: (String, PasskeyFailureStage, Int?) -> Unit = { message, stage, status ->
+            passkeyAutoReporter.record(stage, status, attemptServer)
+            viewModelScope.launch { passkeyAutoReporter.flush() }
+            report(message)
+        }
         if (!_androidPasskeysAvailable.value) {
             AtlasLogBuffer.log("PASSKEY", "Registration blocked because capability is unavailable", "WARN")
             report("Les passkeys Android ne sont pas activées pour le serveur sélectionné.")
@@ -328,7 +344,12 @@ class AppViewModel @Inject constructor(
             AtlasLogBuffer.log("PASSKEY", "Registration flow started")
             try {
                 val selectedServerOrigin = ServerUrl.origin(serverConfig.selection.value?.baseUrl)
+                val registrationScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
                 AtlasLogBuffer.log("PASSKEY", "Registration selected origin=${selectedServerOrigin ?: "invalid"}")
+                if (registrationScope == null) {
+                    report("Votre session a expiré. Reconnectez-vous puis réessayez.")
+                    return@launch
+                }
                 if (selectedServerOrigin == null) {
                     _androidPasskeysAvailable.value = false
                     report("L'origine du serveur sélectionné est invalide.")
@@ -336,9 +357,9 @@ class AppViewModel @Inject constructor(
                 }
                 when (val capabilityResult = authRepository.webAuthnCapabilities()) {
                     is ApiResult.Failure -> {
-                        AtlasLogBuffer.log("PASSKEY", "Registration capability failed: code=${capabilityResult.code}; http=${capabilityResult.httpStatus ?: "none"}; message=${capabilityResult.message}", "ERROR")
+                        AtlasLogBuffer.log("PASSKEY", "Registration capability failed: code=${capabilityResult.code}; http=${capabilityResult.httpStatus ?: "none"}", "ERROR")
                         _androidPasskeysAvailable.value = false
-                        report("Impossible de vérifier la disponibilité des passkeys. Réessayez plus tard.")
+                        fail("Impossible de vérifier la disponibilité des passkeys. Réessayez plus tard.", PasskeyFailureStage.REGISTRATION_CAPABILITY, capabilityResult.httpStatus)
                         return@launch
                     }
                     is ApiResult.Success -> {
@@ -351,7 +372,7 @@ class AppViewModel @Inject constructor(
                             )
                         ) {
                             _androidPasskeysAvailable.value = false
-                            report("Les passkeys Android ne sont plus activées pour le serveur sélectionné.")
+                            fail("Les passkeys Android ne sont plus activées pour le serveur sélectionné.", PasskeyFailureStage.REGISTRATION_CAPABILITY, null)
                             return@launch
                         }
                     }
@@ -359,8 +380,8 @@ class AppViewModel @Inject constructor(
                 AtlasLogBuffer.log("PASSKEY", "Requesting registration options")
                 when (val options = authRepository.webAuthnRegistrationOptions(deviceIdentity.fingerprint)) {
                     is ApiResult.Failure -> {
-                        AtlasLogBuffer.log("PASSKEY", "registration-options failed: code=${options.code}; http=${options.httpStatus ?: "none"}; message=${options.message}", "ERROR")
-                        report("Impossible de préparer la création de la passkey. Réessayez plus tard.")
+                        AtlasLogBuffer.log("PASSKEY", "registration-options failed: code=${options.code}; http=${options.httpStatus ?: "none"}", "ERROR")
+                        fail("Impossible de préparer la création de la passkey. Réessayez plus tard.", PasskeyFailureStage.REGISTRATION_OPTIONS, options.httpStatus)
                     }
                     is ApiResult.Success -> {
                         AtlasLogBuffer.log(
@@ -369,17 +390,24 @@ class AppViewModel @Inject constructor(
                         )
                         if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
                             _androidPasskeysAvailable.value = false
-                            report("Les passkeys Android ne sont plus disponibles sur ce serveur.")
+                            fail("Les passkeys Android ne sont plus disponibles sur ce serveur.", PasskeyFailureStage.REGISTRATION_CAPABILITY, null)
                             return@launch
                         }
                         AtlasLogBuffer.log("PASSKEY", "Opening Android Credential Manager for registration")
+                        val providerStarted = android.os.SystemClock.elapsedRealtime()
                         val credentialJson = try {
-                            withTimeout(90_000L) {
-                                AndroidPasskeyCredentials.create(context, options.data)
-                            }
+                            awaitPasskeyProvider { AndroidPasskeyCredentials.create(context, options.data) }
                         } catch (timeout: TimeoutCancellationException) {
-                            AtlasLogBuffer.log("PASSKEY", "Credential Manager registration timed out after 90 seconds", "ERROR")
-                            report("Le gestionnaire Android n'a pas répondu. Vérifiez votre fournisseur de passkeys puis réessayez.")
+                            AtlasLogBuffer.log("PASSKEY", "Credential Manager registration timed out", "ERROR")
+                            fail("Le gestionnaire Android n'a pas répondu. Vérifiez votre fournisseur de passkeys puis réessayez.", PasskeyFailureStage.REGISTRATION_TIMEOUT, null)
+                            return@launch
+                        } finally {
+                            val elapsed = android.os.SystemClock.elapsedRealtime() - providerStarted
+                            AtlasLogBuffer.log("PASSKEY", "Registration credential provider elapsedMs=$elapsed")
+                        }
+                        val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+                        if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != selectedServerOrigin || currentScope != registrationScope) {
+                            report("La session ou le serveur a changé. Recommencez l'enregistrement de la passkey.")
                             return@launch
                         }
                         AtlasLogBuffer.log("PASSKEY", "Credential Manager returned an attestation; sending it to selected Worker")
@@ -395,8 +423,8 @@ class AppViewModel @Inject constructor(
                             )
                         ) {
                             is ApiResult.Failure -> {
-                                AtlasLogBuffer.log("PASSKEY", "registration-verify failed: code=${result.code}; http=${result.httpStatus ?: "none"}; message=${result.message}", "ERROR")
-                                report("Le serveur n'a pas pu enregistrer la passkey. Réessayez plus tard.")
+                                AtlasLogBuffer.log("PASSKEY", "registration-verify failed: code=${result.code}; http=${result.httpStatus ?: "none"}", "ERROR")
+                                fail(passkeyRegistrationFailureMessage(result.httpStatus), PasskeyFailureStage.REGISTRATION_VERIFY, result.httpStatus)
                             }
                             is ApiResult.Success -> {
                                 AtlasLogBuffer.log("PASSKEY", "Registration verified by Worker")
@@ -419,11 +447,15 @@ class AppViewModel @Inject constructor(
                     "Troubleshooting: configure Google Password Manager or another credential provider; enable screen lock; select the provider in Android Passwords, passkeys & accounts settings; verify Digital Asset Links for the selected origin. No passkey was registered.",
                     "INFO",
                 )
-                report("Aucun fournisseur de passkeys n'a accepté la création. Activez Google Password Manager ou un fournisseur compatible, sélectionnez-le dans Paramètres Android > Mots de passe, clés d'accès et comptes, et vérifiez qu'un verrouillage d'écran est activé. Aucune passkey n'a été créée.")
+                fail("Aucun fournisseur de passkeys n'a accepté la création. Activez Google Password Manager ou un fournisseur compatible, sélectionnez-le dans Paramètres Android > Mots de passe, clés d'accès et comptes, et vérifiez qu'un verrouillage d'écran est activé. Aucune passkey n'a été créée.", PasskeyFailureStage.REGISTRATION_NO_PROVIDER, null)
             } catch (error: Exception) {
-                val detail = "${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(240)}"
+                val detail = error.javaClass.simpleName
                 AtlasLogBuffer.log("PASSKEY", "Registration failed in Credential Manager/client: $detail", "ERROR")
-                report("La création de la passkey a échoué. Réessayez plus tard ou contactez l'administrateur.")
+                if (error is androidx.credentials.exceptions.CreateCredentialCancellationException) {
+                    report("La création de la passkey a été annulée.")
+                } else {
+                    fail("La création de la passkey a échoué. Réessayez plus tard ou contactez l'administrateur.", PasskeyFailureStage.REGISTRATION_PROVIDER, null)
+                }
             } finally {
                 _registeringPasskey.value = false
             }
@@ -440,6 +472,7 @@ class AppViewModel @Inject constructor(
                     _agentPolicy.value = null
                     _cachedProductCount.value = 0
                     if (identity != null) {
+                        viewModelScope.launch { passkeyAutoReporter.flush() }
                         loadDevices()
                         refreshAgentPolicy()
                         refreshCachedProductCount()
@@ -684,7 +717,14 @@ class AppViewModel @Inject constructor(
     }
 
     fun setAppLanguage(language: AppLanguage) {
-        viewModelScope.launch { preferences.setAppLanguage(language) }
+        viewModelScope.launch {
+            preferences.setAppLanguage(language)
+            if (preferences.appLanguage.first() != language) {
+                _languageSaveFailed.value = true
+            } else if (language != appLanguage.value) {
+                _languageRestartNotice.value = language
+            }
+        }
     }
 
     fun setDensityMode(mode: DensityMode) {
@@ -727,6 +767,7 @@ class AppViewModel @Inject constructor(
             sessionManager.signOut()
             serverConfig.clear()
             preferences.clearAllLocalPreferences()
+            passkeyAutoReporter.clear()
             offlineCache.clearAll()
             withContext(Dispatchers.IO) {
                 File(applicationContext.cacheDir, "finance").deleteRecursively()

@@ -459,19 +459,30 @@ object DiagnosticReporter {
         if (summary.length + suffix.length >= maxChars) return (summary + suffix).take(maxChars)
         val safeLogs = AtlasLogBuffer.sanitize(logs).ifBlank { "Aucun journal récent." }
         val logBudget = maxChars - summary.length - suffix.length
+        // Logcat often ends with IME/graphics noise. Preserve the structured passkey
+        // breadcrumbs instead of silently dropping them from the 2,000-character payload.
+        val eventsMatch = Regex("""(?s)=== APP EVENTS / NETWORK / AUTH[^\n]*\n(.*?)(?=\n=== |$)""").find(safeLogs)
+        val eventLines = eventsMatch?.groupValues?.get(1)?.lineSequence()?.toList().orEmpty()
+        val passkeyLines = eventLines.filter { Regex("""\[(?:INFO|WARN|ERROR)/PASSKEY]""").containsMatchIn(it) }
+        val passkeyLabel = "=== PASSKEY EVENTS ===\n"
+        val passkeyBudget = minOf(700, logBudget / 2)
+        val passkeyExcerpt = if (passkeyLines.isEmpty() || passkeyBudget <= passkeyLabel.length) "" else {
+            passkeyLabel + passkeyLines.takeLast(12).joinToString("\n").takeLast(passkeyBudget - passkeyLabel.length) + "\n"
+        }
+        val remainingBudget = (logBudget - passkeyExcerpt.length).coerceAtLeast(0)
         val crashMatch = Regex("""(?s)=== LAST CRASH TRACE ===\s*(.*?)(?=\n=== |$)""").find(safeLogs)
-        val reportLogs = if (crashMatch == null) {
-            safeLogs.takeLast(logBudget)
+        val remainingLogs = if (crashMatch == null) {
+            (eventsMatch?.value ?: safeLogs).takeLast(remainingBudget)
         } else {
             // The captured crash block appears near the start of the full local diagnostics.
             // A plain takeLast(logBudget) silently discarded it from the short Worker payload.
             // Reserve space for the tail of the stack trace, then use the remainder for recent events.
             val crashLabel = "\n=== LAST CRASH TRACE ===\n"
             val eventsLabel = "\n=== RECENT DIAGNOSTICS ===\n"
-            if (logBudget <= crashLabel.length + eventsLabel.length) {
-                safeLogs.takeLast(logBudget)
+            if (remainingBudget <= crashLabel.length + eventsLabel.length) {
+                safeLogs.takeLast(remainingBudget)
             } else {
-                val remainingForBodies = logBudget - crashLabel.length - eventsLabel.length
+                val remainingForBodies = remainingBudget - crashLabel.length - eventsLabel.length
                 val crashBudget = minOf(1_000, remainingForBodies * 2 / 3)
                 val rawCrash = crashMatch.groupValues[1].trim()
                 val truncationMarker = "\n… [stack trace excerpt] …\n"
@@ -484,12 +495,12 @@ object DiagnosticReporter {
                         rawCrash.take(headBudget) + truncationMarker + rawCrash.takeLast(tailBudget)
                     }
                 }
-                val withoutCrash = safeLogs.removeRange(crashMatch.range).trim()
-                val eventsBudget = (logBudget - crashLabel.length - eventsLabel.length - crashExcerpt.length).coerceAtLeast(0)
+                val withoutCrash = eventsMatch?.value ?: safeLogs.removeRange(crashMatch.range).trim()
+                val eventsBudget = (remainingBudget - crashLabel.length - eventsLabel.length - crashExcerpt.length).coerceAtLeast(0)
                 crashLabel + crashExcerpt + eventsLabel + withoutCrash.takeLast(eventsBudget)
             }
         }
-        return summary + reportLogs + suffix
+        return summary + passkeyExcerpt + remainingLogs + suffix
     }
 
     fun copyFullReportToClipboard(context: Context, fullMarkdown: String): Boolean = runCatching {

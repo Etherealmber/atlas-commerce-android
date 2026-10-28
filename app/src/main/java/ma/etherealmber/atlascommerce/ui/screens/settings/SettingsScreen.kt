@@ -196,11 +196,7 @@ fun ProfileScreen(
             AtlasCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
-                        modifier = Modifier
-                            .size(68.dp)
-                            .clickable(enabled = !uploadingAvatar) {
-                                photoPicker.launch("image/*")
-                            },
+                        modifier = Modifier.size(68.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         AtlasAvatar(
@@ -213,11 +209,7 @@ fun ProfileScreen(
                                 "Change ${user.username}'s profile photo",
                                 "تغيير صورة الملف الشخصي لـ ${user.username}",
                             ),
-                            onClick = {
-                                if (!uploadingAvatar) {
-                                    photoPicker.launch("image/*")
-                                }
-                            },
+                            onClick = if (!uploadingAvatar) ({ photoPicker.launch("image/*") }) else null,
                         )
                         Surface(
                             shape = CircleShape,

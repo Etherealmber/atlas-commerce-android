@@ -223,7 +223,8 @@ class MarkdownParserTest {
         )
         val nonAdminTabs = listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE)
         assertEquals(nonAdminTabs, MainTab.bottomTabsForRole("secretaire"))
-        assertEquals(nonAdminTabs, MainTab.bottomTabsForRole("stock"))
+        assertEquals(listOf(MainTab.HOME, MainTab.SCAN, MainTab.PRODUCTS), MainTab.bottomTabsForRole("stock"))
+        assertEquals(listOf(MainTab.HOME, MainTab.SCAN, MainTab.PRODUCTS), MainTab.bottomTabsForRole("magasinier"))
         assertEquals(nonAdminTabs, MainTab.bottomTabsForRole("user"))
         assertFalse(nonAdminTabs.contains(MainTab.EMPLOYEES))
 

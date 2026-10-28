@@ -8,6 +8,11 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential
 import org.json.JSONObject
+import kotlinx.coroutines.withTimeout
+
+/** A provider that never responds must not leave the UI permanently busy. */
+internal suspend fun <T> awaitPasskeyProvider(timeoutMillis: Long = 65_000L, action: suspend () -> T): T =
+    withTimeout(timeoutMillis) { action() }
 
 /** Native Android Credential Manager bridge; Android supplies the installed app's origin. */
 object AndroidPasskeyCredentials {
