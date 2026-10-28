@@ -15,6 +15,17 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import ma.etherealmber.atlascommerce.core.AppLanguage
+import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
+import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSize
+import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSummary
+import ma.etherealmber.atlascommerce.ui.i18n.notificationText
 import ma.etherealmber.atlascommerce.AtlasApp
 import ma.etherealmber.atlascommerce.MainActivity
 import ma.etherealmber.atlascommerce.R
@@ -38,21 +49,28 @@ interface UpdateNotifier {
 @Singleton
 class AndroidUpdateNotifier @Inject constructor(
     @ApplicationContext private val context: Context,
+    preferences: AtlasPreferences,
 ) : UpdateNotifier {
+
+    // Updates never block the main thread while DataStore is loading.
+    private val language = preferences.appLanguage.stateIn(
+        CoroutineScope(SupervisorJob() + Dispatchers.IO), SharingStarted.Eagerly, AppLanguage.FRENCH,
+    )
 
     @Volatile
     private var lastNotifyRealtimeMs: Long = 0L
 
     override fun showStarting(info: UpdateInfo) {
         lastNotifyRealtimeMs = 0L
+        val lang = language.value
         postNotification(
             NotificationCompat.Builder(context, AtlasApp.UPDATE_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_update)
-                .setContentTitle("Mise à jour Atlas Commerce ${info.displayVersion}")
-                .setContentText("Téléchargement démarré — suivez l'avancement ici ou dans Paramètres.")
+                .setContentTitle(notificationText(lang, "Mise à jour Atlas Commerce ${info.displayVersion}", "Atlas Commerce update ${info.displayVersion}", "تحديث Atlas Commerce ${info.displayVersion}"))
+                .setContentText(notificationText(lang, "Téléchargement démarré — suivez l’avancement ici ou dans Paramètres.", "Download started — follow progress here or in Settings.", "بدأ التنزيل — تابع التقدم هنا أو في الإعدادات."))
                 .setStyle(
                     NotificationCompat.BigTextStyle().bigText(
-                        "Téléchargement démarré en arrière-plan. Appuyez pour voir la progression dans Paramètres.",
+                        notificationText(lang, "Téléchargement démarré en arrière-plan. Appuyez pour voir la progression dans Paramètres.", "Background download started. Tap to view progress in Settings.", "بدأ التنزيل في الخلفية. اضغط لعرض التقدم في الإعدادات."),
                     ),
                 )
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -79,13 +97,14 @@ class AndroidUpdateNotifier @Inject constructor(
         } else {
             0
         }
-        val summary = UpdateFormatter.progressSummary(bytesRead, totalBytes)
+        val lang = language.value
+        val summary = localizedUpdateSummary(UpdateState.Downloading(info, bytesRead, totalBytes), lang)
 
         postNotification(
             NotificationCompat.Builder(context, AtlasApp.UPDATE_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_update)
-                .setContentTitle("Téléchargement ${info.displayVersion}")
-                .setContentText("$summary · Ouvrir Paramètres")
+                .setContentTitle(notificationText(lang, "Téléchargement ${info.displayVersion}", "Downloading ${info.displayVersion}", "تنزيل ${info.displayVersion}"))
+                .setContentText(notificationText(lang, "$summary · Ouvrir Paramètres", "$summary · Open Settings", "$summary · فتح الإعدادات"))
                 .setSubText(if (!indeterminate) "$percent %" else null)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -99,12 +118,13 @@ class AndroidUpdateNotifier @Inject constructor(
 
     override fun showCompleted(info: UpdateInfo, apkFile: File) {
         lastNotifyRealtimeMs = 0L
-        val sizeLabel = UpdateFormatter.dataSize(apkFile.length())
+        val lang = language.value
+        val sizeLabel = localizedUpdateSize(apkFile.length(), lang)
         postNotification(
             NotificationCompat.Builder(context, AtlasApp.UPDATE_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_update)
-                .setContentTitle("Mise à jour ${info.displayVersion} téléchargée")
-                .setContentText("Paquet prêt ($sizeLabel) — appuyez pour installer.")
+                .setContentTitle(notificationText(lang, "Mise à jour ${info.displayVersion} téléchargée", "Update ${info.displayVersion} downloaded", "تم تنزيل التحديث ${info.displayVersion}"))
+                .setContentText(notificationText(lang, "Paquet prêt ($sizeLabel) — appuyez pour installer.", "Package ready ($sizeLabel) — tap to install.", "الحزمة جاهزة ($sizeLabel) — اضغط للتثبيت."))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCategory(NotificationCompat.CATEGORY_STATUS)
@@ -118,12 +138,13 @@ class AndroidUpdateNotifier @Inject constructor(
 
     override fun showError(info: UpdateInfo?, message: String) {
         lastNotifyRealtimeMs = 0L
+        val lang = language.value
         val suffix = info?.displayVersion?.let { " $it" }.orEmpty()
         postNotification(
             NotificationCompat.Builder(context, AtlasApp.UPDATE_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_update)
-                .setContentTitle("Échec du téléchargement$suffix")
-                .setContentText(message)
+                .setContentTitle(notificationText(lang, "Échec du téléchargement$suffix", "Download failed$suffix", "فشل التنزيل$suffix"))
+                .setContentText(atlasNotice(message, lang))
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCategory(NotificationCompat.CATEGORY_ERROR)

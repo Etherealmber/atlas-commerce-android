@@ -30,6 +30,67 @@ val LocalSetAtlasLanguage = staticCompositionLocalOf<(AppLanguage) -> Unit> { {}
 
 /** Reviewed French, English, and Arabic UI copy; unknown phrases intentionally remain unchanged. */
 private val commonTranslations = mapOf(
+    "BIENVENUE" to ("WELCOME" to "مرحباً"),
+    "GOUVERNANCE & RÔLES" to ("GOVERNANCE & ROLES" to "الحوكمة والأدوار"),
+    "SCANNER DE PRÉCISION" to ("PRECISION SCANNER" to "الماسح الدقيق"),
+    "INFO BOX & AGENT IA" to ("INFO BOX & AI AGENT" to "صندوق المعلومات والمساعد الذكي"),
+    "Bienvenue sur Atlas Commerce" to ("Welcome to Atlas Commerce" to "مرحباً بك في Atlas Commerce"),
+    "Pilotez vos ventes, votre catalogue, vos stocks et votre trésorerie mobile en synchronisation directe avec votre serveur Atlas." to ("Manage sales, catalog, inventory, and cash flow on mobile with direct synchronization to your Atlas server." to "أدر مبيعاتك وكتالوجك ومخزونك وخزينتك من الهاتف مع المزامنة المباشرة مع خادم Atlas."),
+    "Synchronisation temps réel & cache hors ligne automatique" to ("Real-time synchronization and automatic offline cache" to "مزامنة فورية وتخزين تلقائي للاستخدام دون اتصال"),
+    "Interface fluide, rapide et pensée pour le terrain" to ("A fast, smooth interface designed for use on the go" to "واجهة سريعة وسلسة مصممة للعمل الميداني"),
+    "Connexion rapide par identifiants ou QR code PC" to ("Quick sign-in with credentials or a PC QR code" to "تسجيل دخول سريع بالبيانات أو رمز QR للكمبيوتر"),
+    "Permissions intelligentes par rôle" to ("Role-based permissions" to "صلاحيات حسب الدور"),
+    "Chaque collaborateur dispose exactement des outils adaptés à sa mission : Administrateur, Secrétaire, Magasinier ou Opérateur." to ("Each team member has tools suited to their role: administrator, secretary, stockkeeper, or operator." to "لكل عضو أدوات تناسب دوره: المسؤول أو السكرتير أو أمين المخزن أو المشغّل."),
+    "Seul un Administrateur crée un produit directement au stock" to ("Only an administrator can create a product directly in stock" to "يمكن للمسؤول فقط إنشاء منتج مباشرة في المخزون"),
+    "Tout autre rôle envoie automatiquement la fiche à l'Admin" to ("Other roles send the product details to the administrator" to "ترسل الأدوار الأخرى بيانات المنتج إلى المسؤول"),
+    "Validation & création en 1 geste depuis l'espace Admin" to ("Approve and create in one step from the administrator workspace" to "الموافقة والإنشاء بخطوة واحدة من مساحة المسؤول"),
+    "Scan maîtrisé & annulation instantanée" to ("Controlled scanning and instant cancellation" to "مسح متحكم فيه وإلغاء فوري"),
+    "La caméra ne s'active qu'à votre demande explicite et se coupe dès que vous quittez l'écran." to ("The camera starts only when you request it and stops when you leave the screen." to "لا تعمل الكاميرا إلا بطلب منك وتتوقف عند مغادرة الشاشة."),
+    "Recherche instantanée EAN / QR et ajustement rapide" to ("Instant EAN / QR lookup and quick adjustment" to "بحث فوري عبر EAN / QR وتعديل سريع"),
+    "Bouton « Annuler » immédiat si vous ne souhaitez plus enregistrer l'objet" to ("Immediate Cancel button if you no longer want to save the item" to "زر إلغاء فوري إذا لم تعد ترغب في حفظ العنصر"),
+    "Retour haptique et sonore paramétrable" to ("Configurable haptic and sound feedback" to "اهتزاز وصوت قابلان للضبط"),
+    "Notifications ciblées & copilote IA" to ("Targeted notifications and AI assistant" to "إشعارات موجهة ومساعد ذكي"),
+    "Recevez et diffusez des alertes filtrées selon chaque rôle métier, et interrogez l'Agent IA avec tableaux Markdown." to ("Receive and send role-filtered alerts, and ask the AI assistant with Markdown tables." to "استقبل وأرسل تنبيهات مصفاة حسب الدور، واسأل المساعد الذكي مع جداول Markdown."),
+    "Info Box filtrée par rôle + envoi direct entre équipes" to ("Role-filtered Info Box and direct messages between teams" to "صندوق معلومات مصفى حسب الدور ورسائل مباشرة بين الفرق"),
+    "Notifications système Android pour les demandes urgentes" to ("Android system notifications for urgent requests" to "إشعارات نظام Android للطلبات العاجلة"),
+    "Agent IA commercial avec tableaux et analyses structurées" to ("Business AI assistant with structured tables and analysis" to "مساعد أعمال ذكي بجداول وتحليلات منظمة"),
+    "Émulateur" to ("Emulator" to "المحاكي"),
+    "Worker local vu depuis l'émulateur (npm run dev)" to ("Local Worker from the emulator (npm run dev)" to "Worker المحلي من المحاكي (npm run dev)"),
+    "Adresse invalide — vérifiez attentivement que ce que vous avez tapé est correct (ex. https://votre-domaine.com)." to ("Invalid address. Check what you entered (for example, https://your-domain.com)." to "العنوان غير صالح. تحقّق مما أدخلته (مثال: https://your-domain.com)."),
+    "HTTP n'est pas autorisé dans cette version. Vérifiez que l'adresse commence bien par https://." to ("HTTP is not allowed in this version. Make sure the address starts with https://." to "HTTP غير مسموح في هذا الإصدار. تأكد من أن العنوان يبدأ بـ https://."),
+    "Aucune API Atlas trouvée à cette adresse (404). Vérifiez que l'URL saisie est exacte et qu'Atlas Commerce Web y est bien déployé." to ("No Atlas API was found at this address (404). Check the URL and the Atlas Commerce Web deployment." to "لم يُعثر على واجهة Atlas في هذا العنوان (404). تحقّق من الرابط ونشر Atlas Commerce Web."),
+    "Serveur joignable mais temporairement limité (429). Patientez quelques instants puis réessayez." to ("The server is reachable but temporarily rate-limited (429). Wait a moment and try again." to "الخادم متاح لكن الطلبات محدودة مؤقتاً (429). انتظر قليلاً وحاول مجدداً."),
+    "Ce site ne répond pas comme un espace Atlas Commerce. Vérifiez l'orthographe exacte de l'adresse saisie et assurez-vous d'avoir installé Atlas Commerce Web d'abord." to ("This site did not respond as an Atlas Commerce server. Check the address and deployment." to "لم يستجب الموقع كخادم Atlas Commerce. تحقّق من العنوان والنشر."),
+    "Impossible de résoudre le nom du serveur. Vérifiez l’adresse et votre connexion, puis réessayez." to ("Could not resolve the server name. Check the address and your connection, then try again." to "تعذّر تحديد عنوان الخادم. تحقّق من العنوان واتصالك، ثم حاول مجدداً."),
+    "Délai d'attente dépassé — vérifiez que l'adresse saisie est correcte et que votre site Atlas Commerce est bien en ligne." to ("Connection timed out. Check the address and your connection, then try again." to "انتهت مهلة الاتصال. تحقّق من العنوان واتصالك، ثم حاول مجدداً."),
+    "Certificat HTTPS invalide — vérifiez l'exactitude du nom de domaine saisi." to ("Invalid HTTPS certificate. Check the domain name." to "شهادة HTTPS غير صالحة. تحقّق من اسم النطاق."),
+    "Connexion au serveur impossible. Vérifiez l’adresse et votre connexion, puis réessayez." to ("Could not connect to the server. Check the address and your connection, then try again." to "تعذّر الاتصال بالخادم. تحقّق من العنوان واتصالك، ثم حاول مجدداً."),
+    "Vérification impossible — vérifiez votre saisie." to ("Verification failed. Check the address you entered." to "تعذّر التحقق. راجع العنوان الذي أدخلته."),
+    "Impossible de joindre le serveur pour vérifier les mises à jour." to ("Could not reach the server to check for updates." to "تعذّر الاتصال بالخادم للتحقق من التحديثات."),
+    "Le panier est vide." to ("The cart is empty." to "السلة فارغة."),
+    "Indiquez le nom du client pour le ticket." to ("Enter the customer name for the receipt." to "أدخل اسم العميل للإيصال."),
+    "Le serveur configuré n'utilise pas HTTPS." to ("The configured server does not use HTTPS." to "الخادم المحدد لا يستخدم HTTPS."),
+    "Réponse de mise à jour invalide." to ("Invalid update response." to "استجابة التحديث غير صالحة."),
+    "Le fichier d'installation n'est plus en cache. Relancez le téléchargement." to ("The installer is no longer cached. Download it again." to "لم يعد ملف التثبيت محفوظاً مؤقتاً. أعد تنزيله."),
+    "Impossible d'ouvrir l'installateur Android." to ("Could not open the Android installer." to "تعذّر فتح مثبّت Android."),
+    "Atlas Android · Mobile" to ("Atlas Android · Mobile" to "Atlas Android · هاتف"),
+    "Appareil Android" to ("Android device" to "جهاز Android"),
+    "iPhone / iPad" to ("iPhone / iPad" to "آيفون / آيباد"),
+    "PC Windows · Edge" to ("Windows PC · Edge" to "حاسوب Windows · Edge"),
+    "PC Windows · Chrome" to ("Windows PC · Chrome" to "حاسوب Windows · Chrome"),
+    "PC Windows · Firefox" to ("Windows PC · Firefox" to "حاسوب Windows · Firefox"),
+    "Ordinateur Windows" to ("Windows computer" to "حاسوب Windows"),
+    "Mac · Navigateur" to ("Mac · Browser" to "Mac · متصفح"),
+    "Poste Linux" to ("Linux computer" to "حاسوب Linux"),
+    "Session Atlas" to ("Atlas session" to "جلسة Atlas"),
+    "Le gestionnaire Android n'a pas répondu. Vérifiez votre fournisseur de passkeys puis réessayez." to ("Android's credential manager did not respond. Check your passkey provider and try again." to "لم يستجب مدير بيانات الاعتماد في Android. تحقّق من مزوّد مفاتيح المرور وحاول مجدداً."),
+    "Le serveur n'a pas pu enregistrer la passkey. Réessayez plus tard." to ("The server could not register the passkey. Try again later." to "تعذّر على الخادم تسجيل مفتاح المرور. حاول مجدداً لاحقاً."),
+    "Les passkeys Android ne sont pas activées pour le serveur sélectionné." to ("Android passkeys are not enabled on the selected server." to "مفاتيح مرور Android غير مفعّلة على الخادم المحدد."),
+    "Les passkeys Android ne sont plus activées pour le serveur sélectionné." to ("Android passkeys are no longer enabled on the selected server." to "لم تعد مفاتيح مرور Android مفعّلة على الخادم المحدد."),
+    "Les passkeys Android ne sont plus disponibles sur ce serveur." to ("Android passkeys are no longer available on this server." to "لم تعد مفاتيح مرور Android متاحة على هذا الخادم."),
+    "Impossible de vérifier la disponibilité des passkeys. Réessayez plus tard." to ("Could not check passkey availability. Try again later." to "تعذّر التحقق من توفر مفاتيح المرور. حاول مجدداً لاحقاً."),
+    "Impossible de préparer la création de la passkey. Réessayez plus tard." to ("Could not prepare passkey creation. Try again later." to "تعذّر التحضير لإنشاء مفتاح المرور. حاول مجدداً لاحقاً."),
+    "La création de la passkey a échoué. Réessayez plus tard ou contactez l'administrateur." to ("Passkey creation failed. Try again later or contact your administrator." to "فشل إنشاء مفتاح المرور. حاول مجدداً لاحقاً أو اتصل بالمسؤول."),
     "Annuler" to ("Cancel" to "إلغاء"),
     "Ajouter" to ("Add" to "إضافة"),
     "Actualiser" to ("Refresh" to "تحديث"),
@@ -840,6 +901,21 @@ fun atlasNotice(message: String, language: AppLanguage): String {
     commonTranslations[message]?.let { (english, arabic) ->
         return choose(message, english, arabic)
     }
+    template(Regex("^Serveur Atlas Commerce vérifié · (\\d+) ms$")) { m ->
+        Triple(m.value, "Atlas Commerce server verified · ${m.groupValues[1]} ms", "تم التحقق من خادم Atlas Commerce · ${m.groupValues[1]} مللي ثانية")
+    }?.let { return it }
+    template(Regex("^Accès bloqué par la protection anti-bot Cloudflare \\((\\d+)\\)\\. Autorisez /api/\\* dans votre pare-feu ou vérifiez le domaine saisi\\.$")) { m ->
+        Triple(m.value, "Cloudflare blocked access (${m.groupValues[1]}). Allow /api/* in your firewall or check the domain.", "حجبت حماية Cloudflare الوصول (${m.groupValues[1]}). اسمح بالمسار /api/* في جدار الحماية أو تحقّق من النطاق.")
+    }?.let { return it }
+    template(Regex("^Site temporairement indisponible \\((\\d+)\\)\\. Vérifiez votre déploiement Atlas Commerce Web\\.$")) { m ->
+        Triple(m.value, "Server returned an error (${m.groupValues[1]}). Check the Atlas Commerce Web deployment.", "أعاد الخادم خطأ (${m.groupValues[1]}). تحقّق من نشر Atlas Commerce Web.")
+    }?.let { return it }
+    template(Regex("^Connexion refusée \\((\\d+)\\)\\. Vérifiez que l'adresse saisie est parfaitement exacte\\.$")) { m ->
+        Triple(m.value, "Connection rejected (${m.groupValues[1]}). Check the address.", "رُفض الاتصال (${m.groupValues[1]}). تحقّق من العنوان.")
+    }?.let { return it }
+    template(Regex("^Impossible de vérifier les mises à jour \\((\\d+)\\)\\.$")) { m ->
+        Triple(m.value, "Could not check for updates (${m.groupValues[1]}).", "تعذّر التحقق من التحديثات (${m.groupValues[1]}).")
+    }?.let { return it }
     template(Regex("^Seules les (\\d+) premières images ont été retenues \\(max 3\\)\\.$")) { m ->
         Triple(m.value, "Only the first ${m.groupValues[1]} images were kept (maximum 3).", "تم الاحتفاظ بأول ${m.groupValues[1]} صور فقط (الحد الأقصى 3).")
     }?.let { return it }

@@ -113,6 +113,7 @@ fun HomeScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val dashboard = state.dashboard
     val context = LocalContext.current
+    val shareReportChooserTitle = atlasText("Partager le rapport PDF", "Share PDF report", "مشاركة تقرير PDF")
     var pendingReportFile by remember { mutableStateOf<java.io.File?>(null) }
     var showReportActions by remember { mutableStateOf(false) }
     var pdfViewerFile by remember { mutableStateOf<java.io.File?>(null) }
@@ -197,7 +198,7 @@ fun HomeScreen(
                         clipData = ClipData.newUri(context.contentResolver, reportFile.name, uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    context.startActivity(Intent.createChooser(shareIntent, "Partager le rapport PDF"))
+                    context.startActivity(Intent.createChooser(shareIntent, shareReportChooserTitle))
                 }.onFailure { onToast("Impossible de partager le PDF.") }
                 pendingReportFile = null
             },
@@ -226,7 +227,7 @@ fun HomeScreen(
                         clipData = ClipData.newUri(context.contentResolver, reportFile.name, uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    context.startActivity(Intent.createChooser(shareIntent, "Partager le rapport PDF"))
+                    context.startActivity(Intent.createChooser(shareIntent, shareReportChooserTitle))
                 }.onFailure { onToast("Impossible de partager le PDF.") }
             },
             onSave = { pendingReportFile = reportFile; saveReportLauncher.launch(reportFile.name) },
@@ -906,14 +907,14 @@ private fun FinanceAdminCard(
                     label = atlasText("Solde clôture"),
                     value = atlasMoneyCompact(summary.closingBalance, summary.currency),
                     modifier = Modifier.weight(1f),
-                    hint = "Ouverture ${atlasMoneyCompact(summary.openingBalance, summary.currency)}",
+                    hint = atlasText("Ouverture ${atlasMoneyCompact(summary.openingBalance, summary.currency)}", "Opening ${atlasMoneyCompact(summary.openingBalance, summary.currency)}", "الافتتاحي ${atlasMoneyCompact(summary.openingBalance, summary.currency)}"),
                     tone = AtlasTone.POSITIVE,
                 )
                 AtlasStatTile(
                     label = atlasText("Paie à verser"),
                     value = atlasMoneyCompact(summary.payroll.totalDue, summary.currency),
                     modifier = Modifier.weight(1f),
-                    hint = "${summary.payroll.employees} employé(s)",
+                    hint = atlasText("${summary.payroll.employees} employé(s)", "${summary.payroll.employees} employees", "${summary.payroll.employees} موظف"),
                     tone = if (summary.payroll.totalDue > 0.0) AtlasTone.WARNING else AtlasTone.POSITIVE,
                 )
             }
@@ -923,14 +924,14 @@ private fun FinanceAdminCard(
                     label = atlasText("Clients à recevoir"),
                     value = atlasMoneyCompact(summary.receivables.totalOutstanding, summary.currency),
                     modifier = Modifier.weight(1f),
-                    hint = "${summary.receivables.count} facture(s) · ${atlasMoneyCompact(summary.receivables.totalOverdue, summary.currency)} en retard",
+                    hint = atlasText("${summary.receivables.count} facture(s) · ${atlasMoneyCompact(summary.receivables.totalOverdue, summary.currency)} en retard", "${summary.receivables.count} invoices · ${atlasMoneyCompact(summary.receivables.totalOverdue, summary.currency)} overdue", "${summary.receivables.count} فاتورة · ${atlasMoneyCompact(summary.receivables.totalOverdue, summary.currency)} متأخر"),
                     tone = if (summary.receivables.totalOverdue > 0.0) AtlasTone.DANGER else AtlasTone.INFO,
                 )
                 AtlasStatTile(
                     label = atlasText("Fournisseurs à payer"),
                     value = atlasMoneyCompact(summary.payables.totalOutstanding, summary.currency),
                     modifier = Modifier.weight(1f),
-                    hint = "${summary.payables.count} facture(s) · ${atlasMoneyCompact(summary.payables.totalOverdue, summary.currency)} en retard",
+                    hint = atlasText("${summary.payables.count} facture(s) · ${atlasMoneyCompact(summary.payables.totalOverdue, summary.currency)} en retard", "${summary.payables.count} invoices · ${atlasMoneyCompact(summary.payables.totalOverdue, summary.currency)} overdue", "${summary.payables.count} فاتورة · ${atlasMoneyCompact(summary.payables.totalOverdue, summary.currency)} متأخر"),
                     tone = if (summary.payables.totalOverdue > 0.0) AtlasTone.DANGER else AtlasTone.WARNING,
                 )
             }
@@ -938,19 +939,19 @@ private fun FinanceAdminCard(
             FinanceAdminCharts(summary)
             Spacer(Modifier.height(10.dp))
             AtlasDivider()
-            AtlasInfoRow("Recettes encaissées", atlasMoney(summary.salesReceived, summary.currency))
-            AtlasInfoRow("Dépenses (remboursements inclus)", atlasMoney(summary.expenses, summary.currency))
-            AtlasInfoRow("Remboursements", atlasMoney(summary.refunds, summary.currency))
-            AtlasInfoRow("Salaires versés ce mois", atlasMoney(summary.payrollPaid, summary.currency))
-            AtlasInfoRow("Fournisseurs réglés ce mois", atlasMoney(summary.supplierPaid, summary.currency))
+            AtlasInfoRow(atlasText("Recettes encaissées", "Receipts collected", "الإيرادات المحصّلة"), atlasMoney(summary.salesReceived, summary.currency))
+            AtlasInfoRow(atlasText("Dépenses (remboursements inclus)", "Expenses (including refunds)", "المصروفات (بما فيها المبالغ المستردة)"), atlasMoney(summary.expenses, summary.currency))
+            AtlasInfoRow(atlasText("Remboursements", "Refunds", "المبالغ المستردة"), atlasMoney(summary.refunds, summary.currency))
+            AtlasInfoRow(atlasText("Salaires versés ce mois", "Salaries paid this month", "الرواتب المدفوعة هذا الشهر"), atlasMoney(summary.payrollPaid, summary.currency))
+            AtlasInfoRow(atlasText("Fournisseurs réglés ce mois", "Suppliers paid this month", "مدفوعات الموردين هذا الشهر"), atlasMoney(summary.supplierPaid, summary.currency))
 
             FinanceObligationsList(
-                title = "Clients à encaisser",
+                title = atlasText("Clients à encaisser", "Customer payments to collect", "مستحقات العملاء للتحصيل"),
                 documents = summary.receivables.documents,
                 currency = summary.currency,
             )
             FinanceObligationsList(
-                title = "Factures fournisseurs à régler",
+                title = atlasText("Factures fournisseurs à régler", "Supplier invoices to pay", "فواتير الموردين المستحقة"),
                 documents = summary.payables.documents,
                 currency = summary.currency,
             )
@@ -997,9 +998,9 @@ private fun FinanceAdminCard(
                             }
                             AtlasChip(
                                 text = statusLabel,
-                                tone = when (statusLabel) {
-                                    "Payé" -> AtlasTone.POSITIVE
-                                    "À venir" -> AtlasTone.INFO
+                                tone = when {
+                                    isFutureDue -> AtlasTone.INFO
+                                    employee.status.equals("paid", ignoreCase = true) -> AtlasTone.POSITIVE
                                     else -> AtlasTone.WARNING
                                 },
                             )
@@ -1179,8 +1180,8 @@ private fun BalanceHero(
         )
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HeroPill(text = "Stock ${atlasMoneyCompact(stockValue, currency)}")
-            HeroPill(text = "Créances ${atlasMoneyCompact(receivable, currency)}")
+            HeroPill(text = atlasText("Stock ${atlasMoneyCompact(stockValue, currency)}", "Inventory ${atlasMoneyCompact(stockValue, currency)}", "المخزون ${atlasMoneyCompact(stockValue, currency)}"), modifier = Modifier.weight(1f))
+            HeroPill(text = atlasText("Créances ${atlasMoneyCompact(receivable, currency)}", "Receivables ${atlasMoneyCompact(receivable, currency)}", "المستحقات ${atlasMoneyCompact(receivable, currency)}"), modifier = Modifier.weight(1f))
         }
     }
 }
@@ -1218,19 +1219,20 @@ private fun OperationsHero(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HeroPill(
                 text = if (lowStockCount > 0) {
-                    "$lowStockCount article(s) en alerte stock"
+                    atlasText("$lowStockCount article(s) en alerte stock", "$lowStockCount items low on stock", "$lowStockCount منتج منخفض المخزون")
                 } else {
-                    "Aucune rupture critique"
+                    atlasText("Aucune rupture critique", "No critical stock shortages", "لا يوجد نقص حرج في المخزون")
                 },
             )
-            HeroPill(text = "Demandes → Admin")
+            HeroPill(text = atlasText("Demandes → Admin", "Requests → Admin", "الطلبات ← المسؤول"))
         }
     }
 }
 
 @Composable
-private fun HeroPill(text: String) {
+private fun HeroPill(text: String, modifier: Modifier = Modifier) {
     Surface(
+        modifier = modifier,
         color = Color.White.copy(alpha = 0.14f),
         shape = MaterialTheme.shapes.extraSmall,
     ) {
@@ -1239,7 +1241,6 @@ private fun HeroPill(text: String) {
             style = MaterialTheme.typography.labelSmall,
             color = Color.White,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            maxLines = 1,
         )
     }
 }

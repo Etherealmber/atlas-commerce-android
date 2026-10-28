@@ -150,6 +150,8 @@ import kotlinx.coroutines.delay
 import kotlin.math.sqrt
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.ui.i18n.AtlasLanguageSelector
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
@@ -351,8 +353,6 @@ fun AtlasStatTile(
                     text = atlasText(label).uppercase(),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
             Spacer(Modifier.height(6.dp))
@@ -361,8 +361,6 @@ fun AtlasStatTile(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             if (!hint.isNullOrBlank()) {
                 Spacer(Modifier.height(2.dp))
@@ -370,8 +368,6 @@ fun AtlasStatTile(
                     text = atlasText(hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = toneForeground(tone),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -705,7 +701,7 @@ fun AtlasErrorCard(
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                text = atlasText(message),
+                text = atlasNotice(message, LocalAtlasLanguage.current),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -2266,14 +2262,14 @@ fun AtlasWelcomeOnboardingScreen(
                         Spacer(Modifier.height(18.dp))
 
                         Text(
-                            text = current.title,
+                            text = atlasText(current.title),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = current.subtitle,
+                            text = atlasText(current.subtitle),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -2303,7 +2299,7 @@ fun AtlasWelcomeOnboardingScreen(
                                     }
                                     Spacer(Modifier.width(10.dp))
                                     Text(
-                                        text = point,
+                                        text = atlasText(point),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurface,
                                     )

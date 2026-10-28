@@ -1,6 +1,11 @@
 package ma.etherealmber.atlascommerce.ui.components
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.localizeReleaseNotes
+import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSize
+import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSummary
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
@@ -56,7 +61,6 @@ import androidx.core.app.NotificationManagerCompat
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
 import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
-import ma.etherealmber.atlascommerce.core.update.UpdateFormatter
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
@@ -201,7 +205,7 @@ fun AppUpdateBanner(
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = state.info.effectiveNotes,
+                                text = localizeReleaseNotes(state.info.effectiveNotes, LocalAtlasLanguage.current),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 5,
@@ -269,9 +273,9 @@ fun AppUpdateBanner(
                         Column(Modifier.weight(1f)) {
                             Text(
                                 text = atlasText(
-                                    "Mise à jour ${state.info.displayVersion} prête (${UpdateFormatter.dataSize(state.apkFile.length())})",
-                                    "Update ${state.info.displayVersion} ready (${UpdateFormatter.dataSize(state.apkFile.length())})",
-                                    "التحديث ${state.info.displayVersion} جاهز (${UpdateFormatter.dataSize(state.apkFile.length())})",
+                                    "Mise à jour ${state.info.displayVersion} prête (${localizedUpdateSize(state.apkFile.length(), LocalAtlasLanguage.current)})",
+                                    "Update ${state.info.displayVersion} ready (${localizedUpdateSize(state.apkFile.length(), LocalAtlasLanguage.current)})",
+                                    "التحديث ${state.info.displayVersion} جاهز (${localizedUpdateSize(state.apkFile.length(), LocalAtlasLanguage.current)})",
                                 ),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
@@ -323,7 +327,7 @@ fun AppUpdateBanner(
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = state.message,
+                                text = atlasNotice(state.message, LocalAtlasLanguage.current),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -403,7 +407,7 @@ fun MandatoryUpdateScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = info.effectiveNotes,
+                text = localizeReleaseNotes(info.effectiveNotes, LocalAtlasLanguage.current),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -424,9 +428,9 @@ fun MandatoryUpdateScreen(
                             )
                         } else {
                             atlasText(
-                                "Téléchargement terminé (${UpdateFormatter.dataSize(state.apkFile.length())}).",
-                                "Download complete (${UpdateFormatter.dataSize(state.apkFile.length())}).",
-                                "اكتمل التنزيل (${UpdateFormatter.dataSize(state.apkFile.length())}).",
+                                "Téléchargement terminé (${localizedUpdateSize(state.apkFile.length(), LocalAtlasLanguage.current)}).",
+                                "Download complete (${localizedUpdateSize(state.apkFile.length(), LocalAtlasLanguage.current)}).",
+                                "اكتمل التنزيل (${localizedUpdateSize(state.apkFile.length(), LocalAtlasLanguage.current)}).",
                             )
                         },
                         style = MaterialTheme.typography.bodySmall,
@@ -447,7 +451,7 @@ fun MandatoryUpdateScreen(
                 is UpdateState.Error -> {
                     AtlasErrorCard(
                         title = atlasText("Téléchargement interrompu"),
-                        message = state.message,
+                        message = atlasNotice(state.message, LocalAtlasLanguage.current),
                     )
                     Spacer(Modifier.height(12.dp))
                     AtlasButton(
@@ -721,7 +725,7 @@ fun SettingsUpdateCard(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = state.info.effectiveNotes,
+                    text = localizeReleaseNotes(state.info.effectiveNotes, LocalAtlasLanguage.current),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -741,9 +745,9 @@ fun SettingsUpdateCard(
             is UpdateState.ReadyToInstall -> {
                 Text(
                     text = atlasText(
-                        "Mise à jour ${state.info.displayVersion} téléchargée (${UpdateFormatter.dataSize(state.apkFile.length())}).",
-                        "Update ${state.info.displayVersion} downloaded (${UpdateFormatter.dataSize(state.apkFile.length())}).",
-                        "تم تنزيل التحديث ${state.info.displayVersion} (${UpdateFormatter.dataSize(state.apkFile.length())}).",
+                        "Mise à jour ${state.info.displayVersion} téléchargée (${localizedUpdateSize(state.apkFile.length(), LocalAtlasLanguage.current)}).",
+                        "Update ${state.info.displayVersion} downloaded (${localizedUpdateSize(state.apkFile.length(), LocalAtlasLanguage.current)}).",
+                        "تم تنزيل التحديث ${state.info.displayVersion} (${localizedUpdateSize(state.apkFile.length(), LocalAtlasLanguage.current)}).",
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
@@ -751,7 +755,7 @@ fun SettingsUpdateCard(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = state.info.effectiveNotes,
+                    text = localizeReleaseNotes(state.info.effectiveNotes, LocalAtlasLanguage.current),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -783,7 +787,7 @@ fun SettingsUpdateCard(
 
             is UpdateState.Error -> {
                 Text(
-                    text = state.message,
+                    text = atlasNotice(state.message, LocalAtlasLanguage.current),
                     style = MaterialTheme.typography.bodySmall,
                     color = Atlas.palette.danger,
                 )
@@ -826,7 +830,7 @@ fun DownloadProgressBlock(state: UpdateState.Downloading) {
                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = state.statusTitle,
+                    text = atlasText("Téléchargement de la mise à jour${state.activeSourceLabel?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()} en cours…", "Downloading update${state.activeSourceLabel?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()}…", "جارٍ تنزيل التحديث${state.activeSourceLabel?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()}…"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -838,7 +842,11 @@ fun DownloadProgressBlock(state: UpdateState.Downloading) {
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            text = state.statusMessage,
+            text = if (state.activeConnections > 1) {
+                atlasText("Téléchargement accéléré actif (${state.activeConnections} connexions parallèles). Appuyez sur Masquer pour réduire en mini-bulle.", "Accelerated download active (${state.activeConnections} parallel connections). Tap Hide to minimize.", "التنزيل السريع نشط (${state.activeConnections} اتصالات متوازية). اضغط إخفاء للتصغير.")
+            } else {
+                atlasText("Appuyez sur Masquer pour réduire la barre en mini-bulle à côté du profil, ou suivez dans Paramètres.", "Tap Hide to minimize next to your profile, or follow progress in Settings.", "اضغط إخفاء للتصغير بجوار الملف الشخصي، أو تابع التقدم في الإعدادات.")
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -860,7 +868,7 @@ fun DownloadProgressBlock(state: UpdateState.Downloading) {
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            text = state.progressSummary,
+            text = localizedUpdateSummary(state, LocalAtlasLanguage.current),
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.primary,

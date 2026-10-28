@@ -10,6 +10,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import ma.etherealmber.atlascommerce.core.AppLanguage
+import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
+import ma.etherealmber.atlascommerce.ui.i18n.notificationText
 
 @HiltAndroidApp
 class AtlasApp : Application() {
@@ -37,25 +40,32 @@ class AtlasApp : Application() {
                 )
             }
         }
-        ensureNotificationChannels()
+        ensureNotificationChannels(AppLanguage.FRENCH, cleanupLegacy = true)
+        startupIoScope.launch {
+            AtlasPreferences(this@AtlasApp).appLanguage.collect { language ->
+                ensureNotificationChannels(language, cleanupLegacy = false)
+            }
+        }
     }
 
-    private fun ensureNotificationChannels() {
+    private fun ensureNotificationChannels(language: AppLanguage, cleanupLegacy: Boolean) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         runCatching {
             val nm = getSystemService(NotificationManager::class.java) ?: return
             // Clean up legacy low-importance channel IDs so upgraded installs display
             // notifications visibly in both the status bar and main notification shade.
-            nm.deleteNotificationChannel("atlas_updates")
-            nm.deleteNotificationChannel("atlas_role_alerts")
+            if (cleanupLegacy) {
+                nm.deleteNotificationChannel("atlas_updates")
+                nm.deleteNotificationChannel("atlas_role_alerts")
+            }
 
             nm.createNotificationChannel(
                 NotificationChannel(
                     UPDATE_CHANNEL_ID,
-                    "Téléchargements & mises à jour",
+                    notificationText(language, "Téléchargements & mises à jour", "Downloads & updates", "التنزيلات والتحديثات"),
                     NotificationManager.IMPORTANCE_DEFAULT,
                 ).apply {
-                    description = "Progression visible des téléchargements et installation des mises à jour Atlas Commerce"
+                    description = notificationText(language, "Progression visible des téléchargements et installation des mises à jour Atlas Commerce", "Download progress and Atlas Commerce update installation", "تقدم التنزيل وتثبيت تحديثات Atlas Commerce")
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     setShowBadge(true)
                     enableVibration(false)
@@ -66,10 +76,10 @@ class AtlasApp : Application() {
             nm.createNotificationChannel(
                 NotificationChannel(
                     ASSIST_CHANNEL_ID,
-                    "Assistant & notifications serveur",
+                    notificationText(language, "Assistant & notifications serveur", "Assistant & server notifications", "المساعد وإشعارات الخادم"),
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
-                    description = "Notifications push envoyées par le serveur Atlas (agent, paie, stock)"
+                    description = notificationText(language, "Notifications push envoyées par le serveur Atlas (agent, paie, stock)", "Push notifications sent by the Atlas server (assistant, payroll, stock)", "إشعارات يرسلها خادم Atlas (المساعد والرواتب والمخزون)")
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     setShowBadge(true)
                 },
@@ -77,10 +87,10 @@ class AtlasApp : Application() {
             nm.createNotificationChannel(
                 NotificationChannel(
                     ALERTS_CHANNEL_ID,
-                    "Notifications & alertes métier",
+                    notificationText(language, "Notifications & alertes métier", "Business notifications & alerts", "إشعارات وتنبيهات العمل"),
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
-                    description = "Demandes produits Admin, alertes de stock et notifications ciblées par rôle"
+                    description = notificationText(language, "Demandes produits Admin, alertes de stock et notifications ciblées par rôle", "Administrator product requests, stock alerts, and role-based notifications", "طلبات المنتجات للمسؤول وتنبيهات المخزون والإشعارات حسب الدور")
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     setShowBadge(true)
                 },

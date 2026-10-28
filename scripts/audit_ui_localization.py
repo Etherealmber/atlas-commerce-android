@@ -30,7 +30,7 @@ WIDGETS = {
     "Text", "AtlasOutlinedButton", "AtlasChip", "AtlasInfoRow",
     "AtlasSectionHeader", "AtlasErrorCard", "AtlasEmptyState",
     "AtlasStatTile", "AtlasTextField", "AtlasTopBar", "AtlasButton",
-    "AtlasLoading", "AtlasOfflineBanner", "AtlasBullet", "SectionTitle", "LegalPage",
+    "AtlasLoading", "AtlasOfflineBanner", "AtlasBullet", "SectionTitle", "LegalPage", "HeroPill",
     "Icon", "Image", "onToast", "showSnackbar", "Toast.makeText",
 }
 POSITIONAL_COPY_ARGUMENTS = {

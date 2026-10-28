@@ -55,6 +55,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.toneBackground
 import ma.etherealmber.atlascommerce.ui.components.toneForeground
 import ma.etherealmber.atlascommerce.ui.i18n.AtlasLanguageSelector
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
@@ -201,8 +203,8 @@ fun ServerSetupScreen(
                     ) {
                         RadioButton(selected = selected, onClick = { viewModel.choosePreset(preset.url, preset.label) })
                         Column(Modifier.weight(1f)) {
-                            Text(preset.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            Text(preset.hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(atlasText(preset.label), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(atlasText(preset.hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -386,7 +388,7 @@ private fun ProbeCard(report: ProbeReport) {
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                text = report.message,
+                text = atlasNotice(report.message, LocalAtlasLanguage.current),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
