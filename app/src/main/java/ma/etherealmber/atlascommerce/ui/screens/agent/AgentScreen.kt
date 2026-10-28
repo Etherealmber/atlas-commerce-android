@@ -10,12 +10,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -44,12 +42,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
-import androidx.compose.material.icons.outlined.AddComment
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.Refresh
@@ -194,12 +190,13 @@ internal fun detectAgentNavigationSuggestion(prompt: String): AgentNavigationSug
     return destination?.let { AgentNavigationSuggestion(destination = it) }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AgentScreen(
     onToast: (String) -> Unit,
     onNavigate: (AgentNavigationSuggestion) -> Unit = {},
     isActive: Boolean = true,
+    historyRequested: Boolean = false,
+    onHistoryHandled: () -> Unit = {},
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -232,8 +229,9 @@ fun AgentScreen(
     val density = Atlas.density
     val scope = rememberCoroutineScope()
     var showHistoryDialog by remember { mutableStateOf(false) }
-    var mascotTaps by remember { mutableStateOf(0) }
-    var showMascotSurprise by remember { mutableStateOf(false) }
+    LaunchedEffect(historyRequested) {
+        if (historyRequested) { showHistoryDialog = true; onHistoryHandled() }
+    }
     val latestUserPrompt = state.messages.lastOrNull { it.fromUser }?.text.orEmpty()
     val navigationSuggestion = remember(latestUserPrompt) { detectAgentNavigationSuggestion(latestUserPrompt) }
 
@@ -288,14 +286,6 @@ fun AgentScreen(
         conversationListState.scrollToConversationEnd()
     }
 
-    if (showMascotSurprise) {
-        AlertDialog(
-            onDismissRequest = { showMascotSurprise = false },
-            title = { Text(atlasText("Une petite surprise !", "A little surprise!", "مفاجأة صغيرة!")) },
-            text = { Text(atlasText("✨ Vous avez trouvé la petite étoile d’Atlas !", "✨ You found Atlas’s little star!", "✨ لقد وجدت نجمة Atlas الصغيرة!")) },
-            confirmButton = { TextButton(onClick = { showMascotSurprise = false }) { Text(atlasText("Fermer", "Close", "إغلاق")) } },
-        )
-    }
     if (showHistoryDialog) {
         AlertDialog(
             onDismissRequest = { showHistoryDialog = false },
@@ -412,81 +402,22 @@ fun AgentScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(density.itemGap),
                 ) {
-                    stickyHeader(key = "agent_header") {
-                        AtlasCard(animateSize = false) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    AtlasAgentMascot(Modifier.size(42.dp).clickable { mascotTaps++; if (mascotTaps >= 5) { mascotTaps = 0; showMascotSurprise = true } })
-                                    Spacer(Modifier.width(10.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            text = atlasText("Assistant Atlas", "Atlas Assistant", "مساعد Atlas"),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            maxLines = 1,
-                                        )
-                                        Text(
-                                            text = localizedAgentText(state.activeThreadTitle, selectedAppLanguage).takeIf { it.isNotBlank() }
-                                                ?: atlasText("Stock, ventes et assistance", "Inventory, sales, and support", "المخزون والمبيعات والدعم"),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
-                                    IconButton(onClick = { showHistoryDialog = true }) {
-                                        Icon(Icons.Outlined.History, contentDescription = atlasText("Historique des discussions", "Conversation history", "سجل المحادثات"))
-                                    }
-                                    IconButton(onClick = {
-                                        viewModel.startNewConversation()
-                                        onToast("Nouvelle discussion prête.")
-                                    }) {
-                                        Icon(Icons.Outlined.AddComment, contentDescription = atlasText("Nouvelle discussion", "New conversation", "محادثة جديدة"))
-                                    }
-                                    IconButton(onClick = viewModel::refreshContext) {
-                                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser le contexte", "Refresh context", "تحديث السياق"))
-                                    }
+                    if (state.loadingThread) {
+                        item(key = "agent_loading") {
+                            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(10.dp))
+                                Text(atlasText("Chargement de la discussion…", "Loading conversation…", "جارٍ تحميل المحادثة…"), style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                    if (state.messages.isEmpty() && !state.loadingThread && !quotaLocked) {
+                        item(key = "agent_quick_prompts") {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                quickPrompts.forEach { prompt ->
+                                    AssistChip(onClick = { viewModel.sendPrompt(prompt, responseLanguage = selectedAppLanguage) }, label = { Text(prompt, style = MaterialTheme.typography.bodySmall) })
                                 }
-                                Spacer(Modifier.height(6.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    AtlasChip(
-                                        text = when {
-                                            quotaLocked -> atlasText("Quota atteint", "Quota reached", "تم بلوغ الحصة")
-                                            state.status?.configured == true -> atlasText("En ligne", "Online", "متصل")
-                                            state.status?.configured == false -> atlasText("En pause", "Paused", "متوقف مؤقتًا")
-                                            else -> atlasText("Vérification…", "Checking…", "جارٍ التحقق…")
-                                        },
-                                        tone = when {
-                                            quotaLocked -> AtlasTone.DANGER
-                                            state.status?.configured == true -> AtlasTone.POSITIVE
-                                            state.status?.configured == false -> AtlasTone.WARNING
-                                            else -> AtlasTone.NEUTRAL
-                                        },
-                                    )
-                                }
-
-                                if (state.loadingThread) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                        Spacer(Modifier.width(10.dp))
-                                        Text(atlasText("Chargement de la discussion…", "Loading conversation…", "جارٍ تحميل المحادثة…"), style = MaterialTheme.typography.bodySmall)
-                                    }
-                                }
-
-                                if (state.messages.isEmpty() && !state.loadingThread && !quotaLocked) {
-                                    Spacer(Modifier.height(8.dp))
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        quickPrompts.forEach { prompt ->
-                                            AssistChip(
-                                                onClick = { viewModel.sendPrompt(prompt, responseLanguage = selectedAppLanguage) },
-                                                label = { Text(prompt, style = MaterialTheme.typography.bodySmall) },
-                                            )
-                                        }
-                                    }
-                                }
+                            }
                         }
                     }
 

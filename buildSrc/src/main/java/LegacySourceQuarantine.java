@@ -79,6 +79,7 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/ui/components/AppUpdateUi.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/components/AtlasAvatar.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/components/AtlasComponents.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/components/AtlasSurprises.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/components/BarcodeCameraView.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/components/FinanceReportSelection.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/components/FinanceReportViewers.kt",
@@ -119,6 +120,9 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/ui/screens/server/ServerSetupViewModel.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/screens/settings/DeveloperDiagnosticsScreen.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/screens/settings/SettingsScreen.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/snake/InternetAvailability.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/snake/SnakeGame.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/snake/SnakeScreen.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/shell/MainShell.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/shell/ShellViewModel.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/theme/Theme.kt",
@@ -153,6 +157,7 @@ public final class LegacySourceQuarantine {
             "test/java/ma/etherealmber/atlascommerce/PasskeyProviderTimeoutTest.kt",
             "test/java/ma/etherealmber/atlascommerce/QrDevicesAndModelsTest.kt",
             "test/java/ma/etherealmber/atlascommerce/ServerUrlTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/SnakeGameTest.kt",
             "test/java/ma/etherealmber/atlascommerce/WebAuthnCapabilityTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/net/AtlasVersionHeadersTest.kt"
         ))

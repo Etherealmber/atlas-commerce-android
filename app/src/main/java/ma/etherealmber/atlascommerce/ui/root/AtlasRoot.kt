@@ -75,6 +75,8 @@ import ma.etherealmber.atlascommerce.ui.screens.legal.AboutScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.LicenseScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.SecurityScreen
 import ma.etherealmber.atlascommerce.ui.screens.login.LoginScreen
+import ma.etherealmber.atlascommerce.ui.screens.snake.SnakeScreen
+import ma.etherealmber.atlascommerce.ui.screens.snake.rememberInternetAvailable
 import ma.etherealmber.atlascommerce.ui.screens.notifications.NotificationsScreen
 import ma.etherealmber.atlascommerce.ui.screens.server.ServerSetupScreen
 import ma.etherealmber.atlascommerce.ui.shell.MainShell
@@ -84,6 +86,7 @@ import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 import ma.etherealmber.atlascommerce.ui.util.findActivity
 
 private object Overlay {
+    const val SNAKE = "snake"
     const val SERVER = "server"
     const val QR_DEVICE = "qr_device"
     const val NOTIFICATIONS = "notifications"
@@ -229,6 +232,23 @@ private fun AtlasGate(
     val scope = rememberCoroutineScope()
     var bootSplashFinished by rememberSaveable { mutableStateOf(false) }
     var overlay by rememberSaveable { mutableStateOf<String?>(null) }
+    val internetAvailable = rememberInternetAvailable()
+    var offlineOfferShown by remember { mutableStateOf(false) }
+    var showOfflineOffer by remember { mutableStateOf(false) }
+    var showReconnectPrompt by remember { mutableStateOf(false) }
+    var wasOffline by remember { mutableStateOf(false) }
+    LaunchedEffect(internetAvailable) {
+        when (internetAvailable) {
+            false -> wasOffline = true
+            true -> {
+                if (wasOffline && overlay == Overlay.SNAKE) showReconnectPrompt = true
+                wasOffline = false
+                offlineOfferShown = false
+                showOfflineOffer = false
+            }
+            null -> Unit
+        }
+    }
     var pendingQrToken by rememberSaveable { mutableStateOf<String?>(null) }
     var requestedTab by rememberSaveable { mutableStateOf<String?>(null) }
     var notificationPermissionPrompted by rememberSaveable { mutableStateOf(false) }
@@ -440,6 +460,7 @@ private fun AtlasGate(
                                 onOpenLicense = { overlay = Overlay.LICENSE },
                                 onOpenSecurity = { overlay = Overlay.SECURITY },
                                 onOpenAbout = { overlay = Overlay.ABOUT },
+                                onOpenSnake = { overlay = Overlay.SNAKE },
                                 onOpenDeveloperTools = { overlay = Overlay.DEVELOPER },
                                 onSignOut = viewModel::signOut,
                                 onStartUpdateDownload = startSettingsDownloadWithNotificationPermission,
@@ -469,6 +490,7 @@ private fun AtlasGate(
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     when (overlay ?: lastOverlay) {
+                        Overlay.SNAKE -> SnakeScreen(onClose = { showReconnectPrompt = false; overlay = null }, pausedByPrompt = showReconnectPrompt, isActive = overlay == Overlay.SNAKE)
                         Overlay.SERVER -> ServerSetupScreen(onClose = { overlay = null })
 
                         Overlay.QR_DEVICE -> QrDeviceScreen(
@@ -515,6 +537,7 @@ private fun AtlasGate(
             // Registered AFTER MainShell so system Back always dismisses any open overlay first
             // and returns directly to the exact underlying tab (such as Paramètres).
             BackHandler(enabled = overlay != null) {
+                showReconnectPrompt = false
                 overlay = null
                 pendingQrToken = null
             }
@@ -563,6 +586,32 @@ private fun AtlasGate(
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 88.dp),
             )
+
+            LaunchedEffect(internetAvailable, baseStage, overlay, waitingForPasskeyProvider, passkeyRegistrationMessage) {
+                if (internetAvailable == false && !offlineOfferShown && overlay == null && !waitingForPasskeyProvider && passkeyRegistrationMessage == null &&
+                    (baseStage == RootStage.LOGIN || baseStage == RootStage.SHELL)) {
+                    offlineOfferShown = true
+                    showOfflineOffer = true
+                }
+            }
+            if (showOfflineOffer) {
+                AlertDialog(
+                    onDismissRequest = { showOfflineOffer = false },
+                    title = { Text(atlasText("Pas de connexion Internet", "No internet connection", "لا يوجد اتصال بالإنترنت")) },
+                    text = { Text(atlasText("Envie de jouer à Snake Atlas hors ligne ?", "Want to play Atlas Snake offline?", "هل تريد لعب ثعبان Atlas دون اتصال؟")) },
+                    confirmButton = { TextButton(onClick = { showOfflineOffer = false; overlay = Overlay.SNAKE }) { Text(atlasText("Jouer", "Play", "العب")) } },
+                    dismissButton = { TextButton(onClick = { showOfflineOffer = false }) { Text(atlasText("Pas maintenant", "Not now", "ليس الآن")) } },
+                )
+            }
+            if (showReconnectPrompt && overlay == Overlay.SNAKE) {
+                AlertDialog(
+                    onDismissRequest = { showReconnectPrompt = false },
+                    title = { Text(atlasText("Connexion rétablie", "Connection restored", "تم استعادة الاتصال")) },
+                    text = { Text(atlasText("Voulez-vous continuer à jouer ?", "Would you like to keep playing?", "هل تريد متابعة اللعب؟")) },
+                    confirmButton = { TextButton(onClick = { showReconnectPrompt = false }) { Text(atlasText("Continuer", "Keep playing", "متابعة اللعب")) } },
+                    dismissButton = { TextButton(onClick = { showReconnectPrompt = false; overlay = null }) { Text(atlasText("Retour à Atlas", "Return to Atlas", "العودة إلى Atlas")) } },
+                )
+            }
 
             if (passkeySetupOfferVisible && session is SessionState.Active) {
                 AlertDialog(
