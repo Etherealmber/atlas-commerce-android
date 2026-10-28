@@ -717,7 +717,7 @@ private fun SecurityDeviceRow(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = device.friendlyLabel,
+                        text = atlasText(device.friendlyLabel),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,

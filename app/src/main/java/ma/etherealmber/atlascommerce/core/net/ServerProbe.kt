@@ -120,7 +120,7 @@ class ServerProbe @Inject constructor(
             ProbeReport(
                 ok = false,
                 baseUrl = base,
-                message = "Site introuvable — vérifiez bien que l'adresse tapée est exacte (sans faute de frappe) et que votre connexion Internet est active.",
+                message = "Impossible de résoudre le nom du serveur. Vérifiez l’adresse et votre connexion, puis réessayez.",
             )
         } catch (_: SocketTimeoutException) {
             ProbeReport(
@@ -138,7 +138,7 @@ class ServerProbe @Inject constructor(
             ProbeReport(
                 ok = false,
                 baseUrl = base,
-                message = "Site ou serveur indisponible. Vérifiez que l'adresse tapée est exacte et que votre serveur Atlas Commerce Web fonctionne.",
+                message = "Connexion au serveur impossible. Vérifiez l’adresse et votre connexion, puis réessayez.",
             )
         } catch (t: Throwable) {
             ProbeReport(

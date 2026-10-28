@@ -79,6 +79,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
 import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.components.CombinedReportWebViewDialog
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationSuggestion
@@ -300,7 +301,7 @@ fun BalanceScreen(
             }
         }
         if (state.error != null) {
-            Text(state.error.orEmpty(), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            Text(atlasNotice(state.error.orEmpty(), appLanguage), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val maxContentWidth = if (maxWidth >= 900.dp) 1180.dp else 820.dp

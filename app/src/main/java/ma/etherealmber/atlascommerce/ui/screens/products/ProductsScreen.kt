@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.products
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
@@ -263,7 +264,7 @@ fun ProductsScreen(
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             AtlasCard {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    AtlasChip(text = Roles.label(user.role), tone = AtlasTone.INFO)
+                                    AtlasChip(text = atlasRoleLabel(user.role), tone = AtlasTone.INFO)
                                     Spacer(Modifier.width(8.dp))
                                     Text(
                                         text = atlasText("Nouveaux produits soumis à validation Admin"),

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
@@ -21,6 +22,8 @@ import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.update.RoleNotificationDispatcher
+import ma.etherealmber.atlascommerce.ui.i18n.localizedNotificationRole
+import ma.etherealmber.atlascommerce.ui.i18n.notificationText
 import ma.etherealmber.atlascommerce.data.CartStore
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import javax.inject.Inject
@@ -91,7 +94,8 @@ class ShellViewModel @Inject constructor(
             }
             val role = activeUser.role
             val username = activeUser.username
-            val roleLabel = Roles.label(role)
+            val language = preferences.appLanguage.first()
+            val roleLabel = localizedNotificationRole(role, language)
 
             val rawAlerts = (commerceRepository.alerts() as? ApiResult.Success)?.data.orEmpty()
             val rawActions = (commerceRepository.mobileActions("all") as? ApiResult.Success)?.data.orEmpty()
@@ -113,9 +117,9 @@ class ShellViewModel @Inject constructor(
                 .forEach { action ->
                     notificationDispatcher.dispatchIfNew(
                         dedupKey = "pending:${action.id}:${action.status}",
-                        title = action.title.ifBlank { "Nouvelle notification Atlas" },
+                        title = action.title.ifBlank { notificationText(language, "Nouvelle notification Atlas", "New Atlas notification", "إشعار جديد من Atlas") },
                         body = action.detail?.takeIf { it.isNotBlank() }
-                            ?: "Action en attente dans votre espace $roleLabel",
+                            ?: notificationText(language, "Action en attente dans votre espace $roleLabel", "Action pending in your $roleLabel workspace", "إجراء معلّق في مساحة $roleLabel"),
                         roleBadge = roleLabel,
                         urgent = action.isUrgent || action.type == "new_product",
                     )
@@ -134,9 +138,9 @@ class ShellViewModel @Inject constructor(
                         notificationDispatcher.dispatchIfNew(
                             dedupKey = "resolved:${action.id}:${action.status}",
                             title = if (approved) {
-                                "Demande validée par l'Admin ✓"
+                                notificationText(language, "Demande validée par l’Admin ✓", "Request approved by the administrator ✓", "وافق المسؤول على الطلب ✓")
                             } else {
-                                "Demande refusée par l'Admin"
+                                notificationText(language, "Demande refusée par l’Admin", "Request rejected by the administrator", "رفض المسؤول الطلب")
                             },
                             body = action.title,
                             roleBadge = roleLabel,

@@ -19,6 +19,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.squareup.moshi.Moshi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.AtlasApp
 import ma.etherealmber.atlascommerce.BuildConfig
@@ -26,6 +27,9 @@ import ma.etherealmber.atlascommerce.MainActivity
 import ma.etherealmber.atlascommerce.R
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
+import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
+import ma.etherealmber.atlascommerce.ui.i18n.notificationText
+import ma.etherealmber.atlascommerce.ui.i18n.localizeReleaseNotes
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -67,6 +71,7 @@ class UpdateCheckWorker(
             val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             if (latest.versionCode <= prefs.getInt(KEY_LAST_NOTIFIED_VERSION, 0)) return@withContext Result.success()
 
+            val language = AtlasPreferences(applicationContext).appLanguage.first()
             val titleVersion = latest.versionName?.takeIf { it.isNotBlank() } ?: "build ${latest.versionCode}"
             val intent = Intent(applicationContext, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -80,10 +85,10 @@ class UpdateCheckWorker(
             )
             val notification = NotificationCompat.Builder(applicationContext, AtlasApp.UPDATE_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_update)
-                .setContentTitle("Mise à jour Atlas Commerce disponible")
-                .setContentText("Version $titleVersion — appuyez pour consulter les nouveautés.")
-                .setStyle(NotificationCompat.BigTextStyle().bigText(latest.notes?.takeIf { it.isNotBlank() }
-                    ?: "La version $titleVersion est disponible. Ouvrez Paramètres pour vérifier et télécharger."))
+                .setContentTitle(notificationText(language, "Mise à jour Atlas Commerce disponible", "Atlas Commerce update available", "يتوفر تحديث لـ Atlas Commerce"))
+                .setContentText(notificationText(language, "Version $titleVersion — appuyez pour consulter les nouveautés.", "Version $titleVersion — tap to see what’s new.", "الإصدار $titleVersion — اضغط للاطلاع على الجديد."))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(latest.notes?.takeIf { it.isNotBlank() }?.let { localizeReleaseNotes(it, language) }
+                    ?: notificationText(language, "La version $titleVersion est disponible. Ouvrez Paramètres pour vérifier et télécharger.", "Version $titleVersion is available. Open Settings to check and download.", "الإصدار $titleVersion متاح. افتح الإعدادات للتحقق والتنزيل.")))
                 .setCategory(NotificationCompat.CATEGORY_STATUS)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)

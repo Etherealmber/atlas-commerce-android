@@ -107,6 +107,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
+import ma.etherealmber.atlascommerce.ui.i18n.localizeReleaseNotes
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentQuotaCard
@@ -839,7 +840,7 @@ fun SettingsScreen(
                             }
                             Spacer(Modifier.height(6.dp))
                             Text(
-                                text = entry.notes,
+                                text = localizeReleaseNotes(entry.notes, appLanguage),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1475,7 +1476,7 @@ private fun ConnectedDeviceRow(
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = device.friendlyLabel,
+                    text = atlasText(device.friendlyLabel),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
