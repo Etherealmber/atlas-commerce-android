@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.core.format
 
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
@@ -11,64 +12,84 @@ import kotlin.math.abs
 import kotlin.math.roundToLong
 
 /**
- * Locale-aware formatting (fr-MA) used everywhere in the UI.
- *
- * The app never derives money from floating point sums in the UI layer without
- * rounding: totals are rounded once, at display time.
+ * Locale-aware formatting used throughout Atlas. Money always retains the server's currency code;
+ * Arabic output uses locale digits/separators and isolates the Latin ISO code to prevent bidi
+ * reordering. Values are rounded only for display and are never used to derive financial totals.
  */
 object AtlasFormat {
 
-    private val decimalFormatter: NumberFormat
-        get() = NumberFormat.getNumberInstance(Locale.FRANCE).apply {
-            minimumFractionDigits = 2
-            maximumFractionDigits = 2
-        }
+    private fun locale(language: AppLanguage): Locale = when (language) {
+        AppLanguage.FRENCH -> Locale.FRANCE
+        AppLanguage.ENGLISH -> Locale.UK
+        AppLanguage.ARABIC -> Locale.forLanguageTag("ar-MA")
+    }
 
-    private val integerFormatter: NumberFormat
-        get() = NumberFormat.getIntegerInstance(Locale.FRANCE)
-
-    fun number(value: Double, decimals: Int = 2): String {
+    fun number(value: Double, decimals: Int = 2, language: AppLanguage = AppLanguage.FRENCH): String {
         val safe = if (value.isFinite()) value else 0.0
-        return NumberFormat.getNumberInstance(Locale.FRANCE).apply {
+        return NumberFormat.getNumberInstance(locale(language)).apply {
             minimumFractionDigits = decimals
             maximumFractionDigits = decimals
         }.format(safe)
     }
 
-    fun integer(value: Double): String {
+    fun integer(value: Double, language: AppLanguage = AppLanguage.FRENCH): String {
         val safe = if (value.isFinite()) value else 0.0
-        return integerFormatter.format(safe.roundToLong())
+        return NumberFormat.getIntegerInstance(locale(language)).format(safe.roundToLong())
     }
 
-    /** "1 250,00 MAD" — currency is appended as a code, never a symbol. */
-    fun money(amount: Double, currency: String? = null, withDecimals: Boolean = true): String {
+    /** Example: "1 250,00 MAD"; currency remains an ISO code in every language. */
+    fun money(
+        amount: Double,
+        currency: String? = null,
+        withDecimals: Boolean = true,
+        language: AppLanguage = AppLanguage.FRENCH,
+    ): String {
         val code = currency?.takeIf { it.isNotBlank() } ?: "MAD"
-        val formatted = if (withDecimals) number(amount, 2) else integer(amount)
-        return "$formatted $code"
+        val formatted = if (withDecimals) number(amount, 2, language) else integer(amount, language)
+        val bidiSafeCode = if (language.isRtl) "\u2066$code\u2069" else code
+        return "$formatted $bidiSafeCode"
     }
 
-    /** Compact money for dashboard tiles: "1,2 M" / "12,5 k". */
-    fun moneyCompact(amount: Double, currency: String? = null): String {
+    /** Compact dashboard money; scale words are localized instead of leaking English `k` in Arabic. */
+    fun moneyCompact(
+        amount: Double,
+        currency: String? = null,
+        language: AppLanguage = AppLanguage.FRENCH,
+    ): String {
         val code = currency?.takeIf { it.isNotBlank() } ?: "MAD"
-        val abs = abs(amount)
+        val absolute = abs(amount)
         return when {
-            abs >= 1_000_000 -> "${number(amount / 1_000_000, 1)} M $code"
-            abs >= 10_000 -> "${number(amount / 1_000, 1)} k $code"
-            else -> money(amount, code)
+            absolute >= 1_000_000 -> {
+                val scaled = amount / 1_000_000
+                val decimals = if (language.isRtl && scaled % 1.0 == 0.0) 0 else 1
+                val suffix = if (language.isRtl) "مليون" else "M"
+                "${number(scaled, decimals, language)} $suffix ${if (language.isRtl) "\u2066$code\u2069" else code}"
+            }
+            absolute >= 10_000 -> {
+                val scaled = amount / 1_000
+                val decimals = if (language.isRtl && scaled % 1.0 == 0.0) 0 else 1
+                val suffix = if (language.isRtl) "ألف" else "k"
+                "${number(scaled, decimals, language)} $suffix ${if (language.isRtl) "\u2066$code\u2069" else code}"
+            }
+            else -> money(amount, code, language = language)
         }
     }
 
     /** Quantities hide trailing zeros: 2.0 → "2", 1.5 → "1,5". */
-    fun quantity(value: Double): String {
+    fun quantity(value: Double, language: AppLanguage = AppLanguage.FRENCH): String {
         val safe = if (value.isFinite()) value else 0.0
         return if (abs(safe - safe.roundToLong()) < 0.0001) {
-            integer(safe)
+            integer(safe, language)
         } else {
-            number(safe, 2).trimEnd('0').trimEnd(',')
+            val symbols = java.text.DecimalFormatSymbols.getInstance(locale(language))
+            number(safe, 2, language)
+                .trimEnd(symbols.zeroDigit)
+                .trimEnd(symbols.decimalSeparator)
         }
     }
 
-    fun percent(fraction: Double): String = "${number(fraction * 100, 0)} %"
+    fun percent(fraction: Double, language: AppLanguage = AppLanguage.FRENCH): String =
+        "${number(fraction * 100, 0, language)} %"
 
     fun dateTime(iso: String?): String = format(iso, "dd/MM/yyyy HH:mm")
 

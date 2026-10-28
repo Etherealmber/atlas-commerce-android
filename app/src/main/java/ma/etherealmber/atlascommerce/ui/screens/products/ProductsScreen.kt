@@ -1,6 +1,9 @@
 package ma.etherealmber.atlascommerce.ui.screens.products
 
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
+import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
+import ma.etherealmber.atlascommerce.ui.i18n.atlasQuantity
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -318,7 +321,7 @@ fun ProductsScreen(
             initialName = fulfill.name.orEmpty(),
             initialSku = fulfill.sku.orEmpty(),
             initialUnit = fulfill.unit ?: "unité",
-            initialQuantity = fulfill.quantity?.let { AtlasFormat.quantity(it) } ?: "1",
+            initialQuantity = fulfill.quantity?.let { atlasQuantity(it) } ?: "1",
             initialCategory = fulfill.category.orEmpty(),
             submitting = state.submitting,
             onDismiss = { pendingFulfillRequest = null },
@@ -389,7 +392,7 @@ private fun ProductRequestRow(
                         atlasText("Code ${request.code}", "Code ${request.code}", "الرمز ${request.code}"),
                         request.sku?.takeIf { it.isNotBlank() }?.let { "SKU $it" },
                         request.quantity?.let {
-                            "${AtlasFormat.quantity(it)} ${request.unit ?: atlasText("unité", "unit", "وحدة")}"
+                            "${atlasQuantity(it)} ${request.unit ?: atlasText("unité", "unit", "وحدة")}"
                         },
                     ).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
@@ -455,7 +458,7 @@ private fun ProductRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AtlasChip(
-                    text = atlasText("Stock ${AtlasFormat.quantity(product.stock)}", "Stock ${AtlasFormat.quantity(product.stock)}", "المخزون ${AtlasFormat.quantity(product.stock)}"),
+                    text = atlasText("Stock ${atlasQuantity(product.stock)}", "Stock ${atlasQuantity(product.stock)}", "المخزون ${atlasQuantity(product.stock)}"),
                     tone = when {
                         product.isOutOfStock -> AtlasTone.DANGER
                         product.isLowStock -> AtlasTone.WARNING
@@ -463,9 +466,9 @@ private fun ProductRow(
                     },
                 )
                 if (product.neededQuantity > 0.0) {
-                    AtlasChip(text = atlasText("Manque ${AtlasFormat.quantity(product.neededQuantity)}", "Short by ${AtlasFormat.quantity(product.neededQuantity)}", "النقص ${AtlasFormat.quantity(product.neededQuantity)}"), tone = if (product.isOutOfStock) AtlasTone.DANGER else AtlasTone.WARNING)
+                    AtlasChip(text = atlasText("Manque ${atlasQuantity(product.neededQuantity)}", "Short by ${atlasQuantity(product.neededQuantity)}", "النقص ${atlasQuantity(product.neededQuantity)}"), tone = if (product.isOutOfStock) AtlasTone.DANGER else AtlasTone.WARNING)
                 }
-                AtlasChip(text = AtlasFormat.money(product.price, currency))
+                AtlasChip(text = atlasMoney(product.price, currency))
             }
         }
     }
@@ -504,9 +507,9 @@ private fun ProductDetailDialog(
                     Spacer(Modifier.height(10.dp))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AtlasChip(text = atlasText("Prix ${AtlasFormat.money(product.price, currency)}", "Price ${AtlasFormat.money(product.price, currency)}", "السعر ${AtlasFormat.money(product.price, currency)}"))
+                    AtlasChip(text = atlasText("Prix ${atlasMoney(product.price, currency)}", "Price ${atlasMoney(product.price, currency)}", "السعر ${atlasMoney(product.price, currency)}"))
                     AtlasChip(
-                        text = atlasText("Stock ${AtlasFormat.quantity(product.stock)}", "Stock ${AtlasFormat.quantity(product.stock)}", "المخزون ${AtlasFormat.quantity(product.stock)}"),
+                        text = atlasText("Stock ${atlasQuantity(product.stock)}", "Stock ${atlasQuantity(product.stock)}", "المخزون ${atlasQuantity(product.stock)}"),
                         tone = if (product.isLowStock) AtlasTone.WARNING else AtlasTone.POSITIVE,
                     )
                 }
@@ -522,7 +525,7 @@ private fun ProductDetailDialog(
                             Icon(Icons.Outlined.Remove, contentDescription = atlasText("Réduire"))
                         }
                         Text(
-                            text = AtlasFormat.quantity(quantity),
+                            text = atlasQuantity(quantity),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.width(44.dp),
@@ -534,9 +537,9 @@ private fun ProductDetailDialog(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = atlasText(
-                            "Total ${AtlasFormat.money(product.price * quantity, currency)} · sans TVA (ticket VR)",
-                            "Total ${AtlasFormat.money(product.price * quantity, currency)} · no VAT (VR receipt)",
-                            "الإجمالي ${AtlasFormat.money(product.price * quantity, currency)} · بدون ضريبة (إيصال VR)",
+                            "Total ${atlasMoney(product.price * quantity, currency)} · sans TVA (ticket VR)",
+                            "Total ${atlasMoney(product.price * quantity, currency)} · no VAT (VR receipt)",
+                            "الإجمالي ${atlasMoney(product.price * quantity, currency)} · بدون ضريبة (إيصال VR)",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -593,9 +596,9 @@ private fun StockAdjustDialog(
                 )
                 Text(
                     text = atlasText(
-                        "Stock actuel : ${AtlasFormat.quantity(product.stock)}",
-                        "Current stock: ${AtlasFormat.quantity(product.stock)}",
-                        "المخزون الحالي: ${AtlasFormat.quantity(product.stock)}",
+                        "Stock actuel : ${atlasQuantity(product.stock)}",
+                        "Current stock: ${atlasQuantity(product.stock)}",
+                        "المخزون الحالي: ${atlasQuantity(product.stock)}",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

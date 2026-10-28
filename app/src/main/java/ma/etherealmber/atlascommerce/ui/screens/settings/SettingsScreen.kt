@@ -377,7 +377,15 @@ fun ProfileScreen(
                     FilterChip(
                         selected = themeMode == mode,
                         onClick = { appViewModel.setThemeMode(mode) },
-                        label = { Text(mode.label) },
+                        label = {
+                            Text(
+                                when (mode) {
+                                    ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
+                                    ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
+                                    ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+                                },
+                            )
+                        },
                     )
                 }
             }
@@ -409,7 +417,14 @@ fun ProfileScreen(
                     FilterChip(
                         selected = densityMode == mode,
                         onClick = { appViewModel.setDensityMode(mode) },
-                        label = { Text(mode.label) },
+                        label = {
+                            Text(
+                                when (mode) {
+                                    DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
+                                    DensityMode.COMFORT -> atlasText("Confort", "Comfort", "مريح")
+                                },
+                            )
+                        },
                     )
                 }
             }
@@ -425,7 +440,7 @@ fun ProfileScreen(
                     FilterChip(
                         selected = defaultStartTab == item.name,
                         onClick = { appViewModel.setDefaultStartTab(item.name) },
-                        label = { Text(item.label) },
+                        label = { Text(settingsTabLabel(item)) },
                     )
                 }
             }
@@ -680,6 +695,21 @@ fun SettingsScreen(
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     val automaticCrashReportsEnabled by appViewModel.automaticCrashReportsEnabled.collectAsStateWithLifecycle()
     val automaticCrashReportsAvailable by appViewModel.automaticCrashReportsAvailable.collectAsStateWithLifecycle()
+    val crashReportsUnavailableToast = atlasText(
+        "Crashlytics n'est pas configuré pour cette version.",
+        "Crashlytics is not configured for this build.",
+        "لم يتم إعداد Crashlytics لهذا الإصدار.",
+    )
+    val crashReportsEnabledToast = atlasText(
+        "Rapports de plantage activés.",
+        "Crash reports enabled.",
+        "تم تفعيل تقارير الأعطال.",
+    )
+    val crashReportsDisabledToast = atlasText(
+        "Envoi automatique désactivé.",
+        "Automatic reporting disabled.",
+        "تم تعطيل الإرسال التلقائي.",
+    )
     val androidPasskeysAvailable by appViewModel.androidPasskeysAvailable.collectAsStateWithLifecycle()
     val registeringPasskey by appViewModel.registeringPasskey.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
@@ -804,7 +834,7 @@ fun SettingsScreen(
 
     if (showProblemReportDialog) {
         ProblemReportDialog(
-            screenOrigin = "Paramètres",
+            screenOrigin = atlasText("Paramètres", "Settings", "الإعدادات"),
             onDismiss = { showProblemReportDialog = false },
             onToast = onToast,
             appViewModel = appViewModel,
@@ -1091,32 +1121,43 @@ fun SettingsScreen(
             }
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsToggleRow(
-                title = "Recherche automatique des mises à jour",
-                subtitle = "Vérifie à l'ouverture et environ toutes les 12 h en arrière-plan (selon les règles batterie d'Android).",
+                title = atlasText("Recherche automatique des mises à jour", "Check for updates automatically", "التحقق تلقائياً من التحديثات"),
+                subtitle = atlasText(
+                    "Vérifie à l'ouverture et environ toutes les 12 h en arrière-plan, selon les règles batterie d'Android.",
+                    "Checks at launch and about every 12 hours in the background, subject to Android battery rules.",
+                    "يتحقق عند التشغيل وكل 12 ساعة تقريباً في الخلفية، وفقاً لقيود بطارية Android.",
+                ),
                 checked = autoCheckUpdates,
                 onCheckedChange = appViewModel::setAutoCheckUpdates,
             )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             if (automaticCrashReportsAvailable) {
                 SettingsToggleRow(
-                    title = "Envoyer automatiquement les rapports de plantage",
-                    subtitle = "Envoi opt-in à Firebase Crashlytics, sans jetons, mots de passe ni données commerciales jointes.",
+                    title = atlasText("Rapports de plantage automatiques (Firebase)", "Automatic crash reports (Firebase)", "تقارير الأعطال التلقائية (Firebase)"),
+                    subtitle = atlasText(
+                        "Option désactivée par défaut. Les rapports sont envoyés à Firebase Crashlytics, pas à Atlas Bot.",
+                        "Off by default. Crash reports go to Firebase Crashlytics, not Atlas Bot.",
+                        "معطلة افتراضياً. تُرسل تقارير الأعطال إلى Firebase Crashlytics وليس Atlas Bot.",
+                    ),
                     checked = automaticCrashReportsEnabled,
-                    onCheckedChange = { appViewModel.setAutomaticCrashReportsEnabled(it, onToast) },
+                    onCheckedChange = { enabled ->
+                        appViewModel.setAutomaticCrashReportsEnabled(enabled) { succeeded ->
+                            onToast(
+                                when {
+                                    !succeeded -> crashReportsUnavailableToast
+                                    enabled -> crashReportsEnabledToast
+                                    else -> crashReportsDisabledToast
+                                },
+                            )
+                        }
+                    },
                 )
-            } else {
-                SettingsRow(
-                    icon = Icons.Outlined.BugReport,
-                    title = "Rapports automatiques de plantage",
-                    subtitle = "Indisponible : cette version n'est pas configurée avec Firebase Crashlytics.",
-                    onClick = { onToast("L'administrateur doit configurer Firebase Crashlytics pour cette version.") },
-                )
+                AtlasDivider(Modifier.padding(vertical = 8.dp))
             }
-            AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsRow(
                 icon = Icons.Outlined.AutoAwesomeMotion,
-                title = "Revoir l'écran de bienvenue",
-                subtitle = "Relancer la présentation animée d'Atlas Commerce",
+                title = atlasText("Revoir l'écran de bienvenue", "Replay the welcome screen", "إعادة عرض شاشة الترحيب"),
+                subtitle = atlasText("Relancer la présentation animée d'Atlas Commerce", "Replay the Atlas Commerce introduction", "إعادة عرض مقدمة Atlas Commerce"),
                 onClick = { appViewModel.replayOnboarding() },
             )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
@@ -1143,8 +1184,8 @@ fun SettingsScreen(
             AtlasCard(padding = 4.dp) {
                 SettingsRow(
                     icon = Icons.Outlined.BugReport,
-                    title = "Outils développeur",
-                    subtitle = "État passkey, journaux assainis, copie et diagnostic avancé",
+                    title = atlasText("Outils développeur", "Developer tools", "أدوات المطوّر"),
+                    subtitle = atlasText("État local résumé · journaux masqués", "Summary status · logs hidden", "حالة موجزة · السجلات مخفية"),
                     onClick = onOpenDeveloperTools,
                 )
             }
@@ -1237,7 +1278,7 @@ fun SettingsScreen(
             AtlasDivider(Modifier.padding(horizontal = 12.dp))
             SettingsRow(
                 icon = Icons.Outlined.Info,
-                title = "À propos",
+                title = atlasText("À propos", "About", "حول التطبيق"),
                 subtitle = "${AppDetails.NAME} ${AppDetails.VERSION_NAME}",
                 onClick = onOpenAbout,
             )
@@ -1251,7 +1292,11 @@ fun SettingsScreen(
             Spacer(Modifier.height(6.dp))
             SettingsRow(
                 icon = Icons.Outlined.Person,
-                title = "Profil GitHub @${AppDetails.GITHUB_HANDLE}",
+                title = atlasText(
+                    "Profil GitHub @${AppDetails.GITHUB_HANDLE}",
+                    "GitHub profile @${AppDetails.GITHUB_HANDLE}",
+                    "ملف GitHub @${AppDetails.GITHUB_HANDLE}",
+                ),
                 subtitle = "github.com/${AppDetails.GITHUB_HANDLE}",
                 onClick = {
                     if (!openExternal(context, AppDetails.GITHUB_PROFILE_URL)) {
@@ -1281,8 +1326,12 @@ fun SettingsScreen(
             )
             SettingsRow(
                 icon = Icons.Outlined.BugReport,
-                title = "Signaler un problème",
-                subtitle = "Capturer les journaux, ID appareil & jusqu'à 3 images (≤ 1 Mo) avec @atlas-bot",
+                title = atlasText("Signaler un problème", "Report a problem", "الإبلاغ عن مشكلة"),
+                subtitle = atlasText(
+                    "Un résumé technique privé sera joint uniquement si vous envoyez le rapport. Les captures (3 max) se partagent séparément et ne sont pas envoyées avec le formulaire.",
+                    "A private technical summary is attached only if you send the report. Screenshots (up to 3) are shared separately, not sent with the form.",
+                    "لن يُرفق ملخص تقني خاص إلا عند إرسال البلاغ. تُشارك لقطات الشاشة (حتى 3) بشكل منفصل ولا تُرسل مع النموذج.",
+                ),
                 onClick = { showProblemReportDialog = true },
             )
         }
@@ -1323,6 +1372,19 @@ private fun profileRoleLabel(role: String): String = when (Roles.normalize(role)
 }
 
 @Composable
+private fun settingsTabLabel(tab: MainTab): String = when (tab) {
+    MainTab.HOME -> atlasText("Accueil", "Home", "الرئيسية")
+    MainTab.PRODUCTS -> atlasText("Produits", "Products", "المنتجات")
+    MainTab.SCAN -> atlasText("Scan", "Scan", "المسح")
+    MainTab.SALE -> atlasText("Vente", "Sales", "المبيعات")
+    MainTab.BALANCE -> atlasText("Balance", "Balance", "الرصيد")
+    MainTab.EMPLOYEES -> atlasText("Employés", "Employees", "الموظفون")
+    MainTab.AGENT -> atlasText("Atlas Agent", "Atlas Agent", "مساعد Atlas")
+    MainTab.PROFILE -> atlasText("Mon profil", "My profile", "ملفي الشخصي")
+    MainTab.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
+}
+
+@Composable
 private fun SettingsToggleRow(
     title: String,
     subtitle: String,
@@ -1338,11 +1400,11 @@ private fun SettingsToggleRow(
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                text = title,
+                text = atlasText(title),
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
-                text = subtitle,
+                text = atlasText(subtitle),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1429,9 +1491,9 @@ private fun SettingsRow(
             )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
+                Text(atlasText(title), style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    text = subtitle,
+                    text = atlasText(subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

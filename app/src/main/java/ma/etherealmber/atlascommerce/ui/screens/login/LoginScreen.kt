@@ -117,7 +117,7 @@ fun LoginScreen(
         AlertDialog(
             onDismissRequest = viewModel::dismissPasskeyError,
             title = { Text(atlasText("Connexion par passkey impossible", "Passkey sign-in failed", "تعذّر تسجيل الدخول بمفتاح المرور")) },
-            text = { Text(passkeyError) },
+            text = { Text(localizedLoginMessage(passkeyError)) },
             confirmButton = {
                 TextButton(onClick = viewModel::dismissPasskeyError) { Text(atlasText("Fermer", "Close", "إغلاق")) }
             },
@@ -295,7 +295,7 @@ fun LoginScreen(
                             Spacer(Modifier.height(8.dp))
                             AtlasErrorCard(
                                 title = if (state.step == LoginViewModel.Step.OTP) atlasText("Code refusé", "Code rejected", "تم رفض الرمز") else atlasText("Connexion refusée", "Sign-in failed", "فشل تسجيل الدخول"),
-                                message = state.error.orEmpty(),
+                                message = localizedLoginMessage(state.error.orEmpty()),
                             )
                         }
                     }
@@ -604,7 +604,7 @@ private fun OtpForm(
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            text = state.info ?: atlasText("Saisissez le code à 6 chiffres envoyé par e-mail.", "Enter the six-digit code sent by email.", "أدخل الرمز المكوّن من ستة أرقام المرسل عبر البريد الإلكتروني."),
+            text = atlasText("Saisissez le code à 6 chiffres envoyé par e-mail.", "Enter the six-digit code sent by email.", "أدخل الرمز المكوّن من ستة أرقام المرسل عبر البريد الإلكتروني."),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -639,4 +639,40 @@ private fun OtpForm(
             }
         }
     }
+}
+
+
+@Composable
+private fun localizedLoginMessage(message: String): String = when (message) {
+    "Saisissez votre identifiant et votre mot de passe." ->
+        atlasText("Saisissez votre identifiant et votre mot de passe.", "Enter your username and password.", "أدخل اسم المستخدم وكلمة المرور.")
+    "Saisissez le code reçu par e-mail.", "Saisissez le code complet reçu par e-mail." ->
+        atlasText("Saisissez le code reçu par e-mail.", "Enter the code sent by email.", "أدخل الرمز المرسل عبر البريد الإلكتروني.")
+    "Identifiant ou mot de passe incorrect. Vérifiez votre saisie." ->
+        atlasText("Identifiant ou mot de passe incorrect. Vérifiez votre saisie.", "Incorrect username or password. Check your entry.", "اسم المستخدم أو كلمة المرور غير صحيحة. تحقق من البيانات.")
+    "Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau." ->
+        atlasText("Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau.", "The code is invalid or expired. Check it or request a new one.", "الرمز غير صالح أو منتهي الصلاحية. تحقق منه أو اطلب رمزاً جديداً.")
+    "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez." ->
+        atlasText("Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.", "Couldn't reach the server. Check your connection and try again.", "تعذّر الاتصال بالخادم. تحقق من اتصالك وحاول مجدداً.")
+    "Impossible de joindre ce serveur. Vérifiez votre connexion puis réessayez." ->
+        atlasText("Impossible de joindre ce serveur. Vérifiez votre connexion puis réessayez.", "Couldn't reach this server. Check your connection and try again.", "تعذّر الاتصال بهذا الخادم. تحقق من اتصالك وحاول مجدداً.")
+    "Une mise à jour est nécessaire pour continuer." ->
+        atlasText("Une mise à jour est nécessaire pour continuer.", "An update is required to continue.", "يلزم تحديث للمتابعة.")
+    "Vérification impossible. Vérifiez le code et réessayez." ->
+        atlasText("Vérification impossible. Vérifiez le code et réessayez.", "Couldn't verify the code. Check it and try again.", "تعذّر التحقق من الرمز. تحقق منه وحاول مجدداً.")
+    "Aucune passkey n'est disponible sur cet appareil. Connectez-vous avec votre mot de passe, puis ajoutez une passkey dans les paramètres." ->
+        atlasText("Aucune passkey n'est disponible sur cet appareil. Connectez-vous avec votre mot de passe, puis ajoutez une passkey dans les paramètres.", "No passkey is available on this device. Sign in with your password, then add one in Settings.", "لا يتوفر مفتاح مرور على هذا الجهاز. سجّل الدخول بكلمة المرور ثم أضف مفتاحاً من الإعدادات.")
+    "Aucun fournisseur de passkeys n'est prêt sur cet appareil. Vérifiez les paramètres de mots de passe Android ou utilisez votre mot de passe." ->
+        atlasText("Aucun fournisseur de passkeys n'est prêt sur cet appareil. Vérifiez les paramètres de mots de passe Android ou utilisez votre mot de passe.", "No passkey provider is ready on this device. Check Android password settings or use your password.", "لا يوجد مزوّد مفاتيح مرور جاهز على هذا الجهاز. تحقق من إعدادات كلمات مرور Android أو استخدم كلمة المرور.")
+    "La connexion par passkey a été annulée." ->
+        atlasText("La connexion par passkey a été annulée.", "Passkey sign-in was canceled.", "تم إلغاء تسجيل الدخول بمفتاح المرور.")
+    "L'origine du serveur sélectionné est invalide." ->
+        atlasText("L'adresse du serveur sélectionné est invalide.", "The selected server address is invalid.", "عنوان الخادم المحدد غير صالح.")
+    "Les passkeys Android ne sont pas activées sur ce serveur.", "Les passkeys Android ne sont plus disponibles sur ce serveur." ->
+        atlasText("Les passkeys Android ne sont pas activées sur ce serveur.", "Android passkeys are not enabled on this server.", "مفاتيح المرور غير مفعّلة على هذا الخادم.")
+    "Connexion par passkey impossible. Réessayez ou utilisez votre mot de passe." ->
+        atlasText("Connexion par passkey impossible. Réessayez ou utilisez votre mot de passe.", "Passkey sign-in failed. Try again or use your password.", "تعذّر تسجيل الدخول بمفتاح المرور. حاول مجدداً أو استخدم كلمة المرور.")
+    "Connexion impossible. Vérifiez vos informations et réessayez." ->
+        atlasText("Connexion impossible. Vérifiez vos informations et réessayez.", "Couldn't sign in. Check your details and try again.", "تعذّر تسجيل الدخول. تحقق من بياناتك وحاول مجدداً.")
+    else -> atlasText("Une erreur est survenue. Réessayez.", "Something went wrong. Please try again.", "حدث خطأ. يرجى المحاولة مجدداً.")
 }

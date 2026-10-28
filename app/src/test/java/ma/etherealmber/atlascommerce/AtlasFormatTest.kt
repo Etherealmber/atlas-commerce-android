@@ -32,14 +32,33 @@ class AtlasFormatTest {
     }
 
     @Test
+    fun `Arabic compact money localizes scale and isolates MAD`() {
+        val formatted = AtlasFormat.moneyCompact(
+            61_000.0,
+            "MAD",
+            ma.etherealmber.atlascommerce.core.AppLanguage.ARABIC,
+        )
+        assertTrue(formatted.contains("ألف"))
+        assertFalse(formatted.contains("k"))
+        assertTrue(formatted.contains("MAD"))
+    }
+
+    @Test
     fun `whole quantities have no decimals`() {
         assertEquals("2", AtlasFormat.quantity(2.0))
         assertEquals("0", AtlasFormat.quantity(0.0))
     }
 
     @Test
-    fun `fractional quantities keep two digits`() {
+    fun `fractional quantities keep only significant fraction digits in each locale`() {
         assertEquals("1,5", AtlasFormat.quantity(1.5))
+        assertEquals("1.5", AtlasFormat.quantity(1.5, ma.etherealmber.atlascommerce.core.AppLanguage.ENGLISH))
+
+        val arabicLocale = java.util.Locale.forLanguageTag("ar-MA")
+        val symbols = java.text.DecimalFormatSymbols.getInstance(arabicLocale)
+        val arabic = AtlasFormat.quantity(1.5, ma.etherealmber.atlascommerce.core.AppLanguage.ARABIC)
+        assertFalse(arabic.endsWith(symbols.zeroDigit))
+        assertFalse(arabic.endsWith(symbols.decimalSeparator))
     }
 
     @Test

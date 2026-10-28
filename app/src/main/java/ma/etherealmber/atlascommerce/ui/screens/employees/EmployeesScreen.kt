@@ -1,6 +1,8 @@
 package ma.etherealmber.atlascommerce.ui.screens.employees
 
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
+import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -190,7 +192,7 @@ fun EmployeesScreen(
                 )
                 SummaryCard(
                     label = "Montant dû",
-                    value = payroll?.let { AtlasFormat.moneyCompact(it.totals.amountDue, it.currency) } ?: "—",
+                    value = payroll?.let { atlasMoneyCompact(it.totals.amountDue, it.currency) } ?: "—",
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -308,7 +310,7 @@ private fun EmployeePayrollCard(row: PayrollRowDto, asOf: String, currency: Stri
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(AtlasFormat.money(row.amountDue, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text(atlasMoney(row.amountDue, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 AtlasChip(
                     text = when (status) {
@@ -329,9 +331,9 @@ private fun EmployeePayrollCard(row: PayrollRowDto, asOf: String, currency: Stri
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             Text(
                 atlasText(
-                    "Dernier versement · ${AtlasFormat.money(payment.amount, currency)} · ${payment.paidAt}",
-                    "Last payment · ${AtlasFormat.money(payment.amount, currency)} · ${payment.paidAt}",
-                    "آخر دفعة · ${AtlasFormat.money(payment.amount, currency)} · ${payment.paidAt}",
+                    "Dernier versement · ${atlasMoney(payment.amount, currency)} · ${payment.paidAt}",
+                    "Last payment · ${atlasMoney(payment.amount, currency)} · ${payment.paidAt}",
+                    "آخر دفعة · ${atlasMoney(payment.amount, currency)} · ${payment.paidAt}",
                 ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

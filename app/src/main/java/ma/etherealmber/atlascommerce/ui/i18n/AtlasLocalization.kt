@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.Roles
 
@@ -247,6 +248,7 @@ private val commonTranslations = mapOf(
     "Open source" to ("Open source" to "مفتوح المصدر"),
     "Pack rapports détaillés · ouvrir dans Atlas" to ("Detailed report bundle · open in Atlas" to "حزمة تقارير مفصلة · فتح في Atlas"),
     "Passkey Android" to ("Android passkey" to "مفتاح مرور Android"),
+    "Aucun fournisseur de passkeys n'a accepté la création. Activez Google Password Manager ou un fournisseur compatible, sélectionnez-le dans Paramètres Android > Mots de passe, clés d'accès et comptes, et vérifiez qu'un verrouillage d'écran est activé. Aucune passkey n'a été créée." to ("No passkey provider accepted the creation request. Enable Google Password Manager or another compatible provider, select it in Android Settings > Passwords, passkeys & accounts, and make sure a screen lock is enabled. No passkey was created." to "لم يقبل أي موفّر لمفاتيح المرور طلب الإنشاء. فعّل Google Password Manager أو موفّراً متوافقاً آخر، وحدّده في إعدادات Android > كلمات المرور ومفاتيح المرور والحسابات، وتأكد من تفعيل قفل الشاشة. لم يتم إنشاء أي مفتاح مرور."),
     "Ping" to ("Ping" to "اختبار الاتصال"),
     "PÉRIODE" to ("PERIOD" to "الفترة"),
     "QR SÉCURITÉ POSTE PC UNIQUEMENT" to ("QR SECURITY · DESKTOP ONLY" to "رمز QR للأمان · لأجهزة الكمبيوتر فقط"),
@@ -498,6 +500,55 @@ private val commonTranslations = mapOf(
     "Pas d'analytics, pas de publicité. Seul ML Kit (scan) transmet ses statistiques d'usage à Google." to ("No analytics or advertising. Only ML Kit (scanning) sends usage statistics to Google." to "لا تحليلات ولا إعلانات. يرسل ML Kit فقط، المستخدم للمسح، إحصاءات الاستخدام إلى Google."),
     "Cette application est le compagnon Android du projet web Atlas Commerce : elle se connecte à votre serveur et ne stocke aucune comptabilité localement." to ("This Android app accompanies the Atlas Commerce web project: it connects to your server and stores no accounting data locally." to "هذا التطبيق هو رفيق Android لمشروع Atlas Commerce على الويب؛ يتصل بخادمك ولا يخزّن بيانات المحاسبة محلياً."),
     "Réconciliation indisponible" to ("Reconciliation unavailable" to "المطابقة غير متاحة"),
+    "Système" to ("System" to "النظام"),
+    "Clair" to ("Light" to "فاتح"),
+    "Sombre" to ("Dark" to "داكن"),
+    "Compact" to ("Compact" to "مضغوط"),
+    "Confort" to ("Comfort" to "مريح"),
+    "Animations fluides" to ("Smooth animations" to "حركات سلسة"),
+    "Transitions entre les pages, apparitions d'accueil et effets de mouvement." to ("Page transitions, home-screen entrances, and motion effects." to "انتقالات الصفحات وحركات ظهور الشاشة الرئيسية وتأثيرات الحركة."),
+    "Notifications système par rôle" to ("Role-based system notifications" to "إشعارات النظام حسب الدور"),
+    "Ouvrir la caméra automatiquement" to ("Open camera automatically" to "فتح الكاميرا تلقائيًا"),
+    "Désactivé par défaut — la caméra reste fermée en entrant dans Scan ou QR PC." to ("Off by default — the camera stays closed when opening Scan or PC QR." to "معطّلة افتراضيًا — تظل الكاميرا مغلقة عند فتح المسح أو QR الكمبيوتر."),
+    "Vibration au scan" to ("Vibrate on scan" to "الاهتزاز عند المسح"),
+    "Retour haptique dès qu'un code-barres ou QR est détecté." to ("Vibrate when a barcode or QR code is detected." to "اهتزاز عند اكتشاف باركود أو رمز QR."),
+    "Signal sonore au scan" to ("Scan sound" to "صوت المسح"),
+    "Bip court de confirmation lors de la lecture d'un code." to ("Play a short confirmation beep when a code is read." to "إصدار نغمة تأكيد قصيرة عند قراءة الرمز."),
+    "Ajout automatique au panier" to ("Automatically add to cart" to "الإضافة التلقائية إلى السلة"),
+    "Ajoute immédiatement 1 unité au ticket VR lorsqu'un article est scanné." to ("Immediately add one unit to the VR receipt when an item is scanned." to "إضافة وحدة واحدة فورًا إلى إيصال VR عند مسح المنتج."),
+    "Confirmer avant création du ticket" to ("Confirm before creating receipt" to "التأكيد قبل إنشاء الإيصال"),
+    "Affiche un récapitulatif du montant avant d'envoyer la vente au serveur." to ("Show an amount summary before sending the sale to the server." to "عرض ملخص للمبلغ قبل إرسال البيع إلى الخادم."),
+    "Téléchargement accéléré multi-connexions" to ("Faster multi-connection downloads" to "تنزيل أسرع عبر اتصالات متعددة"),
+    "Télécharge les mises à jour via 4 connexions HTTP Range parallèles haute vitesse." to ("Downloads updates over four high-speed parallel HTTP Range connections." to "تنزيل التحديثات عبر أربعة اتصالات HTTP Range متوازية وعالية السرعة."),
+    "Toujours suivre la dernière version publiée" to ("Always follow the latest published release" to "اتباع أحدث إصدار منشور دائمًا"),
+    "Considère toute version publiée en dernier sur GitHub Releases ou CDN 1 comme la version active." to ("Treat the newest version on GitHub Releases or CDN 1 as the active release." to "اعتبار أحدث إصدار على GitHub Releases أو CDN 1 هو الإصدار النشط."),
+    "Recherche automatique des mises à jour" to ("Automatically check for updates" to "البحث تلقائيًا عن التحديثات"),
+    "Vérifie à l'ouverture et environ toutes les 12 h en arrière-plan (selon les règles batterie d'Android)." to ("Checks on launch and about every 12 hours in the background, subject to Android battery rules." to "التحقق عند التشغيل وحوالي كل 12 ساعة في الخلفية، وفقًا لقواعد البطارية في Android."),
+    "Envoyer automatiquement les rapports de plantage" to ("Automatically send crash reports" to "إرسال تقارير الأعطال تلقائيًا"),
+    "Envoi opt-in à Firebase Crashlytics, sans jetons, mots de passe ni données commerciales jointes." to ("Opt-in upload to Firebase Crashlytics; tokens, passwords, and business data are excluded." to "إرسال اختياري إلى Firebase Crashlytics؛ لا تُرفق الرموز أو كلمات المرور أو بيانات العمل."),
+    "Rapports automatiques de plantage" to ("Automatic crash reports" to "تقارير الأعطال التلقائية"),
+    "Indisponible : cette version n'est pas configurée avec Firebase Crashlytics." to ("Unavailable: this build is not configured with Firebase Crashlytics." to "غير متاح: لم يتم إعداد هذا الإصدار باستخدام Firebase Crashlytics."),
+    "Revoir l'écran de bienvenue" to ("Replay the welcome screen" to "إعادة عرض شاشة الترحيب"),
+    "Relancer la présentation animée d'Atlas Commerce" to ("Replay the Atlas Commerce animated introduction." to "إعادة تشغيل المقدمة المتحركة لـ Atlas Commerce."),
+    "Supprimer les PDF temporaires" to ("Delete temporary PDFs" to "حذف ملفات PDF المؤقتة"),
+    "Les rapports privés sont purgés automatiquement après 7 jours." to ("Private reports are automatically deleted after 7 days." to "تُحذف التقارير الخاصة تلقائيًا بعد 7 أيام."),
+    "Effacer toutes les données locales" to ("Clear all local data" to "مسح جميع البيانات المحلية"),
+    "Déconnecte le compte et efface les données stockées sur cet appareil uniquement." to ("Signs out and clears data stored on this device only." to "تسجيل الخروج ومسح البيانات المخزنة على هذا الجهاز فقط."),
+    "Outils développeur" to ("Developer tools" to "أدوات المطوّر"),
+    "État passkey, journaux assainis, copie et diagnostic avancé" to ("Passkey status, sanitized logs, copying, and advanced diagnostics." to "حالة مفتاح المرور والسجلات المنقّحة والنسخ والتشخيص المتقدم."),
+    "Sources et composants tiers" to ("Source code and third-party components" to "المصدر البرمجي والمكونات الخارجية"),
+    "Signaler un problème" to ("Report a problem" to "الإبلاغ عن مشكلة"),
+    "Capturer les journaux, ID appareil & jusqu'à 3 images (≤ 1 Mo) avec @atlas-bot" to ("Include logs, device ID, and up to 3 images (≤ 1 MB) for @atlas-bot." to "إرفاق السجلات ومعرّف الجهاز وما يصل إلى 3 صور (≤ 1 ميغابايت) لـ @atlas-bot."),
+    "Langue de l'application" to ("App language" to "لغة التطبيق"),
+    "Signaler un problème en secouant" to ("Shake to report a problem" to "هز الهاتف للإبلاغ عن مشكلة"),
+    "Affiche une confirmation uniquement. Aucun rapport ni diagnostic n'est envoyé sans votre accord." to ("Only opens a confirmation. No report or diagnostics are sent without your approval." to "يعرض طلب تأكيد فقط. لا يُرسل أي تقرير أو بيانات تشخيصية دون موافقتك."),
+    "Appareils connectés & QR PC" to ("Connected devices & PC QR" to "الأجهزة المتصلة وQR الكمبيوتر"),
+    "Autorisez un ordinateur par QR ou révoquez une session à distance." to ("Approve a computer using a QR code or revoke a session remotely." to "اعتماد كمبيوتر باستخدام رمز QR أو إلغاء جلسة عن بُعد."),
+    "Scanner un poste PC (QR)" to ("Scan a PC sign-in QR" to "مسح رمز تسجيل الدخول للكمبيوتر"),
+    "Actualiser les appareils" to ("Refresh devices" to "تحديث الأجهزة"),
+    "Paramètres" to ("Settings" to "الإعدادات"),
+    "Projet web Atlas Commerce" to ("Atlas Commerce web project" to "مشروع Atlas Commerce على الويب"),
+    "Atlas Agent peut se tromper. Votre message sera transmis au serveur Atlas et au fournisseur IA configuré. N'envoyez pas de mots de passe ni de données personnelles inutiles." to ("Atlas Agent can make mistakes. Your message will be sent to the Atlas server and configured AI provider. Do not include passwords or unnecessary personal data." to "قد يخطئ مساعد Atlas. ستُرسل رسالتك إلى خادم Atlas ومزوّد الذكاء الاصطناعي المُعدّ. لا ترسل كلمات مرور أو بيانات شخصية غير ضرورية."),
 )
 
 /** Look up reviewed translations for shared static copy. Unknown text is left unchanged. */
@@ -519,6 +570,21 @@ fun atlasRoleLabel(role: String?): String = when (Roles.normalize(role)) {
     Roles.STOCK -> atlasText("Stock", "Stock", "المخزون")
     else -> atlasText("Opérateur", "Operator", "مشغّل")
 }
+
+/** Money helpers bind shared numeric formatting to the app's selected UI language. */
+@Composable
+fun atlasMoney(amount: Double, currency: String? = null, withDecimals: Boolean = true): String =
+    AtlasFormat.money(amount, currency, withDecimals, LocalAtlasLanguage.current)
+
+@Composable
+fun atlasMoneyCompact(amount: Double, currency: String? = null): String =
+    AtlasFormat.moneyCompact(amount, currency, LocalAtlasLanguage.current)
+
+@Composable
+fun atlasInteger(value: Double): String = AtlasFormat.integer(value, LocalAtlasLanguage.current)
+
+@Composable
+fun atlasQuantity(value: Double): String = AtlasFormat.quantity(value, LocalAtlasLanguage.current)
 
 /** Select the localized copy for a language-aware, high-priority piece of UI. */
 @Composable

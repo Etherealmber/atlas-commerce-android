@@ -101,7 +101,7 @@ class LoginViewModel @Inject constructor(
         val capability = (result as? ApiResult.Success)?.data
         val installedOrigins = AndroidPasskeyOrigin.forInstalledApp(applicationContext)
         val android = capability?.android
-        val advertisedOrigins = listOfNotNull(android?.origin, android?.originLegacy)
+        val advertisedOrigins = android?.configuredOrigins.orEmpty()
         val originConfigured = advertisedOrigins.isNotEmpty()
         val signingOriginMatch = advertisedOrigins.any(installedOrigins::contains)
         val selectedOriginAllowed = selectedOrigin != null && capability?.origins?.contains(selectedOrigin) == true
@@ -155,7 +155,7 @@ class LoginViewModel @Inject constructor(
                     it.copy(
                         loading = false,
                         username = entry.username,
-                        error = res.message,
+                        error = safeAuthFailure(res.code, res.httpStatus, isOtp = false),
                     )
                 }
             }
@@ -202,7 +202,7 @@ class LoginViewModel @Inject constructor(
                             return@launch
                         }
                         AtlasLogBuffer.log("PASSKEY", "Opening Android Credential Manager for login")
-                        val credentialJson = AndroidPasskeyCredentials.authenticate(context, options.data, selectedServerOrigin)
+                        val credentialJson = AndroidPasskeyCredentials.authenticate(context, options.data)
                         AtlasLogBuffer.log("PASSKEY", "Credential Manager returned an assertion; sending it to selected Worker")
                         when (val verified = authRepository.verifyWebAuthnLogin(credentialJson, deviceIdentity.fingerprint)) {
                             is ApiResult.Failure -> {
@@ -246,18 +246,14 @@ class LoginViewModel @Inject constructor(
         val type = error.javaClass.simpleName
         return when {
             type.contains("NoCredential", ignoreCase = true) ->
-                "Aucune passkey n'a été trouvée pour ${ServerUrl.display(serverConfig.selection.value?.baseUrl ?: "serveur sélectionné")} sur cet appareil. " +
-                    "Si vous n'en avez pas encore, connectez-vous avec votre mot de passe puis enregistrez-en une dans Paramètres. " +
-                    "Si vous en avez déjà une, activez le gestionnaire Android où elle est enregistrée."
+                "Aucune passkey n'est disponible sur cet appareil. Connectez-vous avec votre mot de passe, puis ajoutez une passkey dans les paramètres."
             type.contains("ProviderConfiguration", ignoreCase = true) ||
                 type.contains("NoCreateOption", ignoreCase = true) ->
-                "Aucun gestionnaire de passkeys Android prêt n'a répondu. Activez Google Password Manager ou un fournisseur compatible, " +
-                    "choisissez-le dans Paramètres Android > Mots de passe et clés d'accès, puis réessayez."
+                "Aucun fournisseur de passkeys n'est prêt sur cet appareil. Vérifiez les paramètres de mots de passe Android ou utilisez votre mot de passe."
             type.contains("Cancellation", ignoreCase = true) ->
-                "La demande de connexion par passkey a été annulée. Vous pouvez réessayer ou utiliser votre mot de passe."
+                "La connexion par passkey a été annulée."
             else -> {
-                val detail = "$type: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(200)}"
-                "Connexion par passkey impossible — $detail. Vous pouvez réessayer ou utiliser votre mot de passe."
+                "Connexion par passkey impossible. Réessayez ou utilisez votre mot de passe."
             }
         }
     }
@@ -270,8 +266,31 @@ class LoginViewModel @Inject constructor(
         )
     }
 
-    private fun formatPasskeyFailure(failure: ApiResult.Failure): String =
-        "${AtlasLogBuffer.sanitize(failure.message)} [${failure.code}${failure.httpStatus?.let { " · HTTP $it" } ?: ""}]"
+    private fun formatPasskeyFailure(failure: ApiResult.Failure): String {
+        AtlasLogBuffer.log(
+            "PASSKEY",
+            "Passkey request failed: code=${failure.code}; http=${failure.httpStatus ?: "none"}; message=${AtlasLogBuffer.sanitize(failure.message).take(180)}",
+            "ERROR",
+        )
+        return if (failure.code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK) {
+            "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
+        } else {
+            "Connexion par passkey impossible. Réessayez ou utilisez votre mot de passe."
+        }
+    }
+
+    private fun safeAuthFailure(code: String, httpStatus: Int?, isOtp: Boolean): String {
+        AtlasLogBuffer.log("AUTH", "Authentication rejected: code=$code; http=${httpStatus ?: "none"}", "WARN")
+        return when {
+            code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK ->
+                "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
+            code == "APP_UPDATE_REQUIRED" -> "Une mise à jour est nécessaire pour continuer."
+            isOtp && httpStatus == 401 -> "Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau."
+            !isOtp && httpStatus == 401 -> "Identifiant ou mot de passe incorrect. Vérifiez votre saisie."
+            isOtp -> "Vérification impossible. Vérifiez le code et réessayez."
+            else -> "Connexion impossible. Vérifiez vos informations et réessayez."
+        }
+    }
 
     private suspend fun supportsSelectedServerPasskeyOrigin(origin: String): Boolean {
         if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != origin) return false
@@ -317,8 +336,9 @@ class LoginViewModel @Inject constructor(
                     rememberAccount = current.rememberAccount,
                 )
             ) {
-                is ApiResult.Failure -> _state.update {
-                    it.copy(loading = false, error = result.message)
+                is ApiResult.Failure -> {
+                    AtlasLogBuffer.log("AUTH", "Sign-in rejected: code=${result.code}; http=${result.httpStatus ?: "none"}", "WARN")
+                    _state.update { it.copy(loading = false, error = safeAuthFailure(result.code, result.httpStatus, isOtp = false)) }
                 }
 
                 is ApiResult.Success -> when (val outcome = result.data) {
@@ -357,8 +377,9 @@ class LoginViewModel @Inject constructor(
                     rememberAccount = current.rememberAccount,
                 )
             ) {
-                is ApiResult.Failure -> _state.update {
-                    it.copy(loading = false, error = result.message)
+                is ApiResult.Failure -> {
+                    AtlasLogBuffer.log("AUTH", "OTP verification rejected: code=${result.code}; http=${result.httpStatus ?: "none"}", "WARN")
+                    _state.update { it.copy(loading = false, error = safeAuthFailure(result.code, result.httpStatus, isOtp = true)) }
                 }
 
                 is ApiResult.Success -> when (val outcome = result.data) {

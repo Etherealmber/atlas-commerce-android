@@ -269,7 +269,7 @@ class AppViewModel @Inject constructor(
         val origin = ServerUrl.origin(selectedBase)
         val android = capability?.android
         val installedOrigins = AndroidPasskeyOrigin.forInstalledApp(applicationContext)
-        val advertisedOrigins = listOfNotNull(android?.origin, android?.originLegacy)
+        val advertisedOrigins = android?.configuredOrigins.orEmpty()
         val available = capability?.supportsAndroid(BuildConfig.APPLICATION_ID, installedOrigins, origin) == true
         when (result) {
             is ApiResult.Success -> AtlasLogBuffer.log(
@@ -371,7 +371,7 @@ class AppViewModel @Inject constructor(
                             return@launch
                         }
                         AtlasLogBuffer.log("PASSKEY", "Opening Android Credential Manager for registration")
-                        val credentialJson = AndroidPasskeyCredentials.create(context, options.data, selectedServerOrigin)
+                        val credentialJson = AndroidPasskeyCredentials.create(context, options.data)
                         AtlasLogBuffer.log("PASSKEY", "Credential Manager returned an attestation; sending it to selected Worker")
                         val label = listOf("Android", android.os.Build.MANUFACTURER, android.os.Build.MODEL)
                             .filter { it.isNotBlank() }
@@ -409,7 +409,7 @@ class AppViewModel @Inject constructor(
                     "Troubleshooting: configure Google Password Manager or another credential provider; enable screen lock; select the provider in Android Passwords, passkeys & accounts settings; verify Digital Asset Links for the selected origin. No passkey was registered.",
                     "INFO",
                 )
-                report("Aucun fournisseur de passkeys n'est disponible sur cet appareil. Aucune passkey n'a été créée.")
+                report("Aucun fournisseur de passkeys n'a accepté la création. Activez Google Password Manager ou un fournisseur compatible, sélectionnez-le dans Paramètres Android > Mots de passe, clés d'accès et comptes, et vérifiez qu'un verrouillage d'écran est activé. Aucune passkey n'a été créée.")
             } catch (error: Exception) {
                 val detail = "${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(240)}"
                 AtlasLogBuffer.log("PASSKEY", "Registration failed in Credential Manager/client: $detail", "ERROR")
@@ -689,16 +689,13 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { preferences.setDeveloperModeEnabled(enabled) }
     }
 
-    fun setAutomaticCrashReportsEnabled(enabled: Boolean, onDone: (String) -> Unit) {
+    fun setAutomaticCrashReportsEnabled(enabled: Boolean, onDone: (Boolean) -> Unit) {
         if (!CrashReportConsent.setEnabled(applicationContext, enabled)) {
-            onDone("Rapports automatiques indisponibles : Firebase Crashlytics n'est pas configuré pour cette version.")
+            onDone(false)
             return
         }
         _automaticCrashReportsEnabled.value = enabled
-        onDone(
-            if (enabled) "Rapports de plantage activés. Les prochains plantages seront envoyés automatiquement à Firebase Crashlytics."
-            else "Envoi automatique des rapports de plantage désactivé.",
-        )
+        onDone(true)
     }
 
     fun clearFinanceReportCache(onDone: (String) -> Unit) {

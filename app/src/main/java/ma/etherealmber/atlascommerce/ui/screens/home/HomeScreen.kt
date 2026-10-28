@@ -93,6 +93,9 @@ import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelection
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelectionDialog
 import ma.etherealmber.atlascommerce.ui.components.StatusChip
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
+import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
+import ma.etherealmber.atlascommerce.ui.i18n.atlasInteger
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 @Composable
@@ -526,21 +529,21 @@ private fun HomeContent(
                 Row(horizontalArrangement = Arrangement.spacedBy(density.itemGap)) {
                     AtlasStatTile(
                         label = atlasText("Produits", "Products", "المنتجات"),
-                        value = AtlasFormat.integer(dashboard.productCount.toDouble()),
+                        value = atlasInteger(dashboard.productCount.toDouble()),
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.Inventory2,
                     )
                     if (canDisplayFinance) {
                         AtlasStatTile(
                             label = atlasText("Valeur du stock", "Inventory value", "قيمة المخزون"),
-                            value = AtlasFormat.moneyCompact(dashboard.stockValue, state.currency),
+                            value = atlasMoneyCompact(dashboard.stockValue, state.currency),
                             modifier = Modifier.weight(1f),
                             icon = Icons.Outlined.TrendingUp,
                         )
                     } else {
                         AtlasStatTile(
                             label = atlasText("Stock faible", "Low stock", "مخزون منخفض"),
-                            value = AtlasFormat.integer(dashboard.lowStockCount.toDouble()),
+                            value = atlasInteger(dashboard.lowStockCount.toDouble()),
                             modifier = Modifier.weight(1f),
                             hint = if (dashboard.lowStockCount > 0) atlasText("À vérifier", "Needs review", "يحتاج إلى مراجعة") else atlasText("Optimal", "Optimal", "مثالي"),
                             tone = if (dashboard.lowStockCount > 0) AtlasTone.WARNING else AtlasTone.POSITIVE,
@@ -557,7 +560,7 @@ private fun HomeContent(
                     Row(horizontalArrangement = Arrangement.spacedBy(density.itemGap)) {
                         AtlasStatTile(
                             label = atlasText("Stock faible", "Low stock", "مخزون منخفض"),
-                            value = AtlasFormat.integer(dashboard.lowStockCount.toDouble()),
+                            value = atlasInteger(dashboard.lowStockCount.toDouble()),
                             modifier = Modifier.weight(1f),
                             hint = if (dashboard.lowStockCount > 0) atlasText("À réapprovisionner", "Reorder needed", "يلزم إعادة الطلب") else atlasText("Tout est bon", "All good", "كل شيء على ما يرام"),
                             tone = if (dashboard.lowStockCount > 0) AtlasTone.WARNING else AtlasTone.POSITIVE,
@@ -565,7 +568,7 @@ private fun HomeContent(
                         )
                         AtlasStatTile(
                             label = atlasText("Créances clients", "Customer receivables", "مستحقات العملاء"),
-                            value = AtlasFormat.moneyCompact(dashboard.unpaidSales.total, state.currency),
+                            value = atlasMoneyCompact(dashboard.unpaidSales.total, state.currency),
                             modifier = Modifier.weight(1f),
                             hint = atlasText("${dashboard.unpaidSales.count} facture(s)", "${dashboard.unpaidSales.count} invoice(s)", "${dashboard.unpaidSales.count} فاتورة"),
                             tone = if (dashboard.unpaidSales.overdue > 0) AtlasTone.DANGER else AtlasTone.INFO,
@@ -687,7 +690,7 @@ private fun MonthlySalesTrendCard(points: List<MonthlyPointDto>, currency: Strin
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text = AtlasFormat.moneyCompact(value, currency),
+                        text = atlasMoneyCompact(value, currency),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -752,7 +755,7 @@ private fun FinanceMiniBarChart(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = AtlasFormat.moneyCompact(entry.amount, currency),
+                    text = atlasMoneyCompact(entry.amount, currency),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -897,14 +900,14 @@ private fun FinanceAdminCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AtlasStatTile(
                     label = atlasText("Solde clôture"),
-                    value = AtlasFormat.moneyCompact(summary.closingBalance, summary.currency),
+                    value = atlasMoneyCompact(summary.closingBalance, summary.currency),
                     modifier = Modifier.weight(1f),
-                    hint = "Ouverture ${AtlasFormat.moneyCompact(summary.openingBalance, summary.currency)}",
+                    hint = "Ouverture ${atlasMoneyCompact(summary.openingBalance, summary.currency)}",
                     tone = AtlasTone.POSITIVE,
                 )
                 AtlasStatTile(
                     label = atlasText("Paie à verser"),
-                    value = AtlasFormat.moneyCompact(summary.payroll.totalDue, summary.currency),
+                    value = atlasMoneyCompact(summary.payroll.totalDue, summary.currency),
                     modifier = Modifier.weight(1f),
                     hint = "${summary.payroll.employees} employé(s)",
                     tone = if (summary.payroll.totalDue > 0.0) AtlasTone.WARNING else AtlasTone.POSITIVE,
@@ -914,16 +917,16 @@ private fun FinanceAdminCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AtlasStatTile(
                     label = atlasText("Clients à recevoir"),
-                    value = AtlasFormat.moneyCompact(summary.receivables.totalOutstanding, summary.currency),
+                    value = atlasMoneyCompact(summary.receivables.totalOutstanding, summary.currency),
                     modifier = Modifier.weight(1f),
-                    hint = "${summary.receivables.count} facture(s) · ${AtlasFormat.moneyCompact(summary.receivables.totalOverdue, summary.currency)} en retard",
+                    hint = "${summary.receivables.count} facture(s) · ${atlasMoneyCompact(summary.receivables.totalOverdue, summary.currency)} en retard",
                     tone = if (summary.receivables.totalOverdue > 0.0) AtlasTone.DANGER else AtlasTone.INFO,
                 )
                 AtlasStatTile(
                     label = atlasText("Fournisseurs à payer"),
-                    value = AtlasFormat.moneyCompact(summary.payables.totalOutstanding, summary.currency),
+                    value = atlasMoneyCompact(summary.payables.totalOutstanding, summary.currency),
                     modifier = Modifier.weight(1f),
-                    hint = "${summary.payables.count} facture(s) · ${AtlasFormat.moneyCompact(summary.payables.totalOverdue, summary.currency)} en retard",
+                    hint = "${summary.payables.count} facture(s) · ${atlasMoneyCompact(summary.payables.totalOverdue, summary.currency)} en retard",
                     tone = if (summary.payables.totalOverdue > 0.0) AtlasTone.DANGER else AtlasTone.WARNING,
                 )
             }
@@ -931,11 +934,11 @@ private fun FinanceAdminCard(
             FinanceAdminCharts(summary)
             Spacer(Modifier.height(10.dp))
             AtlasDivider()
-            AtlasInfoRow("Recettes encaissées", AtlasFormat.money(summary.salesReceived, summary.currency))
-            AtlasInfoRow("Dépenses (remboursements inclus)", AtlasFormat.money(summary.expenses, summary.currency))
-            AtlasInfoRow("Remboursements", AtlasFormat.money(summary.refunds, summary.currency))
-            AtlasInfoRow("Salaires versés ce mois", AtlasFormat.money(summary.payrollPaid, summary.currency))
-            AtlasInfoRow("Fournisseurs réglés ce mois", AtlasFormat.money(summary.supplierPaid, summary.currency))
+            AtlasInfoRow("Recettes encaissées", atlasMoney(summary.salesReceived, summary.currency))
+            AtlasInfoRow("Dépenses (remboursements inclus)", atlasMoney(summary.expenses, summary.currency))
+            AtlasInfoRow("Remboursements", atlasMoney(summary.refunds, summary.currency))
+            AtlasInfoRow("Salaires versés ce mois", atlasMoney(summary.payrollPaid, summary.currency))
+            AtlasInfoRow("Fournisseurs réglés ce mois", atlasMoney(summary.supplierPaid, summary.currency))
 
             FinanceObligationsList(
                 title = "Clients à encaisser",
@@ -980,7 +983,7 @@ private fun FinanceAdminCard(
                             )
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(AtlasFormat.money(employee.amountDue, payroll.currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(atlasMoney(employee.amountDue, payroll.currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             val isFutureDue = employee.status.equals("paid", ignoreCase = true) &&
                                 employee.dueDate?.let { it > payroll.asOf } == true
                             val statusLabel = when {
@@ -1121,7 +1124,7 @@ private fun FinanceObligationsList(
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(AtlasFormat.money(document.remaining, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                Text(atlasMoney(document.remaining, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                 val tone = when (document.state.lowercase()) {
                     "overdue" -> AtlasTone.DANGER
                     "partial" -> AtlasTone.WARNING
@@ -1165,15 +1168,15 @@ private fun BalanceHero(
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = AtlasFormat.money(balance, currency),
+            text = atlasMoney(balance, currency),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = Color.White,
         )
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HeroPill(text = "Stock ${AtlasFormat.moneyCompact(stockValue, currency)}")
-            HeroPill(text = "Créances ${AtlasFormat.moneyCompact(receivable, currency)}")
+            HeroPill(text = "Stock ${atlasMoneyCompact(stockValue, currency)}")
+            HeroPill(text = "Créances ${atlasMoneyCompact(receivable, currency)}")
         }
     }
 }
@@ -1199,9 +1202,9 @@ private fun OperationsHero(
         Spacer(Modifier.height(6.dp))
         Text(
             text = atlasText(
-                "${AtlasFormat.integer(productCount.toDouble())} articles actifs",
-                "${AtlasFormat.integer(productCount.toDouble())} active products",
-                "${AtlasFormat.integer(productCount.toDouble())} منتج نشط",
+                "${atlasInteger(productCount.toDouble())} articles actifs",
+                "${atlasInteger(productCount.toDouble())} active products",
+                "${atlasInteger(productCount.toDouble())} منتج نشط",
             ),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
@@ -1266,7 +1269,7 @@ private fun InvoiceRow(invoice: InvoiceDto, currency: String) {
         Spacer(Modifier.width(10.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = AtlasFormat.money(invoice.total, currency),
+                text = atlasMoney(invoice.total, currency),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
             )

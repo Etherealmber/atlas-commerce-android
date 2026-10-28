@@ -103,6 +103,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
@@ -124,6 +125,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
@@ -796,12 +799,21 @@ fun AtlasInfoRow(label: String, value: String, modifier: Modifier = Modifier) {
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(12.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        val visibleValue = value.replace("\u2066", "").replace("\u2069", "")
+        val trailingToken = visibleValue.substringAfterLast(' ')
+        val containsCurrencyCode = value.any(Char::isDigit) && trailingToken.length == 3 && trailingToken.all { it in 'A'..'Z' }
+        CompositionLocalProvider(
+            LocalLayoutDirection provides if (containsCurrencyCode) LayoutDirection.Ltr else LocalLayoutDirection.current,
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
     }
 }
 
