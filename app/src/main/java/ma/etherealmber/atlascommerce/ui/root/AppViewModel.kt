@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
@@ -371,7 +373,15 @@ class AppViewModel @Inject constructor(
                             return@launch
                         }
                         AtlasLogBuffer.log("PASSKEY", "Opening Android Credential Manager for registration")
-                        val credentialJson = AndroidPasskeyCredentials.create(context, options.data)
+                        val credentialJson = try {
+                            withTimeout(90_000L) {
+                                AndroidPasskeyCredentials.create(context, options.data)
+                            }
+                        } catch (timeout: TimeoutCancellationException) {
+                            AtlasLogBuffer.log("PASSKEY", "Credential Manager registration timed out after 90 seconds", "ERROR")
+                            report("Le gestionnaire Android n'a pas répondu. Vérifiez votre fournisseur de passkeys puis réessayez.")
+                            return@launch
+                        }
                         AtlasLogBuffer.log("PASSKEY", "Credential Manager returned an attestation; sending it to selected Worker")
                         val label = listOf("Android", android.os.Build.MANUFACTURER, android.os.Build.MODEL)
                             .filter { it.isNotBlank() }

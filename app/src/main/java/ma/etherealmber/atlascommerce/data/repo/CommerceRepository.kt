@@ -683,6 +683,9 @@ class CommerceRepository @Inject constructor(
         return buildString {
             appendLine(responseLanguage.agentContextInstruction)
             if (snapshot.isNotBlank()) appendLine(snapshot)
+            appendLine(
+                "[REPORT SCOPE] Live business data above is not a custom date-range report. Never infer or fabricate figures for dates not explicitly covered by that data. For a requested report period, say the actual report must be opened from the Balance/Reports screen; use only the server-generated report there.",
+            )
             append("${responseLanguage.agentQuestionLabel}: $cleanQuestion")
         }.take(2450)
     }

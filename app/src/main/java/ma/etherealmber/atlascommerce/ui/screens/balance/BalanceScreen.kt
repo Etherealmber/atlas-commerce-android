@@ -52,6 +52,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,6 +76,7 @@ import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.components.CombinedReportWebViewDialog
+import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationSuggestion
 import ma.etherealmber.atlascommerce.ui.components.FinancePdfViewerDialog
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelection
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelectionDialog
@@ -90,6 +92,8 @@ private enum class BalanceSection(val label: String) {
 @Composable
 fun BalanceScreen(
     onToast: (String) -> Unit,
+    requestedReport: AgentNavigationSuggestion? = null,
+    onReportRequestHandled: () -> Unit = {},
     viewModel: BalanceViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -105,6 +109,18 @@ fun BalanceScreen(
     var entryKind by remember { mutableStateOf(EntryKind.EXPENSE) }
     var movementFilter by remember { mutableStateOf("Toutes les écritures") }
     var movementSearch by remember { mutableStateOf("") }
+
+    LaunchedEffect(requestedReport) {
+        val request = requestedReport ?: return@LaunchedEffect
+        reportSelection = if (request.fromDate != null && request.toDate != null) {
+            FinanceReportSelection(period = "custom", from = request.fromDate, to = request.toDate)
+        } else {
+            FinanceReportSelection()
+        }
+        section = BalanceSection.REPORTS
+        showReportSelection = true
+        onReportRequestHandled()
+    }
 
     val savePdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         val file = pendingPdfFile

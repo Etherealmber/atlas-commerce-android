@@ -8,12 +8,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -21,6 +30,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
+import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
+import ma.etherealmber.atlascommerce.core.diagnostics.DiagnosticReporter
+import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
@@ -40,6 +53,21 @@ fun DeveloperDiagnosticsScreen(
     val developerMode by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     val passkeyAvailable by appViewModel.androidPasskeysAvailable.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
+    val session by appViewModel.session.collectAsStateWithLifecycle()
+    val activeRole = (session as? SessionState.Active)?.user?.role
+    val scope = rememberCoroutineScope()
+    var copyingDiagnostics by remember { mutableStateOf(false) }
+    var diagnosticSnapshot by remember(activeRole) {
+        mutableStateOf(
+            DiagnosticReporter.collectSnapshot(
+                context = context,
+                shortDeviceId = appViewModel.deviceShortId,
+                fullFingerprint = appViewModel.deviceFingerprint,
+                role = activeRole,
+                screenOrigin = "Developer diagnostics",
+            ),
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -84,14 +112,103 @@ fun DeveloperDiagnosticsScreen(
             }
 
             AtlasCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        atlasText("État de l'application", "App status", "حالة التطبيق"),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    IconButton(
+                        onClick = {
+                            diagnosticSnapshot = DiagnosticReporter.collectSnapshot(
+                                context = context,
+                                shortDeviceId = appViewModel.deviceShortId,
+                                fullFingerprint = appViewModel.deviceFingerprint,
+                                role = activeRole,
+                                screenOrigin = "Developer diagnostics",
+                            )
+                            onToast(atlasText("État actualisé.", "Diagnostics refreshed.", "تم تحديث التشخيصات."))
+                        },
+                    ) {
+                        Icon(
+                            Icons.Outlined.Refresh,
+                            contentDescription = atlasText("Actualiser les diagnostics", "Refresh diagnostics", "تحديث التشخيصات"),
+                        )
+                    }
+                    IconButton(
+                        enabled = !copyingDiagnostics,
+                        onClick = {
+                            scope.launch {
+                                copyingDiagnostics = true
+                                try {
+                                    val freshSnapshot = DiagnosticReporter.collectSnapshot(
+                                        context = context,
+                                        shortDeviceId = appViewModel.deviceShortId,
+                                        fullFingerprint = appViewModel.deviceFingerprint,
+                                        role = activeRole,
+                                        screenOrigin = "Developer diagnostics",
+                                    )
+                                    val safeLogs = AtlasLogBuffer.sanitize(
+                                        AtlasLogBuffer.captureDiagnosticLogsAsync(context, maxChars = 32_000),
+                                    )
+                                    val report = DiagnosticReporter.buildMarkdownReport(
+                                        category = "Developer diagnostics",
+                                        title = "Atlas app diagnostics",
+                                        description = "User-requested local diagnostic copy.",
+                                        stepsToReproduce = "",
+                                        snapshot = freshSnapshot,
+                                        logs = safeLogs,
+                                        attachments = emptyList(),
+                                    )
+                                    val copied = DiagnosticReporter.copyFullReportToClipboard(context, report)
+                                    diagnosticSnapshot = freshSnapshot
+                                    onToast(
+                                        if (copied) atlasText("Diagnostics expurgés copiés.", "Redacted diagnostics copied.", "تم نسخ التشخيصات المنقحة.")
+                                        else atlasText("Impossible de copier les diagnostics.", "Could not copy diagnostics.", "تعذّر نسخ التشخيصات."),
+                                    )
+                                } catch (_: Exception) {
+                                    onToast(atlasText("Impossible de préparer les diagnostics.", "Could not prepare diagnostics.", "تعذّر إعداد التشخيصات."))
+                                } finally {
+                                    copyingDiagnostics = false
+                                }
+                            }
+                        },
+                    ) {
+                        Icon(
+                            Icons.Outlined.ContentCopy,
+                            contentDescription = atlasText("Copier les diagnostics expurgés", "Copy redacted diagnostics", "نسخ التشخيصات المنقحة"),
+                        )
+                    }
+                }
                 Text(
-                    atlasText("État de l'application", "App status", "حالة التطبيق"),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    atlasText(
+                        "Actualiser pour mettre à jour le résumé. Copier capture les journaux expurgés uniquement sur demande.",
+                        "Refresh to update the summary. Copy captures redacted logs only when explicitly requested.",
+                        "حدّث لتجديد الملخص. لا يتم نسخ السجلات المنقحة إلا عند الطلب صراحةً.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 AtlasInfoRow(
                     atlasText("Version", "Version", "الإصدار"),
                     "${AppDetails.VERSION_NAME} · ${AppDetails.VERSION_CODE}",
+                )
+                AtlasInfoRow(
+                    atlasText("Appareil", "Device", "الجهاز"),
+                    diagnosticSnapshot.manufacturerModel,
+                )
+                AtlasInfoRow(
+                    atlasText("Android", "Android", "Android"),
+                    diagnosticSnapshot.androidVersion,
+                )
+                AtlasInfoRow(
+                    atlasText("Réseau", "Network", "الشبكة"),
+                    diagnosticSnapshot.networkStatus,
+                )
+                AtlasInfoRow(
+                    atlasText("Dernière actualisation", "Last refreshed", "آخر تحديث"),
+                    diagnosticSnapshot.timestampUtc,
                 )
                 AtlasInfoRow(
                     atlasText("Passkeys", "Passkeys", "مفاتيح المرور"),

@@ -21,18 +21,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -107,6 +107,8 @@ import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.components.ShakeGestureEffect
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentQuotaBarsContent
+import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationDestination
+import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationSuggestion
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentScreen
 import ma.etherealmber.atlascommerce.ui.screens.agent.AtlasAgentMascot
 import ma.etherealmber.atlascommerce.ui.screens.legal.ProblemReportDialog
@@ -223,6 +225,7 @@ fun MainShell(
     var showProblemReportDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showShakeReportPrompt by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showAgentQuotaDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
+    var pendingAgentReportRequest by remember(user.scopeIdentity) { mutableStateOf<AgentNavigationSuggestion?>(null) }
     LaunchedEffect(tab) {
         if (tab != MainTab.AGENT) showAgentQuotaDialog = false
     }
@@ -312,6 +315,29 @@ fun MainShell(
         } else {
             if (roleTabs.contains(target)) setLastBottomTabName(target.name)
             setTabName(target.name)
+        }
+    }
+    val navigateFromAgent: (AgentNavigationSuggestion) -> Unit = { suggestion ->
+        when (suggestion.destination) {
+            AgentNavigationDestination.HOME -> switchTab(MainTab.HOME)
+            AgentNavigationDestination.PRODUCTS -> switchTab(MainTab.PRODUCTS)
+            AgentNavigationDestination.SALES -> switchTab(MainTab.SALE)
+            AgentNavigationDestination.BALANCE_REPORT -> {
+                if (!Roles.isAdmin(user.role)) {
+                    onToast("Les rapports financiers sont réservés aux administrateurs.")
+                } else {
+                    pendingAgentReportRequest = suggestion
+                    switchTab(MainTab.BALANCE)
+                }
+            }
+            AgentNavigationDestination.EMPLOYEES -> {
+                if (Roles.isAdmin(user.role)) switchTab(MainTab.EMPLOYEES)
+                else onToast("Les informations employés sont réservées aux administrateurs.")
+            }
+            AgentNavigationDestination.SCAN -> switchTab(MainTab.SCAN)
+            AgentNavigationDestination.NOTIFICATIONS -> onOpenNotifications()
+            AgentNavigationDestination.SETTINGS -> switchTab(MainTab.SETTINGS)
+            AgentNavigationDestination.PROFILE -> switchTab(MainTab.PROFILE)
         }
     }
 
@@ -449,7 +475,9 @@ fun MainShell(
             VerticalDivider(modifier = Modifier.align(Alignment.CenterStart).padding(start = 79.dp).fillMaxHeight(), color = MaterialTheme.colorScheme.outlineVariant)
         }
         val floatingNavBottomInset = if (!useRail && tab !in BackStackTabs) {
-            104.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            // Scaffold's content padding already accounts for the transparent system bar;
+            // reserve only the floating bar's measured height here to avoid a doubled gap.
+            92.dp
         } else {
             0.dp
         }
@@ -498,6 +526,7 @@ fun MainShell(
 
                     MainTab.AGENT -> AgentScreen(
                         onToast = onToast,
+                        onNavigate = navigateFromAgent,
                         isActive = isForeground && tab == MainTab.AGENT && currentTab == MainTab.AGENT,
                     )
 
@@ -508,7 +537,11 @@ fun MainShell(
                         onToast = onToast,
                     )
 
-                    MainTab.BALANCE -> BalanceScreen(onToast = onToast)
+                    MainTab.BALANCE -> BalanceScreen(
+                        onToast = onToast,
+                        requestedReport = pendingAgentReportRequest,
+                        onReportRequestHandled = { pendingAgentReportRequest = null },
+                    )
 
                     MainTab.SETTINGS -> SettingsScreen(
                         user = user,
@@ -537,7 +570,14 @@ fun MainShell(
                 if (currentPolicy == null) {
                     Text(atlasText("Chargement du quota…", "Loading quota…", "جارٍ تحميل الحصة…"))
                 } else {
-                    AgentQuotaBarsContent(policy = currentPolicy, compact = false)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        AgentQuotaBarsContent(policy = currentPolicy, compact = false)
+                    }
                 }
             },
             confirmButton = {
