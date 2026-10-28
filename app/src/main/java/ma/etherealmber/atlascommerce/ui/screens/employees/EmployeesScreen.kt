@@ -50,6 +50,7 @@ import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.PayrollRowDto
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
@@ -73,6 +74,7 @@ fun EmployeesScreen(
     user: SessionUser,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
+    val dockPadding = LocalAtlasFloatingDockPadding.current
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isAdmin = Roles.isAdmin(user.role)
     val language = LocalAtlasLanguage.current
@@ -115,7 +117,7 @@ fun EmployeesScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp + dockPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "employees_intro") {
