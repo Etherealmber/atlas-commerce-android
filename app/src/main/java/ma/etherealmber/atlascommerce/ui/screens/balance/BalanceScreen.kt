@@ -350,7 +350,7 @@ fun BalanceScreen(
                                 val outflows = if (breakdown != null) {
                                     breakdown.expenseCategories.map { it.category to it.total }.ifEmpty { listOf(atlasText("Aucune dépense", "No expenses", "لا توجد مصروفات") to 0.0) }
                                 } else {
-                                    listOf(atlasText("Dépenses") to finance.expenses, atlasText("Fournisseurs") to finance.supplierPaid, atlasText("Paie") to finance.payrollPaid, atlasText("Remboursements") to finance.refunds)
+                                    listOf(atlasText("Dépenses") to finance.expenses, atlasText("Fournisseurs") to finance.supplierPaid, atlasText("Paie") to finance.payrollPaid, atlasText("Remboursements", "Refunds", "المبالغ المستردة") to finance.refunds)
                                 }
                                 val incomingTotal = breakdown?.inflows?.total ?: state.statement?.totals?.credits ?: 0.0
                                 val outgoingTotal = breakdown?.outflows?.total ?: state.statement?.totals?.debits ?: 0.0

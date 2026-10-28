@@ -319,6 +319,16 @@ fun MainShell(
             setTabName(target.name)
         }
     }
+    val restrictedFinanceMessage = atlasText(
+        "Les rapports financiers sont réservés aux administrateurs.",
+        "Financial reports are restricted to administrators.",
+        "التقارير المالية مخصصة للمسؤولين فقط.",
+    )
+    val restrictedEmployeesMessage = atlasText(
+        "Les informations employés sont réservées aux administrateurs.",
+        "Employee information is restricted to administrators.",
+        "معلومات الموظفين مخصصة للمسؤولين فقط.",
+    )
     val navigateFromAgent: (AgentNavigationSuggestion) -> Unit = { suggestion ->
         when (suggestion.destination) {
             AgentNavigationDestination.HOME -> switchTab(MainTab.HOME)
@@ -326,7 +336,7 @@ fun MainShell(
             AgentNavigationDestination.SALES -> switchTab(MainTab.SALE)
             AgentNavigationDestination.BALANCE_REPORT -> {
                 if (!Roles.isAdmin(user.role)) {
-                    onToast("Les rapports financiers sont réservés aux administrateurs.")
+                    onToast(restrictedFinanceMessage)
                 } else {
                     pendingAgentReportRequest = suggestion
                     switchTab(MainTab.BALANCE)
@@ -334,7 +344,7 @@ fun MainShell(
             }
             AgentNavigationDestination.EMPLOYEES -> {
                 if (Roles.isAdmin(user.role)) switchTab(MainTab.EMPLOYEES)
-                else onToast("Les informations employés sont réservées aux administrateurs.")
+                else onToast(restrictedEmployeesMessage)
             }
             AgentNavigationDestination.SCAN -> switchTab(MainTab.SCAN)
             AgentNavigationDestination.NOTIFICATIONS -> onOpenNotifications()

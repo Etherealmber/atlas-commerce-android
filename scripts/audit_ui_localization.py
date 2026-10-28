@@ -49,12 +49,12 @@ TEXT_PARAMETERS = {
     "supportingText", "actionLabel", "contentDescription",
 }
 INVARIANT_LITERALS = {
-    "Atlas Commerce", "MIT", "contact@exemple.com",
+    "Atlas Commerce", "CDN 1", "MIT", "contact@exemple.com",
     "https://.../login-qr?t=…", "https://votre-domaine.exemple.com",
     "•", "✓", "  ▾",
 }
 NON_COPY_TOKENS = {
-    "open", "month", "year", "custom", "partial", "overdue",
+    "open", "pending", "paid", "closed", "completed", "month", "year", "custom", "partial", "overdue",
     "summary", "image/*", "android.settings.passwords_and_accounts_settings",
     "payé", "venir", "payer", "sku", "build", "github", "com",
 }
