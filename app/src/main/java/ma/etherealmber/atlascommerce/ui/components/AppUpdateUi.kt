@@ -576,7 +576,13 @@ fun SettingsUpdateCard(
                 FilterChip(
                     selected = selectedSource == src,
                     onClick = { onSelectSource(src) },
-                    label = { Text(src.label) },
+                    label = {
+                        Text(when (src) {
+                            UpdateDownloadSource.AUTO -> atlasText("Auto", "Auto", "تلقائي")
+                            UpdateDownloadSource.CDN1 -> "CDN 1"
+                            UpdateDownloadSource.GITHUB -> "GitHub"
+                        })
+                    },
                 )
             }
         }
@@ -621,12 +627,20 @@ fun SettingsUpdateCard(
                 }
             }
         }
-        mirrorPing.fastestLabel?.let { rec ->
-            Text(
-                text = rec,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+        val recommendation = when {
+            mirrorPing.cdn1Online == true && mirrorPing.githubOnline == true && mirrorPing.cdn1Ms != null && mirrorPing.githubMs != null -> {
+                if (mirrorPing.cdn1Ms <= mirrorPing.githubMs) {
+                    atlasText("CDN 1 recommandé (${mirrorPing.cdn1Ms} ms)", "CDN 1 recommended (${mirrorPing.cdn1Ms} ms)", "CDN 1 موصى به (${mirrorPing.cdn1Ms} مللي ثانية)")
+                } else {
+                    atlasText("GitHub recommandé (${mirrorPing.githubMs} ms)", "GitHub recommended (${mirrorPing.githubMs} ms)", "GitHub موصى به (${mirrorPing.githubMs} مللي ثانية)")
+                }
+            }
+            mirrorPing.cdn1Online == true && mirrorPing.cdn1Ms != null -> atlasText("CDN 1 actif (${mirrorPing.cdn1Ms} ms)", "CDN 1 active (${mirrorPing.cdn1Ms} ms)", "CDN 1 نشط (${mirrorPing.cdn1Ms} مللي ثانية)")
+            mirrorPing.githubOnline == true && mirrorPing.githubMs != null -> atlasText("GitHub actif (${mirrorPing.githubMs} ms)", "GitHub active (${mirrorPing.githubMs} ms)", "GitHub نشط (${mirrorPing.githubMs} مللي ثانية)")
+            else -> null
+        }
+        recommendation?.let { rec ->
+            Text(text = rec, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
         }
         AtlasDivider(Modifier.padding(vertical = 8.dp))
 

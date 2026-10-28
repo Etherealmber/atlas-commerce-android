@@ -32,7 +32,7 @@ class AtlasFormatTest {
     }
 
     @Test
-    fun `Arabic compact money localizes scale and isolates MAD`() {
+    fun `Arabic compact money localizes scale and uses Moroccan dirham notation`() {
         val formatted = AtlasFormat.moneyCompact(
             61_000.0,
             "MAD",
@@ -40,7 +40,16 @@ class AtlasFormatTest {
         )
         assertTrue(formatted.contains("ألف"))
         assertFalse(formatted.contains("k"))
-        assertTrue(formatted.contains("MAD"))
+        assertTrue(formatted.endsWith("د.م."))
+        assertFalse(formatted.contains("MAD"))
+        assertTrue(
+            AtlasFormat.money(1_250.5, "MAD", language = ma.etherealmber.atlascommerce.core.AppLanguage.ARABIC)
+                .endsWith("د.م."),
+        )
+        assertTrue(
+            AtlasFormat.money(1_250.5, "USD", language = ma.etherealmber.atlascommerce.core.AppLanguage.ARABIC)
+                .contains("USD"),
+        )
     }
 
     @Test
@@ -71,6 +80,17 @@ class AtlasFormatTest {
         assertTrue(AtlasFormat.date("2026-10-21T10:30:00Z").contains("2026"))
         assertTrue(AtlasFormat.date("2026-10-21").contains("2026"))
         assertEquals("—", AtlasFormat.date(null))
+    }
+
+    @Test
+    fun `date month names follow the selected UI language`() {
+        val french = AtlasFormat.date("2026-10-21", ma.etherealmber.atlascommerce.core.AppLanguage.FRENCH)
+        val english = AtlasFormat.date("2026-10-21", ma.etherealmber.atlascommerce.core.AppLanguage.ENGLISH)
+        val arabic = AtlasFormat.date("2026-10-21", ma.etherealmber.atlascommerce.core.AppLanguage.ARABIC)
+        assertTrue(french.contains("oct"))
+        assertTrue(english.contains("Oct"))
+        assertFalse(french == english)
+        assertTrue(arabic.contains("٢٠٢٦") || arabic.contains("2026"))
     }
 }
 

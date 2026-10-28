@@ -97,12 +97,12 @@ fun FinanceReportSelectionDialog(
     val today = remember { LocalDate.now() }
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     val presets = listOf(
-        "month" to "Ce mois",
-        "3m" to "3 mois",
-        "6m" to "6 mois",
-        "12m" to "12 mois",
-        "year" to "Année en cours",
-        "custom" to "Du… au…",
+        "month" to atlasText("Ce mois", "This month", "هذا الشهر"),
+        "3m" to atlasText("3 mois", "3 months", "3 أشهر"),
+        "6m" to atlasText("6 mois", "6 months", "6 أشهر"),
+        "12m" to atlasText("12 mois", "12 months", "12 شهراً"),
+        "year" to atlasText("Année en cours", "Current year", "السنة الحالية"),
+        "custom" to atlasText("Du… au…", "From… to…", "من… إلى…"),
     )
     val customRangeValid = runCatching {
         val start = LocalDate.parse(from)
@@ -129,7 +129,7 @@ fun FinanceReportSelectionDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(atlasText("Choisissez une période et les rubriques à consulter."), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(atlasText("PÉRIODE"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text(atlasText("PÉRIODE", "PERIOD", "الفترة"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     presets.chunked(2).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -148,16 +148,16 @@ fun FinanceReportSelectionDialog(
                 if (period == "custom") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            DateChoiceButton("Du", from, Modifier.weight(1f)) {
+                            DateChoiceButton(atlasText("Du", "From", "من"), from, Modifier.weight(1f)) {
                                 showDatePicker(context, from, today, null) { picked -> from = picked; if (to < picked) to = picked }
                             }
-                            DateChoiceButton("Au", to, Modifier.weight(1f)) {
+                            DateChoiceButton(atlasText("Au", "To", "إلى"), to, Modifier.weight(1f)) {
                                 val minDate = runCatching { LocalDate.parse(from) }.getOrNull()
                                 showDatePicker(context, to, today, minDate) { picked -> to = picked }
                             }
                         }
                         if (!customRangeValid) {
-                            Text(atlasText("Vérifiez les dates : début avant fin, et aucune date future."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            Text(atlasText("Vérifiez les dates : début avant fin, et aucune date future.", "Check the dates: the start must precede the end and neither date can be in the future.", "تحقق من التواريخ: يجب أن يسبق تاريخ البداية النهاية وألا يكون أي تاريخ في المستقبل."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                         }
                     }
                 } else {
@@ -171,7 +171,7 @@ fun FinanceReportSelectionDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Text(atlasText("RUBRIQUES"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text(atlasText("RUBRIQUES", "SECTIONS", "الأقسام"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 FinanceReportSection.entries.chunked(2).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         row.forEach { report ->
@@ -180,7 +180,7 @@ fun FinanceReportSelectionDialog(
                                 onClick = {
                                     if (report.key in selectedSections) selectedSections.remove(report.key) else selectedSections.add(report.key)
                                 },
-                                label = { Text(report.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                label = { Text(report.localizedLabel(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 modifier = Modifier.weight(1f),
                             )
                         }
@@ -188,7 +188,7 @@ fun FinanceReportSelectionDialog(
                     }
                 }
                 Text(
-                    atlasText("Le lien d'accès est temporaire (30 min). Les rubriques sélectionnées s'ouvrent dans Atlas."),
+                    atlasText("Le lien d'accès est temporaire (30 min). Les rubriques sélectionnées s'ouvrent dans Atlas.", "The access link is temporary (30 min). Selected sections open in Atlas.", "رابط الوصول مؤقت (30 دقيقة). تُفتح الأقسام المحددة في Atlas."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -211,6 +211,17 @@ private fun DateChoiceButton(label: String, date: String, modifier: Modifier = M
             Text(date, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
     }
+}
+
+@Composable
+private fun FinanceReportSection.localizedLabel(): String = when (this) {
+    FinanceReportSection.BALANCE -> atlasText("Balance", "Balance", "الرصيد")
+    FinanceReportSection.STOCK -> atlasText("Stock", "Inventory", "المخزون")
+    FinanceReportSection.RECEIVABLES -> atlasText("Créances clients", "Customer receivables", "مستحقات العملاء")
+    FinanceReportSection.PAYABLES -> atlasText("Fournisseurs", "Suppliers", "الموردون")
+    FinanceReportSection.EMPLOYEES -> atlasText("Employés & paie", "Employees & payroll", "الموظفون والرواتب")
+    FinanceReportSection.AGING -> atlasText("Balance âgée", "Aging report", "تقرير أعمار الديون")
+    FinanceReportSection.TVA -> atlasText("TVA", "VAT", "ضريبة القيمة المضافة")
 }
 
 private fun showDatePicker(

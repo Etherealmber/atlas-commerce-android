@@ -213,7 +213,7 @@ fun ProblemReportDialog(
                         FilterChip(
                             selected = category == cat,
                             onClick = { category = cat },
-                            label = { Text(cat, style = MaterialTheme.typography.labelSmall) },
+                            label = { Text(atlasText(cat), style = MaterialTheme.typography.labelSmall) },
                         )
                     }
                 }
@@ -612,8 +612,8 @@ SOFTWARE."""
 fun LicenseScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     LegalPage(
-        title = "Licence",
-        subtitle = "MIT · open source",
+        title = atlasText("Licence"),
+        subtitle = atlasText("MIT · open source"),
         onBack = onBack,
     ) {
         AtlasEntrance(delayMillis = 0) {
@@ -744,8 +744,8 @@ private fun ThirdParty(name: String, license: String) {
 fun SecurityScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     LegalPage(
-        title = "Sécurité & confidentialité",
-        subtitle = "Ce que l'app fait de vos données",
+        title = atlasText("Sécurité & confidentialité"),
+        subtitle = atlasText("Ce que l'app fait de vos données"),
         onBack = onBack,
     ) {
         AtlasEntrance(delayMillis = 0) {
@@ -889,7 +889,7 @@ fun AboutScreen(onBack: () -> Unit) {
     }
 
     LegalPage(
-        title = "À propos",
+        title = atlasText("À propos"),
         subtitle = "${AppDetails.NAME} ${AppDetails.VERSION_NAME}",
         onBack = onBack,
     ) {

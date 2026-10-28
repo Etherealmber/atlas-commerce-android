@@ -1,6 +1,9 @@
 package ma.etherealmber.atlascommerce.ui.screens.notifications
 
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
+import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleScopeSummary
+import ma.etherealmber.atlascommerce.ui.i18n.atlasInteger
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
@@ -77,6 +80,7 @@ fun NotificationsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val density = Atlas.density
+    val roleLabel = atlasRoleLabel(state.role)
     var showComposeDialog by remember { mutableStateOf(false) }
     val systemNotificationsEnabled = runCatching {
         NotificationManagerCompat.from(context).areNotificationsEnabled()
@@ -90,11 +94,11 @@ fun NotificationsScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AtlasTopBar(
-                title = atlasText("Info Box & Notifications"),
+                title = atlasText("Info Box & Notifications", "Info Box & Notifications", "صندوق المعلومات والإشعارات"),
                 subtitle = atlasText(
-                    "${state.roleLabel} · ${state.alerts.size} alerte(s) · ${state.pendingCount} en attente",
-                    "${state.roleLabel} · ${state.alerts.size} alert(s) · ${state.pendingCount} pending",
-                    "${state.roleLabel} · ${state.alerts.size} تنبيه · ${state.pendingCount} معلّق",
+                    "${roleLabel} · ${state.alerts.size} alerte(s) · ${state.pendingCount} en attente",
+                    "${roleLabel} · ${state.alerts.size} alert(s) · ${state.pendingCount} pending",
+                    "${roleLabel} · ${state.alerts.size} تنبيه · ${state.pendingCount} معلّق",
                 ),
                 onBack = onBack,
                 actions = {
@@ -147,7 +151,7 @@ fun NotificationsScreen(
                         }
                         Spacer(Modifier.height(10.dp))
                         AtlasButton(
-                            text = "Activer les notifications dans Paramètres",
+                            text = atlasText("Activer les notifications dans Paramètres", "Enable notifications in Settings", "تفعيل الإشعارات في الإعدادات"),
                             onClick = {
                                 runCatching {
                                     val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
@@ -177,12 +181,12 @@ fun NotificationsScreen(
                             Spacer(Modifier.width(8.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    text = atlasText("Info Box · ${state.roleLabel}", "Info Box · ${state.roleLabel}", "صندوق المعلومات · ${state.roleLabel}"),
+                                    text = atlasText("Info Box · ${roleLabel}", "Info Box · ${roleLabel}", "صندوق المعلومات · ${roleLabel}"),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    text = state.roleScopeSummary,
+                                    text = atlasRoleScopeSummary(state.role),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -194,7 +198,7 @@ fun NotificationsScreen(
                         }
                         Spacer(Modifier.height(10.dp))
                         AtlasButton(
-                            text = "Envoyer une notification par rôle",
+                            text = atlasText("Envoyer une notification par rôle"),
                             onClick = { showComposeDialog = true },
                             icon = Icons.Outlined.Send,
                             modifier = Modifier.fillMaxWidth(),
@@ -206,7 +210,7 @@ fun NotificationsScreen(
             when {
                 state.loading && state.alerts.isEmpty() && state.actions.isEmpty() -> {
                     item {
-                        AtlasLoading(message = "Chargement de l'Info Box…")
+                        AtlasLoading(message = atlasText("Chargement de l'Info Box…", "Loading Info Box…", "جارٍ تحميل صندوق المعلومات…"))
                     }
                 }
 
@@ -221,9 +225,9 @@ fun NotificationsScreen(
                         AtlasEmptyState(
                             title = atlasText("Aucune notification pour votre rôle"),
                             message = atlasText(
-                                "Votre flux ${state.roleLabel} est à jour. Vous pouvez envoyer un message ciblé à une équipe ci-dessus.",
-                                "Your ${state.roleLabel} feed is up to date. You can send a targeted message to a team above.",
-                                "تدفّق ${state.roleLabel} محدّث. يمكنك إرسال رسالة موجهة إلى فريق أعلاه.",
+                                "Votre flux ${roleLabel} est à jour. Vous pouvez envoyer un message ciblé à une équipe ci-dessus.",
+                                "Your ${roleLabel} feed is up to date. You can send a targeted message to a team above.",
+                                "تدفّق ${roleLabel} محدّث. يمكنك إرسال رسالة موجهة إلى فريق أعلاه.",
                             ),
                             icon = Icons.Outlined.NotificationsNone,
                             actionLabel = atlasText("Actualiser"),
@@ -236,7 +240,7 @@ fun NotificationsScreen(
                     if (state.alerts.isNotEmpty()) {
                         item {
                             AtlasSectionHeader(
-                                title = atlasText("Alertes ${state.roleLabel} (${state.alerts.size})", "${state.roleLabel} alerts (${state.alerts.size})", "تنبيهات ${state.roleLabel} (${state.alerts.size})"),
+                                title = atlasText("Alertes ${roleLabel} (${state.alerts.size})", "${roleLabel} alerts (${state.alerts.size})", "تنبيهات ${roleLabel} (${state.alerts.size})"),
                                 subtitle = atlasText("Filtrées automatiquement selon vos permissions"),
                             )
                         }
@@ -345,7 +349,7 @@ private fun SendRoleNotificationDialog(
                         FilterChip(
                             selected = selectedTarget == target,
                             onClick = { selectedTarget = target },
-                            label = { Text(target.label) },
+                            label = { Text(localizedTargetLabel(target)) },
                         )
                     }
                 }
@@ -378,7 +382,7 @@ private fun SendRoleNotificationDialog(
                             fontWeight = FontWeight.Medium,
                         )
                         Text(
-                            text = atlasText("Déclenche une alerte haute priorité sur les appareils du rôle"),
+                            text = atlasText("Déclenche une alerte haute priorité sur les appareils du rôle", "Triggers a high-priority alert on devices for this role", "يُطلق تنبيهاً عالي الأولوية على أجهزة هذا الدور"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -410,6 +414,14 @@ private fun AlertRow(
     alert: AlertItemDto,
     onClick: () -> Unit,
 ) {
+    val count = alert.count?.let { atlasInteger(it.toDouble()) }
+    val localizedLabel = when {
+        alert.kind.contains("low_stock", ignoreCase = true) || alert.kind.contains("stock_low", ignoreCase = true) ->
+            atlasText("${count ?: alert.label} article(s) sous le seuil de stock", "${count ?: alert.label} low-stock item(s)", "${count ?: alert.label} منتجات دون حد المخزون")
+        alert.kind.contains("overdue", ignoreCase = true) || alert.kind.contains("unpaid_invoice", ignoreCase = true) ->
+            atlasText("${count ?: alert.label} facture(s) impayée(s)", "${count ?: alert.label} unpaid invoice(s)", "${count ?: alert.label} فواتير غير مدفوعة")
+        else -> atlasText(alert.label)
+    }
     val isHigh = alert.severity.equals("high", ignoreCase = true) ||
         alert.severity.equals("danger", ignoreCase = true) ||
         alert.kind.contains("stock", ignoreCase = true)
@@ -424,7 +436,7 @@ private fun AlertRow(
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = alert.label,
+                    text = localizedLabel,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Medium,
                 )
@@ -441,6 +453,14 @@ private fun AlertRow(
 }
 
 @Composable
+private fun localizedTargetLabel(target: RoleTarget): String = when (target) {
+    RoleTarget.ADMIN -> atlasText("Administrateurs", "Administrators", "المسؤولون")
+    RoleTarget.SECRETARY -> atlasText("Secrétariat & Ventes", "Sales secretaries", "السكرتارية والمبيعات")
+    RoleTarget.STOCK -> atlasText("Magasiniers & Stock", "Warehouse & Stock", "المخازن والمخزون")
+    RoleTarget.ALL -> atlasText("Tous les rôles", "All roles", "كل الأدوار")
+}
+
+@Composable
 private fun MobileActionRow(
     action: MobileActionDto,
     isAdmin: Boolean,
@@ -453,15 +473,22 @@ private fun MobileActionRow(
     val isOwnSubmission = !currentUsername.isBlank() &&
         action.createdBy.equals(currentUsername, ignoreCase = true)
 
-    val (statusLabel, statusTone) = when {
+    val (statusKey, statusTone) = when {
         action.isCompleted -> "Validée ✓" to AtlasTone.POSITIVE
         action.isRejectedOrCancelled -> "Refusée" to AtlasTone.DANGER
         isProductRequest && !isAdmin -> "Transmis à l'Admin" to AtlasTone.INFO
         action.isUrgent -> "Urgent" to AtlasTone.DANGER
         else -> "En attente" to AtlasTone.WARNING
     }
+    val statusLabel = when (statusKey) {
+        "Validée ✓" -> atlasText("Validée ✓", "Approved ✓", "تم الاعتماد ✓")
+        "Refusée" -> atlasText("Refusée", "Rejected", "مرفوض")
+        "Transmis à l'Admin" -> atlasText("Transmis à l'Admin", "Sent to Admin", "أُرسل إلى المسؤول")
+        "Urgent" -> atlasText("Urgent", "Urgent", "عاجل")
+        else -> atlasText("En attente", "Pending", "قيد الانتظار")
+    }
 
-    val targetBadge = action.resolvedTargetRole?.let { RoleTarget.fromKey(it).label }
+    val targetBadge = action.resolvedTargetRole?.let { localizedTargetLabel(RoleTarget.fromKey(it)) }
 
     AtlasCard(padding = 12.dp) {
         Row(verticalAlignment = Alignment.Top) {
@@ -492,9 +519,9 @@ private fun MobileActionRow(
                     )
                 }
                 val footerMeta = listOfNotNull(
-                    action.barcode?.takeIf { it.isNotBlank() }?.let { "Code : $it" },
-                    action.createdBy?.takeIf { it.isNotBlank() }?.let { "Par $it" },
-                    action.completedBy?.takeIf { it.isNotBlank() }?.let { "Validé par $it" },
+                    action.barcode?.takeIf { it.isNotBlank() }?.let { atlasText("Code : $it", "Code: $it", "الرمز: $it") },
+                    action.createdBy?.takeIf { it.isNotBlank() }?.let { atlasText("Par $it", "By $it", "بواسطة $it") },
+                    action.completedBy?.takeIf { it.isNotBlank() }?.let { atlasText("Validé par $it", "Approved by $it", "اعتمده $it") },
                 ).joinToString(" · ")
                 if (footerMeta.isNotEmpty()) {
                     Spacer(Modifier.height(4.dp))

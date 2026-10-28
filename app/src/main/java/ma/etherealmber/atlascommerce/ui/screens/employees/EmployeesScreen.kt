@@ -3,6 +3,8 @@ package ma.etherealmber.atlascommerce.ui.screens.employees
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
+import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -44,8 +46,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.Roles
-import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.PayrollRowDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
@@ -73,6 +75,8 @@ fun EmployeesScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isAdmin = Roles.isAdmin(user.role)
+    val language = LocalAtlasLanguage.current
+    val locale = when (language) { AppLanguage.FRENCH -> Locale.FRANCE; AppLanguage.ENGLISH -> Locale.UK; AppLanguage.ARABIC -> Locale.forLanguageTag("ar-MA") }
     var query by rememberSaveable(user.scopeIdentity) { mutableStateOf("") }
     var paymentFilter by rememberSaveable(user.scopeIdentity) { mutableStateOf("Tous") }
 
@@ -82,9 +86,9 @@ fun EmployeesScreen(
     }
     val period = state.selectedFinancePeriod ?: state.finance?.period ?: currentMonth.toString()
     val selectedMonth = remember(period) { runCatching { YearMonth.parse(period) }.getOrDefault(currentMonth) }
-    val monthLabel = remember(selectedMonth) {
-        selectedMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.FRENCH))
-            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.FRENCH) else it.toString() }
+    val monthLabel = remember(selectedMonth, locale) {
+        selectedMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale))
+            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
     }
     val payroll = state.payroll
     val visibleRows = remember(payroll?.rows, query, paymentFilter) {
@@ -105,7 +109,7 @@ fun EmployeesScreen(
     }
 
     if (state.loading && state.finance == null && state.payroll == null) {
-        AtlasLoading(message = "Chargement des données employés…")
+        AtlasLoading(message = atlasText("Chargement des données employés…", "Loading employee data…", "جارٍ تحميل بيانات الموظفين…"))
         return
     }
 
@@ -181,17 +185,17 @@ fun EmployeesScreen(
         item(key = "employee_summary") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SummaryCard(
-                    label = "Employés concernés",
+                    label = atlasText("Employés concernés", "Employees", "الموظفون"),
                     value = payroll?.total?.toString() ?: "—",
                     modifier = Modifier.weight(1f),
                 )
                 SummaryCard(
-                    label = "À payer",
+                    label = atlasText("À payer", "To pay", "مستحق الدفع"),
                     value = payroll?.totals?.unpaidCount?.toString() ?: "—",
                     modifier = Modifier.weight(1f),
                 )
                 SummaryCard(
-                    label = "Montant dû",
+                    label = atlasText("Montant dû", "Amount due", "المبلغ المستحق"),
                     value = payroll?.let { atlasMoneyCompact(it.totals.amountDue, it.currency) } ?: "—",
                     modifier = Modifier.weight(1f),
                 )
@@ -216,7 +220,7 @@ fun EmployeesScreen(
                         FilterChip(
                             selected = paymentFilter == option,
                             onClick = { paymentFilter = option },
-                            label = { Text(option) },
+                            label = { Text(atlasText(option, when (option) { "Tous" -> "All"; "À payer" -> "To pay"; else -> option }, when (option) { "Tous" -> "الكل"; "À payer" -> "مستحق الدفع"; "À venir" -> "قادم"; else -> "مدفوع" })) },
                         )
                     }
                 }
@@ -225,7 +229,7 @@ fun EmployeesScreen(
 
         if (state.financeLoading && payroll == null) {
             item(key = "employee_loading") {
-                AtlasCard { AtlasLoading(message = "Chargement de la paie…") }
+                AtlasCard { AtlasLoading(message = atlasText("Chargement de la paie…", "Loading payroll…", "جارٍ تحميل الرواتب…")) }
             }
         } else if (visibleRows.isEmpty()) {
             item(key = "employee_empty") {
@@ -284,6 +288,12 @@ private fun SummaryCard(label: String, value: String, modifier: Modifier = Modif
 @Composable
 private fun EmployeePayrollCard(row: PayrollRowDto, asOf: String, currency: String) {
     val status = payrollStatus(row, asOf)
+    val fromDate = atlasShortDate(row.payPeriod.from).takeIf { it != "—" } ?: "—"
+    val toDate = atlasShortDate(row.payPeriod.to).takeIf { it != "—" } ?: "—"
+    val periodLabel = atlasText("Période $fromDate → $toDate", "Period $fromDate → $toDate", "الفترة $fromDate → $toDate")
+    val dueDateLabel = row.dueDate?.takeIf(String::isNotBlank)?.let {
+        atlasText(" · Échéance ${atlasShortDate(it)}", " · Due ${atlasShortDate(it)}", " · الاستحقاق ${atlasShortDate(it)}")
+    }.orEmpty()
     AtlasCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -293,16 +303,7 @@ private fun EmployeePayrollCard(row: PayrollRowDto, asOf: String, currency: Stri
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = buildString {
-                        append(atlasText(
-                            "Période ${row.payPeriod.from.ifBlank { "—" }} → ${row.payPeriod.to.ifBlank { "—" }}",
-                            "Period ${row.payPeriod.from.ifBlank { "—" }} → ${row.payPeriod.to.ifBlank { "—" }}",
-                            "الفترة ${row.payPeriod.from.ifBlank { "—" }} → ${row.payPeriod.to.ifBlank { "—" }}",
-                        ))
-                        row.dueDate?.takeIf(String::isNotBlank)?.let {
-                            append(atlasText(" · Échéance $it", " · Due $it", " · الاستحقاق $it"))
-                        }
-                    },
+                    text = periodLabel + dueDateLabel,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -331,9 +332,9 @@ private fun EmployeePayrollCard(row: PayrollRowDto, asOf: String, currency: Stri
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             Text(
                 atlasText(
-                    "Dernier versement · ${atlasMoney(payment.amount, currency)} · ${payment.paidAt}",
-                    "Last payment · ${atlasMoney(payment.amount, currency)} · ${payment.paidAt}",
-                    "آخر دفعة · ${atlasMoney(payment.amount, currency)} · ${payment.paidAt}",
+                    "Dernier versement · ${atlasMoney(payment.amount, currency)} · ${atlasShortDate(payment.paidAt)}",
+                    "Last payment · ${atlasMoney(payment.amount, currency)} · ${atlasShortDate(payment.paidAt)}",
+                    "آخر دفعة · ${atlasMoney(payment.amount, currency)} · ${atlasShortDate(payment.paidAt)}",
                 ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

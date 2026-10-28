@@ -63,7 +63,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import ma.etherealmber.atlascommerce.core.Roles
-import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
@@ -93,6 +92,8 @@ import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelection
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelectionDialog
 import ma.etherealmber.atlascommerce.ui.components.StatusChip
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
+import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
 import ma.etherealmber.atlascommerce.ui.i18n.atlasInteger
@@ -875,7 +876,7 @@ private fun FinanceAdminCard(
             text = if (reportGenerating) {
                 atlasText("Préparation du relevé…", "Preparing statement…", "جارٍ إعداد الكشف…")
             } else {
-                atlasText("Télécharger le PDF · ${financeMonthLabel(activePeriod)}", "Download PDF · ${financeMonthLabel(activePeriod)}", "تنزيل PDF · ${financeMonthLabel(activePeriod)}")
+                atlasText("Télécharger le PDF · ${financeMonthLabel(activePeriod, atlasLocale())}", "Download PDF · ${financeMonthLabel(activePeriod, atlasLocale())}", "تنزيل PDF · ${financeMonthLabel(activePeriod, atlasLocale())}")
             },
             onClick = { onExportReport(activePeriod) },
             enabled = !reportGenerating && !loading,
@@ -973,9 +974,9 @@ private fun FinanceAdminCard(
                             Text(employee.displayName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                             Text(
                                 text = buildString {
-                                    append(atlasText("Échéance ${AtlasFormat.shortDate(employee.dueDate)}", "Due ${AtlasFormat.shortDate(employee.dueDate)}", "الاستحقاق ${AtlasFormat.shortDate(employee.dueDate)}"))
+                                    append(atlasText("Échéance ${atlasShortDate(employee.dueDate)}", "Due ${atlasShortDate(employee.dueDate)}", "الاستحقاق ${atlasShortDate(employee.dueDate)}"))
                                     employee.lastPayment?.let {
-                                        append(atlasText(" · Dernier versement ${AtlasFormat.shortDate(it.paidAt)}", " · Last payment ${AtlasFormat.shortDate(it.paidAt)}", " · آخر دفعة ${AtlasFormat.shortDate(it.paidAt)}"))
+                                        append(atlasText(" · Dernier versement ${atlasShortDate(it.paidAt)}", " · Last payment ${atlasShortDate(it.paidAt)}", " · آخر دفعة ${atlasShortDate(it.paidAt)}"))
                                     }
                                 },
                                 style = MaterialTheme.typography.bodySmall,
@@ -1027,15 +1028,15 @@ private fun FinanceAdminCard(
                 Text(
                     text = if (currentMonth) {
                         atlasText(
-                            "Mois en cours · arrêté au ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}",
-                            "Current month · as of ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}",
-                            "الشهر الحالي · حتى ${AtlasFormat.shortDate(date)} · المصدر ${summary.reconciliation.source}",
+                            "Mois en cours · arrêté au ${atlasShortDate(date)} · source ${summary.reconciliation.source}",
+                            "Current month · as of ${atlasShortDate(date)} · source ${summary.reconciliation.source}",
+                            "الشهر الحالي · حتى ${atlasShortDate(date)} · المصدر ${summary.reconciliation.source}",
                         )
                     } else {
                         atlasText(
-                            "Période ${financeMonthLabel(activePeriod)} · données au ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}",
-                            "Period ${financeMonthLabel(activePeriod)} · data as of ${AtlasFormat.shortDate(date)} · source ${summary.reconciliation.source}",
-                            "الفترة ${financeMonthLabel(activePeriod)} · البيانات حتى ${AtlasFormat.shortDate(date)} · المصدر ${summary.reconciliation.source}",
+                            "Période ${financeMonthLabel(activePeriod, atlasLocale())} · données au ${atlasShortDate(date)} · source ${summary.reconciliation.source}",
+                            "Period ${financeMonthLabel(activePeriod, atlasLocale())} · data as of ${atlasShortDate(date)} · source ${summary.reconciliation.source}",
+                            "الفترة ${financeMonthLabel(activePeriod, atlasLocale())} · البيانات حتى ${atlasShortDate(date)} · المصدر ${summary.reconciliation.source}",
                         )
                     },
                     style = MaterialTheme.typography.labelSmall,
@@ -1059,7 +1060,7 @@ private fun FinancePeriodPicker(
     val currentPeriod = financeCurrentPeriod(timezone)
     Box {
         TextButton(onClick = { expanded = true }) {
-            Text(financeMonthLabel(period))
+            Text(financeMonthLabel(period, atlasLocale()))
             Text("  ▾")
         }
         DropdownMenu(
@@ -1070,7 +1071,7 @@ private fun FinancePeriodPicker(
             for (offset in 0L..35L) {
                 val option = currentMonth.minusMonths(offset).toString()
                 DropdownMenuItem(
-                    text = { Text(financeMonthLabel(option)) },
+                    text = { Text(financeMonthLabel(option, atlasLocale())) },
                     onClick = {
                         expanded = false
                         onSelect(option)
@@ -1087,10 +1088,10 @@ private fun financeCurrentPeriod(timezone: String): String = runCatching {
     YearMonth.now(ZoneId.of("Africa/Casablanca")).toString()
 }
 
-private fun financeMonthLabel(period: String): String = runCatching {
+private fun financeMonthLabel(period: String, locale: Locale): String = runCatching {
     YearMonth.parse(period)
-        .format(DateTimeFormatter.ofPattern("LLLL yyyy", Locale.FRENCH))
-        .replaceFirstChar { it.uppercase() }
+        .format(DateTimeFormatter.ofPattern("LLLL yyyy", locale))
+        .replaceFirstChar { it.titlecase(locale) }
 }.getOrDefault(period)
 
 @Composable
@@ -1118,7 +1119,7 @@ private fun FinanceObligationsList(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = listOfNotNull(document.number.takeIf { it.isNotBlank() }, document.dueDate?.let { date -> AtlasFormat.shortDate(date) }).joinToString(" · "),
+                    text = listOfNotNull(document.number.takeIf { it.isNotBlank() }, document.dueDate?.let { date -> atlasShortDate(date) }).joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1258,7 +1259,7 @@ private fun InvoiceRow(invoice: InvoiceDto, currency: String) {
             Text(
                 text = listOfNotNull(
                     invoice.clientName?.takeIf { it.isNotBlank() },
-                    AtlasFormat.shortDate(invoice.issueDate).takeIf { it != "—" },
+                    atlasShortDate(invoice.issueDate).takeIf { it != "—" },
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

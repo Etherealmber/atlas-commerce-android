@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.data.model.CreateFinanceEntryRequest
 import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
@@ -75,6 +76,9 @@ import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
+import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
+import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.components.CombinedReportWebViewDialog
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationSuggestion
 import ma.etherealmber.atlascommerce.ui.components.FinancePdfViewerDialog
@@ -85,9 +89,7 @@ import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
-private enum class BalanceSection(val label: String) {
-    MOVEMENTS("Mouvements"), CLIENTS("Clients"), REPORTS("Rapports")
-}
+private enum class BalanceSection { MOVEMENTS, CLIENTS, REPORTS }
 
 @Composable
 fun BalanceScreen(
@@ -97,7 +99,15 @@ fun BalanceScreen(
     viewModel: BalanceViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val appLanguage = LocalAtlasLanguage.current
     val context = LocalContext.current
+    val copyPdfSavedMessage = atlasText("Copie PDF enregistrée.", "PDF copy saved.", "تم حفظ نسخة PDF.")
+    val savePdfFailedMessage = atlasText("Impossible d'enregistrer le PDF.", "Could not save the PDF.", "تعذّر حفظ PDF.")
+    val sharePdfFailedMessage = atlasText("Impossible de partager le PDF.", "Could not share the PDF.", "تعذّرت مشاركة PDF.")
+    val reportDeletedMessage = atlasText("Rapport temporaire supprimé.", "Temporary report deleted.", "تم حذف التقرير المؤقت.")
+    val entrySavedMessage = atlasText("Écriture enregistrée dans la balance.", "Entry saved to the balance.", "تم حفظ القيد في الرصيد.")
+    val reportDownloadedMessage = atlasText("PDF téléchargé et ouvert dans Atlas.", "PDF downloaded and opened in Atlas.", "تم تنزيل PDF وفتحه في Atlas.")
+    val chooserTitle = atlasText("Partager le rapport PDF", "Share PDF report", "مشاركة تقرير PDF")
     var section by remember { mutableStateOf(BalanceSection.MOVEMENTS) }
     var pdfViewerFile by remember { mutableStateOf<File?>(null) }
     var pendingPdfFile by remember { mutableStateOf<File?>(null) }
@@ -128,8 +138,8 @@ fun BalanceScreen(
             runCatching {
                 context.contentResolver.openOutputStream(uri, "wt")?.use { out -> file.inputStream().buffered().use { it.copyTo(out) } }
                     ?: error("Impossible d'écrire le PDF sélectionné.")
-            }.onSuccess { onToast("Copie PDF enregistrée.") }
-                .onFailure { onToast("Impossible d'enregistrer le PDF.") }
+            }.onSuccess { onToast(copyPdfSavedMessage) }
+                .onFailure { onToast(savePdfFailedMessage) }
         }
         pendingPdfFile = null
     }
@@ -149,13 +159,13 @@ fun BalanceScreen(
     if (confirmCombined) {
         AlertDialog(
             onDismissRequest = { confirmCombined = false },
-            title = { Text(atlasText("Ouvrir le rapport combiné ?")) },
+            title = { Text(atlasText("Ouvrir le rapport combiné ?", "Open the combined report?", "هل تريد فتح التقرير الموحّد؟")) },
             text = {
                 Text(
                     atlasText(
-                        "${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. Le lien HMAC est temporaire (30 min) et privé : ne le partagez pas.",
-                        "${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. The HMAC link is private and expires in 30 minutes. Do not share it.",
-                        "${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. رابط HMAC خاص ومؤقت لمدة 30 دقيقة. لا تشاركه.",
+                        "${localizedFinancePeriodLabel(reportSelection)} · ${reportSelection.selectedSections().joinToString { localizedReportSectionLabel(it, appLanguage) }}. Le lien HMAC est temporaire (30 min) et privé : ne le partagez pas.",
+                        "${localizedFinancePeriodLabel(reportSelection)} · ${reportSelection.selectedSections().joinToString { localizedReportSectionLabel(it, appLanguage) }}. The HMAC link is private and expires in 30 minutes. Do not share it.",
+                        "${localizedFinancePeriodLabel(reportSelection)} · ${reportSelection.selectedSections().joinToString { localizedReportSectionLabel(it, appLanguage) }}. رابط HMAC خاص ومؤقت لمدة 30 دقيقة. لا تشاركه.",
                     ),
                 )
             },
@@ -190,8 +200,8 @@ fun BalanceScreen(
                         clipData = ClipData.newUri(context.contentResolver, file.name, uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    context.startActivity(Intent.createChooser(intent, "Partager le rapport PDF"))
-                }.onFailure { onToast("Impossible de partager le PDF.") }
+                    context.startActivity(Intent.createChooser(intent, chooserTitle))
+                }.onFailure { onToast(sharePdfFailedMessage) }
             },
             onSave = {
                 pendingPdfFile = file
@@ -200,7 +210,7 @@ fun BalanceScreen(
             onDelete = {
                 file.delete()
                 pdfViewerFile = null
-                onToast("Rapport temporaire supprimé.")
+                onToast(reportDeletedMessage)
             },
         )
     }
@@ -215,7 +225,7 @@ fun BalanceScreen(
                     when (result) {
                         is ApiResult.Success -> {
                             showEntryDialog = false
-                            onToast("Écriture enregistrée dans la balance.")
+                            onToast(entrySavedMessage)
                         }
                         is ApiResult.Failure -> onToast(result.message)
                     }
@@ -231,7 +241,7 @@ fun BalanceScreen(
         return
     }
     if (state.loading && state.finance == null) {
-        AtlasLoading(message = "Chargement des soldes et mouvements…")
+        AtlasLoading(message = atlasText("Chargement des soldes et mouvements…", "Loading balances and transactions…", "جارٍ تحميل الأرصدة والحركات…"))
         return
     }
 
@@ -267,13 +277,13 @@ fun BalanceScreen(
                     Button(onClick = open) {
                         Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.width(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(kind.quickLabel)
+                        Text(atlasText(kind.quickLabel, kind.quickEnglish, kind.quickArabic))
                     }
                 } else {
                     OutlinedButton(onClick = open) {
                         Icon(kind.icon, contentDescription = null, modifier = Modifier.width(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(kind.quickLabel)
+                        Text(atlasText(kind.quickLabel, kind.quickEnglish, kind.quickArabic))
                     }
                 }
             }
@@ -283,7 +293,7 @@ fun BalanceScreen(
                 Tab(
                     selected = section == tab,
                     onClick = { section = tab },
-                    text = { Text(tab.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    text = { Text(when (tab) { BalanceSection.MOVEMENTS -> atlasText("Mouvements", "Transactions", "الحركات"); BalanceSection.CLIENTS -> atlasText("Clients", "Customers", "العملاء"); BalanceSection.REPORTS -> atlasText("Rapports", "Reports", "التقارير") }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 )
             }
         }
@@ -331,22 +341,22 @@ fun BalanceScreen(
                             item(key = "flow-panels") {
                                 val breakdown = state.periodBreakdown
                                 val outflows = if (breakdown != null) {
-                                    breakdown.expenseCategories.map { it.category to it.total }.ifEmpty { listOf("Aucune dépense" to 0.0) }
+                                    breakdown.expenseCategories.map { it.category to it.total }.ifEmpty { listOf(atlasText("Aucune dépense", "No expenses", "لا توجد مصروفات") to 0.0) }
                                 } else {
-                                    listOf("Dépenses" to finance.expenses, "Fournisseurs" to finance.supplierPaid, "Paie" to finance.payrollPaid, "Remboursements" to finance.refunds)
+                                    listOf(atlasText("Dépenses") to finance.expenses, atlasText("Fournisseurs") to finance.supplierPaid, atlasText("Paie") to finance.payrollPaid, atlasText("Remboursements") to finance.refunds)
                                 }
                                 val incomingTotal = breakdown?.inflows?.total ?: state.statement?.totals?.credits ?: 0.0
                                 val outgoingTotal = breakdown?.outflows?.total ?: state.statement?.totals?.debits ?: 0.0
-                                val categoryTitle = if (breakdown != null) "Dépenses par catégorie" else "Sorties par type"
+                                val categoryTitle = if (breakdown != null) atlasText("Dépenses par catégorie", "Expenses by category", "المصروفات حسب الفئة") else atlasText("Sorties par type", "Expenses by type", "المصروفات حسب النوع")
                                 if (maxWidth < 600.dp) {
                                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                         FinanceFlowCard(categoryTitle, outflows, finance.currency)
-                                        FinanceFlowCard("Entrées et sorties", listOf("Entrées" to incomingTotal, "Sorties" to outgoingTotal), finance.currency)
+                                        FinanceFlowCard(atlasText("Entrées et sorties", "Income and expenses", "الإيرادات والمصروفات"), listOf(atlasText("Entrées") to incomingTotal, atlasText("Sorties") to outgoingTotal), finance.currency)
                                     }
                                 } else {
                                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                         FinanceFlowCard(categoryTitle, outflows, finance.currency, Modifier.weight(1f))
-                                        FinanceFlowCard("Entrées et sorties", listOf("Entrées" to incomingTotal, "Sorties" to outgoingTotal), finance.currency, Modifier.weight(1f))
+                                        FinanceFlowCard(atlasText("Entrées et sorties", "Income and expenses", "الإيرادات والمصروفات"), listOf(atlasText("Entrées") to incomingTotal, atlasText("Sorties") to outgoingTotal), finance.currency, Modifier.weight(1f))
                                     }
                                 }
                             }
@@ -361,7 +371,7 @@ fun BalanceScreen(
                         item(key = "movement-filters") {
                             if (maxWidth < 480.dp) {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    EntryDropdown("Filtrer", movementFilter, listOf("Toutes les écritures", "Entrées", "Sorties", "Dépenses")) { movementFilter = it }
+                                    EntryDropdown(atlasText("Filtrer", "Filter", "تصفية"), movementFilter, listOf("Toutes les écritures", "Entrées", "Sorties", "Dépenses")) { movementFilter = it }
                                     OutlinedTextField(
                                         value = movementSearch,
                                         onValueChange = { movementSearch = it },
@@ -373,7 +383,7 @@ fun BalanceScreen(
                             } else {
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Box(Modifier.weight(1f)) {
-                                        EntryDropdown("Filtrer", movementFilter, listOf("Toutes les écritures", "Entrées", "Sorties", "Dépenses")) { movementFilter = it }
+                                        EntryDropdown(atlasText("Filtrer", "Filter", "تصفية"), movementFilter, listOf("Toutes les écritures", "Entrées", "Sorties", "Dépenses")) { movementFilter = it }
                                     }
                                     OutlinedTextField(
                                         value = movementSearch,
@@ -410,7 +420,7 @@ fun BalanceScreen(
                             matchesFilter && (term.isBlank() || listOf(row.label, row.ref, row.type, row.ts).any { it.contains(term, ignoreCase = true) })
                         }
                         if (filteredRows.isEmpty() && !state.loading) {
-                            item(key = "empty-movements") { EmptyPanel(if (state.rows.isEmpty()) "Aucun mouvement pour cette période." else "Aucun mouvement ne correspond à ce filtre.") }
+                            item(key = "empty-movements") { EmptyPanel(if (state.rows.isEmpty()) atlasText("Aucun mouvement pour cette période.", "No transactions for this period.", "لا توجد حركات لهذه الفترة.") else atlasText("Aucun mouvement ne correspond à ce filtre.", "No transactions match this filter.", "لا توجد حركات تطابق عامل التصفية هذا.")) }
                         } else {
                             items(filteredRows, key = { "${it.source}-${it.id}" }) { row ->
                                 StatementRowCard(row = row, currency = state.statement?.currency ?: "MAD")
@@ -429,14 +439,14 @@ fun BalanceScreen(
                         val bucket = state.finance?.receivables
                         item(key = "clients-total") {
                             SummaryAmountCard(
-                                title = "À recevoir",
+                                title = atlasText("À recevoir", "Receivables", "مستحقات القبض"),
                                 amount = bucket?.totalOutstanding ?: 0.0,
                                 currency = state.finance?.currency ?: "MAD",
-                                subtitle = "${bucket?.count ?: 0} document(s) · ${formatMoney(bucket?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} en retard",
+                                subtitle = atlasText("${bucket?.count ?: 0} document(s) · ${formatMoney(bucket?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} en retard", "${bucket?.count ?: 0} document(s) · ${formatMoney(bucket?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} overdue", "${bucket?.count ?: 0} مستند · ${formatMoney(bucket?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} متأخر"),
                             )
                         }
                         val receivableDocuments = bucket?.documents.orEmpty()
-                        if (receivableDocuments.isEmpty()) item(key = "no-receivables") { EmptyPanel("Aucune créance client ouverte pour cette période.") }
+                        if (receivableDocuments.isEmpty()) item(key = "no-receivables") { EmptyPanel(atlasText("Aucune créance client ouverte pour cette période.", "No open customer receivables for this period.", "لا توجد مستحقات مفتوحة على العملاء لهذه الفترة.")) }
                         else items(receivableDocuments, key = { "receivable-${it.id}" }) { document ->
                             ReceivableCard(document, state.finance?.currency ?: "MAD")
                         }
@@ -446,23 +456,23 @@ fun BalanceScreen(
                         item(key = "suppliers-title") { Text(atlasText("Dettes fournisseurs"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
                         item(key = "suppliers-total") {
                             SummaryAmountCard(
-                                title = "À payer",
+                                title = atlasText("À payer", "Payables", "مستحقات الدفع"),
                                 amount = payables?.totalOutstanding ?: 0.0,
                                 currency = state.finance?.currency ?: "MAD",
-                                subtitle = "${payables?.count ?: 0} document(s) · ${formatMoney(payables?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} en retard",
+                                subtitle = atlasText("${payables?.count ?: 0} document(s) · ${formatMoney(payables?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} en retard", "${payables?.count ?: 0} document(s) · ${formatMoney(payables?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} overdue", "${payables?.count ?: 0} مستند · ${formatMoney(payables?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} متأخر"),
                             )
                         }
                         val payableDocuments = payables?.documents.orEmpty()
-                        if (payableDocuments.isEmpty()) item(key = "no-payables") { EmptyPanel("Aucune dette fournisseur ouverte pour cette période.") }
+                        if (payableDocuments.isEmpty()) item(key = "no-payables") { EmptyPanel(atlasText("Aucune dette fournisseur ouverte pour cette période.", "No open supplier payables for this period.", "لا توجد مستحقات مفتوحة للموردين لهذه الفترة.")) }
                         else items(payableDocuments, key = { "payable-${it.id}" }) { document ->
                             ReceivableCard(document, state.finance?.currency ?: "MAD")
                         }
                         item(key = "payroll-due") {
                             SummaryAmountCard(
-                                title = "Paie encore due",
+                                title = atlasText("Paie encore due", "Payroll still due", "رواتب لا تزال مستحقة"),
                                 amount = state.finance?.payroll?.totalDue ?: 0.0,
                                 currency = state.finance?.currency ?: "MAD",
-                                subtitle = "${state.finance?.payroll?.employees ?: 0} employé(s) concernés",
+                                subtitle = atlasText("${state.finance?.payroll?.employees ?: 0} employé(s) concernés", "${state.finance?.payroll?.employees ?: 0} employees", "${state.finance?.payroll?.employees ?: 0} موظف"),
                                 icon = Icons.Outlined.AccountBalanceWallet,
                             )
                         }
@@ -473,10 +483,10 @@ fun BalanceScreen(
                         }
                         item(key = "month-pdf") {
                             ReportActionCard(
-                                title = "Relevé mensuel PDF",
-                                description = "Rapport officiel du serveur · ${state.selectedPeriod ?: "—"} · téléchargé en cache privé et conservé temporairement.",
+                                title = atlasText("Relevé mensuel PDF", "Monthly statement PDF", "كشف شهري PDF"),
+                                description = atlasText("Rapport officiel du serveur · ${state.selectedPeriod ?: "—"} · téléchargé en cache privé et conservé temporairement.", "Official server report · ${state.selectedPeriod ?: "—"} · downloaded to private cache and kept temporarily.", "تقرير رسمي من الخادم · ${state.selectedPeriod ?: "—"} · يُنزّل إلى ذاكرة خاصة ويُحفظ مؤقتاً."),
                                 icon = { Icon(Icons.Outlined.Description, contentDescription = null) },
-                                actionLabel = if (state.reportGenerating) "Préparation…" else "Télécharger le PDF",
+                                actionLabel = if (state.reportGenerating) atlasText("Préparation…", "Preparing…", "جارٍ التحضير…") else atlasText("Télécharger le PDF", "Download PDF", "تنزيل PDF"),
                                 enabled = !state.reportGenerating && state.selectedPeriod != null,
                             ) {
                                 state.selectedPeriod?.let { period ->
@@ -484,7 +494,7 @@ fun BalanceScreen(
                                         when (result) {
                                             is ApiResult.Success -> {
                                                 pdfViewerFile = result.data
-                                                onToast("PDF téléchargé et ouvert dans Atlas.")
+                                                onToast(reportDownloadedMessage)
                                             }
                                             is ApiResult.Failure -> onToast(result.message)
                                         }
@@ -494,15 +504,15 @@ fun BalanceScreen(
                         }
                         item(key = "combined-report") {
                             ReportActionCard(
-                                title = "Pack de rapports personnalisable",
-                                description = "Choisissez les rubriques et la période : mois, année en cours, derniers mois ou dates exactes.",
+                                title = atlasText("Pack de rapports personnalisable", "Customizable report bundle", "حزمة تقارير قابلة للتخصيص"),
+                                description = atlasText("Choisissez les rubriques et la période : mois, année en cours, derniers mois ou dates exactes.", "Choose sections and a period: month, current year, recent months, or exact dates.", "اختر الأقسام والفترة: شهر أو السنة الحالية أو الأشهر الأخيرة أو تواريخ محددة."),
                                 icon = { Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null) },
-                                actionLabel = if (state.reportGenerating) "Préparation…" else "Ouvrir dans Atlas",
+                                actionLabel = if (state.reportGenerating) atlasText("Préparation…", "Preparing…", "جارٍ التحضير…") else atlasText("Ouvrir dans Atlas", "Open in Atlas", "فتح في Atlas"),
                                 enabled = !state.reportGenerating,
                             ) { showReportSelection = true }
                         }
                         item(key = "report-note") {
-                            Text(atlasText("Les chiffres proviennent des API financières du serveur sélectionné. Aucun solde n'est calculé ou codé en dur dans l'application."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(atlasText("Les chiffres proviennent des API financières du serveur sélectionné. Aucun solde n'est calculé ou codé en dur dans l'application.", "Figures come from the selected server’s financial APIs. No balance is calculated or hardcoded in the app.", "تأتي الأرقام من واجهات الخادم المالي المحدد. لا يحسب التطبيق أي رصيد ولا يضعه بشكل ثابت."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -511,21 +521,43 @@ fun BalanceScreen(
     }
 }
 
+private fun localizedReportSectionLabel(section: ma.etherealmber.atlascommerce.ui.components.FinanceReportSection, language: AppLanguage): String = when (section) {
+    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.BALANCE -> when (language) { AppLanguage.FRENCH -> "Balance"; AppLanguage.ENGLISH -> "Balance"; AppLanguage.ARABIC -> "الرصيد" }
+    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.STOCK -> when (language) { AppLanguage.FRENCH -> "Stock"; AppLanguage.ENGLISH -> "Inventory"; AppLanguage.ARABIC -> "المخزون" }
+    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.RECEIVABLES -> when (language) { AppLanguage.FRENCH -> "Créances clients"; AppLanguage.ENGLISH -> "Customer receivables"; AppLanguage.ARABIC -> "مستحقات العملاء" }
+    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.PAYABLES -> when (language) { AppLanguage.FRENCH -> "Fournisseurs"; AppLanguage.ENGLISH -> "Suppliers"; AppLanguage.ARABIC -> "الموردون" }
+    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.EMPLOYEES -> when (language) { AppLanguage.FRENCH -> "Employés & paie"; AppLanguage.ENGLISH -> "Employees & payroll"; AppLanguage.ARABIC -> "الموظفون والرواتب" }
+    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.AGING -> when (language) { AppLanguage.FRENCH -> "Balance âgée"; AppLanguage.ENGLISH -> "Aging report"; AppLanguage.ARABIC -> "تقرير أعمار الديون" }
+    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.TVA -> when (language) { AppLanguage.FRENCH -> "TVA"; AppLanguage.ENGLISH -> "VAT"; AppLanguage.ARABIC -> "ضريبة القيمة المضافة" }
+}
+
+@Composable
+private fun localizedFinancePeriodLabel(selection: FinanceReportSelection): String = when (selection.period) {
+    "month" -> atlasText("Mois en cours", "Current month", "الشهر الحالي")
+    "3m" -> atlasText("3 derniers mois", "Last 3 months", "آخر 3 أشهر")
+    "6m" -> atlasText("6 derniers mois", "Last 6 months", "آخر 6 أشهر")
+    "12m" -> atlasText("12 derniers mois", "Last 12 months", "آخر 12 شهراً")
+    "year" -> atlasText("Année en cours", "Current year", "السنة الحالية")
+    "custom" -> if (selection.from != null && selection.to != null) "${atlasShortDate(selection.from)} → ${atlasShortDate(selection.to)}" else atlasText("Période personnalisée", "Custom period", "فترة مخصصة")
+    else -> selection.period
+}
+
 @Composable
 private fun MonthSelector(selectedPeriod: String?, onSelect: (String) -> Unit) {
+    val locale = atlasLocale()
     val now = remember { YearMonth.now() }
     val periods = remember(now) { (0..23).map { now.minusMonths(it.toLong()) } }
     var expanded by remember { mutableStateOf(false) }
     val current = selectedPeriod?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
     Box {
         OutlinedButton(onClick = { expanded = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp)) {
-            Text(current?.let(::monthLabel) ?: atlasText("Mois"), style = MaterialTheme.typography.labelLarge)
+            Text(current?.let { monthLabel(it, locale) } ?: atlasText("Mois"), style = MaterialTheme.typography.labelLarge)
             Icon(Icons.Outlined.ExpandMore, contentDescription = atlasText("Choisir un mois"))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             periods.forEach { month ->
                 DropdownMenuItem(
-                    text = { Text(monthLabel(month)) },
+                    text = { Text(monthLabel(month, locale)) },
                     onClick = { expanded = false; onSelect(month.toString()) },
                 )
             }
@@ -533,9 +565,9 @@ private fun MonthSelector(selectedPeriod: String?, onSelect: (String) -> Unit) {
     }
 }
 
-private fun monthLabel(month: YearMonth): String {
-    val name = month.month.getDisplayName(TextStyle.FULL, Locale.FRENCH)
-    return "${name.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.FRENCH) else it.toString() }} ${month.year}"
+private fun monthLabel(month: YearMonth, locale: Locale): String {
+    val name = month.month.getDisplayName(TextStyle.FULL, locale)
+    return "${name.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }} ${month.year}"
 }
 
 @Composable
@@ -545,7 +577,7 @@ private fun BalanceClosingCard(closing: Double, currency: String, modifier: Modi
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                 Spacer(Modifier.width(8.dp))
-                Text(atlasText("SOLDE DE CLÔTURE"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text(atlasText("SOLDE DE CLÔTURE", "CLOSING BALANCE", "الرصيد الختامي"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             Text(formatMoney(closing, currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(atlasText("Après les mouvements comptabilisés"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f))
@@ -559,17 +591,17 @@ private fun BalanceSummary(opening: Double, closing: Double, income: Double, out
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             BalanceClosingCard(closing, currency, Modifier.fillMaxWidth())
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SummaryAmountCard("Ouverture", opening, currency, icon = Icons.Outlined.AccountBalanceWallet, modifier = Modifier.weight(1f))
-                SummaryAmountCard("Entrées", income, currency, icon = Icons.Outlined.ArrowDownward, modifier = Modifier.weight(1f))
+                SummaryAmountCard(atlasText("Ouverture", "Opening", "الافتتاحي"), opening, currency, icon = Icons.Outlined.AccountBalanceWallet, modifier = Modifier.weight(1f))
+                SummaryAmountCard(atlasText("Entrées", "Income", "الإيرادات"), income, currency, icon = Icons.Outlined.ArrowDownward, modifier = Modifier.weight(1f))
             }
-            SummaryAmountCard("Sorties payées", outflows, currency, icon = Icons.Outlined.ArrowUpward, modifier = Modifier.fillMaxWidth())
+            SummaryAmountCard(atlasText("Sorties payées", "Paid expenses", "المصروفات المدفوعة"), outflows, currency, icon = Icons.Outlined.ArrowUpward, modifier = Modifier.fillMaxWidth())
         }
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             BalanceClosingCard(closing, currency, Modifier.weight(1.25f))
-            SummaryAmountCard("Ouverture", opening, currency, icon = Icons.Outlined.AccountBalanceWallet, modifier = Modifier.weight(1f))
-            SummaryAmountCard("Entrées", income, currency, icon = Icons.Outlined.ArrowDownward, modifier = Modifier.weight(1f))
-            SummaryAmountCard("Sorties payées", outflows, currency, icon = Icons.Outlined.ArrowUpward, modifier = Modifier.weight(1f))
+            SummaryAmountCard(atlasText("Ouverture", "Opening", "الافتتاحي"), opening, currency, icon = Icons.Outlined.AccountBalanceWallet, modifier = Modifier.weight(1f))
+            SummaryAmountCard(atlasText("Entrées", "Income", "الإيرادات"), income, currency, icon = Icons.Outlined.ArrowDownward, modifier = Modifier.weight(1f))
+            SummaryAmountCard(atlasText("Sorties payées", "Paid expenses", "المصروفات المدفوعة"), outflows, currency, icon = Icons.Outlined.ArrowUpward, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -595,20 +627,20 @@ private fun CashBankDashboard(data: FinancePeriodDto, currency: String) {
         if (maxWidth < 600.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CashAccountCard("Caisse", data.inflows.cash, data.outflows.cash, currency, Modifier.weight(1f))
-                    CashAccountCard("Banque", data.inflows.bank, data.outflows.bank, currency, Modifier.weight(1f))
+                    CashAccountCard(atlasText("Caisse", "Cash", "النقد"), data.inflows.cash, data.outflows.cash, currency, Modifier.weight(1f))
+                    CashAccountCard(atlasText("Banque", "Bank", "البنك"), data.inflows.bank, data.outflows.bank, currency, Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OwnerMovementCard("Apports", data.owner.contributions.total, data.owner.contributions.count, positive = true, currency = currency, modifier = Modifier.weight(1f))
-                    OwnerMovementCard("Prélèvements", data.owner.withdrawals.total, data.owner.withdrawals.count, positive = false, currency = currency, modifier = Modifier.weight(1f))
+                    OwnerMovementCard(atlasText("Apports", "Contributions", "المساهمات"), data.owner.contributions.total, data.owner.contributions.count, positive = true, currency = currency, modifier = Modifier.weight(1f))
+                    OwnerMovementCard(atlasText("Prélèvements", "Withdrawals", "السحوبات"), data.owner.withdrawals.total, data.owner.withdrawals.count, positive = false, currency = currency, modifier = Modifier.weight(1f))
                 }
             }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CashAccountCard("Caisse", data.inflows.cash, data.outflows.cash, currency, Modifier.weight(1f))
-                CashAccountCard("Banque", data.inflows.bank, data.outflows.bank, currency, Modifier.weight(1f))
-                OwnerMovementCard("Apports", data.owner.contributions.total, data.owner.contributions.count, positive = true, currency = currency, modifier = Modifier.weight(1f))
-                OwnerMovementCard("Prélèvements", data.owner.withdrawals.total, data.owner.withdrawals.count, positive = false, currency = currency, modifier = Modifier.weight(1f))
+                CashAccountCard(atlasText("Caisse", "Cash", "النقد"), data.inflows.cash, data.outflows.cash, currency, Modifier.weight(1f))
+                CashAccountCard(atlasText("Banque", "Bank", "البنك"), data.inflows.bank, data.outflows.bank, currency, Modifier.weight(1f))
+                OwnerMovementCard(atlasText("Apports", "Contributions", "المساهمات"), data.owner.contributions.total, data.owner.contributions.count, positive = true, currency = currency, modifier = Modifier.weight(1f))
+                OwnerMovementCard(atlasText("Prélèvements", "Withdrawals", "السحوبات"), data.owner.withdrawals.total, data.owner.withdrawals.count, positive = false, currency = currency, modifier = Modifier.weight(1f))
             }
         }
     }
@@ -638,7 +670,7 @@ private fun CashBankDashboard(data: FinancePeriodDto, currency: String) {
 private fun CashAccountCard(title: String, incoming: Double, outgoing: Double, currency: String, modifier: Modifier = Modifier) {
     Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title.uppercase(Locale.FRENCH), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title.uppercase(atlasLocale()), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 atlasText("Entrées  +${formatMoney(incoming, currency)}", "Incoming  +${formatMoney(incoming, currency)}", "الوارد  +${formatMoney(incoming, currency)}"),
                 style = MaterialTheme.typography.bodySmall,
@@ -664,7 +696,7 @@ private fun CashAccountCard(title: String, incoming: Double, outgoing: Double, c
 private fun OwnerMovementCard(title: String, amount: Double, count: Int, positive: Boolean, currency: String, modifier: Modifier = Modifier) {
     Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(title.uppercase(Locale.FRENCH), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title.uppercase(atlasLocale()), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 "${if (positive) "+" else "−"}${formatMoney(amount, currency)}",
                 style = MaterialTheme.typography.titleSmall,
@@ -700,7 +732,7 @@ private fun FinanceFlowCard(
                 val fraction by animateFloatAsState(targetValue = target, label = "flow-$label")
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(atlasText(label), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(formatMoney(amount, currency), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
                     }
                     LinearProgressIndicator(
@@ -729,9 +761,9 @@ private fun ReconciliationNotice(balanced: Boolean?, status: String, asOf: Strin
                 )
                 Text(
                     if (status == "open") {
-                        atlasText("Mois en cours · arrêté au $asOf", "Current month · as of $asOf", "الشهر الحالي · حتى $asOf")
+                        atlasText("Mois en cours · arrêté au ${atlasShortDate(asOf)}", "Current month · as of ${atlasShortDate(asOf)}", "الشهر الحالي · حتى ${atlasShortDate(asOf)}")
                     } else {
-                        atlasText("Période clôturée · arrêté au $asOf", "Closed period · as of $asOf", "فترة مغلقة · حتى $asOf")
+                        atlasText("Période clôturée · arrêté au ${atlasShortDate(asOf)}", "Closed period · as of ${atlasShortDate(asOf)}", "فترة مغلقة · حتى ${atlasShortDate(asOf)}")
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -744,19 +776,19 @@ private fun ReconciliationNotice(balanced: Boolean?, status: String, asOf: Strin
 
 @Composable
 private fun StatementRowCard(row: FinanceStatementRowDto, currency: String) {
-    val kind = when (row.type) {
-        "sale" -> "Encaissement"
-        "refund" -> "Remboursement"
-        "expense" -> "Dépense"
-        "payroll" -> "Paie"
-        "supplier" -> "Fournisseur"
-        else -> row.type.ifBlank { "Mouvement" }
+    val kind = when (row.type.lowercase()) {
+        "sale" -> atlasText("Encaissement", "Payment received", "تحصيل")
+        "refund" -> atlasText("Remboursement", "Refund", "استرداد")
+        "expense" -> atlasText("Dépense", "Expense", "مصروف")
+        "payroll" -> atlasText("Paie", "Payroll", "الرواتب")
+        "supplier" -> atlasText("Fournisseur", "Supplier", "المورد")
+        else -> atlasText("Mouvement", "Transaction", "حركة")
     }
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(row.label.ifBlank { kind }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("$kind · ${row.ref} · ${row.ts}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (row.label.isNotBlank()) atlasText(row.label) else kind, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text("$kind · ${row.ref} · ${atlasShortDate(row.ts)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(10.dp))
             Column(horizontalAlignment = Alignment.End) {
@@ -778,13 +810,18 @@ private fun ReceivableCard(document: FinanceOutstandingDocumentDto, currency: St
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(document.party.ifBlank { atlasText("Client") }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                Text(document.state.replaceFirstChar { it.uppercase(Locale.FRENCH) }, style = MaterialTheme.typography.labelMedium, color = if (document.state == "overdue") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                Text(when (document.state.lowercase()) {
+                    "overdue" -> atlasText("En retard", "Overdue", "متأخر")
+                    "open", "pending" -> atlasText("En attente", "Pending", "قيد الانتظار")
+                    "paid", "closed", "completed" -> atlasText("Payé", "Paid", "مدفوع")
+                    else -> atlasText(document.state)
+                }, style = MaterialTheme.typography.labelMedium, color = if (document.state == "overdue") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
             }
             Text(
                 atlasText(
-                    "${document.number} · échéance ${document.dueDate ?: "non définie"}",
-                    "${document.number} · due ${document.dueDate ?: "not set"}",
-                    "${document.number} · الاستحقاق ${document.dueDate ?: "غير محدد"}",
+                    "${document.number} · échéance ${document.dueDate?.let { atlasShortDate(it) } ?: "non définie"}",
+                    "${document.number} · due ${document.dueDate?.let { atlasShortDate(it) } ?: "not set"}",
+                    "${document.number} · الاستحقاق ${document.dueDate?.let { atlasShortDate(it) } ?: "غير محدد"}",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -825,13 +862,15 @@ private enum class EntryKind(
     val apiType: String,
     val label: String,
     val quickLabel: String,
+    val quickEnglish: String,
+    val quickArabic: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val categories: List<String>,
 ) {
-    EXPENSE("expense", "Dépense", "+ Dépense", Icons.Outlined.ArrowUpward, listOf("Loyer", "Transport", "Fournitures", "Salaires", "Taxes", "Autre dépense")),
-    INCOME("income", "Recette", "+ Recette", Icons.Outlined.ArrowDownward, listOf("Vente divers", "Prestation de service", "Remboursement", "Subvention", "Intérêts", "Autre recette")),
-    OWNER_CONTRIB("owner_contrib", "Apport propriétaire", "+ Apport", Icons.Outlined.AccountBalanceWallet, listOf("Apport en capital", "Apport en compte courant", "Autre apport")),
-    OWNER_DRAW("owner_draw", "Prélèvement propriétaire", "+ Prélèvement", Icons.Outlined.ArrowUpward, listOf("Prélèvement personnel", "Dividende", "Remboursement associé", "Autre prélèvement")),
+    EXPENSE("expense", "Dépense", "+ Dépense", "+ Expense", "+ مصروف", Icons.Outlined.ArrowUpward, listOf("Loyer", "Transport", "Fournitures", "Salaires", "Taxes", "Autre dépense")),
+    INCOME("income", "Recette", "+ Recette", "+ Income", "+ إيراد", Icons.Outlined.ArrowDownward, listOf("Vente divers", "Prestation de service", "Remboursement", "Subvention", "Intérêts", "Autre recette")),
+    OWNER_CONTRIB("owner_contrib", "Apport propriétaire", "+ Apport", "+ Contribution", "+ مساهمة", Icons.Outlined.AccountBalanceWallet, listOf("Apport en capital", "Apport en compte courant", "Autre apport")),
+    OWNER_DRAW("owner_draw", "Prélèvement propriétaire", "+ Prélèvement", "+ Withdrawal", "+ سحب", Icons.Outlined.ArrowUpward, listOf("Prélèvement personnel", "Dividende", "Remboursement associé", "Autre prélèvement")),
 }
 
 @Composable
@@ -884,13 +923,13 @@ private fun NewEntryDialog(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 if (step == 0) {
-                    EntryDropdown("Type", kind.label, EntryKind.entries.map { it.label }) { label ->
+                    EntryDropdown(atlasText("Type", "Type", "النوع"), atlasText(kind.label, when (kind) { EntryKind.EXPENSE -> "Expense"; EntryKind.INCOME -> "Income"; EntryKind.OWNER_CONTRIB -> "Owner contribution"; EntryKind.OWNER_DRAW -> "Owner withdrawal" }, when (kind) { EntryKind.EXPENSE -> "مصروف"; EntryKind.INCOME -> "إيراد"; EntryKind.OWNER_CONTRIB -> "مساهمة المالك"; EntryKind.OWNER_DRAW -> "سحب المالك" }), EntryKind.entries.map { it.label }) { label ->
                         EntryKind.entries.firstOrNull { it.label == label }?.let { selected ->
                             kind = selected
                             category = selected.categories.first()
                         }
                     }
-                    EntryDropdown("Catégorie", category, kind.categories) { category = it }
+                    EntryDropdown(atlasText("Catégorie"), category, kind.categories) { category = it }
                     OutlinedTextField(
                         value = description,
                         onValueChange = { description = it },
@@ -919,7 +958,7 @@ private fun NewEntryDialog(
                         isError = !validDate,
                     )
                     EntryDropdown(
-                        "Mode de paiement",
+                        atlasText("Mode de paiement", "Payment method", "طريقة الدفع"),
                         when (payment) { "bank" -> "Banque / virement"; "card" -> "Carte"; "cheque" -> "Chèque"; else -> "Espèces (caisse)" },
                         listOf("Espèces (caisse)", "Banque / virement", "Carte", "Chèque"),
                     ) { label -> payment = when (label) { "Banque / virement" -> "bank"; "Carte" -> "card"; "Chèque" -> "cheque"; else -> "cash" } }
