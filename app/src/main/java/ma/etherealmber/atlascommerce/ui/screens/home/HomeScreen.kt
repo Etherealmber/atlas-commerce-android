@@ -71,6 +71,7 @@ import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.data.model.MonthlyPointDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -287,13 +288,14 @@ private fun HomeErrorContent(
     onOpenScan: () -> Unit,
 ) {
     val density = Atlas.density
+    val dockPadding = LocalAtlasFloatingDockPadding.current
     val canSell = Roles.canCreateDocuments(user.role)
     LazyColumn(
         contentPadding = PaddingValues(
             start = density.screenPadding,
             end = density.screenPadding,
             top = density.cardMargin,
-            bottom = 28.dp,
+            bottom = 28.dp + dockPadding,
         ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {
@@ -362,6 +364,7 @@ private fun HomeContent(
     onOpenCombinedReport: () -> Unit,
 ) {
     val density = Atlas.density
+    val dockPadding = LocalAtlasFloatingDockPadding.current
     val canViewInvoices = Roles.canCreateDocuments(user.role)
     val canSell = Roles.canCreateDocuments(user.role)
     val isAdmin = Roles.isAdmin(user.role)
@@ -381,8 +384,8 @@ private fun HomeContent(
             start = density.screenPadding,
             end = density.screenPadding,
             top = density.cardMargin,
-            // Keep the last report heading and actions fully scrollable above the floating dock.
-            bottom = 48.dp,
+            // Keep the final cards scrollable clear of the floating dock while intermediate content passes behind it.
+            bottom = 48.dp + dockPadding,
         ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {

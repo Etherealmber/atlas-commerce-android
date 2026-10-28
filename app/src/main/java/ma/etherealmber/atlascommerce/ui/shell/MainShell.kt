@@ -74,6 +74,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -100,6 +101,7 @@ import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
@@ -317,6 +319,16 @@ fun MainShell(
             setTabName(target.name)
         }
     }
+    val restrictedFinanceMessage = atlasText(
+        "Les rapports financiers sont réservés aux administrateurs.",
+        "Financial reports are restricted to administrators.",
+        "التقارير المالية مخصصة للمسؤولين فقط.",
+    )
+    val restrictedEmployeesMessage = atlasText(
+        "Les informations employés sont réservées aux administrateurs.",
+        "Employee information is restricted to administrators.",
+        "معلومات الموظفين مخصصة للمسؤولين فقط.",
+    )
     val navigateFromAgent: (AgentNavigationSuggestion) -> Unit = { suggestion ->
         when (suggestion.destination) {
             AgentNavigationDestination.HOME -> switchTab(MainTab.HOME)
@@ -324,7 +336,7 @@ fun MainShell(
             AgentNavigationDestination.SALES -> switchTab(MainTab.SALE)
             AgentNavigationDestination.BALANCE_REPORT -> {
                 if (!Roles.isAdmin(user.role)) {
-                    onToast("Les rapports financiers sont réservés aux administrateurs.")
+                    onToast(restrictedFinanceMessage)
                 } else {
                     pendingAgentReportRequest = suggestion
                     switchTab(MainTab.BALANCE)
@@ -332,7 +344,7 @@ fun MainShell(
             }
             AgentNavigationDestination.EMPLOYEES -> {
                 if (Roles.isAdmin(user.role)) switchTab(MainTab.EMPLOYEES)
-                else onToast("Les informations employés sont réservées aux administrateurs.")
+                else onToast(restrictedEmployeesMessage)
             }
             AgentNavigationDestination.SCAN -> switchTab(MainTab.SCAN)
             AgentNavigationDestination.NOTIFICATIONS -> onOpenNotifications()
@@ -474,19 +486,17 @@ fun MainShell(
             }
             VerticalDivider(modifier = Modifier.align(Alignment.CenterStart).padding(start = 79.dp).fillMaxHeight(), color = MaterialTheme.colorScheme.outlineVariant)
         }
-        val floatingNavBottomInset = if (!useRail && tab !in BackStackTabs) {
-            // Scaffold's content padding already accounts for the transparent system bar;
-            // reserve only the floating bar's measured height here to avoid a doubled gap.
-            92.dp
-        } else {
-            0.dp
-        }
+        CompositionLocalProvider(
+            LocalAtlasFloatingDockPadding provides if (!useRail && tab !in BackStackTabs) 112.dp else 0.dp,
+        ) {
         AtlasPageTransition(
             targetState = tab,
             indexSelector = { it.ordinal },
+            // The dock floats over the page so content can scroll beneath it. Main scrollable
+            // screens add end content-padding so their final items can still scroll clear of it.
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = if (showRail) 80.dp else 0.dp, bottom = floatingNavBottomInset),
+                .padding(start = if (showRail) 80.dp else 0.dp),
         ) { currentTab ->
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 Box(Modifier.widthIn(max = if (useRail) 1200.dp else 840.dp).fillMaxSize()) {
@@ -558,6 +568,7 @@ fun MainShell(
                 }
                 }
             }
+        }
         }
         }
     }
@@ -642,9 +653,8 @@ private fun AtlasFloatingBottomBar(
     val centerIndex = centerTab?.let(tabs::indexOf) ?: -1
     val leftTabs = if (centerIndex >= 0) tabs.take(centerIndex) else tabs
     val rightTabs = if (centerIndex >= 0) tabs.drop(centerIndex + 1) else emptyList()
-    // Keep the navigation pill fully opaque for legible controls; only the surrounding
-    // system/navigation background is transparent so page content can extend behind it.
-    val barColor = MaterialTheme.colorScheme.surfaceContainerLow
+    // Keep the controls crisp while allowing page content to remain visible beneath the dock.
+    val barColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.62f)
     val motionEnabled = LocalAtlasAnimationsEnabled.current
 
     Box(
@@ -659,7 +669,7 @@ private fun AtlasFloatingBottomBar(
             shape = RoundedCornerShape(26.dp),
             color = barColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
-            border = null,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
             tonalElevation = 0.dp,
             shadowElevation = 4.dp,
         ) {

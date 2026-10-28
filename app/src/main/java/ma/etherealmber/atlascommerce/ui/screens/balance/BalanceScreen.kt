@@ -74,6 +74,7 @@ import ma.etherealmber.atlascommerce.data.model.CreateFinanceEntryRequest
 import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
@@ -98,6 +99,7 @@ fun BalanceScreen(
     onReportRequestHandled: () -> Unit = {},
     viewModel: BalanceViewModel = hiltViewModel(),
 ) {
+    val dockPadding = LocalAtlasFloatingDockPadding.current
     val state by viewModel.state.collectAsStateWithLifecycle()
     val appLanguage = LocalAtlasLanguage.current
     val context = LocalContext.current
@@ -304,7 +306,12 @@ fun BalanceScreen(
             val maxContentWidth = if (maxWidth >= 900.dp) 1180.dp else 820.dp
             LazyColumn(
                 modifier = Modifier.widthIn(max = maxContentWidth).fillMaxSize().align(Alignment.TopCenter),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = if (maxWidth >= 600.dp) 24.dp else 16.dp, vertical = 12.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = if (maxWidth >= 600.dp) 24.dp else 16.dp,
+                    end = if (maxWidth >= 600.dp) 24.dp else 16.dp,
+                    top = 12.dp,
+                    bottom = 12.dp + dockPadding,
+                ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 when (section) {
@@ -343,7 +350,7 @@ fun BalanceScreen(
                                 val outflows = if (breakdown != null) {
                                     breakdown.expenseCategories.map { it.category to it.total }.ifEmpty { listOf(atlasText("Aucune dépense", "No expenses", "لا توجد مصروفات") to 0.0) }
                                 } else {
-                                    listOf(atlasText("Dépenses") to finance.expenses, atlasText("Fournisseurs") to finance.supplierPaid, atlasText("Paie") to finance.payrollPaid, atlasText("Remboursements") to finance.refunds)
+                                    listOf(atlasText("Dépenses") to finance.expenses, atlasText("Fournisseurs") to finance.supplierPaid, atlasText("Paie") to finance.payrollPaid, atlasText("Remboursements", "Refunds", "المبالغ المستردة") to finance.refunds)
                                 }
                                 val incomingTotal = breakdown?.inflows?.total ?: state.statement?.totals?.credits ?: 0.0
                                 val outgoingTotal = breakdown?.outflows?.total ?: state.statement?.totals?.debits ?: 0.0

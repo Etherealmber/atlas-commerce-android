@@ -63,6 +63,7 @@ import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
@@ -82,6 +83,7 @@ fun ProductsScreen(
     onToast: (String) -> Unit,
     viewModel: ProductsViewModel = hiltViewModel(),
 ) {
+    val dockPadding = LocalAtlasFloatingDockPadding.current
     val state by viewModel.state.collectAsStateWithLifecycle()
     val density = Atlas.density
     var selected by remember { mutableStateOf<ProductDto?>(null) }
@@ -217,7 +219,7 @@ fun ProductsScreen(
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 320.dp),
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = density.screenPadding, end = density.screenPadding, bottom = 24.dp),
+                        contentPadding = PaddingValues(start = density.screenPadding, end = density.screenPadding, bottom = 24.dp + dockPadding),
                         horizontalArrangement = Arrangement.spacedBy(density.itemGap),
                         verticalArrangement = Arrangement.spacedBy(density.itemGap),
                     ) {
@@ -253,7 +255,7 @@ fun ProductsScreen(
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 320.dp),
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = density.screenPadding, end = density.screenPadding, bottom = 24.dp),
+                    contentPadding = PaddingValues(start = density.screenPadding, end = density.screenPadding, bottom = 24.dp + dockPadding),
                     horizontalArrangement = Arrangement.spacedBy(density.itemGap),
                     verticalArrangement = Arrangement.spacedBy(density.itemGap),
                 ) {

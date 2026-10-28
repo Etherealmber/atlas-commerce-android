@@ -129,6 +129,8 @@ cdn_latest_apk_path_ok = (
     apk_parts.scheme == cdn_parts.scheme
     and apk_parts.netloc == cdn_parts.netloc
     and apk_parts.path == expected_latest_path
+    and not apk_parts.query
+    and not apk_parts.fragment
 )
 latest_apk_cache_control_ok = all(
     directive in apk_cache_normalized
@@ -172,7 +174,7 @@ if summary_path:
         summary.write(f"- Minimum-version policy fields present: `{minimum_policy_present}`\n")
         summary.write(f"- Manifest cache headers safe: `{manifest_cache_control_ok}` (`{cdn_cache_control or 'missing'}`)\n")
         summary.write(f"- Referenced CDN APK exists: `{cdn_apk_exists}` ({apk_status_code or 'no status'}; `{apk_url or 'no apkUrl'}`)\n")
-        summary.write(f"- CDN APK is the stable latest.apk object: `{cdn_latest_apk_path_ok}`\n")
+        summary.write(f"- CDN APK uses the clean stable latest.apk URL (no query string): `{cdn_latest_apk_path_ok}`\n")
         summary.write(f"- latest.apk cache headers are revalidated: `{latest_apk_cache_control_ok}` (`{apk_cache_control or 'missing'}`)\n")
         summary.write(f"- Policy fields observed: `{json.dumps(policy_fields, ensure_ascii=False, sort_keys=True) if policy_fields else 'none'}`\n")
 if not github_match:
