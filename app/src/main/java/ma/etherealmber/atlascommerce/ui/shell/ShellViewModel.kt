@@ -1,5 +1,8 @@
 package ma.etherealmber.atlascommerce.ui.shell
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import ma.etherealmber.atlascommerce.AtlasApp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,6 +33,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ShellViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     cartStore: CartStore,
     private val commerceRepository: CommerceRepository,
     private val sessionManager: SessionManager,
@@ -94,7 +98,9 @@ class ShellViewModel @Inject constructor(
             }
             val role = activeUser.role
             val username = activeUser.username
-            val language = preferences.appLanguage.first()
+            val app = appContext.applicationContext as AtlasApp
+            app.languageLoaded.first { it }
+            val language = app.activeLanguage.value
             val roleLabel = localizedNotificationRole(role, language)
 
             val rawAlerts = (commerceRepository.alerts() as? ApiResult.Success)?.data.orEmpty()

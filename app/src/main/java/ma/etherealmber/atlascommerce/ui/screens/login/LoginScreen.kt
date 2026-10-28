@@ -2,12 +2,14 @@ package ma.etherealmber.atlascommerce.ui.screens.login
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -51,6 +53,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -77,6 +83,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasBrandWordmark
@@ -98,6 +105,7 @@ fun LoginScreen(
     onCheckUpdates: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
     val state by viewModel.state.collectAsStateWithLifecycle()
     val server by viewModel.server.collectAsStateWithLifecycle()
     val savedAccounts by viewModel.savedAccounts.collectAsStateWithLifecycle()
@@ -162,6 +170,7 @@ fun LoginScreen(
                     compact = compact || keyboardVisible,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .then(if (motionEnabled) Modifier.animateContentSize() else Modifier)
                         .height(heroHeight),
                 )
 
@@ -338,6 +347,16 @@ private fun LoginAtlasHero(
 ) {
     val palette = Atlas.palette
     val horizontalDirection = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
+    var logoTaps by remember { mutableIntStateOf(0) }
+    var showSurprise by remember { mutableStateOf(false) }
+    if (showSurprise) {
+        AlertDialog(
+            onDismissRequest = { showSurprise = false },
+            title = { Text(atlasText("Bienvenue, explorateur !", "Welcome, explorer!", "مرحباً أيها المستكشف!")) },
+            text = { Text(atlasText("✨ Vous avez découvert une étoile Atlas.", "✨ You found an Atlas star.", "✨ لقد اكتشفت نجمة Atlas.")) },
+            confirmButton = { TextButton(onClick = { showSurprise = false }) { Text(atlasText("Fermer", "Close", "إغلاق")) } },
+        )
+    }
     Box(
         modifier = modifier.background(
             Brush.linearGradient(listOf(palette.heroStart, palette.heroEnd)),
@@ -391,7 +410,7 @@ private fun LoginAtlasHero(
         ) {
             AtlasEntrance(delayMillis = 0) {
                 AtlasBrandWordmark(
-                    modifier = Modifier.widthIn(max = 185.dp),
+                    modifier = Modifier.widthIn(max = 185.dp).clickable { logoTaps++; if (logoTaps >= 5) { logoTaps = 0; showSurprise = true } },
                     height = if (compact) 28.dp else 38.dp,
                     tint = Color.White,
                 )

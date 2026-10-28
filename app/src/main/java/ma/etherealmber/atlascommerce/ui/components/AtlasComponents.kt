@@ -1902,8 +1902,7 @@ fun AtlasBootSplashScreen(
     }
     LaunchedEffect(motionEnabled, holdUntilReady) {
         if (motionEnabled) {
-            barProgress.animateTo(1f, tween(durationMillis = 520, easing = FastOutSlowInEasing))
-            delay(90)
+            barProgress.animateTo(1f, tween(durationMillis = 280, easing = FastOutSlowInEasing))
         } else {
             delay(150)
         }
@@ -1940,7 +1939,7 @@ fun AtlasBootSplashScreen(
 
             Spacer(Modifier.height(24.dp))
             Text(
-                text = AppDetails.TAGLINE,
+                text = atlasText("Stock · Caisse · Facturation", "Inventory · Register · Invoicing", "المخزون · نقطة البيع · الفوترة"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -1948,6 +1947,15 @@ fun AtlasBootSplashScreen(
 
             Spacer(Modifier.height(28.dp))
 
+            if (holdUntilReady && !motionEnabled) {
+                Box(Modifier.width(176.dp).height(4.dp).clip(CircleShape).background(border))
+            } else if (holdUntilReady) {
+                androidx.compose.material3.LinearProgressIndicator(
+                    modifier = Modifier.width(176.dp).height(4.dp).clip(CircleShape),
+                    color = primary,
+                    trackColor = border,
+                )
+            } else {
             Box(
                 modifier = Modifier
                     .width(176.dp)
@@ -1962,6 +1970,7 @@ fun AtlasBootSplashScreen(
                         .clip(CircleShape)
                         .background(primary),
                 )
+            }
             }
 
             Spacer(Modifier.height(14.dp))

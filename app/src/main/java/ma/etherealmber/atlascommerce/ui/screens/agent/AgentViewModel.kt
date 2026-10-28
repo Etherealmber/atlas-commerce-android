@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 import ma.etherealmber.atlascommerce.core.AppLanguage
+import ma.etherealmber.atlascommerce.data.repo.AGENT_MAX_QUESTION_LENGTH
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.session.SessionManager
@@ -332,6 +333,10 @@ class AgentViewModel @Inject constructor(
         val clean = typed.ifBlank { if (attachments.isNotEmpty()) attachmentOnlyPrompt else "" }
         val snapshot = _state.value
         if (clean.isBlank() || snapshot.sending || snapshot.loadingThread) return
+        if (clean.length > AGENT_MAX_QUESTION_LENGTH) {
+            _state.update { it.copy(error = "Le message est trop long. Limitez-le à 1 800 caractères.") }
+            return
+        }
         if (!sensitiveConfirmed && (requiresSensitiveConfirmation(clean) || attachments.isNotEmpty())) {
             pendingSensitivePrompt = clean
             pendingSensitiveAttachments = attachments

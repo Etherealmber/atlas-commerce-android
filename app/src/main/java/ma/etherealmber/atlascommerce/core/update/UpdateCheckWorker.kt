@@ -27,7 +27,6 @@ import ma.etherealmber.atlascommerce.MainActivity
 import ma.etherealmber.atlascommerce.R
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
-import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.ui.i18n.notificationText
 import ma.etherealmber.atlascommerce.ui.i18n.localizeReleaseNotes
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -71,7 +70,9 @@ class UpdateCheckWorker(
             val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             if (latest.versionCode <= prefs.getInt(KEY_LAST_NOTIFIED_VERSION, 0)) return@withContext Result.success()
 
-            val language = AtlasPreferences(applicationContext).appLanguage.first()
+            val app = applicationContext as AtlasApp
+            app.languageLoaded.first { it }
+            val language = app.activeLanguage.value
             val titleVersion = latest.versionName?.takeIf { it.isNotBlank() } ?: "build ${latest.versionCode}"
             val intent = Intent(applicationContext, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP

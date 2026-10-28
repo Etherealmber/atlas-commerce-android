@@ -30,6 +30,14 @@ val LocalSetAtlasLanguage = staticCompositionLocalOf<(AppLanguage) -> Unit> { {}
 
 /** Reviewed French, English, and Arabic UI copy; unknown phrases intentionally remain unchanged. */
 private val commonTranslations = mapOf(
+    "La création de la passkey a été annulée." to ("Passkey creation was cancelled." to "تم إلغاء إنشاء مفتاح المرور."),
+    "Le serveur a changé. Recommencez la connexion par passkey." to ("The server changed. Start passkey sign-in again." to "تغيّر الخادم. أعد تسجيل الدخول بمفتاح المرور."),
+    "La session ou le serveur a changé. Recommencez l'enregistrement de la passkey." to ("The session or server changed. Start passkey registration again." to "تغيّرت الجلسة أو الخادم. أعد تسجيل مفتاح المرور."),
+    "Le message est trop long. Limitez-le à 1 800 caractères." to ("The message is too long. Limit it to 1,800 characters." to "الرسالة طويلة جداً. الحد الأقصى ١٨٠٠ حرف."),
+    "Votre session a expiré. Reconnectez-vous puis réessayez." to ("Your session expired. Sign in and try again." to "انتهت جلستك. سجّل الدخول ثم حاول مجدداً."),
+    "Le serveur refuse cette opération. Vérifiez vos autorisations." to ("The server denied this operation. Check your permissions." to "رفض الخادم هذه العملية. تحقّق من صلاحياتك."),
+    "Le serveur a signalé un conflit. Réessayez ou contactez l'administrateur." to ("The server reported a conflict. Try again or contact your administrator." to "أبلغ الخادم عن تعارض. حاول مجدداً أو اتصل بالمسؤول."),
+    "Le serveur n'a pas pu vérifier la passkey. Réessayez ou contactez l'administrateur." to ("The server could not verify the passkey. Try again or contact your administrator." to "تعذّر على الخادم التحقق من مفتاح المرور. حاول مجدداً أو اتصل بالمسؤول."),
     "BIENVENUE" to ("WELCOME" to "مرحباً"),
     "GOUVERNANCE & RÔLES" to ("GOVERNANCE & ROLES" to "الحوكمة والأدوار"),
     "SCANNER DE PRÉCISION" to ("PRECISION SCANNER" to "الماسح الدقيق"),

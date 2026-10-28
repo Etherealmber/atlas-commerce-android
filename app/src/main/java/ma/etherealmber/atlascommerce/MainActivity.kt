@@ -27,6 +27,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) (application as AtlasApp).prepareLanguageForFreshLaunch()
         deepLinkQrToken = extractQrFromIntent(intent)
         deepLinkVerify = extractVerifyFromIntent(intent)
         deepLinkServerOrigin = extractVerifyOriginFromIntent(intent)

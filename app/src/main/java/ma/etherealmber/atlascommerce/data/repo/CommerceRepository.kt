@@ -674,20 +674,13 @@ class CommerceRepository @Inject constructor(
         responseLanguage: AppLanguage,
     ): String {
         val isGreeting = Regex(
-            "^(bonjour|bonsoir|salut|hello|hi|hey|coucou|salam|bonne\\s*(journée|soirée)|merci)[\\s!.?]*$",
+            "^(bonjour|bonsoir|salut|hello|hi|hey|coucou|salam|مرحبا|مرحباً|السلام عليكم|شكرا|شكراً|bonne\\s*(journée|soirée)|merci)[\\s!.?]*$",
             RegexOption.IGNORE_CASE,
         ).matches(cleanQuestion)
         val snapshot = if (isGreeting) "" else {
             runCatching { buildLiveBusinessSnapshot(cleanQuestion, role, username) }.getOrDefault("")
         }
-        return buildString {
-            appendLine(responseLanguage.agentContextInstruction)
-            if (snapshot.isNotBlank()) appendLine(snapshot)
-            appendLine(
-                "[REPORT SCOPE] Live business data above is not a custom date-range report. Never infer or fabricate figures for dates not explicitly covered by that data. For a requested report period, say the actual report must be opened from the Balance/Reports screen; use only the server-generated report there.",
-            )
-            append("${responseLanguage.agentQuestionLabel}: $cleanQuestion")
-        }.take(2450)
+        return composeAgentPrompt(cleanQuestion, snapshot, responseLanguage)
     }
 
     private suspend fun buildLiveBusinessSnapshot(userQuestion: String, role: String?, username: String?): String = coroutineScope {
@@ -780,7 +773,7 @@ class CommerceRepository @Inject constructor(
             if (matched.isNotEmpty()) {
                 sb.appendLine(
                     "ProduitsCorrespondants : " + matched.joinToString(" | ") { p ->
-                        "${p.name} [SKU:${p.sku ?: "-"}, Qté:${AtlasFormat.quantity(p.stock)}, Prix:${AtlasFormat.money(p.price, cur)}]"
+                        "${p.name} [SKU:${p.sku ?: "-"}, Qté:${AtlasFormat.quantity(p.stock)}${if (canViewClientsAndInvoices) ", Prix:${AtlasFormat.money(p.price, cur)}" else ""}]"
                     },
                 )
             }
@@ -788,12 +781,12 @@ class CommerceRepository @Inject constructor(
             if (lowOrOut.isNotEmpty()) {
                 sb.appendLine(
                     "RupturesEtStockBas : " + lowOrOut.joinToString(" | ") { p ->
-                        "${p.name} (Qté:${AtlasFormat.quantity(p.stock)} / seuil:${AtlasFormat.quantity(p.lowStockThreshold)}, ${AtlasFormat.money(p.price, cur)})"
+                        "${p.name} (Qté:${AtlasFormat.quantity(p.stock)} / seuil:${AtlasFormat.quantity(p.lowStockThreshold)}${if (canViewClientsAndInvoices) ", ${AtlasFormat.money(p.price, cur)}" else ""})"
                     },
                 )
             } else {
                 sb.appendLine("CatalogueAperçu (${prods.size} réf.) : " + prods.take(5).joinToString(" | ") { p ->
-                    "${p.name} (Qté:${AtlasFormat.quantity(p.stock)}, ${AtlasFormat.money(p.price, cur)})"
+                    "${p.name} (Qté:${AtlasFormat.quantity(p.stock)}${if (canViewClientsAndInvoices) ", ${AtlasFormat.money(p.price, cur)}" else ""})"
                 })
             }
         }

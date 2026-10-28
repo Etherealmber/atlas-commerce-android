@@ -121,6 +121,8 @@ fun AtlasRoot(
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val densityMode by viewModel.densityMode.collectAsStateWithLifecycle()
     val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val languageRestartNotice by viewModel.languageRestartNotice.collectAsStateWithLifecycle()
+    val languageSaveFailed by viewModel.languageSaveFailed.collectAsStateWithLifecycle()
     val updateServer by viewModel.server.collectAsStateWithLifecycle()
     val appearanceLoaded by viewModel.appearanceLoaded.collectAsStateWithLifecycle()
     val animationsEnabled by viewModel.animationsEnabled.collectAsStateWithLifecycle()
@@ -150,6 +152,22 @@ fun AtlasRoot(
             LocalLayoutDirection provides if (appLanguage.isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr,
         ) {
             AtlasTheme(themeMode = themeMode, densityMode = densityMode) {
+                if (languageSaveFailed) {
+                    AlertDialog(
+                        onDismissRequest = viewModel::dismissLanguageSaveFailed,
+                        title = { Text(atlasText("Enregistrement impossible", "Could not save", "تعذّر الحفظ")) },
+                        text = { Text(atlasText("La langue n’a pas été enregistrée. Réessayez.", "The language was not saved. Try again.", "لم تُحفظ اللغة. حاول مجدداً.")) },
+                        confirmButton = { TextButton(onClick = viewModel::dismissLanguageSaveFailed) { Text(atlasText("Fermer", "Close", "إغلاق")) } },
+                    )
+                }
+                languageRestartNotice?.let { pending ->
+                    AlertDialog(
+                        onDismissRequest = viewModel::dismissLanguageRestartNotice,
+                        title = { Text(atlasText("Redémarrage nécessaire", "Restart required", "يلزم إعادة التشغيل")) },
+                        text = { Text(atlasText("Langue enregistrée : ${pending.nativeLabel}. Fermez complètement l’application, puis rouvrez-la pour appliquer le changement.", "Language saved: ${pending.nativeLabel}. Close the app completely, then reopen it to apply the change.", "تم حفظ اللغة: ${pending.nativeLabel}. أغلق التطبيق تماماً ثم أعد فتحه لتطبيق التغيير.")) },
+                        confirmButton = { TextButton(onClick = viewModel::dismissLanguageRestartNotice) { Text(atlasText("Compris", "OK", "حسناً")) } },
+                    )
+                }
                 val dark = LocalAtlasDarkTheme.current
                 val activity = LocalContext.current.findActivity()
                 val view = LocalView.current

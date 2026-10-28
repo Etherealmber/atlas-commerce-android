@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.theme
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 
 // ---------------------------------------------------------------------------
 // Brand palette — zinc / paper / saffron, matching the Atlas web app.
@@ -221,13 +224,31 @@ fun AtlasTheme(
         ThemeMode.DARK -> true
     }
     val compact = densityMode == DensityMode.COMPACT
+    val target = if (dark) darkColors() else lightColors()
+    val duration = if (LocalAtlasAnimationsEnabled.current) 260 else 0
+    val colors = target.copy(
+        primary = animateColorAsState(target.primary, tween(duration), label = "theme-primary").value,
+        onPrimary = animateColorAsState(target.onPrimary, tween(duration), label = "theme-on-primary").value,
+        primaryContainer = animateColorAsState(target.primaryContainer, tween(duration), label = "theme-primary-container").value,
+        onPrimaryContainer = animateColorAsState(target.onPrimaryContainer, tween(duration), label = "theme-on-primary-container").value,
+        background = animateColorAsState(target.background, tween(duration), label = "theme-background").value,
+        onBackground = animateColorAsState(target.onBackground, tween(duration), label = "theme-on-background").value,
+        surface = animateColorAsState(target.surface, tween(duration), label = "theme-surface").value,
+        onSurface = animateColorAsState(target.onSurface, tween(duration), label = "theme-on-surface").value,
+        surfaceVariant = animateColorAsState(target.surfaceVariant, tween(duration), label = "theme-surface-variant").value,
+        onSurfaceVariant = animateColorAsState(target.onSurfaceVariant, tween(duration), label = "theme-on-surface-variant").value,
+        surfaceContainerLow = animateColorAsState(target.surfaceContainerLow, tween(duration), label = "theme-container-low").value,
+        surfaceContainerHigh = animateColorAsState(target.surfaceContainerHigh, tween(duration), label = "theme-container-high").value,
+        outline = animateColorAsState(target.outline, tween(duration), label = "theme-outline").value,
+        outlineVariant = animateColorAsState(target.outlineVariant, tween(duration), label = "theme-outline-variant").value,
+    )
     CompositionLocalProvider(
         LocalAtlasPalette provides if (dark) DarkPalette else LightPalette,
         LocalAtlasDarkTheme provides dark,
         LocalAtlasDensity provides if (compact) CompactDensity else ComfortDensity,
     ) {
         MaterialTheme(
-            colorScheme = if (dark) darkColors() else lightColors(),
+            colorScheme = colors,
             shapes = atlasShapes(),
             typography = atlasTypography(compact),
             content = content,

@@ -13,7 +13,8 @@ import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -263,6 +264,7 @@ object AvatarBitmapCache {
         }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AtlasAvatar(
     avatarUrl: String?,
@@ -273,6 +275,8 @@ fun AtlasAvatar(
     borderColor: Color = MaterialTheme.colorScheme.outlineVariant,
     clickContentDescription: String? = null,
     onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    longClickLabel: String? = null,
 ) {
     val cleanUrl = avatarUrl?.trim().orEmpty()
     val cacheKey = remember(cleanUrl, serverBaseUrl) { "${serverBaseUrl.orEmpty()}|$cleanUrl" }
@@ -307,7 +311,7 @@ fun AtlasAvatar(
         .clip(CircleShape)
         .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
         .border(1.dp, borderColor, CircleShape)
-        .let { base -> if (onClick != null) base.clickable(onClick = onClick) else base }
+        .let { base -> if (onClick != null) base.combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = longClickLabel) else base }
 
     Box(
         modifier = boxModifier,
