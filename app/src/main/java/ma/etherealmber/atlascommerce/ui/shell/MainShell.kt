@@ -18,6 +18,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +52,9 @@ import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.HourglassBottom
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.AddComment
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -104,6 +109,8 @@ import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
+import ma.etherealmber.atlascommerce.ui.components.AtlasSurpriseDialog
+import ma.etherealmber.atlascommerce.ui.components.nextSurprise
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
@@ -115,6 +122,8 @@ import ma.etherealmber.atlascommerce.ui.screens.agent.AgentQuotaBarsContent
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationDestination
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationSuggestion
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentScreen
+import ma.etherealmber.atlascommerce.ui.screens.agent.AgentViewModel
+import ma.etherealmber.atlascommerce.ui.screens.agent.localizedAgentText
 import ma.etherealmber.atlascommerce.ui.screens.agent.AtlasAgentMascot
 import ma.etherealmber.atlascommerce.ui.screens.legal.ProblemReportDialog
 import ma.etherealmber.atlascommerce.ui.screens.balance.BalanceScreen
@@ -170,6 +179,7 @@ private fun MainTab.localizedLabel(): String = when (this) {
 
 private val BackStackTabs = setOf(MainTab.AGENT, MainTab.SALE, MainTab.PROFILE, MainTab.SETTINGS)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainShell(
     user: SessionUser,
@@ -190,6 +200,7 @@ fun MainShell(
     onOpenLicense: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenSnake: () -> Unit = {},
     onOpenDeveloperTools: () -> Unit = {},
     onSignOut: () -> Unit,
     onStartUpdateDownload: () -> Unit = {},
@@ -232,7 +243,12 @@ fun MainShell(
         else -> rawTab
     }
     val scope = rememberCoroutineScope()
+    var surpriseIndex by rememberSaveable(user.scopeIdentity) { mutableStateOf(-1) }
     var showAvatarSurprise by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
+    var showAgentSurprise by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
+    var agentHistoryRequested by remember { mutableStateOf(false) }
+    val agentViewModel: AgentViewModel? = if (tab == MainTab.AGENT) hiltViewModel() else null
+    val agentState = agentViewModel?.state?.collectAsStateWithLifecycle()?.value
     var showProblemReportDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showShakeReportPrompt by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showAgentQuotaDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
@@ -251,13 +267,8 @@ fun MainShell(
         onShake = { showShakeReportPrompt = true },
     )
 
-    if (showAvatarSurprise) {
-        AlertDialog(
-            onDismissRequest = { showAvatarSurprise = false },
-            title = { Text(atlasText("Une étoile pour vous", "A star for you", "نجمة لك")) },
-            text = { Text(atlasText("✨ Merci de faire partie de l’aventure Atlas !", "✨ Thanks for being part of the Atlas journey!", "✨ شكراً لكونك جزءاً من رحلة Atlas!")) },
-            confirmButton = { TextButton(onClick = { showAvatarSurprise = false }) { Text(atlasText("Fermer", "Close", "إغلاق")) } },
-        )
+    if (showAvatarSurprise || showAgentSurprise) {
+        AtlasSurpriseDialog(surpriseIndex) { showAvatarSurprise = false; showAgentSurprise = false }
     }
 
     if (showShakeReportPrompt) {
@@ -401,8 +412,22 @@ fun MainShell(
         topBar = {
             AtlasTopBar(
                 title = tab.localizedLabel(),
+                subtitle = agentState?.let { state ->
+                    val thread = localizedAgentText(state.activeThreadTitle.ifBlank { "Sans titre" }, atlasLanguage)
+                    val status = when {
+                        state.policy?.isExhausted == true -> atlasText("Quota atteint", "Quota reached", "تم بلوغ الحصة")
+                        state.status?.configured == true -> atlasText("Configuré", "Configured", "تم الإعداد")
+                        state.status?.configured == false -> atlasText("En pause", "Paused", "متوقف مؤقتًا")
+                        else -> atlasText("Vérification…", "Checking…", "جارٍ التحقق…")
+                    }
+                    listOf(thread, status).filter { it.isNotBlank() }.joinToString(" · ")
+                },
                 titleLeading = if (tab == MainTab.AGENT) {
-                    { AtlasAgentMascot(Modifier.size(28.dp)) }
+                    { AtlasAgentMascot(Modifier.size(32.dp).combinedClickable(
+                        onClick = {},
+                        onLongClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
+                        onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAgentSurprise = true },
+                    )) }
                 } else null,
                 onBack = when (tab) {
                     MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
@@ -421,6 +446,15 @@ fun MainShell(
                     }
                     when (tab) {
                         MainTab.AGENT -> {
+                            IconButton(onClick = { agentHistoryRequested = true }, modifier = Modifier.size(40.dp)) {
+                                Icon(Icons.Outlined.History, contentDescription = atlasText("Historique des discussions", "Conversation history", "سجل المحادثات"))
+                            }
+                            IconButton(onClick = { agentViewModel?.startNewConversation() }, modifier = Modifier.size(40.dp)) {
+                                Icon(Icons.Outlined.AddComment, contentDescription = atlasText("Nouvelle discussion", "New conversation", "محادثة جديدة"))
+                            }
+                            IconButton(onClick = { agentViewModel?.refreshContext() }, modifier = Modifier.size(40.dp)) {
+                                Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser le contexte", "Refresh context", "تحديث السياق"))
+                            }
                             IconButton(
                                 onClick = {
                                     showAgentQuotaDialog = true
@@ -475,7 +509,7 @@ fun MainShell(
                                     "فتح الملف الشخصي لـ ${user.displayName.ifBlank { user.username }}",
                                 ),
                                 onClick = { switchTab(MainTab.PROFILE) },
-                                onLongClick = { showAvatarSurprise = true },
+                                onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAvatarSurprise = true },
                                 longClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
                             )
                             Spacer(Modifier.width(10.dp))
@@ -561,6 +595,9 @@ fun MainShell(
                     MainTab.AGENT -> AgentScreen(
                         onToast = onToast,
                         onNavigate = navigateFromAgent,
+                        historyRequested = agentHistoryRequested,
+                        onHistoryHandled = { agentHistoryRequested = false },
+                        viewModel = agentViewModel ?: hiltViewModel(),
                         isActive = isForeground && tab == MainTab.AGENT && currentTab == MainTab.AGENT,
                     )
 
@@ -584,6 +621,7 @@ fun MainShell(
                         onOpenLicense = onOpenLicense,
                         onOpenSecurity = onOpenSecurity,
                         onOpenAbout = onOpenAbout,
+                        onOpenSnake = onOpenSnake,
                         onOpenDeveloperTools = onOpenDeveloperTools,
                         onSignOut = onSignOut,
                         onStartUpdateDownload = onStartUpdateDownload,

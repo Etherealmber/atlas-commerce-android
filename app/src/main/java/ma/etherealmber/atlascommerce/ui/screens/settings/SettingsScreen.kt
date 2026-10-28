@@ -44,6 +44,7 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Logout
@@ -659,6 +660,7 @@ fun SettingsScreen(
     onOpenLicense: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenSnake: () -> Unit = {},
     onOpenDeveloperTools: () -> Unit = {},
     onSignOut: () -> Unit,
     onToast: (String) -> Unit,
@@ -1295,6 +1297,15 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+
+        AtlasCard(padding = 4.dp) {
+            SettingsRow(
+                icon = Icons.Outlined.SportsEsports,
+                title = atlasText("Snake Atlas", "Atlas Snake", "ثعبان Atlas"),
+                subtitle = atlasText("Un jeu disponible hors ligne", "A game you can play offline", "لعبة متاحة دون اتصال"),
+                onClick = onOpenSnake,
+            )
         }
 
         // 6. Security, License & About
