@@ -462,14 +462,14 @@ jobs:
           [ -z "$REPO_BASE_URL" ] && REPO_BASE_URL="https://github.com/${GITHUB_REPOSITORY}"
           CDN1_BASE="${INPUT_CDN_URL%/}"
           [ -z "$CDN1_BASE" ] && CDN1_BASE="${DEFAULT_CDN_VAR%/}"
-          # Add a per-build query token so a previously cached 404 cannot mask the new R2 object.
-          CDN1_VERSIONED_URL="${CDN1_BASE%/}/atlas-commerce-${TAG}.apk?v=${VERSION_CODE}"
+          # Keep one stable CDN object key; the query token defeats a cached response after overwrite.
+          CDN1_LATEST_URL="${CDN1_BASE%/}/latest.apk?v=${VERSION_CODE}"
           GITHUB_VERSIONED_URL="${REPO_BASE_URL%/}/releases/download/${TAG}/atlas-commerce.apk"
-          PRIMARY_APK_URL="${INPUT_DOWNLOAD_URL:-$CDN1_VERSIONED_URL}"
+          PRIMARY_APK_URL="${INPUT_DOWNLOAD_URL:-$CDN1_LATEST_URL}"
 
           SHA256="$SHA256" SIZE_BYTES="$SIZE_BYTES" MANDATORY="$MANDATORY" \
           REPO_BASE_URL="$REPO_BASE_URL" \
-          CDN1_VERSIONED_URL="$CDN1_VERSIONED_URL" GITHUB_VERSIONED_URL="$GITHUB_VERSIONED_URL" \
+          CDN1_LATEST_URL="$CDN1_LATEST_URL" GITHUB_VERSIONED_URL="$GITHUB_VERSIONED_URL" \
           PRIMARY_APK_URL="$PRIMARY_APK_URL" PUBLISHED_AT="$PUBLISHED_AT" python3 - <<'PYEOF'
           import base64, json, os, re, subprocess
 
@@ -482,7 +482,7 @@ jobs:
           size_bytes = int(os.environ["SIZE_BYTES"])
           size_mb = size_bytes / (1024 * 1024)
           mandatory = os.environ.get("MANDATORY", "false").lower() == "true"
-          cdn1_url = os.environ["CDN1_VERSIONED_URL"].strip()
+          cdn1_url = os.environ["CDN1_LATEST_URL"].strip()
           github_url = os.environ["GITHUB_VERSIONED_URL"].strip()
           primary_url = os.environ["PRIMARY_APK_URL"].strip() or cdn1_url
           published_at = os.environ["PUBLISHED_AT"].strip()
@@ -593,7 +593,7 @@ jobs:
               f"- **Version :** `{tag}` (`versionCode = {version_code}`)",
               f"- **Taille :** `{size_mb:.2f} Mo`",
               f"- **SHA-256 :** `{sha256}`",
-              f"- **Téléchargement :** [atlas-commerce-{tag}.apk]({primary_url})",
+              f"- **Téléchargement :** [latest.apk]({primary_url})",
               f"- **Miroir GitHub :** [atlas-commerce.apk]({github_url})",
           ]
           if prev_tag:
@@ -822,9 +822,7 @@ jobs:
           prefix = urllib.parse.urlparse(cdn_base).path.strip("/")
           if not prefix:
               raise SystemExit("CDN base URL has no R2 object prefix; refusing to guess the public key path.")
-          version_tag = f"v{version_name}"
           objects = (
-              (f"{prefix}/atlas-commerce-{version_tag}.apk", Path("signed-apk/atlas-commerce.apk"), "application/vnd.android.package-archive", "public, max-age=31536000, immutable"),
               (f"{prefix}/latest.apk", Path("signed-apk/atlas-commerce.apk"), "application/vnd.android.package-archive", "public, max-age=0, no-cache, must-revalidate"),
               (f"{prefix}/latest.json", manifest_path, "application/json", "public, max-age=0, no-cache, must-revalidate"),
           )

@@ -122,11 +122,17 @@ if apk_url:
         apk_probe_error = str(e)
 cdn_apk_exists = apk_status_code is not None and 200 <= apk_status_code < 300
 apk_cache_normalized = apk_cache_control.lower().replace(" ", "")
-apk_path = urlsplit(apk_url).path.lower()
-versioned_cdn_apk = apk_url.startswith(cdn_base + "/") and "-v" in apk_path and apk_path.endswith(".apk")
-versioned_apk_cache_control_ok = (
-    not versioned_cdn_apk
-    or ("immutable" in apk_cache_normalized and "max-age=31536000" in apk_cache_normalized)
+cdn_parts = urlsplit(cdn_base)
+apk_parts = urlsplit(apk_url)
+expected_latest_path = f"{cdn_parts.path.rstrip('/')}/latest.apk"
+cdn_latest_apk_path_ok = (
+    apk_parts.scheme == cdn_parts.scheme
+    and apk_parts.netloc == cdn_parts.netloc
+    and apk_parts.path == expected_latest_path
+)
+latest_apk_cache_control_ok = all(
+    directive in apk_cache_normalized
+    for directive in ("no-cache", "max-age=0", "must-revalidate")
 )
 
 with open("signed-apk/publish-status.json", "w", encoding="utf-8") as fh:
@@ -148,8 +154,9 @@ with open("signed-apk/publish-status.json", "w", encoding="utf-8") as fh:
         "publicCdnApkExists": cdn_apk_exists,
         "publicCdnApkStatusCode": apk_status_code,
         "publicCdnApkProbeError": apk_probe_error,
-        "versionedApkCacheControl": apk_cache_control,
-        "versionedApkCacheControlImmutable": versioned_apk_cache_control_ok,
+        "cdnLatestApkPath": cdn_latest_apk_path_ok,
+        "latestApkCacheControl": apk_cache_control,
+        "latestApkCacheControlSafe": latest_apk_cache_control_ok,
         "cfWafBlocked": os.environ.get("CF_WAF_BLOCKED") == "true",
         "liveCdnLatestJson": live_cdn,
     }, fh, ensure_ascii=False, indent=2)
@@ -165,7 +172,8 @@ if summary_path:
         summary.write(f"- Minimum-version policy fields present: `{minimum_policy_present}`\n")
         summary.write(f"- Manifest cache headers safe: `{manifest_cache_control_ok}` (`{cdn_cache_control or 'missing'}`)\n")
         summary.write(f"- Referenced CDN APK exists: `{cdn_apk_exists}` ({apk_status_code or 'no status'}; `{apk_url or 'no apkUrl'}`)\n")
-        summary.write(f"- Versioned APK immutable cache headers: `{versioned_apk_cache_control_ok}` (`{apk_cache_control or 'missing'}`)\n")
+        summary.write(f"- CDN APK is the stable latest.apk object: `{cdn_latest_apk_path_ok}`\n")
+        summary.write(f"- latest.apk cache headers are revalidated: `{latest_apk_cache_control_ok}` (`{apk_cache_control or 'missing'}`)\n")
         summary.write(f"- Policy fields observed: `{json.dumps(policy_fields, ensure_ascii=False, sort_keys=True) if policy_fields else 'none'}`\n")
 if not github_match:
     print("::error::GitHub Release latest.json does not match the published release version/build.")
@@ -178,12 +186,14 @@ if (
     or not minimum_policy_present
     or not manifest_cache_control_ok
     or not cdn_apk_exists
-    or not versioned_apk_cache_control_ok
+    or not cdn_latest_apk_path_ok
+    or not latest_apk_cache_control_ok
 ):
     print(
         "::error::Public CDN publication is incomplete: "
         f"version_match={public_match}, policy_fields={minimum_policy_present}, "
         f"manifest_no_cache={manifest_cache_control_ok}, apk_exists={cdn_apk_exists}, "
-        f"versioned_apk_immutable={versioned_apk_cache_control_ok}."
+        f"latest_apk_path={cdn_latest_apk_path_ok}, "
+        f"latest_apk_cache_safe={latest_apk_cache_control_ok}."
     )
     raise SystemExit(1)
