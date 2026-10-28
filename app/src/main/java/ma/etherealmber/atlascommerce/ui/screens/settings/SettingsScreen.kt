@@ -738,28 +738,23 @@ fun SettingsScreen(
         }
     }
 
+    val shareAppMessage = atlasText(
+        "Découvrez Atlas Commerce : https://stock.afmarbre.com/download",
+        "Try Atlas Commerce: https://stock.afmarbre.com/download",
+        "جرّب Atlas Commerce: https://stock.afmarbre.com/download",
+    )
+    val shareChooserTitle = atlasText("Partager Atlas Commerce", "Share Atlas Commerce", "مشاركة Atlas Commerce")
+    val shareFailedMessage = atlasText("Impossible d'ouvrir le partage.", "Could not open sharing.", "تعذّر فتح المشاركة.")
     val shareApp: () -> Unit = {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_SUBJECT, "Atlas Commerce")
-            putExtra(
-                Intent.EXTRA_TEXT,
-                atlasText(
-                    "Découvrez Atlas Commerce : https://stock.afmarbre.com/download",
-                    "Try Atlas Commerce: https://stock.afmarbre.com/download",
-                    "جرّب Atlas Commerce: https://stock.afmarbre.com/download",
-                ),
-            )
+            putExtra(Intent.EXTRA_TEXT, shareAppMessage)
         }
         runCatching {
-            context.startActivity(
-                Intent.createChooser(
-                    shareIntent,
-                    atlasText("Partager Atlas Commerce", "Share Atlas Commerce", "مشاركة Atlas Commerce"),
-                ),
-            )
+            context.startActivity(Intent.createChooser(shareIntent, shareChooserTitle))
         }.onFailure {
-            onToast(atlasText("Impossible d'ouvrir le partage.", "Could not open sharing.", "تعذّر فتح المشاركة."))
+            onToast(shareFailedMessage)
         }
     }
 
