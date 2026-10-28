@@ -55,6 +55,7 @@ import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -696,9 +697,9 @@ fun SettingsScreen(
     val automaticCrashReportsEnabled by appViewModel.automaticCrashReportsEnabled.collectAsStateWithLifecycle()
     val automaticCrashReportsAvailable by appViewModel.automaticCrashReportsAvailable.collectAsStateWithLifecycle()
     val crashReportsUnavailableToast = atlasText(
-        "Crashlytics n'est pas configuré pour cette version.",
-        "Crashlytics is not configured for this build.",
-        "لم يتم إعداد Crashlytics لهذا الإصدار.",
+        "Impossible d'activer Crashlytics dans cette version.",
+        "Could not enable Crashlytics in this build.",
+        "تعذّر تفعيل Crashlytics في هذا الإصدار.",
     )
     val crashReportsEnabledToast = atlasText(
         "Rapports de plantage activés.",
@@ -734,6 +735,31 @@ fun SettingsScreen(
             } else {
                 onToast("Mode développeur désactivé.")
             }
+        }
+    }
+
+    val shareApp: () -> Unit = {
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "Atlas Commerce")
+            putExtra(
+                Intent.EXTRA_TEXT,
+                atlasText(
+                    "Découvrez Atlas Commerce : https://stock.afmarbre.com/download",
+                    "Try Atlas Commerce: https://stock.afmarbre.com/download",
+                    "جرّب Atlas Commerce: https://stock.afmarbre.com/download",
+                ),
+            )
+        }
+        runCatching {
+            context.startActivity(
+                Intent.createChooser(
+                    shareIntent,
+                    atlasText("Partager Atlas Commerce", "Share Atlas Commerce", "مشاركة Atlas Commerce"),
+                ),
+            )
+        }.onFailure {
+            onToast(atlasText("Impossible d'ouvrir le partage.", "Could not open sharing.", "تعذّر فتح المشاركة."))
         }
     }
 
@@ -1153,12 +1179,35 @@ fun SettingsScreen(
                     },
                 )
                 AtlasDivider(Modifier.padding(vertical = 8.dp))
+            } else {
+                Text(
+                    text = atlasText(
+                        "Les rapports automatiques ne sont pas configurés pour cette version.",
+                        "Automatic crash reports are not configured for this build.",
+                        "تقارير الأعطال التلقائية غير مهيأة لهذا الإصدار.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                )
+                AtlasDivider(Modifier.padding(vertical = 8.dp))
             }
             SettingsRow(
                 icon = Icons.Outlined.AutoAwesomeMotion,
                 title = atlasText("Revoir l'écran de bienvenue", "Replay the welcome screen", "إعادة عرض شاشة الترحيب"),
                 subtitle = atlasText("Relancer la présentation animée d'Atlas Commerce", "Replay the Atlas Commerce introduction", "إعادة عرض مقدمة Atlas Commerce"),
                 onClick = { appViewModel.replayOnboarding() },
+            )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            SettingsRow(
+                icon = Icons.Outlined.Share,
+                title = atlasText("Partager Atlas Commerce", "Share Atlas Commerce", "مشاركة Atlas Commerce"),
+                subtitle = atlasText(
+                    "Invitez vos amis à télécharger l'application.",
+                    "Invite your friends to download the app.",
+                    "ادعُ أصدقاءك لتنزيل التطبيق.",
+                ),
+                onClick = shareApp,
             )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsRow(

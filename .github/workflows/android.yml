@@ -462,8 +462,8 @@ jobs:
           [ -z "$REPO_BASE_URL" ] && REPO_BASE_URL="https://github.com/${GITHUB_REPOSITORY}"
           CDN1_BASE="${INPUT_CDN_URL%/}"
           [ -z "$CDN1_BASE" ] && CDN1_BASE="${DEFAULT_CDN_VAR%/}"
-          # Keep one stable CDN object key; the query token defeats a cached response after overwrite.
-          CDN1_LATEST_URL="${CDN1_BASE%/}/latest.apk?v=${VERSION_CODE}"
+          # Keep the manifest URL identical to the stable object key; revalidation is enforced by Cache-Control.
+          CDN1_LATEST_URL="${CDN1_BASE%/}/latest.apk"
           GITHUB_VERSIONED_URL="${REPO_BASE_URL%/}/releases/download/${TAG}/atlas-commerce.apk"
           PRIMARY_APK_URL="${INPUT_DOWNLOAD_URL:-$CDN1_LATEST_URL}"
 
