@@ -21,6 +21,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.AlertDialog
@@ -720,6 +721,12 @@ private fun AtlasGate(
     if (activeUser != null && !sessionUnlocked) {
         val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
         val deviceLockSet = keyguard?.isDeviceSecure == true
+        val deviceCredentialTitle = atlasText("Déverrouiller Atlas", "Unlock Atlas", "إلغاء قفل Atlas")
+        val deviceCredentialDescription = atlasText(
+            "Saisissez le code de verrouillage de votre appareil.",
+            "Enter your device screen-lock code.",
+            "أدخل رمز قفل شاشة جهازك.",
+        )
         DeviceCredentialGate(
             accountName = activeUser.displayName.ifBlank { activeUser.username },
             deviceLockSet = deviceLockSet,
@@ -731,8 +738,8 @@ private fun AtlasGate(
                         keyguard?.let { manager ->
                             createDeviceCredentialIntent(
                                 manager,
-                                atlasText("Déverrouiller Atlas", "Unlock Atlas", "إلغاء قفل Atlas"),
-                                atlasText("Saisissez le code de verrouillage de votre appareil.", "Enter your device screen-lock code.", "أدخل رمز قفل شاشة جهازك."),
+                                deviceCredentialTitle,
+                                deviceCredentialDescription,
                             )
                         }
                     }.getOrNull()
