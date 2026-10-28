@@ -159,7 +159,9 @@ public final class LegacySourceQuarantine {
             "test/java/ma/etherealmber/atlascommerce/ServerUrlTest.kt",
             "test/java/ma/etherealmber/atlascommerce/SnakeGameTest.kt",
             "test/java/ma/etherealmber/atlascommerce/WebAuthnCapabilityTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/core/net/AtlasVersionHeadersTest.kt"
+            "test/java/ma/etherealmber/atlascommerce/core/diagnostics/CrashBreadcrumbPersistenceTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/core/net/AtlasVersionHeadersTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/ui/root/AppResumeRefreshPolicyTest.kt"
         ))
     );
 

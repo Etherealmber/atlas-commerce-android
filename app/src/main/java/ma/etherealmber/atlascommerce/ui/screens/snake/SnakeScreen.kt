@@ -23,8 +23,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -48,7 +46,7 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
     var running by remember { mutableStateOf(false) }
     LaunchedEffect(running, pausedByPrompt, game.over, foreground, isActive) {
         while (running && !pausedByPrompt && !game.over && foreground && isActive) {
-            delay(180)
+            delay(240)
             game = game.step()
         }
     }
@@ -64,7 +62,6 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
             Text(atlasText("Score : ${game.score}", "Score: ${game.score}", "النتيجة: ${game.score}"), style = MaterialTheme.typography.titleMedium)
             val snakeColor = MaterialTheme.colorScheme.primary
             val boardColor = MaterialTheme.colorScheme.surfaceVariant
-            val layoutDirection = LocalLayoutDirection.current
             BoxWithConstraints(Modifier.widthIn(max = 440.dp).fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(20.dp)).background(boardColor)
                 .pointerInput(Unit) {
                     var drag = Offset.Zero
@@ -85,9 +82,21 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                             topLeft = Offset(point.x * side + 1f, point.y * side + 1f), size = Size(side - 2f, side - 2f), cornerRadius = CornerRadius(side * 0.24f))
                     }
                 }
-                Icon(painterResource(R.drawable.ic_launcher_foreground),
-                    contentDescription = atlasText("Logo Atlas à collecter", "Atlas logo to collect", "شعار Atlas للجمع"), tint = snakeColor,
-                    modifier = Modifier.align(Alignment.TopStart).absoluteOffset(x = if (layoutDirection == LayoutDirection.Rtl) cell * (game.food.x - (BOARD_SIZE - 1)) else cell * game.food.x, y = cell * game.food.y).size(cell))
+                Surface(
+                    modifier = Modifier.align(Alignment.TopStart).absoluteOffset(
+                        x = cell * game.food.x + cell * 0.09f,
+                        y = cell * game.food.y + cell * 0.09f,
+                    ).size(cell * 0.82f),
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_launcher_foreground),
+                        contentDescription = atlasText("Logo Atlas à collecter", "Atlas logo to collect", "شعار Atlas للجمع"),
+                        modifier = Modifier.padding(cell * 0.16f),
+                    )
+                }
             }
             if (game.over) Text(if (game.won) atlasText("Bravo, plateau rempli !", "You filled the board!", "أحسنت، امتلأت اللوحة!") else atlasText("Partie terminée", "Game over", "انتهت اللعبة"), color = MaterialTheme.colorScheme.error)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -97,11 +106,27 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                 OutlinedButton(onClick = { game = SnakeState(); running = false }) { Text(atlasText("Recommencer", "Restart", "إعادة البدء")) }
             }
             Text(atlasText("Balayez ou utilisez les flèches.", "Swipe or use the arrows.", "اسحب أو استخدم الأسهم."), style = MaterialTheme.typography.bodySmall)
-            IconButton(onClick = { game = game.turn(Direction.UP) }) { Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = atlasText("Haut", "Up", "أعلى")) }
-            Row(horizontalArrangement = Arrangement.spacedBy(36.dp)) {
-                IconButton(onClick = { game = game.turn(Direction.LEFT) }) { Icon(Icons.Outlined.KeyboardArrowLeft, contentDescription = atlasText("Gauche", "Left", "يسار")) }
-                IconButton(onClick = { game = game.turn(Direction.DOWN) }) { Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = atlasText("Bas", "Down", "أسفل")) }
-                IconButton(onClick = { game = game.turn(Direction.RIGHT) }) { Icon(Icons.Outlined.KeyboardArrowRight, contentDescription = atlasText("Droite", "Right", "يمين")) }
+            FilledTonalIconButton(
+                onClick = { game = game.turn(Direction.UP) },
+                modifier = Modifier.size(64.dp),
+                enabled = !pausedByPrompt && !game.over,
+            ) { Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = atlasText("Haut", "Up", "أعلى"), modifier = Modifier.size(36.dp)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalIconButton(
+                    onClick = { game = game.turn(Direction.LEFT) },
+                    modifier = Modifier.size(64.dp),
+                    enabled = !pausedByPrompt && !game.over,
+                ) { Icon(Icons.Outlined.KeyboardArrowLeft, contentDescription = atlasText("Gauche", "Left", "يسار"), modifier = Modifier.size(36.dp)) }
+                FilledTonalIconButton(
+                    onClick = { game = game.turn(Direction.DOWN) },
+                    modifier = Modifier.size(64.dp),
+                    enabled = !pausedByPrompt && !game.over,
+                ) { Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = atlasText("Bas", "Down", "أسفل"), modifier = Modifier.size(36.dp)) }
+                FilledTonalIconButton(
+                    onClick = { game = game.turn(Direction.RIGHT) },
+                    modifier = Modifier.size(64.dp),
+                    enabled = !pausedByPrompt && !game.over,
+                ) { Icon(Icons.Outlined.KeyboardArrowRight, contentDescription = atlasText("Droite", "Right", "يمين"), modifier = Modifier.size(36.dp)) }
             }
         }
     }

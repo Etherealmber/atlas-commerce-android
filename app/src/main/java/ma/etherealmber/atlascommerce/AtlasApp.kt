@@ -25,6 +25,11 @@ class AtlasApp : Application() {
     private val _languageLoaded = MutableStateFlow(false)
     val languageLoaded = _languageLoaded.asStateFlow()
 
+    /** Applies a saved language only after the user explicitly chooses Restart now. */
+    fun activateSavedLanguage(language: AppLanguage) {
+        _activeLanguage.value = language
+    }
+
     private val startupIoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {

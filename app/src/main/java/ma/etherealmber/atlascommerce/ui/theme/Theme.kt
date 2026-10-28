@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.theme
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -225,25 +226,63 @@ fun AtlasTheme(
     }
     val compact = densityMode == DensityMode.COMPACT
     val target = if (dark) darkColors() else lightColors()
-    val duration = if (LocalAtlasAnimationsEnabled.current) 260 else 0
+    val paletteTarget = if (dark) DarkPalette else LightPalette
+    val duration = if (LocalAtlasAnimationsEnabled.current) 520 else 0
+    val colorSpec = tween<Color>(durationMillis = duration, easing = FastOutSlowInEasing)
     val colors = target.copy(
-        primary = animateColorAsState(target.primary, tween(duration), label = "theme-primary").value,
-        onPrimary = animateColorAsState(target.onPrimary, tween(duration), label = "theme-on-primary").value,
-        primaryContainer = animateColorAsState(target.primaryContainer, tween(duration), label = "theme-primary-container").value,
-        onPrimaryContainer = animateColorAsState(target.onPrimaryContainer, tween(duration), label = "theme-on-primary-container").value,
-        background = animateColorAsState(target.background, tween(duration), label = "theme-background").value,
-        onBackground = animateColorAsState(target.onBackground, tween(duration), label = "theme-on-background").value,
-        surface = animateColorAsState(target.surface, tween(duration), label = "theme-surface").value,
-        onSurface = animateColorAsState(target.onSurface, tween(duration), label = "theme-on-surface").value,
-        surfaceVariant = animateColorAsState(target.surfaceVariant, tween(duration), label = "theme-surface-variant").value,
-        onSurfaceVariant = animateColorAsState(target.onSurfaceVariant, tween(duration), label = "theme-on-surface-variant").value,
-        surfaceContainerLow = animateColorAsState(target.surfaceContainerLow, tween(duration), label = "theme-container-low").value,
-        surfaceContainerHigh = animateColorAsState(target.surfaceContainerHigh, tween(duration), label = "theme-container-high").value,
-        outline = animateColorAsState(target.outline, tween(duration), label = "theme-outline").value,
-        outlineVariant = animateColorAsState(target.outlineVariant, tween(duration), label = "theme-outline-variant").value,
+        primary = animateColorAsState(target.primary, colorSpec, label = "theme-primary").value,
+        onPrimary = animateColorAsState(target.onPrimary, colorSpec, label = "theme-on-primary").value,
+        primaryContainer = animateColorAsState(target.primaryContainer, colorSpec, label = "theme-primary-container").value,
+        onPrimaryContainer = animateColorAsState(target.onPrimaryContainer, colorSpec, label = "theme-on-primary-container").value,
+        secondary = animateColorAsState(target.secondary, colorSpec, label = "theme-secondary").value,
+        onSecondary = animateColorAsState(target.onSecondary, colorSpec, label = "theme-on-secondary").value,
+        secondaryContainer = animateColorAsState(target.secondaryContainer, colorSpec, label = "theme-secondary-container").value,
+        onSecondaryContainer = animateColorAsState(target.onSecondaryContainer, colorSpec, label = "theme-on-secondary-container").value,
+        tertiary = animateColorAsState(target.tertiary, colorSpec, label = "theme-tertiary").value,
+        onTertiary = animateColorAsState(target.onTertiary, colorSpec, label = "theme-on-tertiary").value,
+        background = animateColorAsState(target.background, colorSpec, label = "theme-background").value,
+        onBackground = animateColorAsState(target.onBackground, colorSpec, label = "theme-on-background").value,
+        surface = animateColorAsState(target.surface, colorSpec, label = "theme-surface").value,
+        onSurface = animateColorAsState(target.onSurface, colorSpec, label = "theme-on-surface").value,
+        surfaceVariant = animateColorAsState(target.surfaceVariant, colorSpec, label = "theme-surface-variant").value,
+        onSurfaceVariant = animateColorAsState(target.onSurfaceVariant, colorSpec, label = "theme-on-surface-variant").value,
+        surfaceTint = animateColorAsState(target.surfaceTint, colorSpec, label = "theme-surface-tint").value,
+        surfaceDim = animateColorAsState(target.surfaceDim, colorSpec, label = "theme-surface-dim").value,
+        surfaceBright = animateColorAsState(target.surfaceBright, colorSpec, label = "theme-surface-bright").value,
+        surfaceContainerLowest = animateColorAsState(target.surfaceContainerLowest, colorSpec, label = "theme-container-lowest").value,
+        surfaceContainerLow = animateColorAsState(target.surfaceContainerLow, colorSpec, label = "theme-container-low").value,
+        surfaceContainer = animateColorAsState(target.surfaceContainer, colorSpec, label = "theme-container").value,
+        surfaceContainerHigh = animateColorAsState(target.surfaceContainerHigh, colorSpec, label = "theme-container-high").value,
+        surfaceContainerHighest = animateColorAsState(target.surfaceContainerHighest, colorSpec, label = "theme-container-highest").value,
+        inverseSurface = animateColorAsState(target.inverseSurface, colorSpec, label = "theme-inverse-surface").value,
+        inverseOnSurface = animateColorAsState(target.inverseOnSurface, colorSpec, label = "theme-inverse-on-surface").value,
+        inversePrimary = animateColorAsState(target.inversePrimary, colorSpec, label = "theme-inverse-primary").value,
+        outline = animateColorAsState(target.outline, colorSpec, label = "theme-outline").value,
+        outlineVariant = animateColorAsState(target.outlineVariant, colorSpec, label = "theme-outline-variant").value,
+        error = animateColorAsState(target.error, colorSpec, label = "theme-error").value,
+        onError = animateColorAsState(target.onError, colorSpec, label = "theme-on-error").value,
+        errorContainer = animateColorAsState(target.errorContainer, colorSpec, label = "theme-error-container").value,
+        onErrorContainer = animateColorAsState(target.onErrorContainer, colorSpec, label = "theme-on-error-container").value,
+        scrim = animateColorAsState(target.scrim, colorSpec, label = "theme-scrim").value,
+    )
+    val palette = paletteTarget.copy(
+        positive = animateColorAsState(paletteTarget.positive, colorSpec, label = "palette-positive").value,
+        positiveSoft = animateColorAsState(paletteTarget.positiveSoft, colorSpec, label = "palette-positive-soft").value,
+        warning = animateColorAsState(paletteTarget.warning, colorSpec, label = "palette-warning").value,
+        warningSoft = animateColorAsState(paletteTarget.warningSoft, colorSpec, label = "palette-warning-soft").value,
+        danger = animateColorAsState(paletteTarget.danger, colorSpec, label = "palette-danger").value,
+        dangerSoft = animateColorAsState(paletteTarget.dangerSoft, colorSpec, label = "palette-danger-soft").value,
+        info = animateColorAsState(paletteTarget.info, colorSpec, label = "palette-info").value,
+        infoSoft = animateColorAsState(paletteTarget.infoSoft, colorSpec, label = "palette-info-soft").value,
+        markFace = animateColorAsState(paletteTarget.markFace, colorSpec, label = "palette-mark-face").value,
+        markInk = animateColorAsState(paletteTarget.markInk, colorSpec, label = "palette-mark-ink").value,
+        cardBorder = animateColorAsState(paletteTarget.cardBorder, colorSpec, label = "palette-card-border").value,
+        mutedText = animateColorAsState(paletteTarget.mutedText, colorSpec, label = "palette-muted").value,
+        heroStart = animateColorAsState(paletteTarget.heroStart, colorSpec, label = "palette-hero-start").value,
+        heroEnd = animateColorAsState(paletteTarget.heroEnd, colorSpec, label = "palette-hero-end").value,
     )
     CompositionLocalProvider(
-        LocalAtlasPalette provides if (dark) DarkPalette else LightPalette,
+        LocalAtlasPalette provides palette,
         LocalAtlasDarkTheme provides dark,
         LocalAtlasDensity provides if (compact) CompactDensity else ComfortDensity,
     ) {

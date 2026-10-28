@@ -21,8 +21,23 @@ class SnakeGameTest {
         assertTrue(state.food.y in 0 until BOARD_SIZE)
     }
 
-    @Test fun wallsAndSelfCollisionEndGame() {
-        assertTrue(SnakeState(body = listOf(Cell(BOARD_SIZE - 1, 5))).step().over)
+    @Test fun edgesWrapAndSelfCollisionEndsGame() {
+        val rightEdge = SnakeState(body = listOf(Cell(BOARD_SIZE - 1, 5))).step()
+        assertFalse(rightEdge.over)
+        assertEquals(Cell(0, 5), rightEdge.body.first())
+
+        val leftEdge = SnakeState(body = listOf(Cell(0, 5)), direction = Direction.LEFT, queued = Direction.LEFT).step()
+        assertFalse(leftEdge.over)
+        assertEquals(Cell(BOARD_SIZE - 1, 5), leftEdge.body.first())
+
+        val topEdge = SnakeState(body = listOf(Cell(5, 0)), direction = Direction.UP, queued = Direction.UP).step()
+        assertFalse(topEdge.over)
+        assertEquals(Cell(5, BOARD_SIZE - 1), topEdge.body.first())
+
+        val bottomEdge = SnakeState(body = listOf(Cell(5, BOARD_SIZE - 1)), direction = Direction.DOWN, queued = Direction.DOWN).step()
+        assertFalse(bottomEdge.over)
+        assertEquals(Cell(5, 0), bottomEdge.body.first())
+
         val state = SnakeState(body = listOf(Cell(4, 4), Cell(4, 5), Cell(5, 5), Cell(5, 4), Cell(6, 4)))
         assertTrue(state.step().over)
     }

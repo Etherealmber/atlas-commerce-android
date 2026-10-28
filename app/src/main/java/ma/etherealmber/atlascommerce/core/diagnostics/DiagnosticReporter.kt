@@ -21,8 +21,11 @@ import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.Roles
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.io.PrintWriter
 import java.io.StringWriter
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.text.SimpleDateFormat
 import java.util.ArrayDeque
 import java.util.Date
@@ -87,7 +90,7 @@ object AtlasLogBuffer {
     fun recentEntries(): List<String> = synchronized(entries) { entries.toList() }
 
     fun installCrashBreadcrumbHandler(context: Context) {
-        val crashFile = File(File(context.cacheDir, "diagnostics"), CRASH_FILE_NAME)
+        val crashFile = crashBreadcrumbFile(context)
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             runCatching {
@@ -96,15 +99,27 @@ object AtlasLogBuffer {
                 val stamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
                     timeZone = TimeZone.getTimeZone("UTC")
                 }.format(Date())
+                val recentEvents = recentEntries().takeLast(40).joinToString("\n") { sanitize(it) }.takeLast(1_800)
                 val text = buildString {
                     appendLine("[$stamp] Uncaught exception on thread '${thread.name}':")
-                    append(sanitize(sw.toString()).take(8_000))
-                }
-                crashFile.parentFile?.mkdirs()
-                crashFile.writeText(text, Charsets.UTF_8)
+                    appendLine("=== RECENT LOCAL APP EVENTS ===")
+                    appendLine(recentEvents)
+                    appendLine("=== STACK TRACE ===")
+                    append(sanitize(sw.toString()).takeLast(5_800))
+                }.take(8_000)
+                writeCrashBreadcrumbAtomically(crashFile, text)
             }
             previous?.uncaughtException(thread, throwable)
         }
+    }
+
+    private fun crashBreadcrumbFile(context: Context): File {
+        val durableFile = File(File(context.filesDir, "diagnostics"), CRASH_FILE_NAME)
+        val legacyCacheFile = File(File(context.cacheDir, "diagnostics"), CRASH_FILE_NAME)
+        if (!durableFile.exists() && legacyCacheFile.isFile) {
+            runCatching { writeCrashBreadcrumbAtomically(durableFile, legacyCacheFile.readText(Charsets.UTF_8).take(8_000)) }
+        }
+        return durableFile
     }
 
     suspend fun captureDiagnosticLogsAsync(context: Context, maxChars: Int = 32_000): String =
@@ -122,12 +137,12 @@ object AtlasLogBuffer {
             appendLine()
         }
 
-        val crashFile = File(File(context.cacheDir, "diagnostics"), CRASH_FILE_NAME)
+        val crashFile = crashBreadcrumbFile(context)
         val crashText = if (crashFile.isFile) {
             runCatching { crashFile.readText(Charsets.UTF_8).trim() }.getOrDefault("")
         } else ""
         val crashSection = crashText.takeIf(String::isNotEmpty)?.let {
-            "=== LAST CRASH TRACE ===\n${sanitize(it).takeLast(4_000)}\n\n"
+            "=== LAST CRASH TRACE / LOCAL EVENTS ===\n${sanitize(it).takeLast(8_000)}\n\n"
         }.orEmpty()
 
         val ring = recentEntries()
@@ -169,6 +184,22 @@ object AtlasLogBuffer {
 
         val combined = sanitize(essentials + logcatSection + noiseSection).trim()
         return if (combined.length <= maxChars) combined else combined.takeLast(maxChars)
+    }
+}
+
+/** Writes a small private crash breadcrumb durably and atomically; never performs network work. */
+internal fun writeCrashBreadcrumbAtomically(target: File, text: String) {
+    val parent = target.parentFile ?: throw IllegalArgumentException("Crash breadcrumb needs a parent directory")
+    if (!parent.exists() && !parent.mkdirs()) throw java.io.IOException("Cannot create local diagnostics directory")
+    val temporary = File(parent, "${target.name}.tmp")
+    FileOutputStream(temporary).use { stream ->
+        stream.write(text.toByteArray(Charsets.UTF_8))
+        stream.fd.sync()
+    }
+    try {
+        Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+    } catch (_: Exception) {
+        Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
 }
 
