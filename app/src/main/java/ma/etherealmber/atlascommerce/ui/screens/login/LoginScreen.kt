@@ -8,7 +8,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +25,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -31,7 +33,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -52,6 +53,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -64,11 +67,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -100,9 +105,6 @@ import ma.etherealmber.atlascommerce.ui.theme.Atlas
 fun LoginScreen(
     onChangeServer: () -> Unit,
     onOpenQrDevice: () -> Unit = {},
-    onOpenSecurity: () -> Unit,
-    onOpenLicense: () -> Unit,
-    onCheckUpdates: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
@@ -145,7 +147,9 @@ fun LoginScreen(
     }
 
     BoxWithConstraints(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().background(
+            Brush.linearGradient(listOf(Atlas.palette.heroStart, Atlas.palette.heroEnd)),
+        ),
         contentAlignment = Alignment.TopCenter,
     ) {
         val compact = maxWidth < 600.dp || maxHeight < 840.dp
@@ -201,6 +205,7 @@ fun LoginScreen(
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(16.dp))
                     AtlasServerChip(
@@ -237,54 +242,35 @@ fun LoginScreen(
                             onPassword = viewModel::onPasswordChange,
                             onRememberChange = viewModel::onRememberAccountChange,
                             onSubmit = viewModel::submit,
+                            onDismissError = viewModel::dismissError,
                             compact = compact,
                         )
-                        if (state.passkeyAvailable) {
-                            Spacer(Modifier.height(4.dp))
-                            if (compact) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (state.passkeyAvailable) {
                                 TextButton(
                                     onClick = { viewModel.signInWithPasskey(context) },
                                     enabled = !state.loading,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.weight(1f),
                                 ) {
                                     Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(atlasText("Connexion avec une passkey", "Sign in with a passkey", "تسجيل الدخول بمفتاح مرور"))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(atlasText("Connexion passkey", "Passkey sign-in", "الدخول بمفتاح المرور"), textAlign = TextAlign.Center)
                                 }
-                            } else {
-                                AtlasOutlinedButton(
-                                    text = atlasText("Connexion avec une passkey", "Sign in with a passkey", "تسجيل الدخول بمفتاح مرور"),
-                                    onClick = { viewModel.signInWithPasskey(context) },
-                                    icon = Icons.Outlined.Fingerprint,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    enabled = !state.loading,
-                                )
                             }
-                        }
-                        if (compact) {
                             TextButton(
                                 onClick = onOpenQrDevice,
-                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !state.loading,
+                                modifier = Modifier.weight(1f),
                             ) {
                                 Icon(Icons.Outlined.QrCode2, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(atlasText("Scanner un QR de connexion PC", "Scan a PC sign-in QR code", "امسح رمز QR لتسجيل الدخول على الكمبيوتر"))
+                                Spacer(Modifier.width(4.dp))
+                                Text(atlasText("Scanner QR", "Scan QR", "مسح QR"), textAlign = TextAlign.Center)
                             }
-                        } else {
-                            Spacer(Modifier.height(4.dp))
-                            AtlasOutlinedButton(
-                                text = atlasText("Scanner un QR de connexion PC", "Scan a PC sign-in QR code", "امسح رمز QR لتسجيل الدخول على الكمبيوتر"),
-                                onClick = onOpenQrDevice,
-                                icon = Icons.Outlined.QrCode2,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
                         }
-                        Text(
-                            text = atlasText("Besoin d'un accès ? Contactez l'administrateur de votre espace Atlas.", "Need access? Contact your Atlas workspace administrator.", "هل تحتاج إلى وصول؟ تواصل مع مسؤول مساحة Atlas."),
-                            modifier = Modifier.padding(top = 4.dp),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     } else {
                         OtpForm(
                             state = state,
@@ -292,21 +278,8 @@ fun LoginScreen(
                             onSubmit = viewModel::submit,
                             onResend = viewModel::resendCode,
                             onBack = viewModel::backToCredentials,
+                            onDismissError = viewModel::dismissError,
                         )
-                    }
-
-                    AnimatedVisibility(
-                        visible = !state.error.isNullOrBlank(),
-                        enter = fadeIn() + slideInVertically { it / 4 },
-                        exit = fadeOut() + slideOutVertically { it / 4 },
-                    ) {
-                        if (!state.error.isNullOrBlank()) {
-                            Spacer(Modifier.height(8.dp))
-                            AtlasErrorCard(
-                                title = if (state.step == LoginViewModel.Step.OTP) atlasText("Code refusé", "Code rejected", "تم رفض الرمز") else atlasText("Connexion refusée", "Sign-in failed", "فشل تسجيل الدخول"),
-                                message = localizedLoginMessage(state.error.orEmpty()),
-                            )
-                        }
                     }
 
                     Spacer(Modifier.height(14.dp))
@@ -319,19 +292,10 @@ fun LoginScreen(
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = if (compact) {
-                                atlasText("Session chiffrée · ${AppDetails.VERSION_NAME}", "Encrypted session · ${AppDetails.VERSION_NAME}", "جلسة مشفّرة · ${AppDetails.VERSION_NAME}")
-                            } else {
-                                atlasText("Sessions chiffrées et isolées par utilisateur · ${AppDetails.VERSION_NAME}", "Encrypted sessions isolated per user · ${AppDetails.VERSION_NAME}", "جلسات مشفّرة ومعزولة لكل مستخدم · ${AppDetails.VERSION_NAME}")
-                            },
+                            text = atlasText("Session chiffrée · ${AppDetails.VERSION_NAME}", "Encrypted session · ${AppDetails.VERSION_NAME}", "جلسة مشفّرة · ${AppDetails.VERSION_NAME}"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 0.dp else 4.dp)) {
-                        TextButton(onClick = onOpenSecurity) { Text(atlasText("Sécurité", "Security", "الأمان")) }
-                        TextButton(onClick = onOpenLicense) { Text(atlasText("Licence", "License", "الترخيص")) }
-                        TextButton(onClick = onCheckUpdates) { Text(atlasText("Mises à jour", "Updates", "التحديثات")) }
                     }
                     Spacer(Modifier.height(8.dp))
                 }
@@ -346,7 +310,6 @@ private fun LoginAtlasHero(
     modifier: Modifier = Modifier,
 ) {
     val palette = Atlas.palette
-    val horizontalDirection = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
     var logoTaps by remember { mutableIntStateOf(0) }
     var showSurprise by remember { mutableStateOf(false) }
     if (showSurprise) {
@@ -362,45 +325,6 @@ private fun LoginAtlasHero(
             Brush.linearGradient(listOf(palette.heroStart, palette.heroEnd)),
         ),
     ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = 92.dp * horizontalDirection, y = (-100).dp)
-                .size(280.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.32f)),
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .offset(x = 134.dp * horizontalDirection, y = 54.dp)
-                .size(250.dp)
-                .clip(RoundedCornerShape(120.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.50f),
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                        ),
-                    ),
-                ),
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .offset(x = (-150).dp * horizontalDirection, y = 118.dp)
-                .size(330.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.18f)),
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .offset(x = (-38).dp * horizontalDirection, y = 20.dp)
-                .size(if (compact) 42.dp else 56.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)),
-        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -526,6 +450,7 @@ private fun CredentialsForm(
     onPassword: (String) -> Unit,
     onRememberChange: (Boolean) -> Unit,
     onSubmit: () -> Unit,
+    onDismissError: () -> Unit,
     compact: Boolean,
 ) {
     Column(Modifier.fillMaxWidth()) {
@@ -562,6 +487,7 @@ private fun CredentialsForm(
             enabled = !state.loading,
             onDone = onSubmit,
         )
+        LoginInlineError(state, onDismissError)
         Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -605,6 +531,7 @@ private fun OtpForm(
     onSubmit: () -> Unit,
     onResend: () -> Unit,
     onBack: () -> Unit,
+    onDismissError: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -637,6 +564,7 @@ private fun OtpForm(
             enabled = !state.loading,
             onDone = onSubmit,
         )
+        LoginInlineError(state, onDismissError)
         Spacer(Modifier.height(16.dp))
         AtlasButton(
             text = atlasText("Valider le code", "Verify code", "تحقّق من الرمز"),
@@ -661,6 +589,36 @@ private fun OtpForm(
 }
 
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun LoginInlineError(state: LoginViewModel.UiState, onDismiss: () -> Unit) {
+    val error = state.error?.takeIf { it.isNotBlank() && state.passkeyError == null }
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(error) {
+        if (error != null) {
+            withFrameNanos { }
+            requester.bringIntoView()
+        }
+    }
+    AnimatedVisibility(
+        visible = error != null,
+        enter = fadeIn() + slideInVertically { it / 4 },
+        exit = fadeOut() + slideOutVertically { it / 4 },
+        modifier = Modifier.bringIntoViewRequester(requester).semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        if (error != null) {
+            Column {
+                Spacer(Modifier.height(8.dp))
+                AtlasErrorCard(
+                    title = if (state.step == LoginViewModel.Step.OTP) atlasText("Code refusé", "Code rejected", "تم رفض الرمز") else atlasText("Connexion refusée", "Sign-in failed", "فشل تسجيل الدخول"),
+                    message = localizedLoginMessage(error),
+                    onDismiss = onDismiss,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun localizedLoginMessage(message: String): String = when (message) {
     "Saisissez votre identifiant et votre mot de passe." ->
@@ -669,6 +627,8 @@ private fun localizedLoginMessage(message: String): String = when (message) {
         atlasText("Saisissez le code reçu par e-mail.", "Enter the code sent by email.", "أدخل الرمز المرسل عبر البريد الإلكتروني.")
     "Identifiant ou mot de passe incorrect. Vérifiez votre saisie." ->
         atlasText("Identifiant ou mot de passe incorrect. Vérifiez votre saisie.", "Incorrect username or password. Check your entry.", "اسم المستخدم أو كلمة المرور غير صحيحة. تحقق من البيانات.")
+    "Un administrateur doit réinitialiser votre mot de passe." ->
+        atlasText("Un administrateur doit réinitialiser votre mot de passe.", "An administrator must reset your password.", "يجب على المسؤول إعادة تعيين كلمة المرور.")
     "Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau." ->
         atlasText("Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau.", "The code is invalid or expired. Check it or request a new one.", "الرمز غير صالح أو منتهي الصلاحية. تحقق منه أو اطلب رمزاً جديداً.")
     "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez." ->

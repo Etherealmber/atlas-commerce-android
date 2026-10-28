@@ -30,6 +30,8 @@ val LocalSetAtlasLanguage = staticCompositionLocalOf<(AppLanguage) -> Unit> { {}
 
 /** Reviewed French, English, and Arabic UI copy; unknown phrases intentionally remain unchanged. */
 private val commonTranslations = mapOf(
+    "La fenêtre Android n'est plus disponible. Rouvrez l'application puis réessayez." to ("The Android window is no longer available. Reopen the app and try again." to "نافذة Android لم تعد متاحة. أعد فتح التطبيق وحاول مجدداً."),
+    "La création de la passkey n'a pas été terminée à temps. Réessayez ou vérifiez votre fournisseur Android." to ("Passkey creation did not finish in time. Try again or check your Android provider." to "لم يكتمل إنشاء مفتاح المرور في الوقت المحدد. حاول مجدداً أو تحقق من مزوّد Android."),
     "La création de la passkey a été annulée." to ("Passkey creation was cancelled." to "تم إلغاء إنشاء مفتاح المرور."),
     "Le serveur a changé. Recommencez la connexion par passkey." to ("The server changed. Start passkey sign-in again." to "تغيّر الخادم. أعد تسجيل الدخول بمفتاح المرور."),
     "La session ou le serveur a changé. Recommencez l'enregistrement de la passkey." to ("The session or server changed. Start passkey registration again." to "تغيّرت الجلسة أو الخادم. أعد تسجيل مفتاح المرور."),

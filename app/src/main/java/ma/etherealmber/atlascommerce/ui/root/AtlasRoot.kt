@@ -223,6 +223,7 @@ private fun AtlasGate(
     val defaultStartTab by viewModel.defaultStartTab.collectAsStateWithLifecycle()
     val autoCheckUpdates by viewModel.autoCheckUpdates.collectAsStateWithLifecycle()
     val passkeyRegistrationMessage by viewModel.passkeyRegistrationMessage.collectAsStateWithLifecycle()
+    val waitingForPasskeyProvider by viewModel.waitingForPasskeyProvider.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -292,6 +293,7 @@ private fun AtlasGate(
             when (event) {
                 Lifecycle.Event.ON_RESUME -> viewModel.onAppResumed(context)
                 Lifecycle.Event.ON_STOP -> viewModel.onAppStopped()
+                Lifecycle.Event.ON_DESTROY -> viewModel.cancelPasskeyRegistration()
                 else -> Unit
             }
         }
@@ -408,12 +410,6 @@ private fun AtlasGate(
                         onOpenQrDevice = {
                             pendingQrToken = null
                             overlay = Overlay.QR_DEVICE
-                        },
-                        onOpenSecurity = { overlay = Overlay.SECURITY },
-                        onOpenLicense = { overlay = Overlay.LICENSE },
-                        onCheckUpdates = {
-                            viewModel.checkForUpdate(manual = true)
-                            showToast("Vérification des mises à jour…")
                         },
                     )
 
@@ -587,10 +583,22 @@ private fun AtlasGate(
                 )
             }
 
+            if (waitingForPasskeyProvider) {
+                AlertDialog(
+                    onDismissRequest = viewModel::cancelPasskeyRegistration,
+                    title = { Text(atlasText("Passkey Android", "Android passkey", "مفتاح مرور Android")) },
+                    text = { Text(atlasText("Terminez la création dans le gestionnaire Android. Si aucune fenêtre ne s'affiche, vous pouvez annuler et réessayer.", "Complete setup in Android's credential manager. If no prompt appears, you can cancel and try again.", "أكمل الإعداد في مدير بيانات الاعتماد في Android. إذا لم تظهر نافذة، يمكنك الإلغاء والمحاولة مجدداً.")) },
+                    confirmButton = {
+                        TextButton(onClick = viewModel::cancelPasskeyRegistration) { Text(atlasText("Annuler", "Cancel", "إلغاء")) }
+                    },
+                )
+            }
+
             passkeyRegistrationMessage?.let { message ->
                 val providerSetupSuggested = message.contains("aucun fournisseur", ignoreCase = true) ||
                     message.contains("verrouillage d'écran", ignoreCase = true) ||
-                    message.contains("activées", ignoreCase = true)
+                    message.contains("activées", ignoreCase = true) ||
+                    message.contains("fournisseur Android", ignoreCase = true)
                 AlertDialog(
                     onDismissRequest = viewModel::dismissPasskeyRegistrationMessage,
                     title = { Text(atlasText("Passkey Android")) },

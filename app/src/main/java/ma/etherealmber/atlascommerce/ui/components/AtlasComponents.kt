@@ -77,6 +77,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Dns
@@ -678,6 +679,7 @@ fun AtlasErrorCard(
     modifier: Modifier = Modifier,
     title: String = "Connexion impossible",
     onRetry: (() -> Unit)? = null,
+    onDismiss: (() -> Unit)? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -695,9 +697,15 @@ fun AtlasErrorCard(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = atlasText(title),
+                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleSmall,
                     color = toneForeground(AtlasTone.DANGER),
                 )
+                if (onDismiss != null) {
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Outlined.Close, contentDescription = atlasText("Fermer", "Close", "إغلاق"), modifier = Modifier.size(18.dp))
+                    }
+                }
             }
             Spacer(Modifier.height(6.dp))
             Text(
