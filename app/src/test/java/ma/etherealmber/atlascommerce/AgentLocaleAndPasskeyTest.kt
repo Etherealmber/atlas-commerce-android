@@ -5,6 +5,9 @@ import ma.etherealmber.atlascommerce.data.repo.composeAgentPrompt
 import ma.etherealmber.atlascommerce.data.repo.AGENT_MAX_QUESTION_LENGTH
 import ma.etherealmber.atlascommerce.ui.root.passkeyRegistrationFailureMessage
 import ma.etherealmber.atlascommerce.ui.screens.agent.localizedAgentText
+import ma.etherealmber.atlascommerce.ui.screens.login.LoginViewModel
+import ma.etherealmber.atlascommerce.ui.screens.login.afterAuthentication
+import ma.etherealmber.atlascommerce.ui.screens.login.authFailureMessage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -34,6 +37,30 @@ class AgentLocaleAndPasskeyTest {
             assertTrue(result.contains(language.agentContextInstruction))
             assertTrue(result.length <= 2450)
         }
+    }
+
+    @Test fun successfulOtpResetsSensitiveStateBeforeSignOut() {
+        val state = LoginViewModel.UiState(
+            username = "atlas", password = "secret", otp = "123456", loading = true,
+            step = LoginViewModel.Step.OTP, error = "error", info = "info", passkeyError = "error",
+            passkeyAvailable = true,
+        ).afterAuthentication()
+        assertEquals(LoginViewModel.Step.CREDENTIALS, state.step)
+        assertEquals("", state.password)
+        assertEquals("", state.otp)
+        assertEquals("atlas", state.username)
+        assertEquals(false, state.loading)
+        assertEquals(null, state.error)
+        assertEquals(null, state.info)
+        assertEquals(null, state.passkeyError)
+        assertEquals(true, state.passkeyAvailable)
+    }
+
+    @Test fun passwordAndOtpErrorsAreSpecificWithoutMislabelingNetworkFailures() {
+        assertTrue(authFailureMessage("BAD_PASSWORD", null, false).contains("mot de passe incorrect"))
+        assertTrue(authFailureMessage("BAD_OTP", null, true).contains("Code invalide"))
+        assertTrue(authFailureMessage("PASSWORD_REHASH_REQUIRED", 401, false).contains("administrateur"))
+        assertTrue(authFailureMessage("NETWORK", null, false).contains("serveur"))
     }
 
 }

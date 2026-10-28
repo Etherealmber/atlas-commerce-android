@@ -32,6 +32,7 @@ import ma.etherealmber.atlascommerce.core.security.PasskeySetupPrompt
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.session.LoginOutcome
+import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.data.model.supportsAndroid
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
@@ -83,6 +84,11 @@ class LoginViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            sessionManager.state.collect { session ->
+                if (session is SessionState.Active) _state.update { it.afterAuthentication() }
+            }
+        }
+        viewModelScope.launch {
             serverConfig.selection.collectLatest { selectedServer ->
                 _state.update { it.copy(passkeyAvailable = false) }
                 selectedServer?.baseUrl?.let { refreshPasskeyCapabilityFor(it) }
@@ -128,6 +134,10 @@ class LoginViewModel @Inject constructor(
             )
         }
         _state.update { it.copy(passkeyAvailable = available) }
+    }
+
+    fun dismissError() {
+        _state.update { it.copy(error = null) }
     }
 
     fun onUsernameChange(value: String) {
@@ -237,7 +247,7 @@ class LoginViewModel @Inject constructor(
                                 }
                                 is ApiResult.Success -> {
                                     AtlasLogBuffer.log("PASSKEY", "Login completed and session accepted")
-                                    _state.update { it.copy(loading = false, password = "", error = null, passkeyError = null, info = null) }
+                                    _state.update { it.afterAuthentication() }
                                 }
                             }
                         }
@@ -310,15 +320,7 @@ class LoginViewModel @Inject constructor(
 
     private fun safeAuthFailure(code: String, httpStatus: Int?, isOtp: Boolean): String {
         AtlasLogBuffer.log("AUTH", "Authentication rejected: code=$code; http=${httpStatus ?: "none"}", "WARN")
-        return when {
-            code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK ->
-                "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
-            code == "APP_UPDATE_REQUIRED" -> "Une mise à jour est nécessaire pour continuer."
-            isOtp && httpStatus == 401 -> "Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau."
-            !isOtp && httpStatus == 401 -> "Identifiant ou mot de passe incorrect. Vérifiez votre saisie."
-            isOtp -> "Vérification impossible. Vérifiez le code et réessayez."
-            else -> "Connexion impossible. Vérifiez vos informations et réessayez."
-        }
+        return authFailureMessage(code, httpStatus, isOtp)
     }
 
     private suspend fun supportsSelectedServerPasskeyOrigin(origin: String): Boolean {
@@ -372,7 +374,7 @@ class LoginViewModel @Inject constructor(
 
                 is ApiResult.Success -> when (val outcome = result.data) {
                     is LoginOutcome.SignedIn -> {
-                        _state.update { it.copy(loading = false, password = "", error = null) }
+                        _state.update { it.afterAuthentication() }
                         passkeySetupPrompt.request()
                     }
                     is LoginOutcome.OtpRequired -> _state.update {
@@ -413,7 +415,7 @@ class LoginViewModel @Inject constructor(
 
                 is ApiResult.Success -> when (val outcome = result.data) {
                     is LoginOutcome.SignedIn -> {
-                        _state.update { it.copy(loading = false, password = "", error = null) }
+                        _state.update { it.afterAuthentication() }
                         passkeySetupPrompt.request()
                     }
                     is LoginOutcome.OtpRequired -> _state.update {
@@ -423,4 +425,23 @@ class LoginViewModel @Inject constructor(
             }
         }
     }
+}
+
+/** Clear the one-time verification flow whenever a session becomes active. */
+internal fun LoginViewModel.UiState.afterAuthentication(): LoginViewModel.UiState = copy(
+    step = LoginViewModel.Step.CREDENTIALS, password = "", otp = "", loading = false,
+    error = null, passkeyError = null, info = null,
+)
+
+internal fun authFailureMessage(code: String, httpStatus: Int?, isOtp: Boolean): String = when {
+    code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK ->
+        "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
+    code == "APP_UPDATE_REQUIRED" -> "Une mise à jour est nécessaire pour continuer."
+    code == "PASSWORD_REHASH_REQUIRED" -> "Un administrateur doit réinitialiser votre mot de passe."
+    isOtp && (httpStatus == 401 || code == "BAD_OTP" || code == "OTP_EXPIRED") ->
+        "Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau."
+    !isOtp && (httpStatus == 401 || code == "BAD_PASSWORD") ->
+        "Identifiant ou mot de passe incorrect. Vérifiez votre saisie."
+    isOtp -> "Vérification impossible. Vérifiez le code et réessayez."
+    else -> "Connexion impossible. Vérifiez vos informations et réessayez."
 }

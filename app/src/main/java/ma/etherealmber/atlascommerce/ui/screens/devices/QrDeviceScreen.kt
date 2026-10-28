@@ -329,7 +329,7 @@ fun QrDeviceScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(0.86f)
-                                .aspectRatio(1f)
+                                .then(if (shouldRunCamera) Modifier.aspectRatio(1f) else Modifier)
                                 .align(Alignment.CenterHorizontally),
                         ) {
                             if (shouldRunCamera) {
@@ -342,7 +342,7 @@ fun QrDeviceScreen(
                             } else {
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxSize()
+                                        .fillMaxWidth()
                                         .clip(RoundedCornerShape(24.dp))
                                         .background(MaterialTheme.colorScheme.surfaceContainerLow)
                                         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp))
@@ -400,8 +400,6 @@ fun QrDeviceScreen(
                                                 modifier = Modifier.weight(1f),
                                                 color = MaterialTheme.colorScheme.onPrimary,
                                                 textAlign = TextAlign.Center,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
                                             )
                                         }
                                     }

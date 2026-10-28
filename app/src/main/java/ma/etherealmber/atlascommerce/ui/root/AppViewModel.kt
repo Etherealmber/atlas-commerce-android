@@ -6,6 +6,8 @@ import androidx.credentials.exceptions.CreateCredentialNoCreateOptionException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.withContext
 import java.io.File
 import androidx.lifecycle.ViewModel
@@ -65,6 +67,7 @@ import ma.etherealmber.atlascommerce.data.model.supportsAndroid
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import ma.etherealmber.atlascommerce.ui.components.AvatarBitmapCache
+import ma.etherealmber.atlascommerce.ui.util.findActivity
 import javax.inject.Inject
 
 /**
@@ -204,6 +207,15 @@ class AppViewModel @Inject constructor(
 
     private val _registeringPasskey = MutableStateFlow(false)
     val registeringPasskey: StateFlow<Boolean> = _registeringPasskey.asStateFlow()
+    private val _waitingForPasskeyProvider = MutableStateFlow(false)
+    val waitingForPasskeyProvider: StateFlow<Boolean> = _waitingForPasskeyProvider.asStateFlow()
+    private var passkeyRegistrationJob: Job? = null
+    private var canCancelPasskeyRegistration = false
+
+    /** Never cancel the server verification once the provider has returned a credential. */
+    fun cancelPasskeyRegistration() {
+        if (canCancelPasskeyRegistration) passkeyRegistrationJob?.cancel()
+    }
 
     private val _passkeyRegistrationMessage = MutableStateFlow<String?>(null)
     val passkeyRegistrationMessage: StateFlow<String?> = _passkeyRegistrationMessage.asStateFlow()
@@ -339,8 +351,9 @@ class AppViewModel @Inject constructor(
             return
         }
         if (_registeringPasskey.value) return
-        viewModelScope.launch {
-            _registeringPasskey.value = true
+        _registeringPasskey.value = true
+        canCancelPasskeyRegistration = true
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             AtlasLogBuffer.log("PASSKEY", "Registration flow started")
             try {
                 val selectedServerOrigin = ServerUrl.origin(serverConfig.selection.value?.baseUrl)
@@ -393,15 +406,23 @@ class AppViewModel @Inject constructor(
                             fail("Les passkeys Android ne sont plus disponibles sur ce serveur.", PasskeyFailureStage.REGISTRATION_CAPABILITY, null)
                             return@launch
                         }
+                        val activity = context.findActivity()
+                        if (activity == null || activity.isFinishing || activity.isDestroyed) {
+                            AtlasLogBuffer.log("PASSKEY", "Registration aborted: no active Activity for Credential Manager", "WARN")
+                            report("La fenêtre Android n'est plus disponible. Rouvrez l'application puis réessayez.")
+                            return@launch
+                        }
                         AtlasLogBuffer.log("PASSKEY", "Opening Android Credential Manager for registration")
                         val providerStarted = android.os.SystemClock.elapsedRealtime()
+                        _waitingForPasskeyProvider.value = true
                         val credentialJson = try {
-                            awaitPasskeyProvider { AndroidPasskeyCredentials.create(context, options.data) }
+                            awaitPasskeyProvider { AndroidPasskeyCredentials.create(activity, options.data) }
                         } catch (timeout: TimeoutCancellationException) {
                             AtlasLogBuffer.log("PASSKEY", "Credential Manager registration timed out", "ERROR")
-                            fail("Le gestionnaire Android n'a pas répondu. Vérifiez votre fournisseur de passkeys puis réessayez.", PasskeyFailureStage.REGISTRATION_TIMEOUT, null)
+                            fail("La création de la passkey n'a pas été terminée à temps. Réessayez ou vérifiez votre fournisseur Android.", PasskeyFailureStage.REGISTRATION_TIMEOUT, null)
                             return@launch
                         } finally {
+                            _waitingForPasskeyProvider.value = false
                             val elapsed = android.os.SystemClock.elapsedRealtime() - providerStarted
                             AtlasLogBuffer.log("PASSKEY", "Registration credential provider elapsedMs=$elapsed")
                         }
@@ -410,6 +431,7 @@ class AppViewModel @Inject constructor(
                             report("La session ou le serveur a changé. Recommencez l'enregistrement de la passkey.")
                             return@launch
                         }
+                        canCancelPasskeyRegistration = false
                         AtlasLogBuffer.log("PASSKEY", "Credential Manager returned an attestation; sending it to selected Worker")
                         val label = listOf("Android", android.os.Build.MANUFACTURER, android.os.Build.MODEL)
                             .filter { it.isNotBlank() }
@@ -457,9 +479,19 @@ class AppViewModel @Inject constructor(
                     fail("La création de la passkey a échoué. Réessayez plus tard ou contactez l'administrateur.", PasskeyFailureStage.REGISTRATION_PROVIDER, null)
                 }
             } finally {
-                _registeringPasskey.value = false
+                _waitingForPasskeyProvider.value = false
             }
         }
+        passkeyRegistrationJob = job
+        job.invokeOnCompletion {
+            if (passkeyRegistrationJob === job) {
+                _waitingForPasskeyProvider.value = false
+                canCancelPasskeyRegistration = false
+                _registeringPasskey.value = false
+                passkeyRegistrationJob = null
+            }
+        }
+        job.start()
     }
 
     private fun observeActiveSessionDevices() {
