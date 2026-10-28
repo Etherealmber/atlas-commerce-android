@@ -739,9 +739,11 @@ private fun SecurityDeviceRow(
                         }
                     }
                 }
+                val lastSeen = device.lastSeen?.takeIf(String::isNotBlank)
+                val localizedLastSeen = if (lastSeen != null) atlasDateTime(lastSeen) else null
                 val meta = listOfNotNull(
                     device.lastIp?.takeIf { it.isNotBlank() }?.let { "IP $it" },
-                    device.lastSeen?.takeIf { it.isNotBlank() }?.let(::atlasDateTime),
+                    localizedLastSeen,
                     device.fingerprint.takeIf { it.isNotBlank() },
                 ).joinToString(" · ")
                 if (meta.isNotBlank()) {
