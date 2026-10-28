@@ -413,7 +413,8 @@ fun MainShell(
             AtlasTopBar(
                 title = tab.localizedLabel(),
                 subtitle = agentState?.let { state ->
-                    val thread = localizedAgentText(state.activeThreadTitle.ifBlank { "Sans titre" }, atlasLanguage)
+                    val thread = state.activeThreadTitle.takeIf(String::isNotBlank)?.let { localizedAgentText(it, atlasLanguage) }
+                        ?: atlasText("Sans titre", "Untitled", "بلا عنوان")
                     val status = when {
                         state.policy?.isExhausted == true -> atlasText("Quota atteint", "Quota reached", "تم بلوغ الحصة")
                         state.status?.configured == true -> atlasText("Configuré", "Configured", "تم الإعداد")
@@ -719,15 +720,17 @@ private fun AtlasFloatingBottomBar(
     val barColor = MaterialTheme.colorScheme.surfaceContainerLow
     val motionEnabled = LocalAtlasAnimationsEnabled.current
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(horizontal = 10.dp, vertical = 4.dp)
             .height(84.dp),
     ) {
+        val compactWidth = maxWidth < 360.dp
+        val dockWidth = if (maxWidth >= 680.dp) 640.dp else maxWidth
         Surface(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(64.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).width(dockWidth).height(64.dp),
             shape = RoundedCornerShape(26.dp),
             color = barColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
@@ -736,18 +739,18 @@ private fun AtlasFloatingBottomBar(
             shadowElevation = 4.dp,
         ) {
             Row(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = if (compactWidth) 2.dp else 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     leftTabs.forEach { item ->
-                        FloatingBottomBarItem(item, selected == item, motionEnabled, Modifier.weight(1f)) { onSelect(item) }
+                        FloatingBottomBarItem(item, selected == item, motionEnabled, compactWidth, Modifier.weight(1f)) { onSelect(item) }
                     }
                 }
-                if (centerTab != null) Spacer(Modifier.width(64.dp))
+                if (centerTab != null) Spacer(Modifier.width(if (compactWidth) 52.dp else 64.dp))
                 Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     rightTabs.forEach { item ->
-                        FloatingBottomBarItem(item, selected == item, motionEnabled, Modifier.weight(1f)) { onSelect(item) }
+                        FloatingBottomBarItem(item, selected == item, motionEnabled, compactWidth, Modifier.weight(1f)) { onSelect(item) }
                     }
                 }
             }
@@ -773,7 +776,7 @@ private fun AtlasFloatingBottomBar(
                 onClick = { onSelect(centerTab) },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .size(56.dp)
+                    .size(if (compactWidth) 50.dp else 56.dp)
                     .graphicsLayer {
                         scaleX = if (motionEnabled) fabScale else 1f
                         scaleY = if (motionEnabled) fabScale else 1f
@@ -807,6 +810,7 @@ private fun FloatingBottomBarItem(
     item: MainTab,
     selected: Boolean,
     motionEnabled: Boolean,
+    compactWidth: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -814,11 +818,6 @@ private fun FloatingBottomBarItem(
         targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         animationSpec = androidx.compose.animation.core.tween(if (motionEnabled) 180 else 0),
         label = "nav-tint-${item.name}",
-    )
-    val indicatorWidth by animateDpAsState(
-        targetValue = if (selected) 44.dp else 0.dp,
-        animationSpec = if (motionEnabled) spring(dampingRatio = 0.78f, stiffness = 480f) else tween(0),
-        label = "nav-indicator-${item.name}",
     )
     val iconScale by animateFloatAsState(
         targetValue = if (selected && motionEnabled) 1.12f else 1f,
@@ -830,45 +829,60 @@ private fun FloatingBottomBarItem(
         animationSpec = if (motionEnabled) spring(dampingRatio = 0.72f, stiffness = 520f) else tween(0),
         label = "nav-icon-offset-${item.name}",
     )
-    Column(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxHeight()
             .clip(RoundedCornerShape(18.dp))
             .semantics { this.selected = selected }
             .clickable(role = Role.Tab, onClick = onClick)
-            .padding(horizontal = 2.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+            .padding(horizontal = if (compactWidth) 1.dp else 2.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.height(30.dp)) {
-            Surface(
-                modifier = Modifier.width(indicatorWidth).height(28.dp),
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {}
-            Icon(
-                item.icon,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier
-                    .offset(y = iconOffset)
-                    .size(20.dp)
-                    .graphicsLayer {
-                        scaleX = if (motionEnabled) iconScale else 1f
-                        scaleY = if (motionEnabled) iconScale else 1f
-                    },
+        val pillWidth by animateDpAsState(
+            targetValue = if (selected) maxWidth else 0.dp,
+            animationSpec = if (motionEnabled) spring(dampingRatio = 0.74f, stiffness = 430f) else tween(0),
+            label = "nav-selected-pill-${item.name}",
+        )
+        val pillHeight by animateDpAsState(
+            targetValue = if (selected) 48.dp else 0.dp,
+            animationSpec = if (motionEnabled) spring(dampingRatio = 0.76f, stiffness = 460f) else tween(0),
+            label = "nav-selected-pill-height-${item.name}",
+        )
+        Surface(
+            modifier = Modifier.width(pillWidth).height(pillHeight),
+            shape = RoundedCornerShape(17.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            tonalElevation = if (selected) 1.dp else 0.dp,
+        ) {}
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.height(28.dp)) {
+                Icon(
+                    item.icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier
+                        .offset(y = iconOffset)
+                        .size(20.dp)
+                        .graphicsLayer {
+                            scaleX = if (motionEnabled) iconScale else 1f
+                            scaleY = if (motionEnabled) iconScale else 1f
+                        },
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = item.localizedLabel(),
+                style = MaterialTheme.typography.labelSmall,
+                color = tint,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = item.localizedLabel(),
-            style = MaterialTheme.typography.labelSmall,
-            color = tint,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 

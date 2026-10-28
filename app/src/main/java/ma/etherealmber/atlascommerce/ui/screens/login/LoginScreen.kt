@@ -32,13 +32,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AlternateEmail
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
@@ -49,6 +47,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -71,6 +70,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -80,24 +81,19 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
-import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
-import ma.etherealmber.atlascommerce.ui.components.AtlasCard
-import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasBrandWordmark
-import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasServerChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
-import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.i18n.AtlasLanguageSelector
-import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
@@ -112,6 +108,22 @@ fun LoginScreen(
     val server by viewModel.server.collectAsStateWithLifecycle()
     val savedAccounts by viewModel.savedAccounts.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var accountPromptHandled by remember { mutableStateOf(false) }
+    var accountToConfirm by remember { mutableStateOf<SavedAccountEntry?>(null) }
+    LaunchedEffect(savedAccounts, state.step) {
+        if (accountPromptHandled) return@LaunchedEffect
+        if (state.step != LoginViewModel.Step.CREDENTIALS) {
+            accountPromptHandled = true
+            return@LaunchedEffect
+        }
+        if (savedAccounts.isNotEmpty()) {
+            accountToConfirm = savedAccounts.first()
+            accountPromptHandled = true
+        } else {
+            delay(1_500)
+            if (savedAccounts.isEmpty()) accountPromptHandled = true
+        }
+    }
     val host = server?.let { ServerUrl.display(it.baseUrl) } ?: atlasText("Serveur non sélectionné", "No server selected", "لم يتم اختيار خادم")
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -121,6 +133,38 @@ fun LoginScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    accountToConfirm?.let { savedAccount ->
+        AlertDialog(
+            onDismissRequest = { accountToConfirm = null },
+            title = { Text(atlasText("Reconnexion", "Sign in again", "تسجيل الدخول مجدداً")) },
+            text = {
+                Text(
+                    atlasText(
+                        "Voulez-vous vous reconnecter au compte ${savedAccount.displayName.ifBlank { savedAccount.username }} ?",
+                        "Would you like to sign back in to ${savedAccount.displayName.ifBlank { savedAccount.username }}?",
+                        "هل تريد تسجيل الدخول مجدداً إلى ${savedAccount.displayName.ifBlank { savedAccount.username }}؟",
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    accountToConfirm = null
+                    viewModel.onUsernameChange(savedAccount.username)
+                }, enabled = !state.loading) {
+                    Text(atlasText("Oui, continuer", "Yes, continue", "نعم، متابعة"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    accountToConfirm = null
+                    viewModel.onUsernameChange(savedAccount.username)
+                }) {
+                    Text(atlasText("Utiliser un mot de passe", "Use password", "استخدام كلمة المرور"))
+                }
+            },
+        )
     }
 
     state.passkeyError?.let { passkeyError ->
@@ -178,8 +222,20 @@ fun LoginScreen(
                         .height(heroHeight),
                 )
 
-                // The rounded sheet follows the reference layout while retaining
-                // the real Atlas credential, OTP, passkey, and QR flows.
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 12.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp,
+                ) {
+                    AtlasServerChip(
+                        host = host,
+                        onClick = onChangeServer,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                // The credential and OTP sheet begins below the branded server selector.
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -207,35 +263,9 @@ fun LoginScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
-                    Spacer(Modifier.height(16.dp))
-                    AtlasServerChip(
-                        host = host,
-                        onClick = onChangeServer,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
                     Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
 
                     if (state.step == LoginViewModel.Step.CREDENTIALS) {
-                        if (savedAccounts.isNotEmpty()) {
-                            if (compact) {
-                                SavedAccountsCompact(
-                                    accounts = savedAccounts,
-                                    loading = state.loading,
-                                    onSelect = viewModel::signInWithSavedAccount,
-                                    onForget = viewModel::forgetSavedAccount,
-                                )
-                            } else {
-                                SavedAccountsCard(
-                                    accounts = savedAccounts,
-                                    serverBaseUrl = server?.baseUrl,
-                                    loading = state.loading,
-                                    onSelect = viewModel::signInWithSavedAccount,
-                                    onForget = viewModel::forgetSavedAccount,
-                                )
-                            }
-                            Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
-                        }
-
                         CredentialsForm(
                             state = state,
                             onUsername = viewModel::onUsernameChange,
@@ -258,7 +288,14 @@ fun LoginScreen(
                                 ) {
                                     Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(4.dp))
-                                    Text(atlasText("Connexion passkey", "Passkey sign-in", "الدخول بمفتاح المرور"), textAlign = TextAlign.Center)
+                                    Text(
+                                        text = atlasText("Passkey", "Passkey", "مفتاح مرور"),
+                                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
                                 }
                             }
                             TextButton(
@@ -268,7 +305,14 @@ fun LoginScreen(
                             ) {
                                 Icon(Icons.Outlined.QrCode2, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text(atlasText("Scanner QR", "Scan QR", "مسح QR"), textAlign = TextAlign.Center)
+                                Text(
+                                    text = atlasText("Scanner QR", "Scan QR", "مسح QR"),
+                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
                         }
                     } else {
@@ -340,105 +384,6 @@ private fun LoginAtlasHero(
                 )
             }
             AtlasLanguageSelector(contentColor = Color.White)
-        }
-    }
-}
-
-@Composable
-private fun SavedAccountsCard(
-    accounts: List<SavedAccountEntry>,
-    serverBaseUrl: String?,
-    loading: Boolean,
-    onSelect: (SavedAccountEntry) -> Unit,
-    onForget: (SavedAccountEntry) -> Unit,
-) {
-    AtlasCard {
-        Text(
-            text = atlasText("Comptes mémorisés sur ce serveur", "Saved accounts on this server", "الحسابات المحفوظة على هذا الخادم"),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = atlasText("Touchez un compte pour ouvrir sa session isolée instantanément.", "Choose an account to open its isolated session.", "اختر حسابًا لفتح جلسته المعزولة."),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(10.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            accounts.forEach { acc ->
-                AtlasCard(
-                    onClick = if (loading) null else ({ onSelect(acc) }),
-                    padding = 10.dp,
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        AtlasAvatar(
-                            avatarUrl = acc.avatarUrl,
-                            label = acc.displayName.ifBlank { acc.username },
-                            serverBaseUrl = serverBaseUrl,
-                            size = 38.dp,
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = acc.displayName.ifBlank { acc.username },
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = atlasText(
-                                    "@${acc.username} · ${atlasRoleLabel(acc.role)}",
-                                    "@${acc.username} · ${atlasRoleLabel(acc.role)}",
-                                    "@${acc.username} · ${atlasRoleLabel(acc.role)}",
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        AtlasChip(text = atlasRoleLabel(acc.role), tone = AtlasTone.NEUTRAL)
-                        IconButton(
-                            onClick = { onForget(acc) },
-                            enabled = !loading,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Close,
-                                contentDescription = atlasText("Oublier ce compte", "Forget this account", "نسيان هذا الحساب"),
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SavedAccountsCompact(
-    accounts: List<SavedAccountEntry>,
-    loading: Boolean,
-    onSelect: (SavedAccountEntry) -> Unit,
-    onForget: (SavedAccountEntry) -> Unit,
-) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(atlasText("Comptes mémorisés", "Saved accounts", "الحسابات المحفوظة"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            accounts.forEach { account ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AtlasOutlinedButton(
-                        text = account.displayName.ifBlank { account.username },
-                        onClick = { onSelect(account) },
-                        enabled = !loading,
-                    )
-                    IconButton(onClick = { onForget(account) }, enabled = !loading, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Outlined.Close, contentDescription = atlasText("Oublier ${account.username}", "Forget ${account.username}", "نسيان ${account.username}"), modifier = Modifier.size(16.dp))
-                    }
-                }
-            }
         }
     }
 }

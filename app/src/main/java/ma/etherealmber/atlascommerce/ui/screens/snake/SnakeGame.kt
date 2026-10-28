@@ -21,10 +21,14 @@ internal fun SnakeState.turn(next: Direction): SnakeState {
 internal fun SnakeState.step(random: Random = Random.Default): SnakeState {
     if (over) return this
     val head = body.first()
-    val next = Cell(head.x + queued.dx, head.y + queued.dy)
+    // The board wraps at every edge: the only losing collision is the snake hitting itself.
+    val next = Cell(
+        x = (head.x + queued.dx + BOARD_SIZE) % BOARD_SIZE,
+        y = (head.y + queued.dy + BOARD_SIZE) % BOARD_SIZE,
+    )
     val eating = next == food
     val occupied = if (eating) body else body.dropLast(1)
-    if (next.x !in 0 until BOARD_SIZE || next.y !in 0 until BOARD_SIZE || next in occupied) return copy(over = true)
+    if (next in occupied) return copy(over = true)
     val newBody = listOf(next) + if (eating) body else body.dropLast(1)
     if (!eating) return copy(body = newBody, direction = queued)
     val free = (0 until BOARD_SIZE).flatMap { y -> (0 until BOARD_SIZE).map { x -> Cell(x, y) } }.filterNot { it in newBody }

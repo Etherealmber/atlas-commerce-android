@@ -2,6 +2,7 @@ package ma.etherealmber.atlascommerce.ui.root
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import androidx.credentials.exceptions.CreateCredentialNoCreateOptionException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -93,6 +94,9 @@ class AppViewModel @Inject constructor(
     private val passkeyAutoReporter: PasskeyAutoReporter,
 ) : ViewModel() {
 
+    private var lastForegroundRefreshMs = 0L
+    private val foregroundRefreshMinimumIntervalMs = 45_000L
+
     val deviceShortId: String get() = deviceIdentity.shortId()
     val deviceFingerprint: String get() = deviceIdentity.fingerprint
 
@@ -109,6 +113,20 @@ class AppViewModel @Inject constructor(
     val languageSaveFailed = _languageSaveFailed.asStateFlow()
     fun dismissLanguageSaveFailed() { _languageSaveFailed.value = false }
     fun dismissLanguageRestartNotice() { _languageRestartNotice.value = null }
+
+    fun applySavedLanguageAndRestart(restartActivity: () -> Unit) {
+        val pendingLanguage = _languageRestartNotice.value ?: return
+        viewModelScope.launch {
+            val savedLanguage = preferences.appLanguage.first()
+            if (savedLanguage != pendingLanguage) {
+                _languageSaveFailed.value = true
+                return@launch
+            }
+            (applicationContext as ma.etherealmber.atlascommerce.AtlasApp).activateSavedLanguage(savedLanguage)
+            _languageRestartNotice.value = null
+            restartActivity()
+        }
+    }
 
     val appearanceLoaded: StateFlow<Boolean> = kotlinx.coroutines.flow.combine(
         preferences.appearanceLoaded, (applicationContext as ma.etherealmber.atlascommerce.AtlasApp).languageLoaded,
@@ -588,9 +606,13 @@ class AppViewModel @Inject constructor(
     fun onAppResumed(context: Context) {
         updateManager.onAppResumed(context, autoCheck = autoCheckUpdates.value)
         if (sessionManager.state.value is SessionState.Active) {
-            viewModelScope.launch {
-                sessionManager.refreshProfile()
-                refreshAgentPolicy()
+            val now = SystemClock.elapsedRealtime()
+            if (shouldRefreshForegroundData(lastForegroundRefreshMs, now, foregroundRefreshMinimumIntervalMs)) {
+                lastForegroundRefreshMs = now
+                viewModelScope.launch {
+                    sessionManager.refreshProfile()
+                    refreshAgentPolicy()
+                }
             }
         }
     }
@@ -907,3 +929,6 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { sessionManager.signOut() }
     }
 }
+
+internal fun shouldRefreshForegroundData(lastRefreshMs: Long, nowMs: Long, minimumIntervalMs: Long): Boolean =
+    lastRefreshMs <= 0L || nowMs < lastRefreshMs || nowMs - lastRefreshMs >= minimumIntervalMs
