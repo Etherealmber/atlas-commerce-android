@@ -743,7 +743,6 @@ jobs:
           import urllib.error
           import urllib.parse
           import urllib.request
-          import uuid
           from pathlib import Path
 
           token = os.environ["CLOUDFLARE_API_TOKEN"].strip()
@@ -833,23 +832,17 @@ jobs:
           for key, file_path, content_type, cache_control in objects:
               encoded_key = urllib.parse.quote(key, safe="/")
               url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/r2/buckets/{urllib.parse.quote(bucket, safe='')}/objects/{encoded_key}"
-              boundary = "----AtlasCommerceR2" + uuid.uuid4().hex
-              filename = file_path.name.replace('"', "")
               object_bytes = file_path.read_bytes()
-              multipart_body = (
-                  f"--{boundary}\r\n"
-                  f'Content-Disposition: form-data; name="body"; filename="{filename}"\r\n'
-                  f"Content-Type: {content_type}\r\n"
-                  f"Cache-Control: {cache_control}\r\n\r\n"
-              ).encode("utf-8") + object_bytes + f"\r\n--{boundary}--\r\n".encode("ascii")
+              # Cloudflare's R2 REST object endpoint expects the object bytes as the raw PUT
+              # request body. Multipart form uploads return API error 10028 (HTTP 501).
               request = urllib.request.Request(
                   url,
-                  data=multipart_body,
+                  data=object_bytes,
                   method="PUT",
                   headers={
                       "Authorization": f"Bearer {token}",
                       "Accept": "application/json",
-                      "Content-Type": f"multipart/form-data; boundary={boundary}",
+                      "Content-Type": content_type,
                       "Cache-Control": cache_control,
                   },
               )
