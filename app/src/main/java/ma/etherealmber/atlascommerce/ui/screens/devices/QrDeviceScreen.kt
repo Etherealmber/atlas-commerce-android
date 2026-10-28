@@ -70,7 +70,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
@@ -79,6 +78,9 @@ import ma.etherealmber.atlascommerce.ui.components.BarcodeCameraView
 import ma.etherealmber.atlascommerce.ui.components.CameraVisualStyle
 import ma.etherealmber.atlascommerce.ui.components.ScanFeedback
 import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
+import ma.etherealmber.atlascommerce.ui.i18n.atlasDateTime
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
@@ -104,6 +106,9 @@ fun QrDeviceScreen(
     val scanSound by viewModel.scanSoundEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val view = LocalView.current
+    val language = LocalAtlasLanguage.current
+    val statusMessage = state.statusMessage?.let { atlasNotice(it, language) }
+    val errorMessage = state.error?.let { atlasNotice(it, language) }
     val cameraPermissionDeniedMessage = atlasText(
         "Caméra refusée — collez le lien ou code QR ci-dessous.",
         "Camera permission denied — paste a QR link or token below.",
@@ -154,7 +159,7 @@ fun QrDeviceScreen(
     }
 
     LaunchedEffect(Unit) {
-        viewModel.messages.collect { msg -> onToast(msg) }
+        viewModel.messages.collect { msg -> onToast(atlasNotice(msg, language)) }
     }
 
     LaunchedEffect(Unit) {
@@ -300,14 +305,14 @@ fun QrDeviceScreen(
                     QrDeviceViewModel.Step.CONFIRM_PC_BIND -> PcApprovalCard(
                         user = currentUser,
                         serverUrl = viewModel.serverUrl,
-                        message = state.statusMessage,
+                        message = statusMessage,
                         loading = state.loading,
                         onApprove = viewModel::confirmPcAuthorization,
                         onDeny = viewModel::denyPcAuthorization,
                     )
 
                     QrDeviceViewModel.Step.WAITING_PC_APPROVAL -> WaitingPcCard(
-                        statusMessage = state.statusMessage,
+                        statusMessage = statusMessage,
                         accountHint = state.statusDto?.displayName ?: state.statusDto?.username,
                         avatarUrl = state.statusDto?.avatarUrl,
                         serverUrl = viewModel.serverUrl,
@@ -315,7 +320,7 @@ fun QrDeviceScreen(
                     )
 
                     QrDeviceViewModel.Step.COMPLETED -> CompletedPairingCard(
-                        message = state.statusMessage ?: atlasText("Appareil synchronisé avec succès.", "Device connected successfully.", "تم ربط الجهاز بنجاح."),
+                        message = statusMessage ?: atlasText("Appareil synchronisé avec succès.", "Device connected successfully.", "تم ربط الجهاز بنجاح."),
                         onScanAnother = viewModel::resetScan,
                         onDone = onClose,
                     )
@@ -456,7 +461,7 @@ fun QrDeviceScreen(
                         shape = RoundedCornerShape(16.dp),
                     ) {
                         Text(
-                            text = state.error.orEmpty(),
+                            text = errorMessage.orEmpty(),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.padding(14.dp),
@@ -734,9 +739,11 @@ private fun SecurityDeviceRow(
                         }
                     }
                 }
+                val lastSeen = device.lastSeen?.takeIf(String::isNotBlank)
+                val localizedLastSeen = if (lastSeen != null) atlasDateTime(lastSeen) else null
                 val meta = listOfNotNull(
                     device.lastIp?.takeIf { it.isNotBlank() }?.let { "IP $it" },
-                    device.lastSeen?.takeIf { it.isNotBlank() },
+                    localizedLastSeen,
                     device.fingerprint.takeIf { it.isNotBlank() },
                 ).joinToString(" · ")
                 if (meta.isNotBlank()) {

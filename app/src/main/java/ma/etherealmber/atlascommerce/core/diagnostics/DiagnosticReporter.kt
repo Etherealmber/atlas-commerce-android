@@ -492,12 +492,15 @@ object DiagnosticReporter {
         return summary + reportLogs + suffix
     }
 
-    fun copyFullReportToClipboard(context: Context, fullMarkdown: String) {
-        runCatching {
-            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-            cm?.setPrimaryClip(ClipData.newPlainText("Atlas Diagnostic Report", fullMarkdown))
+    fun copyFullReportToClipboard(context: Context, fullMarkdown: String): Boolean = runCatching {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        if (cm == null) {
+            false
+        } else {
+            cm.setPrimaryClip(ClipData.newPlainText("Atlas Diagnostic Report", fullMarkdown))
+            true
         }
-    }
+    }.getOrDefault(false)
 
     fun shareBundleWithAttachments(
         context: Context,

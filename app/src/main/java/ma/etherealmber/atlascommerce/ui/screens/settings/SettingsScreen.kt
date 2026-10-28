@@ -446,14 +446,14 @@ fun ProfileScreen(
             }
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsToggleRow(
-                title = "Animations fluides",
-                subtitle = "Transitions entre les pages, apparitions d'accueil et effets de mouvement.",
+                title = atlasText("Animations fluides", "Smooth animations", "حركات سلسة"),
+                subtitle = atlasText("Transitions entre les pages, apparitions d'accueil et effets de mouvement.", "Page transitions, home screen entrances, and motion effects.", "انتقالات الصفحات وحركات ظهور الشاشة الرئيسية وتأثيرات الحركة."),
                 checked = animationsEnabled,
                 onCheckedChange = appViewModel::setAnimationsEnabled,
             )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsToggleRow(
-                title = "Notifications système par rôle",
+                title = atlasText("Notifications système par rôle", "Role-based system notifications", "إشعارات النظام حسب الدور"),
                 subtitle = atlasText(
                     "Affiche les notifications Android filtrées selon votre rôle (${profileRoleLabel(user.role)}).",
                     "Shows Android notifications filtered for your role (${profileRoleLabel(user.role)}).",
@@ -495,29 +495,29 @@ fun ProfileScreen(
             }
             Spacer(Modifier.height(8.dp))
             SettingsToggleRow(
-                title = "Ouvrir la caméra automatiquement",
-                subtitle = "Désactivé par défaut — la caméra reste fermée en entrant dans Scan ou QR PC.",
+                title = atlasText("Ouvrir la caméra automatiquement", "Open camera automatically", "فتح الكاميرا تلقائياً"),
+                subtitle = atlasText("Désactivé par défaut — la caméra reste fermée en entrant dans Scan ou QR PC.", "Off by default — the camera stays closed when opening Scan or PC QR.", "معطّلة افتراضياً — تظل الكاميرا مغلقة عند فتح المسح أو QR الكمبيوتر."),
                 checked = autoOpenCamera,
                 onCheckedChange = appViewModel::setAutoOpenCamera,
             )
             AtlasDivider(Modifier.padding(vertical = 6.dp))
             SettingsToggleRow(
-                title = "Vibration au scan",
-                subtitle = "Retour haptique dès qu'un code-barres ou QR est détecté.",
+                title = atlasText("Vibration au scan", "Vibrate on scan", "الاهتزاز عند المسح"),
+                subtitle = atlasText("Retour haptique dès qu'un code-barres ou QR est détecté.", "Vibrate when a barcode or QR code is detected.", "اهتزاز عند اكتشاف باركود أو رمز QR."),
                 checked = scanHapticEnabled,
                 onCheckedChange = appViewModel::setScanHapticEnabled,
             )
             AtlasDivider(Modifier.padding(vertical = 6.dp))
             SettingsToggleRow(
-                title = "Signal sonore au scan",
-                subtitle = "Bip court de confirmation lors de la lecture d'un code.",
+                title = atlasText("Signal sonore au scan", "Scan sound", "صوت المسح"),
+                subtitle = atlasText("Bip court de confirmation lors de la lecture d'un code.", "Play a short confirmation beep when a code is read.", "إصدار نغمة تأكيد قصيرة عند قراءة الرمز."),
                 checked = scanSoundEnabled,
                 onCheckedChange = appViewModel::setScanSoundEnabled,
             )
             AtlasDivider(Modifier.padding(vertical = 6.dp))
             SettingsToggleRow(
-                title = "Ajout automatique au panier",
-                subtitle = "Ajoute immédiatement 1 unité au ticket VR lorsqu'un article est scanné.",
+                title = atlasText("Ajout automatique au panier", "Automatically add to cart", "الإضافة التلقائية إلى السلة"),
+                subtitle = atlasText("Ajoute immédiatement 1 unité au ticket VR lorsqu'un article est scanné.", "Immediately add one unit to the VR receipt when an item is scanned.", "إضافة وحدة واحدة فوراً إلى إيصال VR عند مسح المنتج."),
                 checked = autoAddCartOnScan,
                 onCheckedChange = appViewModel::setAutoAddCartOnScan,
             )
@@ -566,8 +566,8 @@ fun ProfileScreen(
                 }
                 AtlasDivider(Modifier.padding(vertical = 8.dp))
                 SettingsToggleRow(
-                    title = "Confirmer avant création du ticket",
-                    subtitle = "Affiche un récapitulatif du montant avant d'envoyer la vente au serveur.",
+                    title = atlasText("Confirmer avant création du ticket"),
+                    subtitle = atlasText("Affiche un récapitulatif du montant avant d'envoyer la vente au serveur."),
                     checked = confirmBeforeSale,
                     onCheckedChange = appViewModel::setConfirmBeforeSale,
                 )
@@ -965,15 +965,15 @@ fun SettingsScreen(
 
         AtlasCard {
             SettingsToggleRow(
-                title = "Téléchargement accéléré multi-connexions",
-                subtitle = "Télécharge les mises à jour via 4 connexions HTTP Range parallèles haute vitesse.",
+                title = atlasText("Téléchargement accéléré multi-connexions", "Multi-connection accelerated downloads", "تنزيلات سريعة متعددة الاتصالات"),
+                subtitle = atlasText("Télécharge les mises à jour via 4 connexions HTTP Range parallèles haute vitesse.", "Downloads updates using four high-speed parallel HTTP Range connections.", "تنزيل التحديثات عبر أربعة اتصالات HTTP Range متوازية وعالية السرعة."),
                 checked = parallelUpdateDownload,
                 onCheckedChange = appViewModel::setParallelUpdateDownload,
             )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsToggleRow(
-                title = "Toujours suivre la dernière version publiée",
-                subtitle = "Considère toute version publiée en dernier sur GitHub Releases ou CDN 1 comme la version active.",
+                title = atlasText("Toujours suivre la dernière version publiée", "Always follow the latest published release", "اتباع أحدث إصدار منشور دائماً"),
+                subtitle = atlasText("Considère toute version publiée en dernier sur GitHub Releases ou CDN 1 comme la version active.", "Treat the latest version published on GitHub Releases or CDN 1 as the active release.", "اعتبار أحدث إصدار منشور على GitHub Releases أو CDN 1 هو الإصدار النشط."),
                 checked = followLatestRelease,
                 onCheckedChange = appViewModel::setFollowLatestRelease,
             )
@@ -1163,15 +1163,15 @@ fun SettingsScreen(
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsRow(
                 icon = Icons.Outlined.DeleteOutline,
-                title = "Supprimer les PDF temporaires",
-                subtitle = "Les rapports privés sont purgés automatiquement après 7 jours.",
+                title = atlasText("Supprimer les PDF temporaires", "Delete temporary PDFs", "حذف ملفات PDF المؤقتة"),
+                subtitle = atlasText("Les rapports privés sont purgés automatiquement après 7 jours.", "Private reports are automatically deleted after 7 days.", "تُحذف التقارير الخاصة تلقائياً بعد 7 أيام."),
                 onClick = { showClearReportsDialog = true },
             )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsRow(
                 icon = Icons.Outlined.DeleteOutline,
-                title = "Effacer toutes les données locales",
-                subtitle = "Déconnecte le compte et efface les données stockées sur cet appareil uniquement.",
+                title = atlasText("Effacer toutes les données locales", "Clear all local data", "مسح جميع البيانات المحلية"),
+                subtitle = atlasText("Déconnecte le compte et efface les données stockées sur cet appareil uniquement.", "Signs out and clears data stored on this device only.", "تسجيل الخروج ومسح البيانات المخزنة على هذا الجهاز فقط."),
                 onClick = { showClearLocalDataDialog = true },
             )
         }
@@ -1264,15 +1264,15 @@ fun SettingsScreen(
         AtlasCard(padding = 4.dp) {
             SettingsRow(
                 icon = Icons.Outlined.Security,
-                title = "Sécurité & confidentialité",
-                subtitle = "Isolation multi-comptes, sessions, chiffrement",
+                title = atlasText("Sécurité & confidentialité", "Security & privacy", "الأمان والخصوصية"),
+                subtitle = atlasText("Isolation multi-comptes, sessions, chiffrement", "Account isolation, sessions, encryption", "عزل الحسابات والجلسات والتشفير"),
                 onClick = onOpenSecurity,
             )
             AtlasDivider(Modifier.padding(horizontal = 12.dp))
             SettingsRow(
                 icon = Icons.Outlined.Description,
-                title = "Licence MIT",
-                subtitle = "Sources et composants tiers",
+                title = atlasText("Licence MIT", "MIT license", "ترخيص MIT"),
+                subtitle = atlasText("Sources et composants tiers", "Sources and third-party components", "المصادر والمكونات الخارجية"),
                 onClick = onOpenLicense,
             )
             AtlasDivider(Modifier.padding(horizontal = 12.dp))

@@ -12,9 +12,10 @@ import kotlin.math.abs
 import kotlin.math.roundToLong
 
 /**
- * Locale-aware formatting used throughout Atlas. Money always retains the server's currency code;
- * Arabic output uses locale digits/separators and isolates the Latin ISO code to prevent bidi
- * reordering. Values are rounded only for display and are never used to derive financial totals.
+ * Locale-aware formatting used throughout Atlas. Server currency codes remain authoritative;
+ * Arabic output uses locale digits/separators and displays MAD with Morocco's Arabic abbreviation.
+ * Other ISO codes are bidi-isolated. Values are rounded only for display and are never used to
+ * derive financial totals.
  */
 object AtlasFormat {
 
@@ -37,7 +38,12 @@ object AtlasFormat {
         return NumberFormat.getIntegerInstance(locale(language)).format(safe.roundToLong())
     }
 
-    /** Example: "1 250,00 MAD"; currency remains an ISO code in every language. */
+    /** Display-only currency labels; Arabic uses the conventional Moroccan abbreviation for MAD. */
+    private fun currencyLabel(code: String, language: AppLanguage): String =
+        if (language == AppLanguage.ARABIC && code.equals("MAD", ignoreCase = true)) "د.م."
+        else if (language.isRtl) "\u2066$code\u2069" else code
+
+    /** Example: "1 250,00 MAD"; Arabic MAD uses the localized Moroccan label د.م. */
     fun money(
         amount: Double,
         currency: String? = null,
@@ -46,8 +52,7 @@ object AtlasFormat {
     ): String {
         val code = currency?.takeIf { it.isNotBlank() } ?: "MAD"
         val formatted = if (withDecimals) number(amount, 2, language) else integer(amount, language)
-        val bidiSafeCode = if (language.isRtl) "\u2066$code\u2069" else code
-        return "$formatted $bidiSafeCode"
+        return "$formatted ${currencyLabel(code, language)}"
     }
 
     /** Compact dashboard money; scale words are localized instead of leaking English `k` in Arabic. */
@@ -63,13 +68,13 @@ object AtlasFormat {
                 val scaled = amount / 1_000_000
                 val decimals = if (language.isRtl && scaled % 1.0 == 0.0) 0 else 1
                 val suffix = if (language.isRtl) "مليون" else "M"
-                "${number(scaled, decimals, language)} $suffix ${if (language.isRtl) "\u2066$code\u2069" else code}"
+                "${number(scaled, decimals, language)} $suffix ${currencyLabel(code, language)}"
             }
             absolute >= 10_000 -> {
                 val scaled = amount / 1_000
                 val decimals = if (language.isRtl && scaled % 1.0 == 0.0) 0 else 1
                 val suffix = if (language.isRtl) "ألف" else "k"
-                "${number(scaled, decimals, language)} $suffix ${if (language.isRtl) "\u2066$code\u2069" else code}"
+                "${number(scaled, decimals, language)} $suffix ${currencyLabel(code, language)}"
             }
             else -> money(amount, code, language = language)
         }
@@ -91,17 +96,17 @@ object AtlasFormat {
     fun percent(fraction: Double, language: AppLanguage = AppLanguage.FRENCH): String =
         "${number(fraction * 100, 0, language)} %"
 
-    fun dateTime(iso: String?): String = format(iso, "dd/MM/yyyy HH:mm")
+    fun dateTime(iso: String?, language: AppLanguage = AppLanguage.FRENCH): String = format(iso, "dd/MM/yyyy HH:mm", language)
 
-    fun date(iso: String?): String = format(iso, "dd MMM yyyy")
+    fun date(iso: String?, language: AppLanguage = AppLanguage.FRENCH): String = format(iso, "dd MMM yyyy", language)
 
-    fun shortDate(iso: String?): String = format(iso, "dd/MM/yy")
+    fun shortDate(iso: String?, language: AppLanguage = AppLanguage.FRENCH): String = format(iso, "dd/MM/yy", language)
 
-    private fun format(iso: String?, pattern: String): String {
+    private fun format(iso: String?, pattern: String, language: AppLanguage): String {
         if (iso.isNullOrBlank()) return "—"
         val instant = parseInstant(iso) ?: return iso.take(10)
         val zone = ZoneId.systemDefault()
-        return DateTimeFormatter.ofPattern(pattern, Locale.FRENCH).format(instant.atZone(zone))
+        return DateTimeFormatter.ofPattern(pattern, locale(language)).format(instant.atZone(zone))
     }
 
     private fun parseInstant(raw: String): Instant? {
@@ -120,17 +125,47 @@ object AtlasFormat {
         return null
     }
 
-    /** Relative wording for lists: "à l'instant", "il y a 3 h", "hier". */
-    fun relative(iso: String?): String {
+    /** Relative wording for lists localized with the selected app language. */
+    fun relative(iso: String?, language: AppLanguage = AppLanguage.FRENCH): String {
         val instant = iso?.let { parseInstant(it) } ?: return "—"
         val seconds = (System.currentTimeMillis() - instant.toEpochMilli()) / 1000
         return when {
-            seconds < 60 -> "à l'instant"
-            seconds < 3_600 -> "il y a ${seconds / 60} min"
-            seconds < 86_400 -> "il y a ${seconds / 3_600} h"
-            seconds < 172_800 -> "hier"
-            seconds < 604_800 -> "il y a ${seconds / 86_400} j"
-            else -> date(iso)
+            seconds < 60 -> when (language) {
+                AppLanguage.FRENCH -> "à l'instant"
+                AppLanguage.ENGLISH -> "just now"
+                AppLanguage.ARABIC -> "الآن"
+            }
+            seconds < 3_600 -> {
+                val count = number((seconds / 60).toDouble(), 0, language)
+                when (language) {
+                    AppLanguage.FRENCH -> "il y a $count min"
+                    AppLanguage.ENGLISH -> "$count min ago"
+                    AppLanguage.ARABIC -> "قبل $count د"
+                }
+            }
+            seconds < 86_400 -> {
+                val count = number((seconds / 3_600).toDouble(), 0, language)
+                when (language) {
+                    AppLanguage.FRENCH -> "il y a $count h"
+                    AppLanguage.ENGLISH -> "$count hr ago"
+                    AppLanguage.ARABIC -> "قبل $count س"
+                }
+            }
+            seconds < 172_800 -> when (language) {
+                AppLanguage.FRENCH -> "hier"
+                AppLanguage.ENGLISH -> "yesterday"
+                AppLanguage.ARABIC -> "أمس"
+            }
+            seconds < 604_800 -> {
+                val count = number((seconds / 86_400).toDouble(), 0, language)
+                when (language) {
+                    AppLanguage.FRENCH -> "il y a $count j"
+                    AppLanguage.ENGLISH -> "$count days ago"
+                    AppLanguage.ARABIC -> "قبل $count أيام"
+                }
+            }
+            else -> date(iso, language)
         }
     }
+
 }
