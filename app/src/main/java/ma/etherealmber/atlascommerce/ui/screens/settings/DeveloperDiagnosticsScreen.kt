@@ -55,6 +55,10 @@ fun DeveloperDiagnosticsScreen(
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
     val session by appViewModel.session.collectAsStateWithLifecycle()
     val activeRole = (session as? SessionState.Active)?.user?.role
+    val diagnosticsRefreshed = atlasText("État actualisé.", "Diagnostics refreshed.", "تم تحديث التشخيصات.")
+    val diagnosticsCopied = atlasText("Diagnostics expurgés copiés.", "Redacted diagnostics copied.", "تم نسخ التشخيصات المنقحة.")
+    val diagnosticsCopyFailed = atlasText("Impossible de copier les diagnostics.", "Could not copy diagnostics.", "تعذّر نسخ التشخيصات.")
+    val diagnosticsPrepareFailed = atlasText("Impossible de préparer les diagnostics.", "Could not prepare diagnostics.", "تعذّر إعداد التشخيصات.")
     val scope = rememberCoroutineScope()
     var copyingDiagnostics by remember { mutableStateOf(false) }
     var diagnosticSnapshot by remember(activeRole) {
@@ -128,7 +132,7 @@ fun DeveloperDiagnosticsScreen(
                                 role = activeRole,
                                 screenOrigin = "Developer diagnostics",
                             )
-                            onToast(atlasText("État actualisé.", "Diagnostics refreshed.", "تم تحديث التشخيصات."))
+                            onToast(diagnosticsRefreshed)
                         },
                     ) {
                         Icon(
@@ -163,12 +167,9 @@ fun DeveloperDiagnosticsScreen(
                                     )
                                     val copied = DiagnosticReporter.copyFullReportToClipboard(context, report)
                                     diagnosticSnapshot = freshSnapshot
-                                    onToast(
-                                        if (copied) atlasText("Diagnostics expurgés copiés.", "Redacted diagnostics copied.", "تم نسخ التشخيصات المنقحة.")
-                                        else atlasText("Impossible de copier les diagnostics.", "Could not copy diagnostics.", "تعذّر نسخ التشخيصات."),
-                                    )
+                                    onToast(if (copied) diagnosticsCopied else diagnosticsCopyFailed)
                                 } catch (_: Exception) {
-                                    onToast(atlasText("Impossible de préparer les diagnostics.", "Could not prepare diagnostics.", "تعذّر إعداد التشخيصات."))
+                                    onToast(diagnosticsPrepareFailed)
                                 } finally {
                                     copyingDiagnostics = false
                                 }
