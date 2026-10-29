@@ -182,6 +182,24 @@ fun ProfileScreen(
     val otherSavedAccounts = savedAccounts.filterNot {
         it.username.equals(user.username, ignoreCase = true)
     }
+    val configureDeviceUnlockMessage = atlasText(
+        "Configurez la biométrie ou un verrouillage d'écran sécurisé pour activer la connexion rapide.",
+        "Set up biometrics or a secure screen lock to enable quick sign-in.",
+        "أعد إعداد القياسات الحيوية أو قفل شاشة آمن لتفعيل تسجيل الدخول السريع.",
+    )
+    val localUnlockUnavailableMessage = atlasText(
+        "Le déverrouillage local est indisponible. Utilisez votre mot de passe et configurez un verrouillage sécurisé.",
+        "Local device unlock is unavailable. Use your password and set up a secure device lock.",
+        "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد قفل آمن.",
+    )
+    val savedAccountUnlockUnavailableMessage = atlasText(
+        "Le déverrouillage local est indisponible. Utilisez le mot de passe et configurez la biométrie ou un verrouillage sécurisé.",
+        "Local device unlock is unavailable. Use your password and set up biometrics or a secure screen lock.",
+        "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد القياسات الحيوية أو قفل شاشة آمن.",
+    )
+    val deviceUnlockAuthTitle = atlasText("Activer le déverrouillage Atlas", "Enable Atlas device unlock", "تفعيل إلغاء قفل Atlas")
+    val deviceUnlockAuthSubtitle = atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك.")
+    val unlockSavedAccountTitle = atlasText("Déverrouiller Atlas", "Unlock Atlas", "إلغاء قفل Atlas")
     val updateCurrentDeviceUnlock: (Boolean) -> Unit = { enabled ->
         val account = currentSavedAccount
         if (account != null && !enabled) {
@@ -190,16 +208,12 @@ fun ProfileScreen(
             val activity = context.findActivity() as? FragmentActivity
             if (activity == null || !DeviceUnlockAuthenticator.isAvailable(activity)) {
                 appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, false)
-                onToast(atlasText(
-                    "Configurez la biométrie ou un verrouillage d'écran sécurisé pour activer la connexion rapide.",
-                    "Set up biometrics or a secure screen lock to enable quick sign-in.",
-                    "أعد إعداد القياسات الحيوية أو قفل شاشة آمن لتفعيل تسجيل الدخول السريع.",
-                ))
+                onToast(configureDeviceUnlockMessage)
             } else {
                 DeviceUnlockAuthenticator.authenticate(
                     activity,
-                    atlasText("Activer le déverrouillage Atlas", "Enable Atlas device unlock", "تفعيل إلغاء قفل Atlas"),
-                    atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك."),
+                    deviceUnlockAuthTitle,
+                    deviceUnlockAuthSubtitle,
                 ) { outcome ->
                     when (outcome) {
                         DeviceUnlockAuthenticator.Outcome.AUTHENTICATED -> appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, true)
@@ -207,11 +221,7 @@ fun ProfileScreen(
                         DeviceUnlockAuthenticator.Outcome.UNAVAILABLE,
                         DeviceUnlockAuthenticator.Outcome.FAILED -> {
                             appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, false)
-                            onToast(atlasText(
-                                "Le déverrouillage local est indisponible. Utilisez votre mot de passe et configurez un verrouillage sécurisé.",
-                                "Local device unlock is unavailable. Use your password and set up a secure device lock.",
-                                "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد قفل آمن.",
-                            ))
+                            onToast(localUnlockUnavailableMessage)
                         }
                     }
                 }
@@ -225,16 +235,12 @@ fun ProfileScreen(
             Unit
         } else if (fragmentActivity == null || !DeviceUnlockAuthenticator.isAvailable(fragmentActivity)) {
             appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, false)
-            onToast(atlasText(
-                "Le déverrouillage local est indisponible. Utilisez le mot de passe et configurez la biométrie ou un verrouillage sécurisé.",
-                "Local device unlock is unavailable. Use your password and set up biometrics or a secure screen lock.",
-                "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد القياسات الحيوية أو قفل آمن.",
-            ))
+            onToast(savedAccountUnlockUnavailableMessage)
         } else {
             DeviceUnlockAuthenticator.authenticate(
                 fragmentActivity,
-                atlasText("Déverrouiller Atlas", "Unlock Atlas", "إلغاء قفل Atlas"),
-                atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك."),
+                unlockSavedAccountTitle,
+                deviceUnlockAuthSubtitle,
             ) { outcome ->
                 when (outcome) {
                     DeviceUnlockAuthenticator.Outcome.AUTHENTICATED -> appViewModel.switchSavedAccount(account, onToast)
@@ -242,11 +248,7 @@ fun ProfileScreen(
                     DeviceUnlockAuthenticator.Outcome.UNAVAILABLE,
                     DeviceUnlockAuthenticator.Outcome.FAILED -> {
                         appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, false)
-                        onToast(atlasText(
-                            "Le déverrouillage local est indisponible. Utilisez le mot de passe et configurez la biométrie ou un verrouillage sécurisé.",
-                            "Local device unlock is unavailable. Use your password and set up biometrics or a secure screen lock.",
-                            "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد القياسات الحيوية أو قفل آمن.",
-                        ))
+                        onToast(savedAccountUnlockUnavailableMessage)
                     }
                 }
             }

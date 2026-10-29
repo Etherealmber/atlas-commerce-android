@@ -435,6 +435,14 @@ private fun AtlasGate(
             isAppearanceLightNavigationBars = if (authScreen) false else !darkTheme
         }
     }
+    val loginDeviceUnlockUnavailableMessage = atlasText(
+        "Le déverrouillage local est indisponible. Connectez-vous avec votre mot de passe et configurez la biométrie ou un verrouillage sécurisé.",
+        "Local device unlock is unavailable. Sign in with your password and set up biometrics or a secure screen lock.",
+        "إلغاء القفل المحلي غير متاح. سجّل الدخول بكلمة المرور وأعد إعداد القياسات الحيوية أو قفل شاشة آمن.",
+    )
+    val loginDeviceUnlockTitle = atlasText("Déverrouiller Atlas", "Unlock Atlas", "إلغاء قفل Atlas")
+    val loginDeviceUnlockSubtitle = atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك.")
+
     LaunchedEffect(onboardingDone, baseStage, openQrAfterOnboarding) {
         if (onboardingDone && openQrAfterOnboarding && baseStage == RootStage.LOGIN) {
             openQrAfterOnboarding = false
@@ -487,16 +495,12 @@ private fun AtlasGate(
                             val authActivity = context.findActivity() as? FragmentActivity
                             if (authActivity == null || !DeviceUnlockAuthenticator.isAvailable(authActivity)) {
                                 viewModel.setSavedAccountDeviceUnlock(entry.serverUrl, entry.username, false)
-                                showToast(atlasText(
-                                    "Le déverrouillage local est indisponible. Connectez-vous avec votre mot de passe et configurez la biométrie ou un verrouillage sécurisé.",
-                                    "Local device unlock is unavailable. Sign in with your password and set up biometrics or a secure screen lock.",
-                                    "إلغاء القفل المحلي غير متاح. سجّل الدخول بكلمة المرور وأعد إعداد القياسات الحيوية أو قفل شاشة آمن.",
-                                ))
+                                showToast(loginDeviceUnlockUnavailableMessage)
                             } else {
                                 DeviceUnlockAuthenticator.authenticate(
                                     authActivity,
-                                    atlasText("Déverrouiller Atlas", "Unlock Atlas", "إلغاء قفل Atlas"),
-                                    atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك."),
+                                    loginDeviceUnlockTitle,
+                                    loginDeviceUnlockSubtitle,
                                 ) { outcome ->
                                     when (outcome) {
                                         DeviceUnlockAuthenticator.Outcome.AUTHENTICATED -> afterAuthentication()
@@ -504,13 +508,7 @@ private fun AtlasGate(
                                         DeviceUnlockAuthenticator.Outcome.UNAVAILABLE,
                                         DeviceUnlockAuthenticator.Outcome.FAILED -> {
                                             viewModel.setSavedAccountDeviceUnlock(entry.serverUrl, entry.username, false)
-                                            showToast(
-                                                atlasText(
-                                                    "Le déverrouillage local est indisponible. Connectez-vous avec votre mot de passe et configurez la biométrie ou un verrouillage sécurisé.",
-                                                    "Local device unlock is unavailable. Sign in with your password and set up biometrics or a secure screen lock.",
-                                                    "إلغاء القفل المحلي غير متاح. سجّل الدخول بكلمة المرور وأعد إعداد القياسات الحيوية أو قفل شاشة آمن.",
-                                                ),
-                                            )
+                                            showToast(loginDeviceUnlockUnavailableMessage)
                                         }
                                     }
                                 }
@@ -701,6 +699,11 @@ private fun AtlasGate(
             if (activeUser != null) deviceUnlockSetupRequest?.let { request ->
                 val authActivity = context.findActivity() as? FragmentActivity
                 val localAuthAvailable = authActivity?.let { DeviceUnlockAuthenticator.isAvailable(it) } == true
+                val unavailableOptInMessage = atlasText("Utilisez votre mot de passe et configurez un verrouillage sécurisé pour activer le déverrouillage rapide.", "Use your password and set up a secure device lock to enable quick unlock.", "استخدم كلمة المرور وأعد إعداد قفل آمن لتفعيل إلغاء القفل السريع.")
+                val deviceUnlockAuthTitle = atlasText("Activer le déverrouillage Atlas", "Enable Atlas device unlock", "تفعيل إلغاء قفل Atlas")
+                val deviceUnlockAuthSubtitle = atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك.")
+                val deviceUnlockEnabledMessage = atlasText("Déverrouillage de l'appareil activé.", "Device unlock enabled.", "تم تفعيل إلغاء قفل الجهاز.")
+                val deviceUnlockFailureMessage = atlasText("Le déverrouillage local n'est pas disponible. Utilisez votre mot de passe et configurez un verrouillage sécurisé.", "Local device unlock is unavailable. Use your password and set up a secure device lock.", "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد قفل آمن.")
                 AlertDialog(
                     onDismissRequest = {
                         viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, false)
@@ -735,23 +738,23 @@ private fun AtlasGate(
                                 viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, false)
                                 val activity = authActivity
                                 if (activity == null) {
-                                    showToast(atlasText("Utilisez votre mot de passe et configurez un verrouillage sécurisé pour activer le déverrouillage rapide.", "Use your password and set up a secure device lock to enable quick unlock.", "استخدم كلمة المرور وأعد إعداد قفل آمن لتفعيل إلغاء القفل السريع."))
+                                    showToast(unavailableOptInMessage)
                                 } else {
                                     DeviceUnlockAuthenticator.authenticate(
                                         activity,
-                                        atlasText("Activer le déverrouillage Atlas", "Enable Atlas device unlock", "تفعيل إلغاء قفل Atlas"),
-                                        atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك."),
+                                        deviceUnlockAuthTitle,
+                                        deviceUnlockAuthSubtitle,
                                     ) { outcome ->
                                         when (outcome) {
                                             DeviceUnlockAuthenticator.Outcome.AUTHENTICATED -> {
                                                 viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, true)
-                                                showToast(atlasText("Déverrouillage de l'appareil activé.", "Device unlock enabled.", "تم تفعيل إلغاء قفل الجهاز."))
+                                                showToast(deviceUnlockEnabledMessage)
                                             }
                                             DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
                                             DeviceUnlockAuthenticator.Outcome.UNAVAILABLE,
                                             DeviceUnlockAuthenticator.Outcome.FAILED -> {
                                                 viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, false)
-                                                showToast(atlasText("Le déverrouillage local n'est pas disponible. Utilisez votre mot de passe et configurez un verrouillage sécurisé.", "Local device unlock is unavailable. Use your password and set up a secure device lock.", "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد قفل آمن."))
+                                                showToast(deviceUnlockFailureMessage)
                                             }
                                         }
                                     }
