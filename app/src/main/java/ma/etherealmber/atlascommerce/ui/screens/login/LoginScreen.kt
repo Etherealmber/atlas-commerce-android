@@ -1,18 +1,11 @@
 package ma.etherealmber.atlascommerce.ui.screens.login
 
-import android.content.Intent
-import android.provider.Settings
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -61,11 +54,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -74,22 +65,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppDetails
@@ -107,41 +93,38 @@ import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasUsesSystemLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalSetAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalUseSystemAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
-import ma.etherealmber.atlascommerce.ui.screens.agent.AtlasAgentMascot
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
+import ma.etherealmber.atlascommerce.ui.theme.AtlasAuthTheme
 
 @Composable
 fun LoginScreen(
     onChangeServer: () -> Unit,
     onOpenQrDevice: () -> Unit = {},
+    onUnlockSavedAccount: (SavedAccountEntry, () -> Unit) -> Unit = { _, _ -> },
     viewModel: LoginViewModel = hiltViewModel(),
+) {
+    AtlasAuthTheme {
+        LoginScreenContent(onChangeServer, onOpenQrDevice, onUnlockSavedAccount, viewModel)
+    }
+}
+
+@Composable
+private fun LoginScreenContent(
+    onChangeServer: () -> Unit,
+    onOpenQrDevice: () -> Unit,
+    onUnlockSavedAccount: (SavedAccountEntry, () -> Unit) -> Unit,
+    viewModel: LoginViewModel,
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val state by viewModel.state.collectAsStateWithLifecycle()
     val server by viewModel.server.collectAsStateWithLifecycle()
     val savedAccounts by viewModel.savedAccounts.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     val language = LocalAtlasLanguage.current
     val setLanguage = LocalSetAtlasLanguage.current
     val followsSystemLanguage = LocalAtlasUsesSystemLanguage.current
     val useSystemLanguage = LocalUseSystemAtlasLanguage.current
     var accountPromptHandled by remember { mutableStateOf(false) }
-    var accountToConfirm by remember { mutableStateOf<SavedAccountEntry?>(null) }
     var languageDialogOpen by remember { mutableStateOf(false) }
-    var userTyping by remember { mutableStateOf(false) }
-    var typingPulse by remember { mutableIntStateOf(0) }
-    LaunchedEffect(typingPulse) {
-        if (typingPulse > 0) {
-            userTyping = true
-            delay(1_100)
-            userTyping = false
-        }
-    }
-    val agentStatus = when {
-        state.loading -> atlasText("Atlas vérifie votre connexion…", "Atlas is checking your sign-in…", "يتحقق Atlas من تسجيل دخولك…")
-        userTyping -> atlasText("Atlas vous écoute…", "Atlas is listening…", "Atlas يستمع إليك…")
-        else -> atlasText("Atlas Agent est prêt à vous aider", "Atlas Agent is ready to help", "مساعد Atlas جاهز لمساعدتك")
-    }
     LaunchedEffect(savedAccounts, state.step) {
         if (accountPromptHandled) return@LaunchedEffect
         if (state.step != LoginViewModel.Step.CREDENTIALS) {
@@ -149,7 +132,9 @@ fun LoginScreen(
             return@LaunchedEffect
         }
         if (savedAccounts.isNotEmpty()) {
-            accountToConfirm = savedAccounts.first()
+            val savedAccount = savedAccounts.firstOrNull { it.canUseDeviceUnlock } ?: savedAccounts.first()
+            // Keep the regular password form visible; local unlock is an explicit alternative below.
+            viewModel.onUsernameChange(savedAccount.username)
             accountPromptHandled = true
         } else {
             delay(1_500)
@@ -157,70 +142,7 @@ fun LoginScreen(
         }
     }
     val host = server?.let { ServerUrl.display(it.baseUrl) } ?: atlasText("Serveur non sélectionné", "No server selected", "لم يتم اختيار خادم")
-    val lifecycleOwner = LocalLifecycleOwner.current
 
-    DisposableEffect(lifecycleOwner, viewModel) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshPasskeyCapability()
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    accountToConfirm?.let { savedAccount ->
-        AlertDialog(
-            onDismissRequest = { accountToConfirm = null },
-            title = { Text(atlasText("Bon retour", "Welcome back", "مرحبًا بعودتك")) },
-            text = {
-                Text(
-                    atlasText(
-                        "Continuer avec ${savedAccount.displayName.ifBlank { savedAccount.username }} ? Son identifiant sera prérempli ; votre mot de passe reste nécessaire.",
-                        "Continue as ${savedAccount.displayName.ifBlank { savedAccount.username }}? We'll prefill the username; your account password is still required.",
-                        "هل تريد المتابعة باسم ${savedAccount.displayName.ifBlank { savedAccount.username }}؟ سنملأ اسم المستخدم فقط؛ وستظل كلمة مرور الحساب مطلوبة.",
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    accountToConfirm = null
-                    viewModel.onUsernameChange(savedAccount.username)
-                }, enabled = !state.loading) {
-                    Text(atlasText("Continuer avec ce compte", "Continue with this account", "المتابعة بهذا الحساب"))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    accountToConfirm = null
-                    viewModel.onUsernameChange("")
-                }) {
-                    Text(atlasText("Utiliser un autre compte", "Use another account", "استخدام حساب آخر"))
-                }
-            },
-        )
-    }
-
-    state.passkeyError?.let { passkeyError ->
-        AlertDialog(
-            onDismissRequest = viewModel::dismissPasskeyError,
-            title = { Text(atlasText("Connexion par passkey impossible", "Passkey sign-in failed", "تعذّر تسجيل الدخول بمفتاح المرور")) },
-            text = { Text(localizedLoginMessage(passkeyError)) },
-            confirmButton = {
-                TextButton(onClick = viewModel::dismissPasskeyError) { Text(atlasText("Fermer", "Close", "إغلاق")) }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.dismissPasskeyError()
-                        val credentialSettings = Intent("android.settings.PASSWORDS_AND_ACCOUNTS_SETTINGS")
-                        runCatching { context.startActivity(credentialSettings) }
-                            .onFailure {
-                                runCatching { context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
-                            }
-                    },
-                ) { Text(atlasText("Paramètres Android", "Android settings", "إعدادات Android")) }
-            },
-        )
-    }
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize().background(
@@ -232,7 +154,7 @@ fun LoginScreen(
     ) {
         val compact = maxWidth < 600.dp || maxHeight < 840.dp
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        val heroHeight = if (keyboardVisible) 128.dp else if (compact) 148.dp else 174.dp
+        val heroHeight = if (keyboardVisible) 82.dp else if (compact) 108.dp else 136.dp
 
         Column(
             modifier = Modifier
@@ -247,8 +169,6 @@ fun LoginScreen(
         ) {
             LoginAtlasHero(
                 compact = compact || keyboardVisible,
-                motionEnabled = motionEnabled,
-                status = agentStatus,
                 host = host,
                 onChangeServer = onChangeServer,
                 onOpenQrDevice = onOpenQrDevice,
@@ -291,29 +211,31 @@ fun LoginScreen(
                 if (state.step == LoginViewModel.Step.CREDENTIALS) {
                     CredentialsForm(
                         state = state,
-                        onUsername = {
-                            viewModel.onUsernameChange(it)
-                            typingPulse++
-                        },
-                        onPassword = {
-                            viewModel.onPasswordChange(it)
-                            typingPulse++
-                        },
+                        onUsername = viewModel::onUsernameChange,
+                        onPassword = viewModel::onPasswordChange,
                         onRememberChange = viewModel::onRememberAccountChange,
                         onSubmit = viewModel::submit,
                         onDismissError = viewModel::dismissError,
                         compact = compact,
                     )
-                    if (state.passkeyAvailable) {
+                    savedAccounts.filter { it.canUseDeviceUnlock }.forEach { savedAccount ->
                         TextButton(
-                            onClick = { viewModel.signInWithPasskey(context) },
+                            onClick = {
+                                onUnlockSavedAccount(savedAccount) {
+                                    viewModel.signInWithSavedAccount(savedAccount)
+                                }
+                            },
                             enabled = !state.loading,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(7.dp))
                             Text(
-                                text = atlasText("Utiliser une passkey Android", "Use an Android passkey", "استخدم مفتاح مرور Android"),
+                                text = atlasText(
+                                    "Utiliser le déverrouillage Android · ${savedAccount.displayName.ifBlank { savedAccount.username }}",
+                                    "Use Android device unlock · ${savedAccount.displayName.ifBlank { savedAccount.username }}",
+                                    "استخدم إلغاء قفل Android · ${savedAccount.displayName.ifBlank { savedAccount.username }}",
+                                ),
                                 style = MaterialTheme.typography.labelLarge,
                                 maxLines = 1,
                                 softWrap = false,
@@ -324,10 +246,7 @@ fun LoginScreen(
                 } else {
                     OtpForm(
                         state = state,
-                        onOtp = {
-                            viewModel.onOtpChange(it)
-                            typingPulse++
-                        },
+                        onOtp = viewModel::onOtpChange,
                         onSubmit = viewModel::submit,
                         onResend = viewModel::resendCode,
                         onBack = viewModel::backToCredentials,
@@ -368,8 +287,6 @@ fun LoginScreen(
 @Composable
 private fun LoginAtlasHero(
     compact: Boolean,
-    motionEnabled: Boolean,
-    status: String,
     host: String,
     onChangeServer: () -> Unit,
     onOpenQrDevice: () -> Unit,
@@ -377,84 +294,26 @@ private fun LoginAtlasHero(
     modifier: Modifier = Modifier,
 ) {
     val palette = Atlas.palette
-    var logoTaps by remember { mutableIntStateOf(0) }
-    var showSurprise by remember { mutableStateOf(false) }
-    if (showSurprise) {
-        AlertDialog(
-            onDismissRequest = { showSurprise = false },
-            title = { Text(atlasText("Bienvenue, explorateur !", "Welcome, explorer!", "مرحباً أيها المستكشف!")) },
-            text = { Text(atlasText("✨ Vous avez découvert une étoile Atlas.", "✨ You found an Atlas star.", "✨ لقد اكتشفت نجمة Atlas.")) },
-            confirmButton = { TextButton(onClick = { showSurprise = false }) { Text(atlasText("Fermer", "Close", "إغلاق")) } },
-        )
-    }
-    Column(
-        modifier = modifier.background(
-            Brush.verticalGradient(listOf(Color(0xFF081211), palette.heroStart, Color(0xFF183A36))),
-        ).padding(horizontal = 22.dp, vertical = if (compact) 8.dp else 13.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
+    Row(
+        modifier = modifier
+            .background(Brush.verticalGradient(listOf(Color(0xFF071110), palette.heroStart, Color(0xFF3A7069))))
+            .padding(horizontal = 22.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AtlasEntrance(delayMillis = 0) {
-                AtlasBrandWordmark(
-                    modifier = Modifier.widthIn(max = 185.dp).clickable {
-                        logoTaps++
-                        if (logoTaps >= 5) { logoTaps = 0; showSurprise = true }
-                    },
-                    height = if (compact) 28.dp else 36.dp,
-                    tint = Color.White,
-                )
-            }
-            LoginOverflowMenu(
-                host = host,
-                onChangeServer = onChangeServer,
-                onOpenQrDevice = onOpenQrDevice,
-                onOpenLanguage = onOpenLanguage,
+        AtlasEntrance(delayMillis = 0) {
+            AtlasBrandWordmark(
+                modifier = Modifier.widthIn(max = 185.dp),
+                height = if (compact) 28.dp else 36.dp,
+                tint = Color.White,
             )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 2.dp, end = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AtlasAgentMascot(Modifier.size(if (compact) 34.dp else 40.dp))
-            Spacer(Modifier.width(11.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = atlasText("Atlas Agent", "Atlas Agent", "مساعد Atlas"),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
-                AnimatedContent(
-                    targetState = status,
-                    transitionSpec = {
-                        if (motionEnabled) {
-                            (fadeIn(tween(170)) + slideInVertically { it / 5 }) togetherWith
-                                (fadeOut(tween(120)) + slideOutVertically { -it / 5 })
-                        } else EnterTransition.None togetherWith ExitTransition.None
-                    },
-                    label = "login-agent-status",
-                ) { currentStatus ->
-                    Text(
-                        text = currentStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.78f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Text(
-                    text = atlasText("Serveur sécurisé · $host", "Secure server · $host", "خادم آمن · $host"),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.58f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
+        Spacer(Modifier.weight(1f))
+        LoginOverflowMenu(
+            host = host,
+            onChangeServer = onChangeServer,
+            onOpenQrDevice = onOpenQrDevice,
+            onOpenLanguage = onOpenLanguage,
+        )
     }
 }
 
@@ -692,7 +551,7 @@ private fun OtpForm(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LoginInlineError(state: LoginViewModel.UiState, onDismiss: () -> Unit) {
-    val error = state.error?.takeIf { it.isNotBlank() && state.passkeyError == null }
+    val error = state.error?.takeIf { it.isNotBlank() }
     val requester = remember { BringIntoViewRequester() }
     LaunchedEffect(error) {
         if (error != null) {
@@ -739,18 +598,8 @@ private fun localizedLoginMessage(message: String): String = when (message) {
         atlasText("Une mise à jour est nécessaire pour continuer.", "An update is required to continue.", "يلزم تحديث للمتابعة.")
     "Vérification impossible. Vérifiez le code et réessayez." ->
         atlasText("Vérification impossible. Vérifiez le code et réessayez.", "Couldn't verify the code. Check it and try again.", "تعذّر التحقق من الرمز. تحقق منه وحاول مجدداً.")
-    "Aucune passkey n'est disponible sur cet appareil. Connectez-vous avec votre mot de passe, puis ajoutez une passkey dans les paramètres." ->
-        atlasText("Aucune passkey n'est disponible sur cet appareil. Connectez-vous avec votre mot de passe, puis ajoutez une passkey dans les paramètres.", "No passkey is available on this device. Sign in with your password, then add one in Settings.", "لا يتوفر مفتاح مرور على هذا الجهاز. سجّل الدخول بكلمة المرور ثم أضف مفتاحاً من الإعدادات.")
-    "Aucun fournisseur de passkeys n'est prêt sur cet appareil. Vérifiez les paramètres de mots de passe Android ou utilisez votre mot de passe." ->
-        atlasText("Aucun fournisseur de passkeys n'est prêt sur cet appareil. Vérifiez les paramètres de mots de passe Android ou utilisez votre mot de passe.", "No passkey provider is ready on this device. Check Android password settings or use your password.", "لا يوجد مزوّد مفاتيح مرور جاهز على هذا الجهاز. تحقق من إعدادات كلمات مرور Android أو استخدم كلمة المرور.")
-    "La connexion par passkey a été annulée." ->
-        atlasText("La connexion par passkey a été annulée.", "Passkey sign-in was canceled.", "تم إلغاء تسجيل الدخول بمفتاح المرور.")
     "L'origine du serveur sélectionné est invalide." ->
         atlasText("L'adresse du serveur sélectionné est invalide.", "The selected server address is invalid.", "عنوان الخادم المحدد غير صالح.")
-    "Les passkeys Android ne sont pas activées sur ce serveur.", "Les passkeys Android ne sont plus disponibles sur ce serveur." ->
-        atlasText("Les passkeys Android ne sont pas activées sur ce serveur.", "Android passkeys are not enabled on this server.", "مفاتيح المرور غير مفعّلة على هذا الخادم.")
-    "Connexion par passkey impossible. Réessayez ou utilisez votre mot de passe." ->
-        atlasText("Connexion par passkey impossible. Réessayez ou utilisez votre mot de passe.", "Passkey sign-in failed. Try again or use your password.", "تعذّر تسجيل الدخول بمفتاح المرور. حاول مجدداً أو استخدم كلمة المرور.")
     "Connexion impossible. Vérifiez vos informations et réessayez." ->
         atlasText("Connexion impossible. Vérifiez vos informations et réessayez.", "Couldn't sign in. Check your details and try again.", "تعذّر تسجيل الدخول. تحقق من بياناتك وحاول مجدداً.")
     else -> atlasText("Une erreur est survenue. Réessayez.", "Something went wrong. Please try again.", "حدث خطأ. يرجى المحاولة مجدداً.")

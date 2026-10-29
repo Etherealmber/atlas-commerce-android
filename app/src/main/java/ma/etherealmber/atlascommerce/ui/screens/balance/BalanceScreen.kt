@@ -249,16 +249,21 @@ fun BalanceScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    atlasText("Trésorerie · créances · mouvements"),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                atlasText("Trésorerie · créances · mouvements", "Cash · receivables · transactions", "الخزينة · المستحقات · الحركات"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Spacer(Modifier.weight(1f))
                 MonthSelector(selectedPeriod = state.selectedPeriod, onSelect = viewModel::selectPeriod)
                 IconButton(onClick = viewModel::refresh, enabled = !state.refreshing) {
                     if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
@@ -296,7 +301,7 @@ fun BalanceScreen(
                 Tab(
                     selected = section == tab,
                     onClick = { section = tab },
-                    text = { Text(when (tab) { BalanceSection.MOVEMENTS -> atlasText("Mouvements", "Transactions", "الحركات"); BalanceSection.CLIENTS -> atlasText("Clients", "Customers", "العملاء"); BalanceSection.REPORTS -> atlasText("Rapports", "Reports", "التقارير") }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    text = { Text(when (tab) { BalanceSection.MOVEMENTS -> atlasText("Mouvements", "Transactions", "الحركات"); BalanceSection.CLIENTS -> atlasText("Comptes", "Accounts", "الحسابات"); BalanceSection.REPORTS -> atlasText("Rapports", "Reports", "التقارير") }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 )
             }
         }

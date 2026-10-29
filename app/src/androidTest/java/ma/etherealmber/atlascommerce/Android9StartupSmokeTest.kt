@@ -22,15 +22,15 @@ class Android9StartupSmokeTest {
         val launchIntent = checkNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         val device = UiDevice.getInstance(instrumentation)
-        // The first screen is the sign-in choice page. Accept its localized title (and the demo
-        // preview title) because the app follows the emulator's system language.
+        // New installs choose a server before onboarding or sign-in. Accept the localized
+        // server-setup heading because the app follows the emulator's system language.
         val firstRunMarkers = listOf(
-            By.textContains("Bienvenue sur Atlas"),
-            By.textContains("Welcome to Atlas"),
-            By.textContains("مرحباً بك في Atlas"),
-            By.textContains("Aperçu interactif"),
-            By.textContains("Interactive preview"),
-            By.textContains("معاينة تفاعلية"),
+            By.textContains("Connectez votre serveur"),
+            By.textContains("Connect your server"),
+            By.textContains("اربط الخادم الخاص بك"),
+            By.textContains("Saisissez l'adresse du site Atlas Commerce de votre organisation."),
+            By.textContains("Enter your organization's Atlas Commerce site address."),
+            By.textContains("أدخل عنوان موقع Atlas Commerce الخاص بمؤسستك."),
         )
 
         ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->

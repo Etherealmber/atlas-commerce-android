@@ -295,6 +295,42 @@ fun AtlasTheme(
     }
 }
 
+/** Dark glass/teal theme used for the pre-authentication screens, inspired by the supplied reference. */
+@Composable
+fun AtlasAuthTheme(content: @Composable () -> Unit) {
+    val typography = MaterialTheme.typography
+    val shapes = MaterialTheme.shapes
+    val colors = darkColorScheme(
+        primary = Color(0xFFB5D9D2),
+        onPrimary = Color(0xFF102522),
+        primaryContainer = Color(0xFF315D56),
+        onPrimaryContainer = Color(0xFFE1F2EE),
+        secondary = Color(0xFFC0D2CE),
+        onSecondary = Color(0xFF1D2C29),
+        tertiary = Color(0xFFD6B56D),
+        onTertiary = Color(0xFF251C08),
+        background = Color(0xFF071110),
+        onBackground = Color(0xFFF4F7F6),
+        surface = Color(0xFF1E2928),
+        onSurface = Color(0xFFF1F5F4),
+        surfaceVariant = Color(0xFF2A3836),
+        onSurfaceVariant = Color(0xFFBECBC7),
+        outline = Color(0xFF60716D),
+        outlineVariant = Color(0xFF40504D),
+        error = Color(0xFFFFB4AB),
+        onError = Color(0xFF690005),
+    )
+    val authPalette = DarkPalette.copy(
+        cardBorder = Color(0xFF40514E),
+        mutedText = Color(0xFFBECBC7),
+        heroStart = Color(0xFF071110),
+        heroEnd = Color(0xFF3A7069),
+    )
+    CompositionLocalProvider(LocalAtlasPalette provides authPalette) {
+        MaterialTheme(colorScheme = colors, typography = typography, shapes = shapes, content = content)
+    }
+}
+
 /** Convenience accessors used across screens. */
 object Atlas {
     val palette: AtlasPalette

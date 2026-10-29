@@ -51,7 +51,6 @@ fun DeveloperDiagnosticsScreen(
 ) {
     val context = LocalContext.current
     val developerMode by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
-    val passkeyAvailable by appViewModel.androidPasskeysAvailable.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
     val session by appViewModel.session.collectAsStateWithLifecycle()
     val activeRole = (session as? SessionState.Active)?.user?.role
@@ -210,11 +209,6 @@ fun DeveloperDiagnosticsScreen(
                 AtlasInfoRow(
                     atlasText("Dernière actualisation", "Last refreshed", "آخر تحديث"),
                     diagnosticSnapshot.timestampUtc,
-                )
-                AtlasInfoRow(
-                    atlasText("Passkeys", "Passkeys", "مفاتيح المرور"),
-                    if (passkeyAvailable) atlasText("Disponibles", "Available", "متاحة")
-                    else atlasText("Non disponibles", "Unavailable", "غير متاحة"),
                 )
                 AtlasInfoRow(
                     atlasText("Catalogue hors ligne", "Offline catalog", "الكتالوج غير المتصل"),

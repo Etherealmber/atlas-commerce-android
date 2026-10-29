@@ -349,7 +349,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Start API 28 emulator and verify app reaches onboarding
+      - name: Start API 28 emulator and verify first-run setup
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 28

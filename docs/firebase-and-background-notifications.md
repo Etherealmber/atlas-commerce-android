@@ -43,6 +43,6 @@ The Android app can receive pushes only if the APK has the matching Firebase con
 
 Allow **Notifications** for Atlas Commerce and enable the `Assistant & notifications serveur`, `Notifications & alertes métier`, and update channels. Xiaomi may also require **Autostart** and **Battery → No restrictions** for reliable background delivery. Android/MIUI can still defer background work; an app cannot override the operating system's battery policy.
 
-## Passkey diagnosis
+## Local device unlock
 
-The registration request still reaches the Worker, but the observed `CreateCredentialNoCreateOptionException` is raised by Android Credential Manager before `/register/verify`. Android's troubleshooting guide describes this exception as no valid password/passkey provider being configured. This differs from server-side verification errors. The current options also contain one `excludeCredentials` entry: if no passkey exists on the device, inspect whether that Worker row is a stale legacy credential before deleting or excluding anything. Do not weaken origin, challenge, account-binding, or signature checks.
+Quick sign-in is an opt-in convenience for a saved account. It uses the Android system prompt with biometrics and device PIN/password fallback, then verifies the encrypted session token with the selected Worker. If the prompt is unavailable or the quick action disappears, sign in manually and check that biometric authentication or a secure screen lock is configured. Atlas never stores the account password; do not weaken server session verification.

@@ -7,18 +7,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
 
 ### Ajouté
 
-- **Passkeys Android Credential Manager protégées par la capacité du serveur** : l'app exige
-  `data.enabled`, `data.android.enabled`, le package exact, l'origine de signature Play dérivée du
-  certificat installé et l'origine HTTPS sélectionnée dans `data.origins`. Le client transmet
-  l'origine au Credential Manager lorsque l'API Android le permet; aucune session n'est créée avant
-  la vérification cryptographique côté Worker. Voir [docs/SETUP.md](docs/SETUP.md) et le guide
-  backend [WebAuthn](https://github.com/Etherealmber/atlas-commerce/blob/main/docs/webauthn.md).
+- **Déverrouillage local facultatif des comptes enregistrés** : après une connexion manuelle,
+  l'utilisateur peut autoriser biométrie ou code PIN/mot de passe Android. Le jeton de session
+  enregistré reste chiffré et est revérifié auprès du serveur sélectionné; le mot de passe Atlas
+  n'est jamais conservé. Le refus ou l'indisponibilité conserve la connexion manuelle.
 - **Envoi automatique de rapports de plantage, avec consentement explicite** : Firebase Crashlytics
   reste désactivé par défaut et n'envoie rien tant que l'utilisateur n'a pas activé l'option dans
   Paramètres. Les builds sans `google-services.json` restent fonctionnels sans Firebase.
 - **Configuration complète depuis zéro** : [docs/SETUP.md](docs/SETUP.md) couvre le Worker Cloudflare,
-  D1/migrations, R2, les clés provider, l'app Android, Crashlytics, le certificat Play, assetlinks
-  et la validation passkey en staging.
+  D1/migrations, R2, les clés provider, l'app Android, Crashlytics et la signature Play.
 - **Connexion vérifiée en un tap par lien e-mail signé (`VerifyLinkParser` & `POST /api/auth/verify-link`)** :
   prise en charge des liens profonds `https://<serveur>/verify?user=…&code=…&sig=…&exp=…` et du
   relais natif `atlascommerce://verify?…` depuis le bouton **VÉRIFIER & CONTINUER**, sans saisie
@@ -35,9 +32,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
   visible dans Paramètres; les alertes système de début/progression sont supprimées tant que l'app
   reste au premier plan, puis une notification est publiée si l'app passe en arrière-plan. Le retour
   dans l'app efface l'alerte redondante sans annuler ni redémarrer le téléchargement.
-- **Compatibilité Credential Manager / WebAuthn explicitement vérifiée** : le statut du Worker expose
-  l'origine Android SHA-256 et, en option, l'origine legacy SHA-1; l'app compare ces valeurs au
-  certificat installé et ne montre pas l'option si package, origine ou allowlist ne correspondent pas.
+- **Connexion Android simplifiée et sélection initiale du serveur** : les installations neuves
+  choisissent le serveur avant l'accueil et la connexion. Les passkeys Android ont été retirées du
+  parcours et des paramètres; le menu conserve le changement manuel de serveur sur l'écran de connexion.
 
 ## [1.0.7] — 2026-10-22
 

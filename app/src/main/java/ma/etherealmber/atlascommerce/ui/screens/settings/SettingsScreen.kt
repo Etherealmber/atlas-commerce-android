@@ -80,6 +80,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -95,6 +96,8 @@ import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
+import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
+import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
@@ -116,6 +119,7 @@ import ma.etherealmber.atlascommerce.ui.screens.legal.EtherealmberAuthorCard
 import ma.etherealmber.atlascommerce.ui.screens.legal.ProblemReportDialog
 import ma.etherealmber.atlascommerce.ui.shell.MainTab
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
+import ma.etherealmber.atlascommerce.ui.util.findActivity
 import ma.etherealmber.atlascommerce.ui.util.openExternal
 
 /**
@@ -172,8 +176,83 @@ fun ProfileScreen(
         }
     }
 
+    val currentSavedAccount = savedAccounts.firstOrNull {
+        it.username.equals(user.username, ignoreCase = true)
+    }
     val otherSavedAccounts = savedAccounts.filterNot {
         it.username.equals(user.username, ignoreCase = true)
+    }
+    val configureDeviceUnlockMessage = atlasText(
+        "Configurez la biométrie ou un verrouillage d'écran sécurisé pour activer la connexion rapide.",
+        "Set up biometrics or a secure screen lock to enable quick sign-in.",
+        "أعد إعداد القياسات الحيوية أو قفل شاشة آمن لتفعيل تسجيل الدخول السريع.",
+    )
+    val localUnlockUnavailableMessage = atlasText(
+        "Le déverrouillage local est indisponible. Utilisez votre mot de passe et configurez un verrouillage sécurisé.",
+        "Local device unlock is unavailable. Use your password and set up a secure device lock.",
+        "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد قفل آمن.",
+    )
+    val savedAccountUnlockUnavailableMessage = atlasText(
+        "Le déverrouillage local est indisponible. Utilisez le mot de passe et configurez la biométrie ou un verrouillage sécurisé.",
+        "Local device unlock is unavailable. Use your password and set up biometrics or a secure screen lock.",
+        "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد القياسات الحيوية أو قفل شاشة آمن.",
+    )
+    val deviceUnlockAuthTitle = atlasText("Activer le déverrouillage Atlas", "Enable Atlas device unlock", "تفعيل إلغاء قفل Atlas")
+    val deviceUnlockAuthSubtitle = atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك.")
+    val unlockSavedAccountTitle = atlasText("Déverrouiller Atlas", "Unlock Atlas", "إلغاء قفل Atlas")
+    val updateCurrentDeviceUnlock: (Boolean) -> Unit = { enabled ->
+        val account = currentSavedAccount
+        if (account != null && !enabled) {
+            appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, false)
+        } else if (account != null) {
+            val activity = context.findActivity() as? FragmentActivity
+            if (activity == null || !DeviceUnlockAuthenticator.isAvailable(activity)) {
+                appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, false)
+                onToast(configureDeviceUnlockMessage)
+            } else {
+                DeviceUnlockAuthenticator.authenticate(
+                    activity,
+                    deviceUnlockAuthTitle,
+                    deviceUnlockAuthSubtitle,
+                ) { outcome ->
+                    when (outcome) {
+                        DeviceUnlockAuthenticator.Outcome.AUTHENTICATED -> appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, true)
+                        DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
+                        DeviceUnlockAuthenticator.Outcome.UNAVAILABLE,
+                        DeviceUnlockAuthenticator.Outcome.FAILED -> {
+                            appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, false)
+                            onToast(localUnlockUnavailableMessage)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    val unlockAndSwitchSavedAccount: (SavedAccountEntry) -> Unit = { account ->
+        val activity = context.findActivity()
+        val fragmentActivity = activity as? FragmentActivity
+        if (!account.canUseDeviceUnlock) {
+            Unit
+        } else if (fragmentActivity == null || !DeviceUnlockAuthenticator.isAvailable(fragmentActivity)) {
+            appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, false)
+            onToast(savedAccountUnlockUnavailableMessage)
+        } else {
+            DeviceUnlockAuthenticator.authenticate(
+                fragmentActivity,
+                unlockSavedAccountTitle,
+                deviceUnlockAuthSubtitle,
+            ) { outcome ->
+                when (outcome) {
+                    DeviceUnlockAuthenticator.Outcome.AUTHENTICATED -> appViewModel.switchSavedAccount(account, onToast)
+                    DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
+                    DeviceUnlockAuthenticator.Outcome.UNAVAILABLE,
+                    DeviceUnlockAuthenticator.Outcome.FAILED -> {
+                        appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, false)
+                        onToast(savedAccountUnlockUnavailableMessage)
+                    }
+                }
+            }
+        }
     }
     val profileGreeting = if (LocalTime.now(ZoneId.systemDefault()).hour in 5..17) {
         atlasText("Bonjour", "Good morning", "صباح الخير")
@@ -280,6 +359,40 @@ fun ProfileScreen(
             }
         }
 
+        currentSavedAccount?.let { account ->
+            AtlasCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Fingerprint,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            atlasText("Déverrouillage de l'appareil", "Device unlock", "إلغاء قفل الجهاز"),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            if (account.canUseDeviceUnlock) {
+                                atlasText("Biométrie ou code de l'appareil activé.", "Biometrics or device PIN/password is enabled.", "القياسات الحيوية أو رمز الجهاز مفعّل.")
+                            } else {
+                                atlasText("Désactivé — le mot de passe reste nécessaire.", "Off — your account password is still required.", "متوقف — لا تزال كلمة مرور الحساب مطلوبة.")
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = account.canUseDeviceUnlock,
+                        onCheckedChange = updateCurrentDeviceUnlock,
+                    )
+                }
+            }
+        }
+
         // Quick-switch between other accounts saved specifically on THIS server (100% isolated)
         if (otherSavedAccounts.isNotEmpty()) {
             AtlasCard {
@@ -291,9 +404,9 @@ fun ProfileScreen(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = atlasText(
-                        "Bascule instantanée — les paniers, caches et discussions restent strictement séparés.",
-                        "Switch instantly — carts, caches, and conversations stay separate.",
-                        "التبديل فوري — تبقى السلال وذاكرات التخزين والمحادثات منفصلة.",
+                        "Les comptes protégés se déverrouillent avec l'appareil ; les autres exigent leur mot de passe.",
+                        "Device unlock is required for saved-account switching; other accounts require their password.",
+                        "يلزم إلغاء قفل الجهاز للتبديل إلى الحسابات المحفوظة؛ وتتطلب الحسابات الأخرى كلمة مرورها.",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -302,7 +415,7 @@ fun ProfileScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     otherSavedAccounts.forEach { acc ->
                         AtlasCard(
-                            onClick = { appViewModel.switchSavedAccount(acc, onToast) },
+                            onClick = if (acc.canUseDeviceUnlock) ({ unlockAndSwitchSavedAccount(acc) }) else null,
                             padding = 10.dp,
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -328,6 +441,13 @@ fun ProfileScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
+                                    if (!acc.canUseDeviceUnlock) {
+                                        Text(
+                                            atlasText("Mot de passe requis", "Password required", "كلمة المرور مطلوبة"),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 }
                                 IconButton(
                                     onClick = { appViewModel.forgetSavedAccount(acc, onToast) },
@@ -713,8 +833,6 @@ fun SettingsScreen(
         "Automatic reporting disabled.",
         "تم تعطيل الإرسال التلقائي.",
     )
-    val androidPasskeysAvailable by appViewModel.androidPasskeysAvailable.collectAsStateWithLifecycle()
-    val registeringPasskey by appViewModel.registeringPasskey.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
     var showReleaseHistoryDialog by remember { mutableStateOf(false) }
     var showClearReportsDialog by remember { mutableStateOf(false) }
@@ -865,7 +983,6 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(user.scopeIdentity, serverSelection?.baseUrl) {
-        appViewModel.refreshPasskeyCapability()
         appViewModel.loadDevices()
         appViewModel.refreshAgentPolicy()
         appViewModel.refreshCachedProductCount()
@@ -1239,75 +1356,6 @@ fun SettingsScreen(
                     subtitle = atlasText("État local résumé · journaux masqués", "Summary status · logs hidden", "حالة موجزة · السجلات مخفية"),
                     onClick = onOpenDeveloperTools,
                 )
-            }
-        }
-
-        AtlasEntrance(delayMillis = 30, offsetY = 8.dp) {
-            AtlasCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.Fingerprint,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(atlasText("Passkey Android"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            if (androidPasskeysAvailable) {
-                                atlasText(
-                                    "Le serveur les autorise. La création exige aussi un gestionnaire Android compatible et un verrouillage d'écran.",
-                                    "The server allows passkeys. Creating one also requires a compatible Android credential manager and a screen lock.",
-                                    "يسمح الخادم بمفاتيح المرور. يتطلب إنشاؤها أيضاً مدير بيانات اعتماد متوافقاً مع Android وقفل شاشة.",
-                                )
-                            } else {
-                                atlasText(
-                                    "Configuration Android non confirmée par le serveur sélectionné. L'inscription reste masquée tant que le serveur ne l'annonce pas comme disponible.",
-                                    "Android support has not been confirmed by the selected server. Registration stays hidden until the server reports it as available.",
-                                    "لم يؤكد الخادم المحدد دعم Android. يظل التسجيل مخفياً حتى يعلن الخادم توفره.",
-                                )
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                if (androidPasskeysAvailable) {
-                    AtlasOutlinedButton(
-                        text = if (registeringPasskey) atlasText("Enregistrement en cours…") else atlasText("Enregistrer une passkey", "Register passkey", "تسجيل مفتاح مرور"),
-                        onClick = { appViewModel.registerAndroidPasskey(context) { } },
-                        icon = Icons.Outlined.Fingerprint,
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !registeringPasskey,
-                    )
-                    TextButton(
-                        onClick = {
-                            val credentialSettings = Intent("android.settings.PASSWORDS_AND_ACCOUNTS_SETTINGS")
-                            val securitySettings = Intent(Settings.ACTION_SECURITY_SETTINGS)
-                            val openedCredentialSettings = runCatching { context.startActivity(credentialSettings) }.isSuccess
-                            if (!openedCredentialSettings) {
-                                runCatching { context.startActivity(securitySettings) }
-                                    .onFailure { onToast("Ouvrez Paramètres Android > Mots de passe et clés d'accès, puis choisissez un fournisseur.") }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(atlasText("Configurer le fournisseur Android"))
-                    }
-                } else {
-                    TextButton(
-                        onClick = appViewModel::refreshPasskeyCapability,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(atlasText("Vérifier à nouveau"))
-                    }
-                }
             }
         }
 

@@ -148,7 +148,7 @@ object AtlasLogBuffer {
         val ring = recentEntries()
         val ringHeader = "=== APP EVENTS / NETWORK / AUTH (${ring.size}) ===\n"
         val ringBody = ring.takeLast(700).joinToString("\n") { sanitize(it) }
-        // Keep structured events ahead of verbose logcat so passkey stages and HTTP status
+        // Keep structured application events ahead of verbose logcat so auth and HTTP
         // details survive the final size limit even on very chatty devices.
         val ringBudget = (maxChars - deviceSection.length - crashSection.length - 2_000)
             .coerceAtLeast(1_000)
@@ -175,7 +175,7 @@ object AtlasLogBuffer {
             lowSignalPlatformNoise.any { it.containsMatchIn(line) }
         }
         val noiseSection = if (noiseLines.isEmpty()) "" else
-            "\n=== PLATFORM NOISE ===\n${noiseLines.size} avertissements graphiques/fastpipe à faible signal omis; ils ne sont pas des erreurs passkey.\n"
+            "\n=== PLATFORM NOISE ===\n${noiseLines.size} avertissements graphiques/fastpipe à faible signal omis; ils ne sont pas des erreurs de l’application.\n"
         val logHeader = if (usefulLines.isEmpty()) "" else
             "\n=== ANDROID LOGCAT (APP PID $pid · ${usefulLines.size} lignes) ===\n"
         val logBody = usefulLines.takeLast(700).joinToString("\n") { sanitize(it) }
@@ -490,17 +490,10 @@ object DiagnosticReporter {
         if (summary.length + suffix.length >= maxChars) return (summary + suffix).take(maxChars)
         val safeLogs = AtlasLogBuffer.sanitize(logs).ifBlank { "Aucun journal récent." }
         val logBudget = maxChars - summary.length - suffix.length
-        // Logcat often ends with IME/graphics noise. Preserve the structured passkey
-        // breadcrumbs instead of silently dropping them from the 2,000-character payload.
+        // Logcat often ends with IME/graphics noise; prioritize the recent app events
+        // and retain crash context when it is present.
         val eventsMatch = Regex("""(?s)=== APP EVENTS / NETWORK / AUTH[^\n]*\n(.*?)(?=\n=== |$)""").find(safeLogs)
-        val eventLines = eventsMatch?.groupValues?.get(1)?.lineSequence()?.toList().orEmpty()
-        val passkeyLines = eventLines.filter { Regex("""\[(?:INFO|WARN|ERROR)/PASSKEY]""").containsMatchIn(it) }
-        val passkeyLabel = "=== PASSKEY EVENTS ===\n"
-        val passkeyBudget = minOf(700, logBudget / 2)
-        val passkeyExcerpt = if (passkeyLines.isEmpty() || passkeyBudget <= passkeyLabel.length) "" else {
-            passkeyLabel + passkeyLines.takeLast(12).joinToString("\n").takeLast(passkeyBudget - passkeyLabel.length) + "\n"
-        }
-        val remainingBudget = (logBudget - passkeyExcerpt.length).coerceAtLeast(0)
+        val remainingBudget = logBudget
         val crashMatch = Regex("""(?s)=== LAST CRASH TRACE ===\s*(.*?)(?=\n=== |$)""").find(safeLogs)
         val remainingLogs = if (crashMatch == null) {
             (eventsMatch?.value ?: safeLogs).takeLast(remainingBudget)
@@ -531,7 +524,7 @@ object DiagnosticReporter {
                 crashLabel + crashExcerpt + eventsLabel + withoutCrash.takeLast(eventsBudget)
             }
         }
-        return summary + passkeyExcerpt + remainingLogs + suffix
+        return summary + remainingLogs + suffix
     }
 
     fun copyFullReportToClipboard(context: Context, fullMarkdown: String): Boolean = runCatching {

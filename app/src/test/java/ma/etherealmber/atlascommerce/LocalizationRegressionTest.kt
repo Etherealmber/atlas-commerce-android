@@ -15,13 +15,10 @@ import org.junit.Test
 
 class LocalizationRegressionTest {
     @Test
-    fun deviceNamesAndPasskeyErrorsUseSelectedLanguage() {
+    fun deviceNamesUseSelectedLanguage() {
         assertEquals("حاسوب Windows · Chrome", atlasNotice("PC Windows · Chrome", AppLanguage.ARABIC))
         assertEquals("Android device", atlasNotice("Appareil Android", AppLanguage.ENGLISH))
         assertEquals("Custom device", atlasNotice("Custom device", AppLanguage.ARABIC))
-        val error = "Le serveur n'a pas pu enregistrer la passkey. Réessayez plus tard."
-        assertTrue(atlasNotice(error, AppLanguage.ENGLISH).startsWith("The server"))
-        assertTrue(atlasNotice(error, AppLanguage.ARABIC).startsWith("تعذّر"))
     }
 
     @Test

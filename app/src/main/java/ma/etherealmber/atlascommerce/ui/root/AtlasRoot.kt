@@ -3,9 +3,6 @@ package ma.etherealmber.atlascommerce.ui.root
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import android.Manifest
-import android.app.Activity
-import android.app.KeyguardManager
-import android.content.Context
 import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.os.Build
@@ -27,8 +24,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +48,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -67,6 +63,8 @@ import java.util.Locale
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.session.SessionState
+import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
+import ma.etherealmber.atlascommerce.core.security.DeviceUnlockSetupPrompt
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AppUpdateBanner
 import ma.etherealmber.atlascommerce.ui.components.AtlasBootSplashScreen
@@ -108,8 +106,8 @@ private object Overlay {
 
 private enum class RootStage(val rank: Int) {
     SPLASH(0),
-    ONBOARDING(1),
-    SERVER_SETUP(2),
+    SERVER_SETUP(1),
+    ONBOARDING(2),
     MANDATORY_UPDATE(3),
     LOGIN(4),
     SHELL(5),
@@ -175,6 +173,15 @@ fun AtlasRoot(
         ) {
             AtlasTheme(themeMode = themeMode, densityMode = densityMode) {
                 val activity = LocalContext.current.findActivity()
+                val dark = LocalAtlasDarkTheme.current
+                val rootView = LocalView.current
+                SideEffect {
+                    val window = activity?.window ?: return@SideEffect
+                    WindowCompat.getInsetsController(window, rootView).apply {
+                        isAppearanceLightStatusBars = !dark
+                        isAppearanceLightNavigationBars = !dark
+                    }
+                }
                 if (languageSaveFailed) {
                     AlertDialog(
                         onDismissRequest = viewModel::dismissLanguageSaveFailed,
@@ -206,15 +213,6 @@ fun AtlasRoot(
                             }
                         },
                     )
-                }
-                val dark = LocalAtlasDarkTheme.current
-                val view = LocalView.current
-                SideEffect {
-                    val window = activity?.window ?: return@SideEffect
-                    WindowCompat.getInsetsController(window, view).apply {
-                        isAppearanceLightStatusBars = !dark
-                        isAppearanceLightNavigationBars = !dark
-                    }
                 }
                 if (!appearanceLoaded && !appearanceTimedOut) {
                     AtlasBootSplashScreen(holdUntilReady = true)
@@ -260,19 +258,12 @@ private fun AtlasGate(
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val defaultStartTab by viewModel.defaultStartTab.collectAsStateWithLifecycle()
     val autoCheckUpdates by viewModel.autoCheckUpdates.collectAsStateWithLifecycle()
-    val passkeyRegistrationMessage by viewModel.passkeyRegistrationMessage.collectAsStateWithLifecycle()
-    val waitingForPasskeyProvider by viewModel.waitingForPasskeyProvider.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var bootSplashFinished by rememberSaveable { mutableStateOf(false) }
     var overlay by rememberSaveable { mutableStateOf<String?>(null) }
     var openQrAfterOnboarding by rememberSaveable { mutableStateOf(false) }
-    var sessionUnlocked by remember { mutableStateOf(false) }
-    var lockPromptInProgress by remember { mutableStateOf(false) }
-    var openingDeviceLockSettings by remember { mutableStateOf(false) }
-    var lockSetupError by remember { mutableStateOf(false) }
-    var stoppedForPasskeyProvider by remember { mutableStateOf(false) }
     val internetAvailable = rememberInternetAvailable()
     var offlineOfferShown by remember { mutableStateOf(false) }
     var showOfflineOffer by remember { mutableStateOf(false) }
@@ -293,7 +284,7 @@ private fun AtlasGate(
     var pendingQrToken by rememberSaveable { mutableStateOf<String?>(null) }
     var requestedTab by rememberSaveable { mutableStateOf<String?>(null) }
     var notificationPermissionPrompted by rememberSaveable { mutableStateOf(false) }
-    var passkeySetupOfferVisible by rememberSaveable { mutableStateOf(false) }
+    var deviceUnlockSetupRequest by remember { mutableStateOf<DeviceUnlockSetupPrompt.Request?>(null) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -303,19 +294,8 @@ private fun AtlasGate(
         }
     }
 
-    val deviceCredentialLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        val manager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-        sessionUnlocked = !openingDeviceLockSettings && result.resultCode == Activity.RESULT_OK && manager?.isDeviceSecure == true
-        openingDeviceLockSettings = false
-        lockPromptInProgress = false
-        lockSetupError = false
-    }
-
-
-    LaunchedEffect(session, sessionUnlocked) {
-        if (session is SessionState.Active && sessionUnlocked &&
+    LaunchedEffect(session) {
+        if (session is SessionState.Active &&
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             !notificationPermissionPrompted &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -360,19 +340,12 @@ private fun AtlasGate(
         viewModel.installDownloadedUpdate(context)
     }
 
-    DisposableEffect(lifecycleOwner, context, waitingForPasskeyProvider) {
+    DisposableEffect(lifecycleOwner, context) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> viewModel.onAppResumed(context)
-                Lifecycle.Event.ON_STOP -> {
-                    if (waitingForPasskeyProvider) {
-                        stoppedForPasskeyProvider = true
-                    } else if (!lockPromptInProgress && context.findActivity()?.isChangingConfigurations != true) {
-                        sessionUnlocked = false
-                    }
-                    viewModel.onAppStopped()
-                }
-                Lifecycle.Event.ON_DESTROY -> viewModel.cancelPasskeyRegistration()
+                Lifecycle.Event.ON_STOP -> viewModel.onAppStopped()
+                Lifecycle.Event.ON_DESTROY -> Unit
                 else -> Unit
             }
         }
@@ -419,11 +392,12 @@ private fun AtlasGate(
         viewModel.notices.collect { message -> showToast(message) }
     }
     LaunchedEffect(viewModel) {
-        viewModel.passkeySetupOffers.collect { passkeySetupOfferVisible = true }
+        viewModel.deviceUnlockSetupRequests.collect { request -> deviceUnlockSetupRequest = request }
     }
-    LaunchedEffect(session, sessionUnlocked) {
-        if (session is SessionState.SignedOut && overlay == Overlay.NOTIFICATIONS) {
-            overlay = null
+    LaunchedEffect(session) {
+        if (session is SessionState.SignedOut) {
+            if (overlay == Overlay.NOTIFICATIONS) overlay = null
+            deviceUnlockSetupRequest = null
         }
     }
 
@@ -437,27 +411,38 @@ private fun AtlasGate(
 
     val loadingBackend = !serverLoaded || session is SessionState.Loading
     val activeUser = (session as? SessionState.Active)?.user
-    LaunchedEffect(activeUser?.scopeIdentity) { sessionUnlocked = false }
-    LaunchedEffect(waitingForPasskeyProvider) {
-        if (!waitingForPasskeyProvider && stoppedForPasskeyProvider) {
-            stoppedForPasskeyProvider = false
-            sessionUnlocked = false
-        }
-    }
     var savedShellTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
     var savedLastBottomTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
 
     val baseStage = when {
         !bootSplashFinished || loadingBackend -> RootStage.SPLASH
+        // Fresh installs select the backend before onboarding or login; a saved
+        // selection is reused for every later sign-in unless the user switches it.
+        server == null && session !is SessionState.Active -> RootStage.SERVER_SETUP
         !onboardingDone -> RootStage.ONBOARDING
         mandatoryBlocking -> RootStage.MANDATORY_UPDATE
-        // Server setup is a pre-login step. Never bounce an active session back
-        // to server selection after authentication.
-        server == null && session !is SessionState.Active -> RootStage.SERVER_SETUP
         session is SessionState.SignedOut -> RootStage.LOGIN
         activeUser != null -> RootStage.SHELL
         else -> RootStage.SPLASH
     }
+    val darkTheme = LocalAtlasDarkTheme.current
+    val rootView = LocalView.current
+    SideEffect {
+        val window = context.findActivity()?.window ?: return@SideEffect
+        val authScreen = baseStage == RootStage.LOGIN || baseStage == RootStage.SERVER_SETUP
+        WindowCompat.getInsetsController(window, rootView).apply {
+            isAppearanceLightStatusBars = if (authScreen) false else !darkTheme
+            isAppearanceLightNavigationBars = if (authScreen) false else !darkTheme
+        }
+    }
+    val loginDeviceUnlockUnavailableMessage = atlasText(
+        "Le déverrouillage local est indisponible. Connectez-vous avec votre mot de passe et configurez la biométrie ou un verrouillage sécurisé.",
+        "Local device unlock is unavailable. Sign in with your password and set up biometrics or a secure screen lock.",
+        "إلغاء القفل المحلي غير متاح. سجّل الدخول بكلمة المرور وأعد إعداد القياسات الحيوية أو قفل شاشة آمن.",
+    )
+    val loginDeviceUnlockTitle = atlasText("Déverrouiller Atlas", "Unlock Atlas", "إلغاء قفل Atlas")
+    val loginDeviceUnlockSubtitle = atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك.")
+
     LaunchedEffect(onboardingDone, baseStage, openQrAfterOnboarding) {
         if (onboardingDone && openQrAfterOnboarding && baseStage == RootStage.LOGIN) {
             openQrAfterOnboarding = false
@@ -505,6 +490,29 @@ private fun AtlasGate(
                         onOpenQrDevice = {
                             pendingQrToken = null
                             overlay = Overlay.QR_DEVICE
+                        },
+                        onUnlockSavedAccount = { entry, afterAuthentication ->
+                            val authActivity = context.findActivity() as? FragmentActivity
+                            if (authActivity == null || !DeviceUnlockAuthenticator.isAvailable(authActivity)) {
+                                viewModel.setSavedAccountDeviceUnlock(entry.serverUrl, entry.username, false)
+                                showToast(loginDeviceUnlockUnavailableMessage)
+                            } else {
+                                DeviceUnlockAuthenticator.authenticate(
+                                    authActivity,
+                                    loginDeviceUnlockTitle,
+                                    loginDeviceUnlockSubtitle,
+                                ) { outcome ->
+                                    when (outcome) {
+                                        DeviceUnlockAuthenticator.Outcome.AUTHENTICATED -> afterAuthentication()
+                                        DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
+                                        DeviceUnlockAuthenticator.Outcome.UNAVAILABLE,
+                                        DeviceUnlockAuthenticator.Outcome.FAILED -> {
+                                            viewModel.setSavedAccountDeviceUnlock(entry.serverUrl, entry.username, false)
+                                            showToast(loginDeviceUnlockUnavailableMessage)
+                                        }
+                                    }
+                                }
+                            }
                         },
                     )
 
@@ -662,8 +670,8 @@ private fun AtlasGate(
                     .padding(bottom = 88.dp),
             )
 
-            LaunchedEffect(internetAvailable, baseStage, overlay, waitingForPasskeyProvider, passkeyRegistrationMessage) {
-                if (internetAvailable == false && !offlineOfferShown && overlay == null && !waitingForPasskeyProvider && passkeyRegistrationMessage == null &&
+            LaunchedEffect(internetAvailable, baseStage, overlay) {
+                if (internetAvailable == false && !offlineOfferShown && overlay == null &&
                     (baseStage == RootStage.LOGIN || baseStage == RootStage.SHELL)) {
                     offlineOfferShown = true
                     showOfflineOffer = true
@@ -688,169 +696,87 @@ private fun AtlasGate(
                 )
             }
 
-            if (passkeySetupOfferVisible && session is SessionState.Active) {
+            if (activeUser != null) deviceUnlockSetupRequest?.let { request ->
+                val authActivity = context.findActivity() as? FragmentActivity
+                val localAuthAvailable = authActivity?.let { DeviceUnlockAuthenticator.isAvailable(it) } == true
+                val unavailableOptInMessage = atlasText("Utilisez votre mot de passe et configurez un verrouillage sécurisé pour activer le déverrouillage rapide.", "Use your password and set up a secure device lock to enable quick unlock.", "استخدم كلمة المرور وأعد إعداد قفل آمن لتفعيل إلغاء القفل السريع.")
+                val deviceUnlockAuthTitle = atlasText("Activer le déverrouillage Atlas", "Enable Atlas device unlock", "تفعيل إلغاء قفل Atlas")
+                val deviceUnlockAuthSubtitle = atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك.")
+                val deviceUnlockEnabledMessage = atlasText("Déverrouillage de l'appareil activé.", "Device unlock enabled.", "تم تفعيل إلغاء قفل الجهاز.")
+                val deviceUnlockFailureMessage = atlasText("Le déverrouillage local n'est pas disponible. Utilisez votre mot de passe et configurez un verrouillage sécurisé.", "Local device unlock is unavailable. Use your password and set up a secure device lock.", "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد قفل آمن.")
                 AlertDialog(
-                    onDismissRequest = { passkeySetupOfferVisible = false },
-                    title = { Text(atlasText("Créer une passkey ?")) },
+                    onDismissRequest = {
+                        viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, false)
+                        deviceUnlockSetupRequest = null
+                    },
+                    title = {
+                        Text(atlasText(
+                            "Activer le déverrouillage de l'appareil ?",
+                            "Enable device unlock?",
+                            "هل تريد تفعيل إلغاء قفل الجهاز؟",
+                        ))
+                    },
                     text = {
-                        Text(atlasText("Ajoutez une connexion rapide et protégée par le gestionnaire de mots de passe de cet appareil. Vous pourrez aussi la créer plus tard dans Paramètres > Sécurité. Cette étape est facultative."))
-                    },
-                    confirmButton = {
-                        Button(onClick = {
-                            passkeySetupOfferVisible = false
-                            viewModel.registerAndroidPasskey(context) { }
-                        }) { Text(atlasText("Créer une passkey")) }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { passkeySetupOfferVisible = false }) { Text(atlasText("Plus tard")) }
-                    },
-                )
-            }
-
-            if (waitingForPasskeyProvider) {
-                AlertDialog(
-                    onDismissRequest = viewModel::cancelPasskeyRegistration,
-                    title = { Text(atlasText("Passkey Android", "Android passkey", "مفتاح مرور Android")) },
-                    text = { Text(atlasText("Terminez la création dans le gestionnaire Android. Si aucune fenêtre ne s'affiche, vous pouvez annuler et réessayer.", "Complete setup in Android's credential manager. If no prompt appears, you can cancel and try again.", "أكمل الإعداد في مدير بيانات الاعتماد في Android. إذا لم تظهر نافذة، يمكنك الإلغاء والمحاولة مجدداً.")) },
-                    confirmButton = {
-                        TextButton(onClick = viewModel::cancelPasskeyRegistration) { Text(atlasText("Annuler", "Cancel", "إلغاء")) }
-                    },
-                )
-            }
-
-            passkeyRegistrationMessage?.let { message ->
-                val providerSetupSuggested = message.contains("aucun fournisseur", ignoreCase = true) ||
-                    message.contains("verrouillage d'écran", ignoreCase = true) ||
-                    message.contains("activées", ignoreCase = true) ||
-                    message.contains("fournisseur Android", ignoreCase = true)
-                AlertDialog(
-                    onDismissRequest = viewModel::dismissPasskeyRegistrationMessage,
-                    title = { Text(atlasText("Passkey Android")) },
-                    text = { Text(atlasNotice(message, atlasLanguage)) },
-                    confirmButton = {
-                        TextButton(onClick = viewModel::dismissPasskeyRegistrationMessage) { Text(atlasText("OK")) }
-                    },
-                    dismissButton = {
-                        if (providerSetupSuggested) {
-                            TextButton(onClick = {
-                                viewModel.dismissPasskeyRegistrationMessage()
-                                runCatching { context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
-                            }) { Text(atlasText("Paramètres Android")) }
-                        }
-                    },
-                )
-            }
-        }
-    }
-
-    if (activeUser != null && !sessionUnlocked) {
-        val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-        val deviceLockSet = keyguard?.isDeviceSecure == true
-        val deviceCredentialTitle = atlasText("Déverrouiller Atlas", "Unlock Atlas", "إلغاء قفل Atlas")
-        val deviceCredentialDescription = atlasText(
-            "Saisissez le code de verrouillage de votre appareil.",
-            "Enter your device screen-lock code.",
-            "أدخل رمز قفل شاشة جهازك.",
-        )
-        DeviceCredentialGate(
-            accountName = activeUser.displayName.ifBlank { activeUser.username },
-            deviceLockSet = deviceLockSet,
-            showSetupError = lockSetupError,
-            onUnlock = {
-                lockSetupError = false
-                if (deviceLockSet) {
-                    val intent = runCatching {
-                        keyguard?.let { manager ->
-                            createDeviceCredentialIntent(
-                                manager,
-                                deviceCredentialTitle,
-                                deviceCredentialDescription,
+                        Text(if (localAuthAvailable) {
+                            atlasText(
+                                "Utilisez votre biométrie ou le code PIN/mot de passe de votre appareil pour ouvrir votre session Atlas enregistrée. Le serveur la vérifiera à chaque connexion.",
+                                "Use biometrics or your device PIN/password to unlock your saved Atlas session. Atlas will verify the session with the server each time.",
+                                "استخدم القياسات الحيوية أو رمز PIN/كلمة مرور الجهاز لفتح جلسة Atlas المحفوظة. سيتحقق Atlas من الجلسة مع الخادم في كل مرة.",
                             )
+                        } else {
+                            atlasText(
+                                "Le déverrouillage rapide est indisponible. Configurez la biométrie ou un verrouillage d'écran sécurisé ; vous pourrez continuer avec votre mot de passe.",
+                                "Quick unlock is unavailable. Set up biometrics or a secure screen lock; you can continue signing in with your password.",
+                                "إلغاء القفل السريع غير متاح. أعد إعداد القياسات الحيوية أو قفل شاشة آمن؛ ويمكنك المتابعة باستخدام كلمة المرور.",
+                            )
+                        })
+                    },
+                    confirmButton = {
+                        if (localAuthAvailable) {
+                            Button(onClick = {
+                                deviceUnlockSetupRequest = null
+                                viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, false)
+                                val activity = authActivity
+                                if (activity == null) {
+                                    showToast(unavailableOptInMessage)
+                                } else {
+                                    DeviceUnlockAuthenticator.authenticate(
+                                        activity,
+                                        deviceUnlockAuthTitle,
+                                        deviceUnlockAuthSubtitle,
+                                    ) { outcome ->
+                                        when (outcome) {
+                                            DeviceUnlockAuthenticator.Outcome.AUTHENTICATED -> {
+                                                viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, true)
+                                                showToast(deviceUnlockEnabledMessage)
+                                            }
+                                            DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
+                                            DeviceUnlockAuthenticator.Outcome.UNAVAILABLE,
+                                            DeviceUnlockAuthenticator.Outcome.FAILED -> {
+                                                viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, false)
+                                                showToast(deviceUnlockFailureMessage)
+                                            }
+                                        }
+                                    }
+                                }
+                            }) { Text(atlasText("Activer", "Enable", "تفعيل")) }
+                        } else {
+                            Button(onClick = {
+                                viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, false)
+                                deviceUnlockSetupRequest = null
+                                runCatching { context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
+                            }) { Text(atlasText("Paramètres Android", "Android settings", "إعدادات Android")) }
                         }
-                    }.getOrNull()
-                    if (intent != null) {
-                        lockPromptInProgress = true
-                        openingDeviceLockSettings = false
-                        runCatching { deviceCredentialLauncher.launch(intent) }
-                            .onFailure { lockPromptInProgress = false; lockSetupError = true }
-                    } else {
-                        openingDeviceLockSettings = true
-                        lockPromptInProgress = true
-                        runCatching { deviceCredentialLauncher.launch(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
-                            .onFailure { openingDeviceLockSettings = false; lockPromptInProgress = false; lockSetupError = true }
-                    }
-                } else {
-                    openingDeviceLockSettings = true
-                    lockPromptInProgress = true
-                    runCatching { deviceCredentialLauncher.launch(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
-                        .onFailure { openingDeviceLockSettings = false; lockPromptInProgress = false; lockSetupError = true }
-                }
-            },
-            onSignOut = viewModel::signOut,
-        )
-    }
-}
-
-
-@Suppress("DEPRECATION")
-private fun createDeviceCredentialIntent(manager: KeyguardManager, title: String, description: String): Intent? =
-    manager.createConfirmDeviceCredentialIntent(title, description)
-
-@Composable
-private fun DeviceCredentialGate(
-    accountName: String,
-    deviceLockSet: Boolean,
-    showSetupError: Boolean,
-    onUnlock: () -> Unit,
-    onSignOut: () -> Unit,
-) {
-    Dialog(
-        onDismissRequest = {},
-        properties = DialogProperties(
-            dismissOnBackPress = false,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false,
-        ),
-    ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            androidx.compose.foundation.layout.Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-        ) {
-            Text(atlasText("Atlas", "Atlas", "Atlas"), style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
-            Text(
-                atlasText("Continuer avec ce compte ?", "Continue with this account?", "المتابعة بهذا الحساب؟"),
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                if (deviceLockSet) atlasText(
-                    "Voulez-vous continuer avec le compte $accountName ? Saisissez le code de verrouillage de votre appareil.",
-                    "Would you like to continue with $accountName? Enter your device screen-lock code.",
-                    "هل تريد المتابعة باستخدام $accountName؟ أدخل رمز قفل شاشة جهازك.",
-                ) else atlasText(
-                    "Voulez-vous continuer avec le compte $accountName ? Configurez d’abord un verrouillage d’écran sur votre appareil.",
-                    "Would you like to continue with $accountName? Set up a screen lock on your device first.",
-                    "هل تريد المتابعة باستخدام $accountName؟ قم أولاً بإعداد قفل شاشة على جهازك.",
-                ),
-                modifier = Modifier.padding(top = 12.dp, bottom = 20.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (showSetupError) {
-                Text(
-                    atlasText("Impossible d’ouvrir l’écran de sécurité Android. Réessayez.", "Could not open Android security settings. Try again.", "تعذر فتح إعدادات أمان Android. حاول مجدداً."),
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, false)
+                            deviceUnlockSetupRequest = null
+                        }) { Text(atlasText("Plus tard", "Not now", "لاحقاً")) }
+                    },
                 )
-            }
-            Button(onClick = onUnlock, modifier = Modifier.fillMaxWidth()) {
-                Text(if (deviceLockSet) atlasText("Oui, continuer", "Yes, continue", "نعم، متابعة") else atlasText("Configurer le verrouillage", "Set up screen lock", "إعداد قفل الشاشة"))
-            }
-                TextButton(onClick = onSignOut) {
-                    Text(atlasText("Se déconnecter", "Sign out", "تسجيل الخروج"))
-                }
             }
         }
     }
+
 }

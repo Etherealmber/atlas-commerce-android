@@ -1,8 +1,5 @@
 package ma.etherealmber.atlascommerce.data.repo
 
-import com.squareup.moshi.Moshi
-import com.squareup.moshi.Types
-import org.json.JSONObject
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
@@ -20,10 +17,6 @@ import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.data.model.UserReportRequest
 import ma.etherealmber.atlascommerce.data.model.UserReportReceiptDto
 import ma.etherealmber.atlascommerce.data.model.VerifyLinkRequest
-import ma.etherealmber.atlascommerce.data.model.WebAuthnCapabilitiesDto
-import ma.etherealmber.atlascommerce.data.model.WebAuthnCredentialVerifyRequest
-import ma.etherealmber.atlascommerce.data.model.WebAuthnLoginOptionsRequest
-import ma.etherealmber.atlascommerce.data.model.WebAuthnRegistrationOptionsRequest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,12 +24,7 @@ import javax.inject.Singleton
 class AuthRepository @Inject constructor(
     private val apiProvider: ApiProvider,
     private val runner: ApiRunner,
-    moshi: Moshi,
 ) {
-
-    private val credentialMapAdapter = moshi.adapter<Map<String, Any?>>(
-        Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java),
-    )
 
     suspend fun login(username: String, password: String, fingerprint: String): ApiResult<LoginResponse> =
         runner.status {
@@ -83,78 +71,8 @@ class AuthRepository @Inject constructor(
         )
     }
 
-    suspend fun webAuthnCapabilities(): ApiResult<WebAuthnCapabilitiesDto> =
-        runner.envelope { apiProvider.api().webAuthnStatus() }
-
     suspend fun submitUserReport(request: UserReportRequest): ApiResult<UserReportReceiptDto> =
         runner.envelope { apiProvider.api().submitUserReport(request) }
-
-    suspend fun webAuthnLoginOptions(username: String?): ApiResult<String> =
-        optionsJson(
-            runner.status {
-                apiProvider.api().webAuthnLoginOptions(WebAuthnLoginOptionsRequest(username?.takeIf { it.isNotBlank() }))
-            },
-        )
-
-    suspend fun webAuthnRegistrationOptions(fingerprint: String): ApiResult<String> =
-        optionsJson(
-            runner.status {
-                apiProvider.api().webAuthnRegisterOptions(WebAuthnRegistrationOptionsRequest(fingerprint))
-            },
-        )
-
-    suspend fun verifyWebAuthnLogin(credentialJson: String, fingerprint: String): ApiResult<LoginResponse> =
-        runner.status {
-            apiProvider.api().webAuthnLoginVerify(
-                WebAuthnCredentialVerifyRequest(
-                    credential = credentialMapAdapter.fromJson(credentialJson)
-                        ?: throw IllegalArgumentException("Réponse passkey vide."),
-                    fingerprint = fingerprint,
-                ),
-            )
-        }
-
-    suspend fun verifyWebAuthnRegistration(
-        credentialJson: String,
-        fingerprint: String,
-        deviceLabel: String,
-    ): ApiResult<String> {
-        val result = runner.status {
-            apiProvider.api().webAuthnRegisterVerify(
-                WebAuthnCredentialVerifyRequest(
-                    credential = credentialMapAdapter.fromJson(credentialJson)
-                        ?: throw IllegalArgumentException("Réponse passkey vide."),
-                    fingerprint = fingerprint,
-                    deviceType = "platform",
-                    deviceLabel = deviceLabel,
-                ),
-            )
-        }
-        return when (result) {
-            is ApiResult.Failure -> result
-            is ApiResult.Success -> ApiResult.Success(
-                result.data.message?.takeIf { it.isNotBlank() } ?: "Passkey enregistrée sur cet appareil.",
-            )
-        }
-    }
-
-    private fun optionsJson(result: ApiResult<ma.etherealmber.atlascommerce.data.model.WebAuthnOptionsResponse>): ApiResult<String> =
-        when (result) {
-            is ApiResult.Failure -> result
-            is ApiResult.Success -> {
-                val options = result.data.options
-                if (options.isEmpty()) {
-                    ApiResult.Failure("INVALID_WEBAUTHN_OPTIONS", "Le serveur n'a pas fourni d'options passkey valides.")
-                } else {
-                    val json = runCatching { JSONObject(options).toString() }.getOrNull()
-                    if (json.isNullOrBlank()) {
-                        ApiResult.Failure("INVALID_WEBAUTHN_OPTIONS", "Les options passkey du serveur sont invalides.")
-                    } else {
-                        ApiResult.Success(json)
-                    }
-                }
-            }
-        }
 
     suspend fun me(): ApiResult<MeDto> = runner.envelope { apiProvider.api().me() }
 

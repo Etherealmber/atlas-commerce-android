@@ -3,12 +3,8 @@ package ma.etherealmber.atlascommerce.ui.root
 import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
-import androidx.credentials.exceptions.CreateCredentialNoCreateOptionException
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.withContext
 import java.io.File
 import androidx.lifecycle.ViewModel
@@ -20,7 +16,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -28,14 +23,10 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.TimeoutCancellationException
-import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
-import ma.etherealmber.atlascommerce.core.diagnostics.PasskeyAutoReporter
-import ma.etherealmber.atlascommerce.core.diagnostics.PasskeyFailureStage
 import ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
@@ -44,12 +35,8 @@ import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
-import ma.etherealmber.atlascommerce.core.security.awaitPasskeyProvider
-import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyCredentials
-import ma.etherealmber.atlascommerce.core.security.AndroidPasskeyOrigin
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
-import ma.etherealmber.atlascommerce.core.security.PasskeySetupPrompt
-import ma.etherealmber.atlascommerce.core.net.ServerUrl
+import ma.etherealmber.atlascommerce.core.security.DeviceUnlockSetupPrompt
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.server.ServerSelection
 import ma.etherealmber.atlascommerce.core.session.SessionManager
@@ -64,11 +51,9 @@ import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.data.model.UserReportRequest
 import ma.etherealmber.atlascommerce.data.model.UserReportReceiptDto
-import ma.etherealmber.atlascommerce.data.model.supportsAndroid
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import ma.etherealmber.atlascommerce.ui.components.AvatarBitmapCache
-import ma.etherealmber.atlascommerce.ui.util.findActivity
 import javax.inject.Inject
 
 /**
@@ -90,8 +75,7 @@ class AppViewModel @Inject constructor(
     private val updateManager: AppUpdateManager,
     private val offlineCache: OfflineCache,
     private val deviceIdentity: DeviceIdentity,
-    private val passkeySetupPrompt: PasskeySetupPrompt,
-    private val passkeyAutoReporter: PasskeyAutoReporter,
+    private val deviceUnlockSetupPrompt: DeviceUnlockSetupPrompt,
 ) : ViewModel() {
 
     private var lastForegroundRefreshMs = 0L
@@ -204,6 +188,12 @@ class AppViewModel @Inject constructor(
         .flatMapLatest { sel -> preferences.savedAccountsForServer(sel?.baseUrl) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val deviceUnlockSetupRequests = deviceUnlockSetupPrompt.events
+
+    fun setSavedAccountDeviceUnlock(serverUrl: String, username: String, enabled: Boolean) {
+        viewModelScope.launch { preferences.setSavedAccountDeviceUnlock(serverUrl, username, enabled) }
+    }
+
     private val _agentPolicy = MutableStateFlow<AgentPolicyDto?>(null)
     val agentPolicy: StateFlow<AgentPolicyDto?> = _agentPolicy.asStateFlow()
 
@@ -222,298 +212,6 @@ class AppViewModel @Inject constructor(
     private val _cachedProductCount = MutableStateFlow(0)
     val cachedProductCount: StateFlow<Int> = _cachedProductCount.asStateFlow()
 
-    private val _androidPasskeysAvailable = MutableStateFlow(false)
-    val androidPasskeysAvailable: StateFlow<Boolean> = _androidPasskeysAvailable.asStateFlow()
-
-    private val _registeringPasskey = MutableStateFlow(false)
-    val registeringPasskey: StateFlow<Boolean> = _registeringPasskey.asStateFlow()
-    private val _waitingForPasskeyProvider = MutableStateFlow(false)
-    val waitingForPasskeyProvider: StateFlow<Boolean> = _waitingForPasskeyProvider.asStateFlow()
-    private var passkeyRegistrationJob: Job? = null
-    private var canCancelPasskeyRegistration = false
-
-    /** Never cancel the server verification once the provider has returned a credential. */
-    fun cancelPasskeyRegistration() {
-        if (canCancelPasskeyRegistration) passkeyRegistrationJob?.cancel()
-    }
-
-    private val _passkeyRegistrationMessage = MutableStateFlow<String?>(null)
-    val passkeyRegistrationMessage: StateFlow<String?> = _passkeyRegistrationMessage.asStateFlow()
-    val passkeySetupOffers = passkeySetupPrompt.events
-
-    fun dismissPasskeyRegistrationMessage() {
-        _passkeyRegistrationMessage.value = null
-    }
-
-    init {
-        viewModelScope.launch(Dispatchers.IO) {
-            val available = CrashReportConsent.isConfigured(applicationContext)
-            _automaticCrashReportsAvailable.value = available
-            _automaticCrashReportsEnabled.value = available && CrashReportConsent.isEnabled(applicationContext)
-        }
-        observeSessionExpiry()
-        observeServerChanges()
-        observePasskeyCapabilities()
-        observeActiveSessionDevices()
-        checkUpdatesOnceServerReady()
-    }
-
-    private fun observeSessionExpiry() {
-        viewModelScope.launch {
-            sessionEvents.expired.collect { message ->
-                sessionManager.signOut(message)
-            }
-        }
-    }
-
-    private fun observeServerChanges() {
-        viewModelScope.launch {
-            var previous = serverConfig.selection.value?.baseUrl
-            serverConfig.selection.collect { selection ->
-                val next = selection?.baseUrl
-                if (previous != null && next != null && !previous.equals(next, ignoreCase = true)) {
-                    apiProvider.invalidate()
-                    sessionManager.signOut("Serveur modifié — veuillez vous reconnecter.")
-                    updateManager.checkForUpdate(
-                        manual = false,
-                        mandatoryOnly = !autoCheckUpdates.value,
-                    )
-                } else if (previous == null && next != null) {
-                    updateManager.checkForUpdate(
-                        manual = false,
-                        mandatoryOnly = !autoCheckUpdates.value,
-                    )
-                }
-                previous = next
-                if (next != null) viewModelScope.launch { passkeyAutoReporter.flush() }
-            }
-        }
-    }
-
-    private fun observePasskeyCapabilities() {
-        viewModelScope.launch {
-            serverConfig.selection.collectLatest { selection ->
-                _androidPasskeysAvailable.value = false
-                val selectedBase = selection?.baseUrl ?: return@collectLatest
-                val result = authRepository.webAuthnCapabilities()
-                val currentBase = serverConfig.selection.value?.baseUrl
-                if (currentBase != null && currentBase.equals(selectedBase, ignoreCase = true)) {
-                    _androidPasskeysAvailable.value = recordPasskeyCapability("settings-observer", selectedBase, result)
-                }
-            }
-        }
-    }
-
-    private fun recordPasskeyCapability(
-        source: String,
-        selectedBase: String,
-        result: ApiResult<ma.etherealmber.atlascommerce.data.model.WebAuthnCapabilitiesDto>,
-    ): Boolean {
-        val capability = (result as? ApiResult.Success)?.data
-        val origin = ServerUrl.origin(selectedBase)
-        val android = capability?.android
-        val installedOrigins = AndroidPasskeyOrigin.forInstalledApp(applicationContext)
-        val advertisedOrigins = android?.configuredOrigins.orEmpty()
-        val available = capability?.supportsAndroid(BuildConfig.APPLICATION_ID, installedOrigins, origin) == true
-        when (result) {
-            is ApiResult.Success -> AtlasLogBuffer.log(
-                "PASSKEY",
-                "$source capability: enabled=${capability?.enabled}; androidEnabled=${android?.enabled}; packageMatch=${android?.packageName == BuildConfig.APPLICATION_ID}; selectedOriginAllowed=${origin != null && capability?.origins?.contains(origin) == true}; androidOriginConfigured=${advertisedOrigins.isNotEmpty()}; installedSigningOriginMatch=${advertisedOrigins.any(installedOrigins::contains)}; available=$available",
-            )
-            is ApiResult.Failure -> AtlasLogBuffer.log(
-                "PASSKEY",
-                "$source capability request failed: code=${result.code}; http=${result.httpStatus ?: "none"}",
-                "ERROR",
-            )
-        }
-        return available
-    }
-
-    private suspend fun supportsSelectedServerPasskeyOrigin(origin: String): Boolean {
-        if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != origin) return false
-        val capability = (authRepository.webAuthnCapabilities() as? ApiResult.Success)?.data ?: return false
-        return capability.supportsAndroid(
-            BuildConfig.APPLICATION_ID,
-            AndroidPasskeyOrigin.forInstalledApp(applicationContext),
-            origin,
-        )
-    }
-
-    fun refreshPasskeyCapability() {
-        val selectedBase = serverConfig.selection.value?.baseUrl ?: run {
-            _androidPasskeysAvailable.value = false
-            return
-        }
-        viewModelScope.launch {
-            val result = authRepository.webAuthnCapabilities()
-            val currentBase = serverConfig.selection.value?.baseUrl
-            if (currentBase != null && currentBase.equals(selectedBase, ignoreCase = true)) {
-                _androidPasskeysAvailable.value = recordPasskeyCapability("settings-refresh", selectedBase, result)
-            }
-        }
-    }
-
-    fun registerAndroidPasskey(context: Context, onDone: (String) -> Unit) {
-        _passkeyRegistrationMessage.value = null
-        val report: (String) -> Unit = { message ->
-            _passkeyRegistrationMessage.value = message
-            onDone(message)
-        }
-        val attemptServer = serverConfig.selection.value?.baseUrl
-        val fail: (String, PasskeyFailureStage, Int?) -> Unit = { message, stage, status ->
-            passkeyAutoReporter.record(stage, status, attemptServer)
-            viewModelScope.launch { passkeyAutoReporter.flush() }
-            report(message)
-        }
-        if (!_androidPasskeysAvailable.value) {
-            AtlasLogBuffer.log("PASSKEY", "Registration blocked because capability is unavailable", "WARN")
-            report("Les passkeys Android ne sont pas activées pour le serveur sélectionné.")
-            return
-        }
-        if (_registeringPasskey.value) return
-        _registeringPasskey.value = true
-        canCancelPasskeyRegistration = true
-        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
-            AtlasLogBuffer.log("PASSKEY", "Registration flow started")
-            try {
-                val selectedServerOrigin = ServerUrl.origin(serverConfig.selection.value?.baseUrl)
-                val registrationScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
-                AtlasLogBuffer.log("PASSKEY", "Registration selected origin=${selectedServerOrigin ?: "invalid"}")
-                if (registrationScope == null) {
-                    report("Votre session a expiré. Reconnectez-vous puis réessayez.")
-                    return@launch
-                }
-                if (selectedServerOrigin == null) {
-                    _androidPasskeysAvailable.value = false
-                    report("L'origine du serveur sélectionné est invalide.")
-                    return@launch
-                }
-                when (val capabilityResult = authRepository.webAuthnCapabilities()) {
-                    is ApiResult.Failure -> {
-                        AtlasLogBuffer.log("PASSKEY", "Registration capability failed: code=${capabilityResult.code}; http=${capabilityResult.httpStatus ?: "none"}", "ERROR")
-                        _androidPasskeysAvailable.value = false
-                        fail("Impossible de vérifier la disponibilité des passkeys. Réessayez plus tard.", PasskeyFailureStage.REGISTRATION_CAPABILITY, capabilityResult.httpStatus)
-                        return@launch
-                    }
-                    is ApiResult.Success -> {
-                        recordPasskeyCapability("registration-check", serverConfig.selection.value?.baseUrl.orEmpty(), capabilityResult)
-                        if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != selectedServerOrigin ||
-                            !capabilityResult.data.supportsAndroid(
-                                BuildConfig.APPLICATION_ID,
-                                AndroidPasskeyOrigin.forInstalledApp(applicationContext),
-                                selectedServerOrigin,
-                            )
-                        ) {
-                            _androidPasskeysAvailable.value = false
-                            fail("Les passkeys Android ne sont plus activées pour le serveur sélectionné.", PasskeyFailureStage.REGISTRATION_CAPABILITY, null)
-                            return@launch
-                        }
-                    }
-                }
-                AtlasLogBuffer.log("PASSKEY", "Requesting registration options")
-                when (val options = authRepository.webAuthnRegistrationOptions(deviceIdentity.fingerprint)) {
-                    is ApiResult.Failure -> {
-                        AtlasLogBuffer.log("PASSKEY", "registration-options failed: code=${options.code}; http=${options.httpStatus ?: "none"}", "ERROR")
-                        fail("Impossible de préparer la création de la passkey. Réessayez plus tard.", PasskeyFailureStage.REGISTRATION_OPTIONS, options.httpStatus)
-                    }
-                    is ApiResult.Success -> {
-                        AtlasLogBuffer.log(
-                            "PASSKEY",
-                            "Registration options received; challenge and user data are not logged; ${AndroidPasskeyCredentials.registrationOptionsSummary(options.data)}",
-                        )
-                        if (!supportsSelectedServerPasskeyOrigin(selectedServerOrigin)) {
-                            _androidPasskeysAvailable.value = false
-                            fail("Les passkeys Android ne sont plus disponibles sur ce serveur.", PasskeyFailureStage.REGISTRATION_CAPABILITY, null)
-                            return@launch
-                        }
-                        val activity = context.findActivity()
-                        if (activity == null || activity.isFinishing || activity.isDestroyed) {
-                            AtlasLogBuffer.log("PASSKEY", "Registration aborted: no active Activity for Credential Manager", "WARN")
-                            report("La fenêtre Android n'est plus disponible. Rouvrez l'application puis réessayez.")
-                            return@launch
-                        }
-                        AtlasLogBuffer.log("PASSKEY", "Opening Android Credential Manager for registration")
-                        val providerStarted = android.os.SystemClock.elapsedRealtime()
-                        _waitingForPasskeyProvider.value = true
-                        val credentialJson = try {
-                            awaitPasskeyProvider { AndroidPasskeyCredentials.create(activity, options.data) }
-                        } catch (timeout: TimeoutCancellationException) {
-                            AtlasLogBuffer.log("PASSKEY", "Credential Manager registration timed out", "ERROR")
-                            fail("La création de la passkey n'a pas été terminée à temps. Réessayez ou vérifiez votre fournisseur Android.", PasskeyFailureStage.REGISTRATION_TIMEOUT, null)
-                            return@launch
-                        } finally {
-                            _waitingForPasskeyProvider.value = false
-                            val elapsed = android.os.SystemClock.elapsedRealtime() - providerStarted
-                            AtlasLogBuffer.log("PASSKEY", "Registration credential provider elapsedMs=$elapsed")
-                        }
-                        val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
-                        if (ServerUrl.origin(serverConfig.selection.value?.baseUrl) != selectedServerOrigin || currentScope != registrationScope) {
-                            report("La session ou le serveur a changé. Recommencez l'enregistrement de la passkey.")
-                            return@launch
-                        }
-                        canCancelPasskeyRegistration = false
-                        AtlasLogBuffer.log("PASSKEY", "Credential Manager returned an attestation; sending it to selected Worker")
-                        val label = listOf("Android", android.os.Build.MANUFACTURER, android.os.Build.MODEL)
-                            .filter { it.isNotBlank() }
-                            .distinct()
-                            .joinToString(" ")
-                        when (
-                            val result = authRepository.verifyWebAuthnRegistration(
-                                credentialJson = credentialJson,
-                                fingerprint = deviceIdentity.fingerprint,
-                                deviceLabel = label,
-                            )
-                        ) {
-                            is ApiResult.Failure -> {
-                                AtlasLogBuffer.log("PASSKEY", "registration-verify failed: code=${result.code}; http=${result.httpStatus ?: "none"}", "ERROR")
-                                fail(passkeyRegistrationFailureMessage(result.httpStatus), PasskeyFailureStage.REGISTRATION_VERIFY, result.httpStatus)
-                            }
-                            is ApiResult.Success -> {
-                                AtlasLogBuffer.log("PASSKEY", "Registration verified by Worker")
-                                report(result.data)
-                            }
-                        }
-                    }
-                }
-            } catch (cancelled: CancellationException) {
-                AtlasLogBuffer.log("PASSKEY", "Registration coroutine cancelled")
-                throw cancelled
-            } catch (error: CreateCredentialNoCreateOptionException) {
-                AtlasLogBuffer.log(
-                    "PASSKEY",
-                    "Credential Manager has no eligible provider after registration options were received; exceptionType=${error.type}; no credential was created",
-                    "ERROR",
-                )
-                AtlasLogBuffer.log(
-                    "PASSKEY",
-                    "Troubleshooting: configure Google Password Manager or another credential provider; enable screen lock; select the provider in Android Passwords, passkeys & accounts settings; verify Digital Asset Links for the selected origin. No passkey was registered.",
-                    "INFO",
-                )
-                fail("Aucun fournisseur de passkeys n'a accepté la création. Activez Google Password Manager ou un fournisseur compatible, sélectionnez-le dans Paramètres Android > Mots de passe, clés d'accès et comptes, et vérifiez qu'un verrouillage d'écran est activé. Aucune passkey n'a été créée.", PasskeyFailureStage.REGISTRATION_NO_PROVIDER, null)
-            } catch (error: Exception) {
-                val detail = error.javaClass.simpleName
-                AtlasLogBuffer.log("PASSKEY", "Registration failed in Credential Manager/client: $detail", "ERROR")
-                if (error is androidx.credentials.exceptions.CreateCredentialCancellationException) {
-                    report("La création de la passkey a été annulée.")
-                } else {
-                    fail("La création de la passkey a échoué. Réessayez plus tard ou contactez l'administrateur.", PasskeyFailureStage.REGISTRATION_PROVIDER, null)
-                }
-            } finally {
-                _waitingForPasskeyProvider.value = false
-            }
-        }
-        passkeyRegistrationJob = job
-        job.invokeOnCompletion {
-            if (passkeyRegistrationJob === job) {
-                _waitingForPasskeyProvider.value = false
-                canCancelPasskeyRegistration = false
-                _registeringPasskey.value = false
-                passkeyRegistrationJob = null
-            }
-        }
-        job.start()
-    }
-
     private fun observeActiveSessionDevices() {
         viewModelScope.launch {
             sessionManager.state
@@ -524,7 +222,6 @@ class AppViewModel @Inject constructor(
                     _agentPolicy.value = null
                     _cachedProductCount.value = 0
                     if (identity != null) {
-                        viewModelScope.launch { passkeyAutoReporter.flush() }
                         loadDevices()
                         refreshAgentPolicy()
                         refreshCachedProductCount()
@@ -634,6 +331,10 @@ class AppViewModel @Inject constructor(
     }
 
     fun switchSavedAccount(entry: SavedAccountEntry, onDone: (String) -> Unit) {
+        if (!entry.canUseDeviceUnlock) {
+            onDone("Sign in with the account password to switch to this account.")
+            return
+        }
         viewModelScope.launch {
             when (val res = sessionManager.switchToSavedAccount(entry)) {
                 is ApiResult.Success -> onDone(
@@ -842,7 +543,6 @@ class AppViewModel @Inject constructor(
             sessionManager.signOut()
             serverConfig.clear()
             preferences.clearAllLocalPreferences()
-            passkeyAutoReporter.clear()
             offlineCache.clearAll()
             withContext(Dispatchers.IO) {
                 File(applicationContext.cacheDir, "finance").deleteRecursively()

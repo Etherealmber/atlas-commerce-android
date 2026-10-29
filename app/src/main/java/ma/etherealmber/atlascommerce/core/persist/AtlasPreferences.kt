@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.map
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
+import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
@@ -45,8 +46,13 @@ data class SavedAccountEntry(
     val email: String = "",
     val avatarUrl: String = "",
     val tokenCipher: String = "",
+    val deviceUnlockEnabled: Boolean = false,
+    val deviceUnlockChoiceMade: Boolean = false,
     val savedAtMs: Long = 0L,
-)
+) {
+    val canUseDeviceUnlock: Boolean
+        get() = deviceUnlockEnabled && deviceUnlockChoiceMade
+}
 
 /**
  * Single source of persistent app preferences: chosen server, saved servers,
@@ -293,10 +299,15 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         if (srv.isEmpty() || usr.isEmpty() || entry.tokenCipher.isEmpty()) return
         safeEdit { prefs ->
             val current = decodeSavedAccounts(prefs.safeString(Keys.SAVED_ACCOUNTS.name))
+            val existing = current.firstOrNull {
+                it.serverUrl.equals(srv, ignoreCase = true) && it.username.equals(usr, ignoreCase = true)
+            }
             val updated = listOf(
                 entry.copy(
                     serverUrl = srv,
                     username = usr,
+                    deviceUnlockEnabled = entry.deviceUnlockEnabled || existing?.deviceUnlockEnabled == true,
+                    deviceUnlockChoiceMade = entry.deviceUnlockChoiceMade || existing?.deviceUnlockChoiceMade == true,
                     savedAtMs = System.currentTimeMillis(),
                 ),
             ) + current.filterNot {
@@ -304,6 +315,21 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
                     it.username.equals(usr, ignoreCase = true)
             }
             prefs.putClean(Keys.SAVED_ACCOUNTS, encodeSavedAccounts(updated.take(20)))
+        }
+    }
+
+    suspend fun setSavedAccountDeviceUnlock(serverUrl: String, username: String, enabled: Boolean) {
+        val srv = serverUrl.trim()
+        val usr = username.trim().lowercase(Locale.ROOT)
+        if (srv.isEmpty() || usr.isEmpty()) return
+        safeEdit { prefs ->
+            val accounts = decodeSavedAccounts(prefs.safeString(Keys.SAVED_ACCOUNTS.name))
+            val updated = accounts.map { account ->
+                if (account.serverUrl.equals(srv, ignoreCase = true) && account.username.equals(usr, ignoreCase = true)) {
+                    account.copy(deviceUnlockEnabled = enabled, deviceUnlockChoiceMade = true)
+                } else account
+            }
+            prefs.putClean(Keys.SAVED_ACCOUNTS, encodeSavedAccounts(updated))
         }
     }
 
@@ -531,6 +557,8 @@ private fun decodeSavedAccounts(raw: String?): List<SavedAccountEntry> {
                             email = obj.optString("email").trim(),
                             avatarUrl = obj.optString("avatarUrl").trim(),
                             tokenCipher = tokenCipher,
+                            deviceUnlockEnabled = obj.optBoolean("deviceUnlockEnabled", false),
+                            deviceUnlockChoiceMade = obj.optBoolean("deviceUnlockChoiceMade", false),
                             savedAtMs = obj.optLong("savedAtMs", 0L),
                         ),
                     )
@@ -552,6 +580,8 @@ private fun encodeSavedAccounts(items: List<SavedAccountEntry>): String {
                 .put("email", item.email)
                 .put("avatarUrl", item.avatarUrl)
                 .put("tokenCipher", item.tokenCipher)
+                .put("deviceUnlockEnabled", item.deviceUnlockEnabled)
+                .put("deviceUnlockChoiceMade", item.deviceUnlockChoiceMade)
                 .put("savedAtMs", item.savedAtMs),
         )
     }
