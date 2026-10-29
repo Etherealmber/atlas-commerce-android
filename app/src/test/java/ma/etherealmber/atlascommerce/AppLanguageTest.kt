@@ -28,6 +28,13 @@ class AppLanguageTest {
     }
 
     @Test
+    fun systemLocaleSelectsSupportedLanguageAndFallsBackToFrench() {
+        assertEquals(AppLanguage.ARABIC, AppLanguage.fromSystemLocale(java.util.Locale.forLanguageTag("ar-MA")))
+        assertEquals(AppLanguage.ENGLISH, AppLanguage.fromSystemLocale(java.util.Locale.forLanguageTag("en-US")))
+        assertEquals(AppLanguage.FRENCH, AppLanguage.fromSystemLocale(java.util.Locale.forLanguageTag("ja-JP")))
+    }
+
+    @Test
     fun agentRequestSendsResponseLanguageForBackendPromptPolicy() {
         val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
         val json = moshi.adapter(AssistChatRequest::class.java).toJson(

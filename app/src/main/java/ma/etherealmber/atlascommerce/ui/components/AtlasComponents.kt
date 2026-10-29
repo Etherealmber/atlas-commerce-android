@@ -112,6 +112,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -2147,9 +2148,81 @@ private fun AtlasDemoPreviewScreen(
 }
 
 @Composable
+private fun AtlasFirstSignInChoiceScreen(
+    onOpenQr: () -> Unit,
+    onUseAccount: () -> Unit,
+) {
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp, vertical = 22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            AtlasMark(size = 58.dp)
+            Spacer(Modifier.height(20.dp))
+            Text(
+                atlasText("Bienvenue sur Atlas", "Welcome to Atlas", "مرحباً بك في Atlas"),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                atlasText(
+                    "Comment souhaitez-vous vous connecter ?",
+                    "How would you like to sign in?",
+                    "كيف تريد تسجيل الدخول؟",
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(28.dp))
+            AtlasButton(
+                text = atlasText("Se connecter avec un QR code", "Sign in with a QR code", "تسجيل الدخول باستخدام رمز QR"),
+                onClick = onOpenQr,
+                modifier = Modifier.fillMaxWidth(),
+                icon = Icons.Outlined.QrCodeScanner,
+            )
+            Spacer(Modifier.height(10.dp))
+            AtlasOutlinedButton(
+                text = atlasText("Utiliser identifiant et mot de passe", "Use username and password", "استخدم اسم المستخدم وكلمة المرور"),
+                onClick = onUseAccount,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(24.dp))
+            Text(
+                atlasText(
+                    "Atlas suit le thème et la langue de votre téléphone. Si sa langue n'est pas disponible, l'application utilise le français.",
+                    "Atlas follows your phone's theme and language. If that language isn't supported, the app uses French.",
+                    "يتبع Atlas سمة الهاتف ولغته. إذا لم تكن اللغة مدعومة، فسيستخدم التطبيق الفرنسية.",
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
 fun AtlasWelcomeOnboardingScreen(
     onComplete: () -> Unit,
+    onOpenQrSignIn: () -> Unit = onComplete,
 ) {
+    var showSignInChoice by rememberSaveable { mutableStateOf(true) }
+    if (showSignInChoice) {
+        AtlasFirstSignInChoiceScreen(
+            onOpenQr = onOpenQrSignIn,
+            onUseAccount = { showSignInChoice = false },
+        )
+        return
+    }
     var showDemo by remember { mutableStateOf(true) }
     if (showDemo) {
         AtlasDemoPreviewScreen(

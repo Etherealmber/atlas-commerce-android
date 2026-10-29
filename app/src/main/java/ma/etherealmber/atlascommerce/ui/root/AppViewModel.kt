@@ -107,6 +107,8 @@ class AppViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, DensityMode.COMPACT)
 
     val appLanguage: StateFlow<AppLanguage> = (applicationContext as ma.etherealmber.atlascommerce.AtlasApp).activeLanguage
+    val appLanguageFollowsSystem: StateFlow<Boolean> = preferences.appLanguageFollowsSystem
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
     private val _languageRestartNotice = MutableStateFlow<AppLanguage?>(null)
     val languageRestartNotice = _languageRestartNotice.asStateFlow()
     private val _languageSaveFailed = MutableStateFlow(false)
@@ -775,9 +777,28 @@ class AppViewModel @Inject constructor(
             preferences.setAppLanguage(language)
             if (preferences.appLanguage.first() != language) {
                 _languageSaveFailed.value = true
-            } else if (language != appLanguage.value) {
-                _languageRestartNotice.value = language
+            } else {
+                _languageRestartNotice.value = language.takeIf { it != appLanguage.value }
             }
+        }
+    }
+
+    fun refreshSystemAppLanguage(language: AppLanguage) {
+        if (appLanguageFollowsSystem.value) {
+            (applicationContext as ma.etherealmber.atlascommerce.AtlasApp).activateSavedLanguage(language)
+        }
+    }
+
+    fun followSystemAppLanguage() {
+        viewModelScope.launch {
+            val current = appLanguage.value
+            preferences.useSystemAppLanguage()
+            if (!preferences.appLanguageFollowsSystem.first()) {
+                _languageSaveFailed.value = true
+                return@launch
+            }
+            val resolved = preferences.appLanguage.first()
+            _languageRestartNotice.value = resolved.takeIf { it != current }
         }
     }
 

@@ -6,12 +6,12 @@
   <h1>Atlas Commerce — Android</h1>
   <p><strong>Official Native Android Companion for <a href="https://github.com/Etherealmber/atlas-commerce">Atlas Commerce Web</a></strong><br/>Stock · POS &amp; Receipts · Invoicing · Barcode &amp; PC QR Scanner · Atlas Agent AI</p>
 
-![Version](https://img.shields.io/badge/version-1.1.2-blue)
-![License](https://img.shields.io/badge/license-MIT-yellow)
-![Kotlin](https://img.shields.io/badge/kotlin-2.0.21-7f52ff)
+![Version](https://img.shields.io/github/v/release/Etherealmber/atlas-commerce-android?label=version)
+![License](https://img.shields.io/github/license/Etherealmber/atlas-commerce-android)
+![Kotlin](https://img.shields.io/badge/kotlin-2.3.0-7f52ff)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285f4)
 ![Min SDK](https://img.shields.io/badge/minSdk-28%20(Android%209%2B)-3ddc84)
-![Build](https://img.shields.io/badge/CI-GitHub%20Actions-2088ff)
+![Build](https://img.shields.io/github/actions/workflow/status/Etherealmber/atlas-commerce-android/android.yml?branch=main&label=CI)
 
 **[Web Backend Repository (`Etherealmber/atlas-commerce`)](https://github.com/Etherealmber/atlas-commerce)** ·
 **[Download Latest APK](https://github.com/Etherealmber/atlas-commerce-android/releases)** ·
@@ -53,7 +53,7 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
 
 1. **Double-Check What You Typed Character by Character! ✍️**
    - Most connection errors come from a small typo in the server URL (missing letter, extra space, `.ma` vs `.com`, or typing `http://` instead of `https://`).
-   - Tap the server chip on the login screen (or **Mon profil → ⚙️ Paramètres → Changer ou ajouter un serveur**) and carefully re-check every character of the domain name you typed.
+   - Open the **three-dot menu → Choose server** on the login screen (or **Mon profil → ⚙️ Paramètres → Changer ou ajouter un serveur**) and carefully re-check every character of the domain name you typed.
 2. **Verify Your Website Is Actually Online First 🌐**
    - Open the exact same URL directly inside Chrome on your phone (`https://your-domain.com/api/health`).
    - If it works, you will see `{"success":true,"data":{"ok":true,...}}`. If it does not load in Chrome either, deploy or restart your **[Atlas Commerce Web](https://github.com/Etherealmber/atlas-commerce)** worker first.
@@ -74,7 +74,7 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
 
 ---
 
-## ✨ Key Features (`v1.1.2`)
+## ✨ Key Features (`v1.2.9`)
 
 - **Strict Multi-Server & Multi-Account Isolation (Zero Data Leak)**:
   - Save multiple servers and multiple user accounts on one device with **100% cryptographic & filesystem isolation** (`AES-256-GCM` per server + `SHA-256` scoped offline caches). Switching accounts or servers immediately purges in-memory carts, caches, avatars, notifications, and AI chats.
@@ -115,7 +115,7 @@ For the complete backend-first onboarding and optional provider configuration, s
 ## 🚀 Maintainer Guide — Publishing Releases & Automated Bug Hunting
 
 ### 1. Publishing a New Release via GitHub Actions (100% Manual — Never Auto-Published on Push)
-Version numbers and releases are **never** bumped or published automatically on pushes or PR merges — releases publish **only** when you run **`workflow_dispatch`** manually (or push a `v*` tag):
+Version numbers and releases are **never** bumped or published automatically on pushes or PR merges — releases publish **only** when you run **`workflow_dispatch`** manually (or push a `v*` tag). The version and CI badges at the top use live GitHub endpoints; after a release is published, the Android release workflow’s **Sync README release version** job automatically updates the Key Features heading on `main`.
 
 1. Open **[Actions → Android CI](https://github.com/Etherealmber/atlas-commerce-android/actions/workflows/android.yml)** and click **Run workflow** on branch **`main`**.
 2. Fill in the prompt fields before building:

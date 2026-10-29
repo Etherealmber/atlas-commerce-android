@@ -1,13 +1,13 @@
 package ma.etherealmber.atlascommerce
 
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.Until
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,13 +22,27 @@ class Android9StartupSmokeTest {
         val launchIntent = checkNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         val device = UiDevice.getInstance(instrumentation)
-        val firstRunMarker = By.text("Aperçu interactif · mode démo")
+        // The first screen is the sign-in choice page. Accept its localized title (and the demo
+        // preview title) because the app follows the emulator's system language.
+        val firstRunMarkers = listOf(
+            By.textContains("Bienvenue sur Atlas"),
+            By.textContains("Welcome to Atlas"),
+            By.textContains("مرحباً بك في Atlas"),
+            By.textContains("Aperçu interactif"),
+            By.textContains("Interactive preview"),
+            By.textContains("معاينة تفاعلية"),
+        )
 
         ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
             scenario.onActivity { activity ->
                 Log.i("Android9StartupSmoke", "MainActivity resumed; package=${activity.packageName}")
             }
-            val reachedFirstRun = device.wait(Until.hasObject(firstRunMarker), 30_000L)
+            val deadline = SystemClock.uptimeMillis() + 30_000L
+            var reachedFirstRun = false
+            while (!reachedFirstRun && SystemClock.uptimeMillis() < deadline) {
+                reachedFirstRun = firstRunMarkers.any { marker -> device.findObject(marker) != null }
+                if (!reachedFirstRun) SystemClock.sleep(250L)
+            }
             if (!reachedFirstRun) {
                 val hierarchy = java.io.File(context.cacheDir, "android9-window.xml")
                 runCatching { device.dumpWindowHierarchy(hierarchy) }

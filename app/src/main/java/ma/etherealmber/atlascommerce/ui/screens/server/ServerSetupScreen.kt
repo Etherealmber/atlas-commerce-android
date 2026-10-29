@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.server
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,8 +14,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -73,6 +78,7 @@ fun ServerSetupScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Color(0xFF071110), Color(0xFF173B37), Color(0xFF3A7069))))
             .statusBarsPadding()
             .navigationBarsPadding()
             .verticalScroll(rememberScrollState())
@@ -85,281 +91,289 @@ fun ServerSetupScreen(
         ) {
             if (onClose != null) {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"), tint = Color.White)
                 }
             } else {
-                Spacer(Modifier.width(48.dp))
+                AtlasBrandWordmark(
+                    modifier = Modifier.widthIn(max = 190.dp),
+                    height = 38.dp,
+                    tint = Color.White,
+                )
             }
-            AtlasLanguageSelector()
+            Spacer(Modifier.weight(1f))
+            AtlasLanguageSelector(contentColor = Color.White)
         }
 
-        AtlasEntrance(delayMillis = 0) {
-            AtlasBrandWordmark(
-                modifier = Modifier.fillMaxWidth(),
-                height = 68.dp,
-            )
-        }
-        Spacer(Modifier.height(18.dp))
         AtlasEntrance(delayMillis = 55) {
             Column {
                 Text(
                     text = atlasText("Connectez votre serveur", "Connect your server", "اربط الخادم الخاص بك"),
                     style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onBackground,
+                    color = Color.White,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = atlasText("Cette application est liée à la plateforme web Atlas Commerce (à déployer en premier). Saisissez l'adresse exacte de votre site — si le site semble indisponible, vérifiez qu'il n'y a aucune faute de frappe.", "This app connects to the Atlas Commerce web platform, which must be deployed first. Enter your exact site address. If it appears unavailable, double-check the spelling.", "يرتبط هذا التطبيق بمنصة Atlas Commerce على الويب، ويجب نشرها أولًا. أدخل عنوان موقعك بدقة. إذا لم يظهر الموقع متاحًا، فتحقّق من كتابة العنوان."),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White.copy(alpha = 0.78f),
                 )
             }
         }
-        Spacer(Modifier.height(density.sectionGap))
+        Spacer(Modifier.height(14.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            tonalElevation = 1.dp,
+        ) {
+            Column(Modifier.fillMaxWidth().padding(18.dp)) {
+                Spacer(Modifier.height(density.sectionGap))
 
-        if (savedServers.isNotEmpty()) {
-            Text(
-                text = atlasText("MES SERVEURS ENREGISTRÉS", "SAVED SERVERS", "الخوادم المحفوظة"),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            savedServers.forEach { saved ->
-                val selected = state.normalizedInput.equals(saved.url, ignoreCase = true)
-                Surface(
-                    onClick = { viewModel.choosePreset(saved.url, saved.label) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-                    border = BorderStroke(
-                        width = if (selected) 2.dp else 1.dp,
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            Atlas.palette.cardBorder
-                        },
-                    ),
-                ) {
+                if (savedServers.isNotEmpty()) {
+                    Text(
+                        text = atlasText("MES SERVEURS ENREGISTRÉS", "SAVED SERVERS", "الخوادم المحفوظة"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    savedServers.forEach { saved ->
+                        val selected = state.normalizedInput.equals(saved.url, ignoreCase = true)
+                        Surface(
+                            onClick = { viewModel.choosePreset(saved.url, saved.label) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.medium,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.surface
+                            },
+                            border = BorderStroke(
+                                width = if (selected) 2.dp else 1.dp,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    Atlas.palette.cardBorder
+                                },
+                            ),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = selected,
+                                    onClick = { viewModel.choosePreset(saved.url, saved.label) },
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = saved.label.ifBlank { ServerUrl.display(saved.url) },
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        text = ServerUrl.display(saved.url),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                IconButton(onClick = { viewModel.forgetServer(saved) }) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Close,
+                                        contentDescription = atlasText("Oublier ce serveur", "Forget this server", "نسيان هذا الخادم"),
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                if (devPresets.isNotEmpty()) {
+                    Text(
+                        text = atlasText("ENVIRONNEMENTS LOCAUX (DEBUG)", "LOCAL ENVIRONMENTS (DEBUG)", "البيئات المحلية (تصحيح)"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    devPresets.forEach { preset ->
+                        val selected = state.normalizedInput == ServerUrl.normalize(preset.url)
+                        Surface(
+                            onClick = { viewModel.choosePreset(preset.url, preset.label) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.medium,
+                            color = if (selected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(
+                                width = if (selected) 2.dp else 1.dp,
+                                color = if (selected) MaterialTheme.colorScheme.primary else Atlas.palette.cardBorder,
+                            ),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = selected, onClick = { viewModel.choosePreset(preset.url, preset.label) })
+                                Column(Modifier.weight(1f)) {
+                                    Text(atlasText(preset.label), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                    Text(atlasText(preset.hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                Text(
+                    text = atlasText("ADRESSE DU SERVEUR", "SERVER ADDRESS", "عنوان الخادم"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                AtlasTextField(
+                    value = state.input,
+                    onValueChange = viewModel::onInputChange,
+                    label = atlasText("Domaine ou URL HTTPS", "Domain or HTTPS URL", "النطاق أو رابط HTTPS"),
+                    placeholder = "https://votre-domaine.exemple.com",
+                    leadingIcon = Icons.Outlined.Dns,
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Next,
+                    supportingText = atlasText("Connexion HTTPS chiffrée obligatoire en production.", "Encrypted HTTPS is required in production.", "اتصال HTTPS المشفّر مطلوب في الإصدار النهائي."),
+                )
+
+                Spacer(Modifier.height(10.dp))
+                AtlasCard {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        RadioButton(
-                            selected = selected,
-                            onClick = { viewModel.choosePreset(saved.url, saved.label) },
-                        )
                         Column(Modifier.weight(1f)) {
                             Text(
-                                text = saved.label.ifBlank { ServerUrl.display(saved.url) },
+                                text = atlasText("Enregistrer ce serveur", "Save this server", "حفظ هذا الخادم"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = ServerUrl.display(saved.url),
+                                text = atlasText("Garde l'adresse sur cet appareil pour basculer rapidement entre plusieurs espaces.", "Keep this address on this device to switch between workspaces quickly.", "احتفظ بالعنوان على هذا الجهاز للتبديل سريعًا بين مساحات العمل."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        IconButton(onClick = { viewModel.forgetServer(saved) }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Close,
-                                contentDescription = atlasText("Oublier ce serveur", "Forget this server", "نسيان هذا الخادم"),
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
+                        Spacer(Modifier.width(8.dp))
+                        Switch(
+                            checked = state.rememberServer,
+                            onCheckedChange = viewModel::onRememberServerChange,
+                        )
+                    }
+                    if (state.rememberServer) {
+                        Spacer(Modifier.height(10.dp))
+                        AtlasTextField(
+                            value = state.label,
+                            onValueChange = viewModel::onLabelChange,
+                            label = atlasText("Nom du serveur (optionnel)", "Server name (optional)", "اسم الخادم (اختياري)"),
+                            placeholder = atlasText("Ex. Boutique principale, Dépôt Nord…", "e.g. Main shop, North warehouse…", "مثال: المتجر الرئيسي، مستودع الشمال…"),
+                            leadingIcon = Icons.Outlined.BookmarkBorder,
+                            imeAction = ImeAction.Done,
+                            onDone = viewModel::test,
+                        )
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-            }
-            Spacer(Modifier.height(8.dp))
-        }
 
-        if (devPresets.isNotEmpty()) {
-            Text(
-                text = atlasText("ENVIRONNEMENTS LOCAUX (DEBUG)", "LOCAL ENVIRONMENTS (DEBUG)", "البيئات المحلية (تصحيح)"),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            devPresets.forEach { preset ->
-                val selected = state.normalizedInput == ServerUrl.normalize(preset.url)
-                Surface(
-                    onClick = { viewModel.choosePreset(preset.url, preset.label) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    color = if (selected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(
-                        width = if (selected) 2.dp else 1.dp,
-                        color = if (selected) MaterialTheme.colorScheme.primary else Atlas.palette.cardBorder,
-                    ),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = selected, onClick = { viewModel.choosePreset(preset.url, preset.label) })
-                        Column(Modifier.weight(1f)) {
-                            Text(atlasText(preset.label), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            Text(atlasText(preset.hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-
-        Text(
-            text = atlasText("ADRESSE DU SERVEUR", "SERVER ADDRESS", "عنوان الخادم"),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(8.dp))
-        AtlasTextField(
-            value = state.input,
-            onValueChange = viewModel::onInputChange,
-            label = atlasText("Domaine ou URL HTTPS", "Domain or HTTPS URL", "النطاق أو رابط HTTPS"),
-            placeholder = "https://votre-domaine.exemple.com",
-            leadingIcon = Icons.Outlined.Dns,
-            keyboardType = KeyboardType.Uri,
-            imeAction = ImeAction.Next,
-            supportingText = atlasText("Connexion HTTPS chiffrée obligatoire en production.", "Encrypted HTTPS is required in production.", "اتصال HTTPS المشفّر مطلوب في الإصدار النهائي."),
-        )
-
-        Spacer(Modifier.height(10.dp))
-        AtlasCard {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = atlasText("Enregistrer ce serveur", "Save this server", "حفظ هذا الخادم"),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AtlasOutlinedButton(
+                        text = atlasText("Tester la connexion", "Test connection", "اختبار الاتصال"),
+                        onClick = viewModel::test,
+                        modifier = Modifier.weight(1f),
+                        enabled = !state.testing && state.input.isNotBlank(),
+                        icon = Icons.Outlined.Dns,
                     )
+                }
+
+                if (state.testing) {
+                    Spacer(Modifier.height(12.dp))
                     Text(
-                        text = atlasText("Garde l'adresse sur cet appareil pour basculer rapidement entre plusieurs espaces.", "Keep this address on this device to switch between workspaces quickly.", "احتفظ بالعنوان على هذا الجهاز للتبديل سريعًا بين مساحات العمل."),
+                        text = atlasText("Vérification de /api/health…", "Checking /api/health…", "جارٍ التحقق من /api/health…"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Spacer(Modifier.width(8.dp))
-                Switch(
-                    checked = state.rememberServer,
-                    onCheckedChange = viewModel::onRememberServerChange,
+
+                val report = state.report
+                if (report != null && !state.testing) {
+                    Spacer(Modifier.height(12.dp))
+                    ProbeCard(report)
+                }
+
+                if (!state.error.isNullOrBlank()) {
+                    Spacer(Modifier.height(12.dp))
+                    AtlasErrorCard(message = state.error.orEmpty(), title = atlasText("Adresse refusée", "Address rejected", "تم رفض العنوان"))
+                }
+
+                Spacer(Modifier.height(density.sectionGap))
+                AtlasButton(
+                    text = if (state.saving) atlasText("Enregistrement…", "Saving…", "جارٍ الحفظ…") else atlasText("Continuer vers la connexion", "Continue to sign in", "المتابعة إلى تسجيل الدخول"),
+                    onClick = { viewModel.continueToLogin { onClose?.invoke() } },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = state.canContinue,
+                    loading = state.saving,
                 )
-            }
-            if (state.rememberServer) {
+
                 Spacer(Modifier.height(10.dp))
-                AtlasTextField(
-                    value = state.label,
-                    onValueChange = viewModel::onLabelChange,
-                    label = atlasText("Nom du serveur (optionnel)", "Server name (optional)", "اسم الخادم (اختياري)"),
-                    placeholder = atlasText("Ex. Boutique principale, Dépôt Nord…", "e.g. Main shop, North warehouse…", "مثال: المتجر الرئيسي، مستودع الشمال…"),
-                    leadingIcon = Icons.Outlined.BookmarkBorder,
-                    imeAction = ImeAction.Done,
-                    onDone = viewModel::test,
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Lock,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = atlasText("Sessions, paniers et caches sont isolés par serveur et par utilisateur.", "Sessions, carts and caches are isolated by server and user.", "الجلسات وسلال التسوق والذاكرة المؤقتة معزولة لكل خادم ومستخدم."),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Spacer(Modifier.height(density.sectionGap))
+                AtlasCard {
+                    Text(
+                        text = atlasText("Nouveau sur Atlas Commerce ? (Étape 1 requise)", "New to Atlas Commerce? (Step 1 required)", "هل أنت جديد في Atlas Commerce؟ (الخطوة الأولى مطلوبة)"),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = atlasText(
+                            "1. Installez et déployez d'abord l'application web Atlas Commerce sur votre domaine HTTPS.\n2. Entrez votre URL exacte ci-dessus puis touchez « Tester la connexion ».\n3. Si le site apparaît indisponible, vérifiez attentivement l'orthographe de ce que vous avez tapé.",
+                            "1. First install and deploy the Atlas Commerce web app on your HTTPS domain.\n2. Enter the exact URL above and tap ‘Test connection’.\n3. If the site appears unavailable, carefully check the spelling of the address.",
+                            "١. ثبّت وانشر أولاً تطبيق Atlas Commerce على نطاق HTTPS الخاص بك.\n٢. أدخل عنوان URL الدقيق أعلاه ثم اضغط «اختبار الاتصال».\n٣. إذا ظهر الموقع غير متاح، فتحقّق من كتابة العنوان بدقة.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = AppDetails.WEB_REPO,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+
+                Spacer(Modifier.height(density.sectionGap))
+                Text(
+                    text = atlasText(
+                        "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · Licence ${AppDetails.LICENSE_NAME}",
+                        "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · License ${AppDetails.LICENSE_NAME}",
+                        "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · الترخيص ${AppDetails.LICENSE_NAME}",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(24.dp))
             }
         }
-
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            AtlasOutlinedButton(
-                text = atlasText("Tester la connexion", "Test connection", "اختبار الاتصال"),
-                onClick = viewModel::test,
-                modifier = Modifier.weight(1f),
-                enabled = !state.testing && state.input.isNotBlank(),
-                icon = Icons.Outlined.Dns,
-            )
-        }
-
-        if (state.testing) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = atlasText("Vérification de /api/health…", "Checking /api/health…", "جارٍ التحقق من /api/health…"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        val report = state.report
-        if (report != null && !state.testing) {
-            Spacer(Modifier.height(12.dp))
-            ProbeCard(report)
-        }
-
-        if (!state.error.isNullOrBlank()) {
-            Spacer(Modifier.height(12.dp))
-            AtlasErrorCard(message = state.error.orEmpty(), title = atlasText("Adresse refusée", "Address rejected", "تم رفض العنوان"))
-        }
-
-        Spacer(Modifier.height(density.sectionGap))
-        AtlasButton(
-            text = if (state.saving) atlasText("Enregistrement…", "Saving…", "جارٍ الحفظ…") else atlasText("Continuer vers la connexion", "Continue to sign in", "المتابعة إلى تسجيل الدخول"),
-            onClick = { viewModel.continueToLogin { onClose?.invoke() } },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = state.canContinue,
-            loading = state.saving,
-        )
-
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Outlined.Lock,
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = atlasText("Sessions, paniers et caches sont isolés par serveur et par utilisateur.", "Sessions, carts and caches are isolated by server and user.", "الجلسات وسلال التسوق والذاكرة المؤقتة معزولة لكل خادم ومستخدم."),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Spacer(Modifier.height(density.sectionGap))
-        AtlasCard {
-            Text(
-                text = atlasText("Nouveau sur Atlas Commerce ? (Étape 1 requise)", "New to Atlas Commerce? (Step 1 required)", "هل أنت جديد في Atlas Commerce؟ (الخطوة الأولى مطلوبة)"),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = atlasText(
-                    "1. Installez et déployez d'abord l'application web Atlas Commerce sur votre domaine HTTPS.\n2. Entrez votre URL exacte ci-dessus puis touchez « Tester la connexion ».\n3. Si le site apparaît indisponible, vérifiez attentivement l'orthographe de ce que vous avez tapé.",
-                    "1. First install and deploy the Atlas Commerce web app on your HTTPS domain.\n2. Enter the exact URL above and tap ‘Test connection’.\n3. If the site appears unavailable, carefully check the spelling of the address.",
-                    "١. ثبّت وانشر أولاً تطبيق Atlas Commerce على نطاق HTTPS الخاص بك.\n٢. أدخل عنوان URL الدقيق أعلاه ثم اضغط «اختبار الاتصال».\n٣. إذا ظهر الموقع غير متاح، فتحقّق من كتابة العنوان بدقة.",
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = AppDetails.WEB_REPO,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-
-        Spacer(Modifier.height(density.sectionGap))
-        Text(
-            text = atlasText(
-                "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · Licence ${AppDetails.LICENSE_NAME}",
-                "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · License ${AppDetails.LICENSE_NAME}",
-                "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · الترخيص ${AppDetails.LICENSE_NAME}",
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(24.dp))
     }
 }
 

@@ -67,7 +67,7 @@ class LoginViewModel @Inject constructor(
         val canSubmit: Boolean
             get() = !loading && username.isNotBlank() && when (step) {
                 Step.CREDENTIALS -> password.isNotBlank()
-                Step.OTP -> otp.length >= 4
+                Step.OTP -> otp.length == 6 && otp.all(Char::isDigit)
             }
     }
 
@@ -394,8 +394,8 @@ class LoginViewModel @Inject constructor(
     private fun verifyOtp() {
         val current = _state.value
         if (current.loading) return
-        if (current.otp.length < 4) {
-            _state.update { it.copy(error = "Saisissez le code reçu par e-mail.") }
+        if (current.otp.length != 6 || current.otp.any { !it.isDigit() }) {
+            _state.update { it.copy(error = "Saisissez les 6 chiffres du code reçu par e-mail.") }
             return
         }
         viewModelScope.launch {

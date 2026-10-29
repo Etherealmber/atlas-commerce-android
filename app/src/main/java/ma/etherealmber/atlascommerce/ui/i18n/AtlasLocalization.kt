@@ -27,6 +27,8 @@ import ma.etherealmber.atlascommerce.core.Roles
 
 val LocalAtlasLanguage = staticCompositionLocalOf { AppLanguage.FRENCH }
 val LocalSetAtlasLanguage = staticCompositionLocalOf<(AppLanguage) -> Unit> { {} }
+val LocalAtlasUsesSystemLanguage = staticCompositionLocalOf { true }
+val LocalUseSystemAtlasLanguage = staticCompositionLocalOf<() -> Unit> { {} }
 
 /** Reviewed French, English, and Arabic UI copy; unknown phrases intentionally remain unchanged. */
 private val commonTranslations = mapOf(
@@ -994,6 +996,8 @@ fun AtlasLanguageSelector(
 ) {
     val language = LocalAtlasLanguage.current
     val setLanguage = LocalSetAtlasLanguage.current
+    val followsSystem = LocalAtlasUsesSystemLanguage.current
+    val useSystemLanguage = LocalUseSystemAtlasLanguage.current
     var expanded by remember { mutableStateOf(false) }
 
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -1007,6 +1011,24 @@ fun AtlasLanguageSelector(
             Text(language.tag.uppercase(), color = contentColor)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        atlasText(
+                            "Suivre la langue du téléphone",
+                            "Follow phone language (${AppLanguage.fromSystemLocale().nativeLabel})",
+                            "اتباع لغة الهاتف (${AppLanguage.fromSystemLocale().nativeLabel})",
+                        ),
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    useSystemLanguage()
+                },
+                leadingIcon = if (followsSystem) {
+                    { Text("✓", color = MaterialTheme.colorScheme.primary) }
+                } else null,
+            )
             AppLanguage.entries.forEach { option ->
                 DropdownMenuItem(
                     text = { Text(option.nativeLabel) },
