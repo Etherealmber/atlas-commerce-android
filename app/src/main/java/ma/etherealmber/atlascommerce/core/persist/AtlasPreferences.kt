@@ -98,6 +98,7 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         val SESSION_DISPLAY = stringPreferencesKey("session_display_name")
         val SESSION_EMAIL = stringPreferencesKey("session_email")
         val SESSION_AVATAR = stringPreferencesKey("session_avatar_url")
+        val SESSION_RESTORE_DISABLED = booleanPreferencesKey("session_restore_disabled")
         val ONBOARDING_DONE = booleanPreferencesKey("server_onboarding_done")
     }
 
@@ -482,6 +483,17 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
             prefs.putClean(Keys.SESSION_DISPLAY, displayName)
             prefs.putClean(Keys.SESSION_EMAIL, email)
             prefs.putClean(Keys.SESSION_AVATAR, avatarUrl)
+            prefs.remove(Keys.SESSION_RESTORE_DISABLED)
+        }
+    }
+
+    suspend fun isSessionRestoreDisabled(): Boolean =
+        runCatching { safeData.first()[Keys.SESSION_RESTORE_DISABLED] ?: false }.getOrDefault(false)
+
+    suspend fun disableSessionRestore(disabled: Boolean) {
+        safeEdit { prefs ->
+            if (disabled) prefs.putClean(Keys.SESSION_RESTORE_DISABLED, true)
+            else prefs.remove(Keys.SESSION_RESTORE_DISABLED)
         }
     }
 
