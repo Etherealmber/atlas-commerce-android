@@ -4,8 +4,10 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface as MaterialSurface
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -14,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -63,8 +66,8 @@ data class AtlasPalette(
 )
 
 val LightPalette = AtlasPalette(
-    positive = Color(0xFF0F7B4F),
-    positiveSoft = Color(0xFFE6F6EC),
+    positive = Color(0xFFA16207),
+    positiveSoft = Color(0xFFFEF3C7),
     warning = Color(0xFFB45309),
     warningSoft = Color(0xFFFEF3C7),
     danger = Color(0xFFB91C1C),
@@ -80,8 +83,8 @@ val LightPalette = AtlasPalette(
 )
 
 val DarkPalette = AtlasPalette(
-    positive = Color(0xFF34D399),
-    positiveSoft = Color(0xFF10362A),
+    positive = Color(0xFFFBBF24),
+    positiveSoft = Color(0xFF3A2A0B),
     warning = Color(0xFFFBBF24),
     warningSoft = Color(0xFF3A2A0B),
     danger = Color(0xFFF87171),
@@ -295,39 +298,50 @@ fun AtlasTheme(
     }
 }
 
-/** Dark glass/teal theme used for the pre-authentication screens, inspired by the supplied reference. */
+/** Dark zinc-and-saffron Atlas theme shared by the pre-authentication screens. */
 @Composable
 fun AtlasAuthTheme(content: @Composable () -> Unit) {
     val typography = MaterialTheme.typography
     val shapes = MaterialTheme.shapes
     val colors = darkColorScheme(
-        primary = Color(0xFFB5D9D2),
-        onPrimary = Color(0xFF102522),
-        primaryContainer = Color(0xFF315D56),
-        onPrimaryContainer = Color(0xFFE1F2EE),
-        secondary = Color(0xFFC0D2CE),
-        onSecondary = Color(0xFF1D2C29),
-        tertiary = Color(0xFFD6B56D),
-        onTertiary = Color(0xFF251C08),
-        background = Color(0xFF071110),
-        onBackground = Color(0xFFF4F7F6),
-        surface = Color(0xFF1E2928),
-        onSurface = Color(0xFFF1F5F4),
-        surfaceVariant = Color(0xFF2A3836),
-        onSurfaceVariant = Color(0xFFBECBC7),
-        outline = Color(0xFF60716D),
-        outlineVariant = Color(0xFF40504D),
-        error = Color(0xFFFFB4AB),
-        onError = Color(0xFF690005),
+        primary = Color(0xFFF4F4F5),
+        onPrimary = Color(0xFF0A0A0C),
+        primaryContainer = Color(0xFF2A2A30),
+        onPrimaryContainer = Color(0xFFF4F4F5),
+        secondary = Color(0xFFD4D4D8),
+        onSecondary = Color(0xFF18181B),
+        tertiary = Saffron,
+        onTertiary = Color(0xFF171717),
+        background = Color(0xFF09090B),
+        onBackground = Color(0xFFF4F4F5),
+        surface = Color(0xFF17171B),
+        onSurface = Color(0xFFF4F4F5),
+        surfaceVariant = Color(0xFF222227),
+        onSurfaceVariant = Color(0xFFB4B4BC),
+        outline = Color(0xFF66666F),
+        outlineVariant = Color(0xFF3A3A41),
+        error = Color(0xFFFCA5A5),
+        onError = Color(0xFF450A0A),
     )
     val authPalette = DarkPalette.copy(
-        cardBorder = Color(0xFF40514E),
-        mutedText = Color(0xFFBECBC7),
-        heroStart = Color(0xFF071110),
-        heroEnd = Color(0xFF3A7069),
+        positive = Color(0xFFFBBF24),
+        positiveSoft = Color(0xFF3A2A0B),
+        cardBorder = Color(0xFF3A3A41),
+        mutedText = Color(0xFFB4B4BC),
+        heroStart = Color(0xFF09090B),
+        heroEnd = Color(0xFF26262C),
     )
     CompositionLocalProvider(LocalAtlasPalette provides authPalette) {
-        MaterialTheme(colorScheme = colors, typography = typography, shapes = shapes, content = content)
+        MaterialTheme(colorScheme = colors, typography = typography, shapes = shapes) {
+            // Establish matching LocalContentColor as well as MaterialTheme colors;
+            // auth routes are composed beneath a root Surface using the app theme.
+            MaterialSurface(
+                modifier = Modifier.fillMaxSize(),
+                color = colors.background,
+                contentColor = colors.onBackground,
+                content = content,
+            )
+        }
     }
 }
 

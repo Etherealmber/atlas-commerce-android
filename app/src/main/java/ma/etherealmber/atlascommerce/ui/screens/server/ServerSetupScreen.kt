@@ -86,7 +86,15 @@ private fun ServerSetupScreenContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF071110), Color(0xFF173B37), Color(0xFF3A7069))))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                ),
+            )
             .statusBarsPadding()
             .navigationBarsPadding()
             .verticalScroll(rememberScrollState())

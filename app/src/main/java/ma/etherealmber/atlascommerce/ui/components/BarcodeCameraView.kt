@@ -237,7 +237,7 @@ fun BarcodeCameraView(
             .border(
                 width = if (style == CameraVisualStyle.QR_DEVICE_SECURITY) 2.dp else 1.dp,
                 brush = if (style == CameraVisualStyle.QR_DEVICE_SECURITY) {
-                    Brush.linearGradient(listOf(Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFF34D399)))
+                    Brush.linearGradient(listOf(Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFFF59E0B)))
                 } else {
                     Brush.linearGradient(
                         listOf(
@@ -326,7 +326,7 @@ private fun QrSecurityReticleOverlay(modifier: Modifier = Modifier) {
         val corner = side * 0.18f
         val stroke = 7f
         val cyan = Color(0xFF38BDF8)
-        val emerald = Color(0xFF34D399)
+        val saffron = Color(0xFFF59E0B)
 
         // Subtle square frame
         drawRoundRect(
@@ -345,10 +345,10 @@ private fun QrSecurityReticleOverlay(modifier: Modifier = Modifier) {
         drawLine(cyan, Offset(left + side - corner, top), Offset(left + side, top), stroke, StrokeCap.Round)
         drawLine(cyan, Offset(left + side, top), Offset(left + side, top + corner), stroke, StrokeCap.Round)
         // Bottom-left
-        drawLine(emerald, Offset(left, top + side - corner), Offset(left, top + side), stroke, StrokeCap.Round)
-        drawLine(emerald, Offset(left, top + side), Offset(left + corner, top + side), stroke, StrokeCap.Round)
+        drawLine(saffron, Offset(left, top + side - corner), Offset(left, top + side), stroke, StrokeCap.Round)
+        drawLine(saffron, Offset(left, top + side), Offset(left + corner, top + side), stroke, StrokeCap.Round)
         // Bottom-right
-        drawLine(emerald, Offset(left + side - corner, top + side), Offset(left + side, top + side), stroke, StrokeCap.Round)
-        drawLine(emerald, Offset(left + side, top + side - corner), Offset(left + side, top + side), stroke, StrokeCap.Round)
+        drawLine(saffron, Offset(left + side - corner, top + side), Offset(left + side, top + side), stroke, StrokeCap.Round)
+        drawLine(saffron, Offset(left + side, top + side - corner), Offset(left + side, top + side), stroke, StrokeCap.Round)
     }
 }

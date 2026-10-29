@@ -978,14 +978,23 @@ class AppUpdateManager internal constructor(
     }
 
     /**
-     * Hides the optional update banner for this session. Never cancels or overrides
-     * an active download.
+     * Hides an optional update or install-ready banner for this session. Never
+     * cancels an active download or dismisses a mandatory update.
      */
     fun dismissBanner() {
         synchronized(lock) {
-            val current = _state.value
-            if (current is UpdateState.Available && !current.info.mandatory) {
-                _state.value = current.copy(dismissedBanner = true)
+            when (val current = _state.value) {
+                is UpdateState.Available -> {
+                    if (!current.info.mandatory) {
+                        _state.value = current.copy(dismissedBanner = true)
+                    }
+                }
+                is UpdateState.ReadyToInstall -> {
+                    if (!current.info.mandatory) {
+                        _state.value = current.copy(dismissedBanner = true)
+                    }
+                }
+                else -> Unit
             }
         }
     }

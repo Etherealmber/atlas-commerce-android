@@ -152,7 +152,7 @@ private fun LoginScreenContent(
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize().background(
             Brush.verticalGradient(
-                listOf(Color(0xFF071110), Color(0xFF173B37), Color(0xFF3A7069)),
+                listOf(Color(0xFF09090B), Color(0xFF17171B), Color(0xFF26262C)),
             ),
         ),
         contentAlignment = Alignment.TopCenter,
@@ -214,6 +214,64 @@ private fun LoginScreenContent(
                 Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
 
                 if (state.step == LoginViewModel.Step.CREDENTIALS) {
+                    val unlockAccounts = savedAccounts.filter { it.canUseDeviceUnlock }
+                    unlockAccounts.forEach { savedAccount ->
+                        val accountName = savedAccount.displayName.ifBlank { savedAccount.username }
+                        Surface(
+                            onClick = {
+                                onUnlockSavedAccount(savedAccount) {
+                                    viewModel.signInWithSavedAccount(savedAccount)
+                                }
+                            },
+                            enabled = !state.loading,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Fingerprint,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        atlasText(
+                                            "Déverrouiller avec la biométrie",
+                                            "Unlock with biometrics",
+                                            "إلغاء القفل بالبصمة",
+                                        ),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        accountName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    if (unlockAccounts.isNotEmpty()) {
+                        Text(
+                            atlasText(
+                                "Ou utilisez votre mot de passe",
+                                "Or sign in with your password",
+                                "أو سجّل الدخول بكلمة المرور",
+                            ),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 4.dp),
+                        )
+                    }
                     CredentialsForm(
                         state = state,
                         onUsername = viewModel::onUsernameChange,
@@ -223,31 +281,6 @@ private fun LoginScreenContent(
                         onDismissError = viewModel::dismissError,
                         compact = compact,
                     )
-                    savedAccounts.filter { it.canUseDeviceUnlock }.forEach { savedAccount ->
-                        TextButton(
-                            onClick = {
-                                onUnlockSavedAccount(savedAccount) {
-                                    viewModel.signInWithSavedAccount(savedAccount)
-                                }
-                            },
-                            enabled = !state.loading,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(7.dp))
-                            Text(
-                                text = atlasText(
-                                    "Utiliser le déverrouillage Android · ${savedAccount.displayName.ifBlank { savedAccount.username }}",
-                                    "Use Android device unlock · ${savedAccount.displayName.ifBlank { savedAccount.username }}",
-                                    "استخدم إلغاء قفل Android · ${savedAccount.displayName.ifBlank { savedAccount.username }}",
-                                ),
-                                style = MaterialTheme.typography.labelLarge,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
                 } else {
                     OtpForm(
                         state = state,
@@ -301,7 +334,7 @@ private fun LoginAtlasHero(
     val palette = Atlas.palette
     Row(
         modifier = modifier
-            .background(Brush.verticalGradient(listOf(Color(0xFF071110), palette.heroStart, Color(0xFF3A7069))))
+            .background(Brush.verticalGradient(listOf(Color(0xFF09090B), palette.heroStart, palette.heroEnd)))
             .padding(horizontal = 22.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

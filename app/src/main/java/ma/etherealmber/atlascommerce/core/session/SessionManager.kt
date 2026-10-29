@@ -117,6 +117,7 @@ class SessionManager @Inject constructor(
             serverConfig.loaded.filter { it }.first()
             val stored = preferences.readSession()
             if (stored == null) {
+                if (!preferences.isSessionRestoreDisabled() && restoreOptedInSavedSession()) return
                 purgeInMemorySession()
                 _state.value = SessionState.SignedOut
                 return
@@ -142,6 +143,7 @@ class SessionManager @Inject constructor(
             if (resolvedServer == null || token.isNullOrBlank()) {
                 purgeInMemorySession()
                 runCatching { preferences.clearSession() }
+                if (!preferences.isSessionRestoreDisabled() && restoreOptedInSavedSession()) return
                 _state.value = SessionState.SignedOut
                 return
             }
@@ -179,6 +181,47 @@ class SessionManager @Inject constructor(
                 _state.value = SessionState.SignedOut
             }
         }
+    }
+
+    /**
+     * Recover the active session from an explicitly saved + device-unlock-enabled
+     * account when the primary session record is absent. A deliberate sign-out
+     * disables this fallback until the next successful sign-in.
+     */
+    private suspend fun restoreOptedInSavedSession(): Boolean {
+        val selectedServer = serverConfig.selection.value?.baseUrl?.let(ServerUrl::normalize) ?: return false
+        val entry = preferences.savedAccountsForServer(selectedServer)
+            .first()
+            .firstOrNull { it.canUseDeviceUnlock }
+            ?: return false
+        val resolvedServer = ServerUrl.normalize(entry.serverUrl) ?: return false
+        if (!resolvedServer.equals(selectedServer, ignoreCase = true)) return false
+        val token = cryptoStore.decrypt(entry.tokenCipher)?.takeIf { it.isNotBlank() } ?: return false
+
+        runCatching { preferences.bindActiveScope(resolvedServer, entry.username) }
+        runCatching { offlineCache.bindScope(resolvedServer, entry.username) }
+        tokenHolder.set(token)
+        preferences.writeSession(
+            serverUrl = resolvedServer,
+            tokenCipher = entry.tokenCipher,
+            username = entry.username,
+            role = entry.role,
+            displayName = entry.displayName,
+            email = entry.email,
+            avatarUrl = entry.avatarUrl,
+        )
+        _state.value = SessionState.Active(
+            SessionUser(
+                username = entry.username,
+                role = entry.role.ifBlank { "user" },
+                displayName = entry.displayName.ifBlank { entry.username },
+                email = entry.email,
+                avatarUrl = entry.avatarUrl,
+                serverUrl = resolvedServer,
+            ),
+        )
+        runCatching { refreshProfile() }
+        return true
     }
 
     suspend fun signIn(
@@ -544,6 +587,7 @@ class SessionManager @Inject constructor(
 
     suspend fun signOut(reason: String? = null) {
         purgeInMemorySession()
+        runCatching { preferences.disableSessionRestore(disabled = true) }
         runCatching { preferences.clearSession() }
         _state.value = SessionState.SignedOut
         if (!reason.isNullOrBlank()) _notices.tryEmit(reason)

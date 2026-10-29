@@ -162,7 +162,7 @@ fun AppUpdateBanner(
     val shouldShow = when (state) {
         is UpdateState.Available -> !state.dismissedBanner && !state.info.mandatory
         is UpdateState.Downloading -> !state.info.mandatory && !state.hiddenInForeground
-        is UpdateState.ReadyToInstall -> !state.info.mandatory
+        is UpdateState.ReadyToInstall -> !state.info.mandatory && !state.dismissedBanner
         is UpdateState.Error -> state.info != null && state.info.mandatory.not()
         else -> false
     }
@@ -299,7 +299,12 @@ fun AppUpdateBanner(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        TextButton(onClick = onDismiss) {
+                            Text(atlasText("Masquer", "Hide", "إخفاء"))
+                        }
+                        Spacer(Modifier.width(8.dp))
                         AtlasButton(
                             text = if (state.awaitingInstallPermission) {
                                 "Autoriser et installer"

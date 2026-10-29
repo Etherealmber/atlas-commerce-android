@@ -324,10 +324,16 @@ class AppUpdateManagerTest {
             assertTrue(notifier.completedCalled)
             assertNull(notifier.errorMessage)
 
+            // The optional install-ready banner can be hidden without removing the APK.
+            manager.dismissBanner()
+            val hiddenReady = manager.state.value as UpdateState.ReadyToInstall
+            assertTrue(hiddenReady.dismissedBanner)
+            assertTrue(hiddenReady.apkFile.exists())
+
             // Automatic background check must NOT overwrite an already-downloaded ReadyToInstall APK.
             manager.checkForUpdate(manual = false)
             Thread.sleep(150)
-            assertTrue(manager.state.value is UpdateState.ReadyToInstall)
+            assertTrue((manager.state.value as UpdateState.ReadyToInstall).dismissedBanner)
 
             serverThread.interrupt()
         }

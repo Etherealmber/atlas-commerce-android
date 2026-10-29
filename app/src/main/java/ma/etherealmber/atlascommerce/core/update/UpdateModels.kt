@@ -210,6 +210,7 @@ sealed interface UpdateState {
         val info: UpdateInfo,
         val apkFile: File,
         val awaitingInstallPermission: Boolean = false,
+        val dismissedBanner: Boolean = false,
     ) : UpdateState
 
     data class Error(
