@@ -43,13 +43,16 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -71,6 +74,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -324,6 +329,7 @@ private fun LoginOverflowMenu(
     onOpenQrDevice: () -> Unit,
     onOpenLanguage: () -> Unit,
 ) {
+    val language = LocalAtlasLanguage.current
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { expanded = true }) {
@@ -350,7 +356,16 @@ private fun LoginOverflowMenu(
                 onClick = { expanded = false; onChangeServer() },
             )
             DropdownMenuItem(
-                text = { Text(atlasText("Langue", "Language", "اللغة")) },
+                text = {
+                    Column {
+                        Text(atlasText("Langues", "Languages", "اللغات"))
+                        Text(
+                            language.nativeLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
                 leadingIcon = { Icon(Icons.Outlined.Language, contentDescription = null) },
                 onClick = { expanded = false; onOpenLanguage() },
             )
@@ -366,40 +381,125 @@ private fun LoginLanguageDialog(
     onChooseLanguage: (AppLanguage) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
+    var selectedLanguage by remember(language, followsSystem) {
+        mutableStateOf(if (followsSystem) null else language)
+    }
+    val selectionChanged = if (selectedLanguage == null) {
+        !followsSystem
+    } else {
+        followsSystem || selectedLanguage != language
+    }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text(atlasText("Choisir la langue", "Choose language", "اختيار اللغة")) },
-        text = {
-            Column {
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().widthIn(max = 390.dp).padding(horizontal = 20.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
+            shadowElevation = 20.dp,
+        ) {
+            Column(Modifier.padding(horizontal = 22.dp, vertical = 20.dp)) {
+                Text(
+                    text = atlasText("Choisir la langue", "Choose language", "اختيار اللغة"),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = atlasText("Traduisez Atlas dans votre langue", "Translate Atlas into your language", "ترجم Atlas إلى لغتك"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(16.dp))
+
+                LanguageChoiceRow(
+                    title = atlasText("Suivre la langue du téléphone", "Follow phone language", "اتباع لغة الهاتف"),
+                    subtitle = AppLanguage.fromSystemLocale().nativeLabel,
+                    flag = "⚙️",
+                    selected = selectedLanguage == null,
+                    onClick = { selectedLanguage = null },
+                )
+                Spacer(Modifier.height(6.dp))
+                AppLanguage.entries.forEach { option ->
+                    val flag = when (option) {
+                        AppLanguage.ARABIC -> "🇲🇦"
+                        AppLanguage.FRENCH -> "🇫🇷"
+                        AppLanguage.ENGLISH -> "🇬🇧"
+                    }
+                    LanguageChoiceRow(
+                        title = option.nativeLabel,
+                        flag = flag,
+                        selected = selectedLanguage == option,
+                        onClick = { selectedLanguage = option },
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
+
+                Spacer(Modifier.height(8.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onChooseSystem).padding(vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    RadioButton(selected = followsSystem, onClick = onChooseSystem)
-                    Column {
-                        Text(atlasText("Suivre la langue du téléphone", "Follow phone language", "اتباع لغة الهاتف"))
-                        Text(
-                            AppLanguage.fromSystemLocale().nativeLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    TextButton(onClick = onDismiss) {
+                        Text(atlasText("Annuler", "Cancel", "إلغاء"))
                     }
-                }
-                AppLanguage.entries.forEach { option ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onChooseLanguage(option) }.padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            if (selectedLanguage == null) onChooseSystem()
+                            else onChooseLanguage(selectedLanguage!!)
+                        },
+                        enabled = selectionChanged,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
                     ) {
-                        RadioButton(selected = !followsSystem && language == option, onClick = { onChooseLanguage(option) })
-                        Text(option.nativeLabel)
+                        Text(atlasText("Valider", "Apply", "تأكيد"))
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(atlasText("Fermer", "Close", "إغلاق")) }
-        },
-    )
+        }
+    }
+}
+
+@Composable
+private fun LanguageChoiceRow(
+    title: String,
+    flag: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    subtitle: String? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(15.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(flag, style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            subtitle?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        RadioButton(selected = selected, onClick = onClick)
+    }
 }
 
 @Composable
