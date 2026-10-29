@@ -23,6 +23,7 @@ import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.security.CryptoStore
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
+import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.data.CartStore
 import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.data.model.LoginResponse
@@ -110,31 +111,42 @@ class SessionManager @Inject constructor(
 
     private suspend fun restore() {
         try {
-            kotlinx.coroutines.withTimeoutOrNull(2_500L) {
-                serverConfig.loaded.filter { it }.first()
+            // Do not give up on a valid stored session just because DataStore is
+            // slow during process startup. The root remains on its splash stage
+            // until both server selection and session restoration are complete.
+            serverConfig.loaded.filter { it }.first()
+            val stored = preferences.readSession()
+            if (stored == null) {
+                purgeInMemorySession()
+                _state.value = SessionState.SignedOut
+                return
             }
-            val currentServer = serverConfig.selection.value?.baseUrl.orEmpty()
 
-            val restored = runCatching {
-                val stored = preferences.readSession() ?: return@runCatching null
-                if (currentServer.isBlank()) return@runCatching null
-                if (stored.serverUrl.isNotBlank() && !stored.serverUrl.equals(currentServer, ignoreCase = true)) {
-                    return@runCatching null
-                }
-                val token = cryptoStore.decrypt(stored.tokenCipher)
-                if (token.isNullOrBlank()) null else stored to token
-            }.getOrNull()
+            val storedServer = ServerUrl.normalize(stored.serverUrl)
+            var currentServer = serverConfig.selection.value?.baseUrl?.let(ServerUrl::normalize)
+            if (currentServer == null && storedServer != null) {
+                // The session record is authoritative if a prior preference
+                // write left the server selection blank. Reuse that server
+                // rather than sending a returning user back to setup/login.
+                val restoredSelection = serverConfig.select(storedServer, rememberServer = false)
+                currentServer = restoredSelection.getOrNull()?.baseUrl
+            }
 
-            if (restored == null) {
+            val resolvedServer = when {
+                currentServer == null -> null
+                storedServer == null -> currentServer // legacy session records
+                currentServer.equals(storedServer, ignoreCase = true) -> currentServer
+                else -> null
+            }
+            val token = resolvedServer?.let { cryptoStore.decrypt(stored.tokenCipher) }
+            if (resolvedServer == null || token.isNullOrBlank()) {
                 purgeInMemorySession()
                 runCatching { preferences.clearSession() }
                 _state.value = SessionState.SignedOut
                 return
             }
 
-            val (stored, token) = restored
             val username = stored.username.ifBlank { "utilisateur" }
-            val resolvedServer = stored.serverUrl.ifBlank { currentServer }
             runCatching { preferences.bindActiveScope(resolvedServer, username) }
             runCatching { offlineCache.bindScope(resolvedServer, username) }
             tokenHolder.set(token)
@@ -149,6 +161,19 @@ class SessionManager @Inject constructor(
                 ),
             )
             runCatching { refreshProfile() }
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            // A transient local startup error must not erase the encrypted
+            // session record. Leave sign-in available and allow the next launch
+            // to retry restoration.
+            ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+                tag = "AUTH",
+                message = "Could not restore saved session (${error.javaClass.simpleName})",
+                level = "WARN",
+            )
+            purgeInMemorySession()
+            _state.value = SessionState.SignedOut
         } finally {
             if (_state.value is SessionState.Loading) {
                 _state.value = SessionState.SignedOut
@@ -297,11 +322,18 @@ class SessionManager @Inject constructor(
         when (val verify = authRepository.me()) {
             is ApiResult.Failure -> {
                 tokenHolder.clear()
-                preferences.removeSavedAccount(entry.serverUrl, entry.username)
-                return ApiResult.Failure(
-                    "EXPIRED",
-                    "La session mémorisée a expiré sur le serveur. Saisissez votre mot de passe.",
-                )
+                // Keep the encrypted account and its opt-in unlock setting on
+                // transient network/server failures. Only a definitive 401
+                // means the saved token can no longer authenticate.
+                if (verify.httpStatus == 401 || verify.code == "SESSION_EXPIRED") {
+                    preferences.removeSavedAccount(entry.serverUrl, entry.username)
+                    return ApiResult.Failure(
+                        "EXPIRED",
+                        "La session mémorisée a expiré sur le serveur. Saisissez votre mot de passe.",
+                        httpStatus = verify.httpStatus,
+                    )
+                }
+                return verify
             }
             is ApiResult.Success -> {
                 val me = verify.data
