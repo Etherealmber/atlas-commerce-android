@@ -46,12 +46,6 @@ import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
 import ma.etherealmber.atlascommerce.data.model.RejectMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.RevokeDeviceRequest
 import ma.etherealmber.atlascommerce.data.model.ReportLinkTicketDto
-import ma.etherealmber.atlascommerce.data.model.WebAuthnCapabilitiesDto
-import ma.etherealmber.atlascommerce.data.model.WebAuthnCredentialVerifyRequest
-import ma.etherealmber.atlascommerce.data.model.WebAuthnLoginOptionsRequest
-import ma.etherealmber.atlascommerce.data.model.WebAuthnOptionsResponse
-import ma.etherealmber.atlascommerce.data.model.WebAuthnRegistrationOptionsRequest
-import ma.etherealmber.atlascommerce.data.model.WebAuthnRegistrationVerifyResponse
 import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
 import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
@@ -115,20 +109,6 @@ interface AtlasApi {
     @POST("api/auth/verify-link")
     suspend fun verifyLink(@Body body: VerifyLinkRequest): LoginResponse
 
-    @GET("api/auth/webauthn/status")
-    suspend fun webAuthnStatus(): ApiEnvelope<WebAuthnCapabilitiesDto>
-
-    @POST("api/auth/webauthn/login/options")
-    suspend fun webAuthnLoginOptions(@Body body: WebAuthnLoginOptionsRequest): WebAuthnOptionsResponse
-
-    @POST("api/auth/webauthn/login/verify")
-    suspend fun webAuthnLoginVerify(@Body body: WebAuthnCredentialVerifyRequest): LoginResponse
-
-    @POST("api/auth/webauthn/register/options")
-    suspend fun webAuthnRegisterOptions(@Body body: WebAuthnRegistrationOptionsRequest): WebAuthnOptionsResponse
-
-    @POST("api/auth/webauthn/register/verify")
-    suspend fun webAuthnRegisterVerify(@Body body: WebAuthnCredentialVerifyRequest): WebAuthnRegistrationVerifyResponse
 
     @GET("api/auth/devices")
     suspend fun devices(): ApiEnvelope<List<TrustedDeviceDto>>

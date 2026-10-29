@@ -775,12 +775,16 @@ fun AtlasEmptyState(
             text = atlasText(title),
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(4.dp))
         Text(
             text = atlasText(message),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(8.dp))

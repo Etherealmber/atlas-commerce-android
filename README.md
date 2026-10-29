@@ -27,7 +27,7 @@
 > **This Android app is directly linked to an [Atlas Commerce Web (`Etherealmber/atlas-commerce`)](https://github.com/Etherealmber/atlas-commerce) server.**
 > It does **not** store a standalone local accounting database on your phone — **you MUST deploy and set up your [Atlas Commerce Web](https://github.com/Etherealmber/atlas-commerce) instance FIRST** before connecting this mobile app!
 >
-> **New from zero?** Follow the full [self-hosting and Android setup guide](docs/SETUP.md): Cloudflare account, D1 database/migrations, R2, mail/keys, app installation, optional Firebase crash reports, release signing, and passkeys.
+> **New from zero?** Follow the full [self-hosting and Android setup guide](docs/SETUP.md): Cloudflare account, D1 database/migrations, R2, mail/keys, app installation, optional Firebase crash reports, release signing, and local device-unlock setup.
 
 ### Step-by-Step Setup for Brand-New Users
 
@@ -37,13 +37,13 @@
 2. **Step 2 — Install the Android App**:
    - Download **`atlas-commerce.apk`** from **[GitHub Releases](https://github.com/Etherealmber/atlas-commerce-android/releases)** onto your Android 9+ phone or handheld scanner.
 3. **Step 3 — Connect Your Server URL**:
-   - Launch **Atlas Commerce** on your phone, complete the quick welcome tour, and enter your **exact HTTPS server address** (e.g. `https://erp.your-company.com`).
+   - On a new device, choose your server first, enter its **exact HTTPS address** (e.g. `https://erp.your-company.com`), and test the connection. The welcome tour follows; saved servers are reused on later sign-ins.
    - Tap **« Tester la connexion »** (`Test connection`) to verify `/api/health`, database (`D1`), and storage (`R2`) status before signing in.
    - Optionally toggle **« Enregistrer ce serveur »** and give it a label (e.g. *Main Store*, *North Warehouse*) if you manage multiple servers.
 4. **Step 4 — Sign In, Tap Your Email Link, or Pair PC via QR Code**:
    - Enter your **Atlas Commerce** username & password — on a new device, either tap the **« VÉRIFIER & CONTINUER »** one-tap button directly inside the verification e-mail (opens the app and authenticates against your selected Worker automatically with no code typing!) or type the 6-digit OTP manually.
-   - Passkey login/registration appears only when the selected Worker enables WebAuthn and confirms this Android package, signing certificate, and allowed origin. Keep the feature disabled until the [staging setup and device smoke test](docs/SETUP.md#5-optional-android-passkeys--keep-disabled-until-the-full-smoke-test-passes) passes.
-   - Optionally toggle **« Mémoriser ce compte »** to save encrypted credentials **strictly isolated to that specific server**.
+   - Android sign-in uses your username/password and any required one-time code. Atlas never stores your account password.
+   - If **« Mémoriser ce compte »** is enabled, Atlas asks once whether to allow future sign-ins with biometrics or your Android device PIN/password. The encrypted saved session is verified with the selected server; declining or unavailable device authentication leaves password sign-in available.
 
 ---
 
@@ -67,8 +67,8 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
    - Non-admin accounts have daily (`00:00 UTC`) and weekly (`Monday 00:00 UTC`) token limits enforced by the server. Check the live **Quota Bar** inside **Atlas Agent** or **Mon profil → ⚙️ Paramètres** to see remaining tokens and exact reset countdown time.
 5. **Check Cloudflare Bot Fight / WAF Rules on Custom Domains 🛡️**
    - If you enabled aggressive Cloudflare *Super Bot Fight Mode* on your custom domain, allow requests carrying path `/api/*` so mobile API calls and automated release uploads are never challenged by HTML CAPTCHA pages.
-6. **Passkey button missing or verification rejected 🔑**
-   - Passkeys default to disabled. Check the selected server's `GET /api/auth/webauthn/status`, Android package, advertised SHA-256/SHA-1 signing origins, and allowlisted server origin. Credential Manager may use the package-bound explicit web-origin flow; the backend still verifies `crossOrigin` and the Android package. Follow the [staging/device setup guide](docs/SETUP.md#5-optional-android-passkeys--keep-disabled-until-the-full-smoke-test-passes). Do not bypass server-side verification.
+6. **Quick device unlock is missing or unavailable 🔐**
+   - Quick sign-in is opt-in per saved account and requires an enrolled biometric or secure Android screen lock. If it is disabled or unavailable, sign in with the account password; you can review device unlock in Profile settings. Android does not use WebAuthn passkeys.
 7. **Crash reports not appearing 🐞**
    - Firebase is optional and automatic upload is off until the user opts in under Settings. Confirm the correct `google-services.json` is installed in the build, Crashlytics is enabled in Firebase Console, and the test install has opted in. See [Firebase setup](docs/SETUP.md#4-optional-push-notifications-and-automatic-crash-reports-firebase).
 
@@ -86,8 +86,8 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
   - The supplied Atlas wordmark switches foreground contrast with the app's light/dark theme, the Android launcher exposes a themed monochrome icon where supported, and the phone navigation centers a raised Scan action while preserving the tablet navigation rail.
 - **Camera Privacy & Explicit Controls**:
   - Camera hardware stays completely off when opening *Scan* or *QR PC* until you tap start, unbinds immediately upon leaving the screen, and lets you cancel (`Annuler`) any scanned code at any time.
-- **Server-gated Android passkeys**:
-  - Credential Manager registration/login are available only when the selected Worker confirms global and Android enablement, the exact app package, advertised Android origin metadata, and an allowlisted server origin. The app can use the package-bound explicit web-origin route when an upload/debug signing key differs; the Worker still enforces `crossOrigin`, package, and WebAuthn verification. Password/OTP stays available as fallback.
+- **Opt-in local device unlock**:
+  - After a successful manual sign-in, a saved account can opt into biometrics or Android device PIN/password. Atlas unlocks the locally encrypted session token and verifies it with the selected server; the account password is never stored. Manual password sign-in remains available when this option is declined or unavailable.
 - **Automatic crash reporting is optional and consent-based**:
   - Firebase Crashlytics uploads crash reports automatically only after the user opts in under Settings. It is off by default; builds without Firebase configuration continue to work without push or automatic crash uploads.
 - **Temporary finance reports and local-data controls**:

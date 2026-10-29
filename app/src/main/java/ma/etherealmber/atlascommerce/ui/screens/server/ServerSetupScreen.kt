@@ -27,7 +27,6 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -64,11 +63,20 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
+import ma.etherealmber.atlascommerce.ui.theme.AtlasAuthTheme
 
 @Composable
 fun ServerSetupScreen(
     onClose: (() -> Unit)? = null,
     viewModel: ServerSetupViewModel = hiltViewModel(),
+) {
+    AtlasAuthTheme { ServerSetupScreenContent(onClose, viewModel) }
+}
+
+@Composable
+private fun ServerSetupScreenContent(
+    onClose: (() -> Unit)?,
+    viewModel: ServerSetupViewModel,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val savedServers by viewModel.savedServers.collectAsStateWithLifecycle()
@@ -113,7 +121,7 @@ fun ServerSetupScreen(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = atlasText("Cette application est liée à la plateforme web Atlas Commerce (à déployer en premier). Saisissez l'adresse exacte de votre site — si le site semble indisponible, vérifiez qu'il n'y a aucune faute de frappe.", "This app connects to the Atlas Commerce web platform, which must be deployed first. Enter your exact site address. If it appears unavailable, double-check the spelling.", "يرتبط هذا التطبيق بمنصة Atlas Commerce على الويب، ويجب نشرها أولًا. أدخل عنوان موقعك بدقة. إذا لم يظهر الموقع متاحًا، فتحقّق من كتابة العنوان."),
+                    text = atlasText("Saisissez l'adresse du site Atlas Commerce de votre organisation.", "Enter your organization's Atlas Commerce site address.", "أدخل عنوان موقع Atlas Commerce الخاص بمؤسستك."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.78f),
                 )
@@ -319,47 +327,6 @@ fun ServerSetupScreen(
                     enabled = state.canContinue,
                     loading = state.saving,
                 )
-
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.Lock,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = atlasText("Sessions, paniers et caches sont isolés par serveur et par utilisateur.", "Sessions, carts and caches are isolated by server and user.", "الجلسات وسلال التسوق والذاكرة المؤقتة معزولة لكل خادم ومستخدم."),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                Spacer(Modifier.height(density.sectionGap))
-                AtlasCard {
-                    Text(
-                        text = atlasText("Nouveau sur Atlas Commerce ? (Étape 1 requise)", "New to Atlas Commerce? (Step 1 required)", "هل أنت جديد في Atlas Commerce؟ (الخطوة الأولى مطلوبة)"),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = atlasText(
-                            "1. Installez et déployez d'abord l'application web Atlas Commerce sur votre domaine HTTPS.\n2. Entrez votre URL exacte ci-dessus puis touchez « Tester la connexion ».\n3. Si le site apparaît indisponible, vérifiez attentivement l'orthographe de ce que vous avez tapé.",
-                            "1. First install and deploy the Atlas Commerce web app on your HTTPS domain.\n2. Enter the exact URL above and tap ‘Test connection’.\n3. If the site appears unavailable, carefully check the spelling of the address.",
-                            "١. ثبّت وانشر أولاً تطبيق Atlas Commerce على نطاق HTTPS الخاص بك.\n٢. أدخل عنوان URL الدقيق أعلاه ثم اضغط «اختبار الاتصال».\n٣. إذا ظهر الموقع غير متاح، فتحقّق من كتابة العنوان بدقة.",
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = AppDetails.WEB_REPO,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
 
                 Spacer(Modifier.height(density.sectionGap))
                 Text(

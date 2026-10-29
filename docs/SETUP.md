@@ -1,6 +1,6 @@
 # Atlas Commerce — installation and operator setup
 
-This guide starts from an empty Cloudflare account and ends with the native Android app connected to your own Atlas Commerce Worker. It covers the backend database, file storage, mail, Android signing, optional Firebase push/crash reporting, and passkey enablement. Keep production credentials in the provider's secret store; never paste them into an issue, chat, source file, or committed `.dev.vars`.
+This guide starts from an empty Cloudflare account and ends with the native Android app connected to your own Atlas Commerce Worker. It covers the backend database, file storage, mail, Android signing, optional Firebase push/crash reporting, and optional local device unlock. Keep production credentials in the provider's secret store; never paste them into an issue, chat, source file, or committed `.dev.vars`.
 
 > **Architecture:** Android is an API client, not a stand-alone ERP. The selected Atlas Commerce Worker owns accounts, roles, inventory, sales, invoices, and the D1 database. The app stores only app-private session/cache data. Deploy and test the web backend before connecting Android.
 
@@ -13,7 +13,7 @@ Create or obtain access to:
 - [Node.js 20 or newer](https://nodejs.org/en/download/) and npm for the Worker.
 - [Android Studio](https://developer.android.com/studio) with Android SDK 35 and JDK 17 or newer (the CI build uses JDK 21).
 - Optional: [Firebase Console](https://console.firebase.google.com/) for push notifications and consent-based Crashlytics reports.
-- Optional for Play distribution/passkeys: a [Google Play Console](https://play.google.com/console/) account.
+- Optional for Play distribution: a [Google Play Console](https://play.google.com/console/) account.
 
 Authoritative project docs: [Atlas Commerce Web](https://github.com/Etherealmber/atlas-commerce), its [deployment README](https://github.com/Etherealmber/atlas-commerce#-starter--d%C3%A9marrer-de-z%C3%A9ro), [API/backend security policy](https://github.com/Etherealmber/atlas-commerce/blob/main/SECURITY.md), and [WebAuthn deployment guide](https://github.com/Etherealmber/atlas-commerce/blob/main/docs/webauthn.md).
 
@@ -144,55 +144,15 @@ In GitHub: **Repository → Settings → Secrets and variables → Actions → N
 
 Crash reports may contain a stack trace, app version, Android version/model, timestamps, and Firebase installation identifiers. This app does not attach session tokens, passwords, OTPs, financial records, or custom log breadcrumbs to Crashlytics. See the [Android security/privacy policy](../SECURITY.md) and Google's [Crashlytics data collection documentation](https://firebase.google.com/docs/crashlytics/android/data-collection).
 
-## 5. Optional Android passkeys — keep disabled until the full smoke test passes
+## 5. Optional local device unlock
 
-Passkeys use the selected Worker as the relying-party server. Password/OTP login continues to work when passkeys are unavailable. The backend deliberately keeps `WEBAUTHN_ENABLED=false` by default; never turn it on just because the Android button is present in a development build.
+After a successful manual sign-in, Atlas asks once whether to enable quick sign-in for that saved account. The system prompt accepts biometrics or the Android device PIN/password. If enabled, the app uses the existing locally encrypted session token and verifies/restores it with the selected server; it never stores the Atlas account password. Declining or unavailable local authentication leaves password sign-in available and does not show a quick-unlock action. A saved account can be managed later in Profile settings.
 
-### 5.1 Backend and domain prerequisites
-
-Follow the backend's current [WebAuthn guide](https://github.com/Etherealmber/atlas-commerce/blob/main/docs/webauthn.md). In summary:
-
-1. Deploy the hardened verifier and tests to a **staging/preview Worker** first.
-2. Keep `WEBAUTHN_RP_ID` set to the registrable web domain (no scheme), and `WEBAUTHN_ALLOWED_ORIGINS` set to exact HTTPS origins. Do not use an Android package name as the RP ID.
-3. Set `WEBAUTHN_ANDROID_PACKAGE=ma.etherealmber.atlascommerce`.
-4. Obtain the **Play App Signing key certificate SHA-256** from Play Console → **Setup → App integrity → App signing key certificate**. For a directly installed APK, use the signing key that signed that APK (for example, `keytool -list -v -keystore release.jks`). Configure SHA-256 as `WEBAUTHN_ANDROID_CERT_HASH`; optionally configure SHA-1 as `WEBAUTHN_ANDROID_CERT_SHA1` for the legacy native-origin form. These fingerprints are public certificate digests, not private signing keys. Add debug/upload-key fingerprints only to staging if you intentionally test APKs signed by those keys.
-5. Deploy and check `https://YOUR_DOMAIN/.well-known/assetlinks.json`. It must list the exact package and Play signing certificate, including both Credential Manager relations: `delegate_permission/common.handle_all_urls` and `delegate_permission/common.get_login_creds`. The Worker may return 404 until the required certificate configuration is present; that is expected and does not mean you need to purchase Digital Asset Links.
-6. Query `GET /api/auth/webauthn/status` on the same server the Android app will select. Check `data.enabled`, `data.android.enabled`, `data.android.package`, both `data.android.origin` and `data.android.origin_legacy`, and `data.origins`.
-
-The Android client fails closed: it checks both server enablement flags, exact package ID, that at least one server-advertised certificate origin (`data.android.origin` for SHA-256 or `data.android.origin_legacy` for legacy SHA-1) exactly matches an origin derived locally from the installed build's signing certificate DER, and that the selected server origin appears in `data.origins`. Registration is available only inside an authenticated session; login creates a session only after backend verification succeeds.
-
-### 5.2 Origin mode and the compatibility gate
-
-For Android 14+ the client sets the selected server's exact web origin on the Credential Manager request and declares `android.permission.CREDENTIAL_MANAGER_SET_ORIGIN`. The verifier accepts that HTTPS origin with `crossOrigin: true` only when the Android package is configured. On Android versions where the explicit-origin parameter is unavailable, the native app origin path is used.
-
-The status API returns canonical accepted signing origins as `data.android.origin` (SHA-256 form, `android:apk-key-hash-sha256:`) and optional `data.android.origin_legacy` (historical SHA-1 form, `android:apk-key-hash:`). The app derives both from the installed certificate DER and compares the server-returned values exactly; it never invents a signing fingerprint or trusts a user-entered origin. Backend verification also tolerates equivalent standard/Base64URL encodings and optional padding, but still compares the decoded digest bytes and fails closed on incorrect or unconfigured hashes. See [Android passkey origin](https://developer.android.com/identity/passkeys/create-passkeys), [Credential Manager sign-in](https://developer.android.com/identity/passkeys/sign-in-with-passkeys), [origin delegation API](https://developer.android.com/identity/sign-in/privileged-apps), and the backend [WebAuthn enablement guide](https://github.com/Etherealmber/atlas-commerce/blob/main/docs/webauthn.md).
-
-### 5.3 Staging smoke test and production switch
-
-1. Keep production `WEBAUTHN_ENABLED=false`.
-2. On staging, confirm the status response and assetlinks file; install the **Play-signed** APK (or the exact staging signer configured server-side).
-3. Compare the installed build against both `status.data.android.origin` and `status.data.android.origin_legacy` (when present). At least one server-advertised origin must match the APK signing certificate; otherwise the Settings/Login passkey affordance must remain hidden.
-4. Register a passkey for a test account, sign out, sign in with that passkey, and confirm the Worker verifies the response. Replay a consumed challenge and try a wrong account; both must fail.
-5. Test the web/PWA passkey flow too. Ensure Android settings, Android passkey origin, and web-origin + `crossOrigin` behavior do not broaden each other's allowlists.
-6. Only after successful staging checks and review of backend WebAuthn CI results: set production `WEBAUTHN_ENABLED=true`, deploy, verify `/api/auth/webauthn/status`, then test one production account. Keep password/OTP as a recovery route.
-
-### 5.4 WebAuthn API endpoints used by Android
-
-The app talks only to the selected Worker; it does not call a key provider directly or hold a server secret:
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /api/auth/webauthn/status` | Public capability, package, accepted origin, and origin allowlist |
-| `POST /api/auth/webauthn/login/options` | Start assertion ceremony |
-| `POST /api/auth/webauthn/login/verify` | Verify signed assertion and issue session on success |
-| `POST /api/auth/webauthn/register/options` | Authenticated registration challenge |
-| `POST /api/auth/webauthn/register/verify` | Verify and store public key for the signed-in account |
-
-Do not log or persist challenge payloads, signed credential JSON, bearer tokens, or report-ticket values. See backend [WebAuthn API/security details](https://github.com/Etherealmber/atlas-commerce/blob/main/docs/webauthn.md).
+This Android app does not provide passkey/WebAuthn login or registration. WebAuthn configuration for the separate web application remains covered by the [backend deployment guide](https://github.com/Etherealmber/atlas-commerce/blob/main/docs/webauthn.md).
 
 ## 6. Release signing and distribution
 
-For a local signed build, create a release keystore and keep it outside Git. Put only the required `storeFile`, `storePassword`, `keyAlias`, and `keyPassword` entries in an ignored `keystore.properties`; keep backups of the keystore and credentials in an approved password manager. For Play distribution, configure Play App Signing and use the **Play app-signing certificate** for assetlinks/WebAuthn, not merely the upload certificate.
+For a local signed build, create a release keystore and keep it outside Git. Put only the required `storeFile`, `storePassword`, `keyAlias`, and `keyPassword` entries in an ignored `keystore.properties`; keep backups of the keystore and credentials in an approved password manager. For Play distribution, configure Play App Signing and keep upload/signing material out of Git.
 
 For GitHub Actions releases, use the repository's manual Android CI workflow and set protected secrets (`KEYSTORE_BASE64`, `KEYSTORE_PROPERTIES` or individual signing secrets, `GOOGLE_SERVICES_JSON_BASE64` when Firebase is used, and the backend's upload token where configured). Never print secret values in logs. Review [Android CI workflow](../.github/workflows/android.yml) and the README maintainer guide before publishing. Version code must increase for every Play release.
 
@@ -206,7 +166,7 @@ Before release, inspect **GitHub Repository → Security → Dependabot alerts**
 - Android's selected server is exactly the deployed Worker URL and connection test succeeds.
 - User role is least-privilege; test sales/inventory on a non-production account first.
 - Firebase is optional; a missing config keeps push and crash uploading off. Automatic crash uploads require an explicit in-app opt-in.
-- Passkeys are hidden unless every selected-server/package/certificate/origin gate passes. Do not enable until the physical-device checklist above is complete.
+- Local device unlock is optional; password sign-in remains the recovery route. Confirm saved-account switching only appears after opt-in and system authentication.
 - Never diagnose a production outage by copying a session token or customer/financial data into an issue. Use the app's redacted diagnostic-report flow and remove sensitive screenshots first.
 
-For URL or API errors, open `https://YOUR_DOMAIN/api/health` in a browser and check Cloudflare Worker logs. For database failures, inspect D1 migration status and bindings. For passkey failures, compare status JSON, signing-certificate fingerprint, `assetlinks.json`, device-produced origin, and the backend verifier's exact-origin rules before changing code.
+For URL or API errors, open `https://YOUR_DOMAIN/api/health` in a browser and check Cloudflare Worker logs. For database failures, inspect D1 migration status and bindings. For local device-unlock failures, use the account password and check that Android biometrics or a secure screen lock are configured; the Android app does not use passkeys.

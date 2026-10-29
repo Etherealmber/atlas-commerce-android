@@ -43,21 +43,12 @@ and are not supported for production use.
 - Logout clears the token, the cart and the offline catalogue; sessions are never shared between
   servers, and changing the server forces a fresh login.
 
-### Passkeys / WebAuthn
+### Local device unlock
 
-- Passkey UI is fail-closed and scoped to the selected Worker. It requires `data.enabled`,
-  `data.android.enabled`, the exact application ID, at least one server-advertised SHA-256 or legacy
-  SHA-1 signing origin to exactly match the installed APK certificate, and the selected web origin
-  to be listed in `data.origins`.
-- Android uses Credential Manager with the server challenge and selected HTTPS origin; the request
-  uses `CREDENTIAL_MANAGER_SET_ORIGIN` so the Worker can validate the web origin, `crossOrigin`,
-  and Android package together. The server performs cryptographic registration/assertion verification;
-  the app does not create a session until login verification succeeds.
-- Registration endpoints are called only from an existing authenticated session. Challenges and
-  credential JSON are not stored in app preferences or logs. Password/OTP remains the fallback.
-- Keep the backend disabled until the Play signing certificate, `assetlinks.json`, both origins,
-  and physical-device staging test are verified. See [the passkey enablement guide](https://github.com/Etherealmber/atlas-commerce/blob/main/docs/webauthn.md)
-  and the client [setup guide](docs/SETUP.md#5-optional-android-passkeys--keep-disabled-until-the-full-smoke-test-passes).
+- After a successful manual login, a saved account may opt in to Android biometric or device-credential authentication. The system prompt supports biometric plus device PIN/password fallback.
+- Successful local authentication gates use of the saved session token; the app then verifies/restores that token with `/api/auth/me` on the selected server. This is not an Atlas password and the app never stores the account password.
+- Declined or unavailable local authentication leaves manual password sign-in available and suppresses quick-unlock actions. The user can manage the setting in Profile settings.
+- The Android client does not implement passkey/WebAuthn login or registration. The web product's WebAuthn implementation is governed by the separate backend security policy.
 
 ### Transport
 
@@ -71,7 +62,7 @@ and are not supported for production use.
 | Data | Where | Purpose |
 | --- | --- | --- |
 | Encrypted session token | DataStore (app-private) | Stay signed in |
-| Username, role, display name, email | DataStore | Show the profile without a request |
+| Username, role, display name, email, local-unlock opt-in | DataStore | Show the profile and remember device-unlock choice without storing the account password |
 | Server address, theme, density | DataStore | Settings |
 | Last product catalogue | App-private files (`atlas-cache/products.json`) | Offline browsing |
 | Install UUID | SharedPreferences (app-private) | Stable device fingerprint |
@@ -89,7 +80,6 @@ The app does not maintain a local accounting database or cache server-side custo
 | `CAMERA` | Decode barcodes on-device with ML Kit (no frame is uploaded or saved) |
 | `POST_NOTIFICATIONS` | Display live progress notifications while downloading an APK update |
 | `REQUEST_INSTALL_PACKAGES` | Hand downloaded `.apk` updates to Android's system package installer via `FileProvider` |
-| `CREDENTIAL_MANAGER_SET_ORIGIN` | Let Credential Manager sign requests for the selected, allowlisted Worker origin; server also verifies the Android package and exact origin |
 
 No location, contacts, microphone, storage or advertising permissions are requested.
 

@@ -180,19 +180,6 @@ class SessionManager @Inject constructor(
         }
     }
 
-    /** Accepts a LoginResponse only after the server's WebAuthn verifier returns success. */
-    suspend fun signInWithPasskey(response: LoginResponse): ApiResult<LoginOutcome> {
-        if (!response.success || response.needsOtp) {
-            return ApiResult.Failure(
-                response.code ?: "PASSKEY_LOGIN_FAILED",
-                response.error ?: response.message ?: "La connexion passkey n'a pas pu être finalisée.",
-            )
-        }
-        val username = response.username?.trim()?.takeIf { it.isNotEmpty() }
-            ?: return ApiResult.Failure("PASSKEY_LOGIN_FAILED", "Le serveur n'a pas confirmé le compte de cette passkey.")
-        return completeLogin(response, username, rememberAccount = true)
-    }
-
     suspend fun verifyOtp(
         username: String,
         password: String,
@@ -287,10 +274,16 @@ class SessionManager @Inject constructor(
     }
 
     /**
-     * Switches directly into an encrypted saved account belonging strictly to
+     * Switches into an opted-in, encrypted saved account belonging strictly to
      * `entry.serverUrl`, flushing every trace of any previous session first.
      */
     suspend fun switchToSavedAccount(entry: SavedAccountEntry): ApiResult<Unit> {
+        if (!entry.canUseDeviceUnlock) {
+            return ApiResult.Failure(
+                "DEVICE_UNLOCK_DISABLED",
+                "Déverrouillage rapide désactivé — reconnectez-vous avec votre mot de passe.",
+            )
+        }
         val token = runCatching { cryptoStore.decrypt(entry.tokenCipher) }.getOrNull()
         if (token.isNullOrBlank()) {
             preferences.removeSavedAccount(entry.serverUrl, entry.username)

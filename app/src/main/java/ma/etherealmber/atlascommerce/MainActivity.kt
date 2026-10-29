@@ -4,7 +4,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
@@ -17,7 +17,7 @@ import ma.etherealmber.atlascommerce.ui.root.AtlasRoot
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrTokenParser
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private var deepLinkQrToken by mutableStateOf<String?>(null)
     private var deepLinkVerify by mutableStateOf<VerifyLink?>(null)
