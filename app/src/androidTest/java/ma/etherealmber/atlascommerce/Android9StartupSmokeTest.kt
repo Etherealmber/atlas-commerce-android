@@ -28,6 +28,9 @@ class Android9StartupSmokeTest {
             By.textContains("Connectez votre serveur"),
             By.textContains("Connect your server"),
             By.textContains("اربط الخادم الخاص بك"),
+            By.textContains("Saisissez l'adresse du site Atlas Commerce de votre organisation."),
+            By.textContains("Enter your organization's Atlas Commerce site address."),
+            By.textContains("أدخل عنوان موقع Atlas Commerce الخاص بمؤسستك."),
         )
 
         ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
