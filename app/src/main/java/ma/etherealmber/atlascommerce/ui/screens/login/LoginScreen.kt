@@ -452,8 +452,8 @@ private fun LoginLanguageDialog(
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            if (selectedLanguage == null) onChooseSystem()
-                            else onChooseLanguage(selectedLanguage!!)
+                            val choice = selectedLanguage
+                            if (choice == null) onChooseSystem() else onChooseLanguage(choice)
                         },
                         enabled = selectionChanged,
                         shape = RoundedCornerShape(14.dp),
