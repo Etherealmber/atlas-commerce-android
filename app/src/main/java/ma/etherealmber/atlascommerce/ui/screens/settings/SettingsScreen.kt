@@ -142,6 +142,7 @@ fun ProfileScreen(
 
     val themeMode by appViewModel.themeMode.collectAsStateWithLifecycle()
     val appLanguage by appViewModel.appLanguage.collectAsStateWithLifecycle()
+    val appLanguageFollowsSystem by appViewModel.appLanguageFollowsSystem.collectAsStateWithLifecycle()
     val densityMode by appViewModel.densityMode.collectAsStateWithLifecycle()
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val autoOpenCamera by appViewModel.autoOpenCamera.collectAsStateWithLifecycle()
@@ -392,9 +393,14 @@ fun ProfileScreen(
             )
             Spacer(Modifier.height(4.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = appLanguageFollowsSystem,
+                    onClick = { appViewModel.followSystemAppLanguage() },
+                    label = { Text(atlasText("Système · ${AppLanguage.fromSystemLocale().nativeLabel}", "System · ${AppLanguage.fromSystemLocale().nativeLabel}", "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}")) },
+                )
                 AppLanguage.entries.forEach { language ->
                     FilterChip(
-                        selected = appLanguage == language,
+                        selected = !appLanguageFollowsSystem && appLanguage == language,
                         onClick = { appViewModel.setAppLanguage(language) },
                         label = { Text(language.nativeLabel) },
                     )
@@ -680,6 +686,7 @@ fun SettingsScreen(
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val updateDownloadSource by appViewModel.updateDownloadSource.collectAsStateWithLifecycle()
     val appLanguage by appViewModel.appLanguage.collectAsStateWithLifecycle()
+    val appLanguageFollowsSystem by appViewModel.appLanguageFollowsSystem.collectAsStateWithLifecycle()
     val shakeToReportEnabled by appViewModel.shakeToReportEnabled.collectAsStateWithLifecycle()
     val mirrorPing by appViewModel.mirrorPing.collectAsStateWithLifecycle()
     val releaseChangelog by appViewModel.releaseChangelog.collectAsStateWithLifecycle()
@@ -886,9 +893,14 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = appLanguageFollowsSystem,
+                    onClick = { appViewModel.followSystemAppLanguage() },
+                    label = { Text(atlasText("Système · ${AppLanguage.fromSystemLocale().nativeLabel}", "System · ${AppLanguage.fromSystemLocale().nativeLabel}", "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}")) },
+                )
                 AppLanguage.entries.forEach { language ->
                     FilterChip(
-                        selected = appLanguage == language,
+                        selected = !appLanguageFollowsSystem && appLanguage == language,
                         onClick = { appViewModel.setAppLanguage(language) },
                         label = { Text(language.nativeLabel) },
                     )

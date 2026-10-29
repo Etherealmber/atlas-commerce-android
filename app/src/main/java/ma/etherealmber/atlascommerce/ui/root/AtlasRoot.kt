@@ -77,6 +77,8 @@ import ma.etherealmber.atlascommerce.ui.components.MandatoryUpdateScreen
 import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalSetAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasUsesSystemLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.LocalUseSystemAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrDeviceScreen
 import ma.etherealmber.atlascommerce.ui.screens.settings.DeveloperDiagnosticsScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.AboutScreen
@@ -132,6 +134,7 @@ fun AtlasRoot(
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val densityMode by viewModel.densityMode.collectAsStateWithLifecycle()
     val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val appLanguageFollowsSystem by viewModel.appLanguageFollowsSystem.collectAsStateWithLifecycle()
     val languageRestartNotice by viewModel.languageRestartNotice.collectAsStateWithLifecycle()
     val languageSaveFailed by viewModel.languageSaveFailed.collectAsStateWithLifecycle()
     val updateServer by viewModel.server.collectAsStateWithLifecycle()
@@ -147,6 +150,12 @@ fun AtlasRoot(
     }
 
     val baseConfiguration = LocalConfiguration.current
+    val systemLanguage = remember(baseConfiguration) {
+        AppLanguage.fromSystemLocale(baseConfiguration.locales[0] ?: Locale.getDefault())
+    }
+    LaunchedEffect(appLanguageFollowsSystem, systemLanguage) {
+        if (appLanguageFollowsSystem) viewModel.refreshSystemAppLanguage(systemLanguage)
+    }
     val localizedConfiguration = remember(baseConfiguration, appLanguage) {
         Configuration(baseConfiguration).apply {
             setLocale(Locale.forLanguageTag(appLanguage.tag))
@@ -157,6 +166,8 @@ fun AtlasRoot(
         LocalAtlasAnimationsEnabled provides animationsEnabled,
         LocalAtlasLanguage provides appLanguage,
         LocalSetAtlasLanguage provides viewModel::setAppLanguage,
+        LocalAtlasUsesSystemLanguage provides appLanguageFollowsSystem,
+        LocalUseSystemAtlasLanguage provides viewModel::followSystemAppLanguage,
     ) {
         CompositionLocalProvider(
             LocalConfiguration provides localizedConfiguration,
@@ -256,6 +267,7 @@ private fun AtlasGate(
     val scope = rememberCoroutineScope()
     var bootSplashFinished by rememberSaveable { mutableStateOf(false) }
     var overlay by rememberSaveable { mutableStateOf<String?>(null) }
+    var openQrAfterOnboarding by rememberSaveable { mutableStateOf(false) }
     var sessionUnlocked by remember { mutableStateOf(false) }
     var lockPromptInProgress by remember { mutableStateOf(false) }
     var openingDeviceLockSettings by remember { mutableStateOf(false) }
@@ -300,6 +312,7 @@ private fun AtlasGate(
         lockPromptInProgress = false
         lockSetupError = false
     }
+
 
     LaunchedEffect(session, sessionUnlocked) {
         if (session is SessionState.Active && sessionUnlocked &&
@@ -445,6 +458,13 @@ private fun AtlasGate(
         activeUser != null -> RootStage.SHELL
         else -> RootStage.SPLASH
     }
+    LaunchedEffect(onboardingDone, baseStage, openQrAfterOnboarding) {
+        if (onboardingDone && openQrAfterOnboarding && baseStage == RootStage.LOGIN) {
+            openQrAfterOnboarding = false
+            pendingQrToken = null
+            overlay = Overlay.QR_DEVICE
+        }
+    }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -461,6 +481,11 @@ private fun AtlasGate(
 
                     RootStage.ONBOARDING -> AtlasWelcomeOnboardingScreen(
                         onComplete = {
+                            requestNotificationPermissionIfNeeded()
+                            viewModel.completeOnboarding()
+                        },
+                        onOpenQrSignIn = {
+                            openQrAfterOnboarding = true
                             requestNotificationPermissionIfNeeded()
                             viewModel.completeOnboarding()
                         },

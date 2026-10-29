@@ -152,8 +152,22 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
         }
         .distinctUntilChanged()
 
+    val appLanguageFollowsSystem: Flow<Boolean> = safeData
+        .map { prefs ->
+            val stored = prefs.safeString(Keys.LANGUAGE.name)
+            stored.isNullOrBlank() || stored.equals("system", ignoreCase = true)
+        }
+        .distinctUntilChanged()
+
     val appLanguage: Flow<AppLanguage> = safeData
-        .map { prefs -> AppLanguage.fromTag(prefs.safeString(Keys.LANGUAGE.name)) }
+        .map { prefs ->
+            val stored = prefs.safeString(Keys.LANGUAGE.name)
+            if (stored.isNullOrBlank() || stored.equals("system", ignoreCase = true)) {
+                AppLanguage.fromSystemLocale()
+            } else {
+                AppLanguage.fromTag(stored)
+            }
+        }
         .distinctUntilChanged()
 
     val densityMode: Flow<DensityMode> = safeData
@@ -317,6 +331,10 @@ class AtlasPreferences @Inject constructor(@ApplicationContext context: Context)
 
     suspend fun setAppLanguage(language: AppLanguage) {
         safeEdit { prefs -> prefs.putClean(Keys.LANGUAGE, language.tag) }
+    }
+
+    suspend fun useSystemAppLanguage() {
+        safeEdit { prefs -> prefs.putClean(Keys.LANGUAGE, "system") }
     }
 
     suspend fun setDensityMode(mode: DensityMode) {
