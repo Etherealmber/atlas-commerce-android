@@ -22,8 +22,12 @@ class Android9StartupSmokeTest {
         val launchIntent = checkNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         val device = UiDevice.getInstance(instrumentation)
-        // The app follows the emulator's system language, so don't pin this smoke test to French.
+        // The first screen is the sign-in choice page. Accept its localized title (and the demo
+        // preview title) because the app follows the emulator's system language.
         val firstRunMarkers = listOf(
+            By.textContains("Bienvenue sur Atlas"),
+            By.textContains("Welcome to Atlas"),
+            By.textContains("مرحباً بك في Atlas"),
             By.textContains("Aperçu interactif"),
             By.textContains("Interactive preview"),
             By.textContains("معاينة تفاعلية"),
