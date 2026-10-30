@@ -298,38 +298,38 @@ fun AtlasTheme(
     }
 }
 
-/** Dark zinc-and-saffron Atlas theme shared by the pre-authentication screens. */
+/** Charcoal Atlas theme shared by pre-authentication screens. */
 @Composable
 fun AtlasAuthTheme(content: @Composable () -> Unit) {
     val typography = MaterialTheme.typography
     val shapes = MaterialTheme.shapes
     val colors = darkColorScheme(
-        primary = Color(0xFFF4F4F5),
-        onPrimary = Color(0xFF0A0A0C),
-        primaryContainer = Color(0xFF2A2A30),
+        primary = Color(0xFFBCCBC4),
+        onPrimary = Color(0xFF151917),
+        primaryContainer = Color(0xFF2A2D30),
         onPrimaryContainer = Color(0xFFF4F4F5),
-        secondary = Color(0xFFD4D4D8),
-        onSecondary = Color(0xFF18181B),
-        tertiary = Saffron,
-        onTertiary = Color(0xFF171717),
-        background = Color(0xFF09090B),
+        secondary = Color(0xFFD4D6D9),
+        onSecondary = Color(0xFF1E2025),
+        tertiary = Color(0xFF94AAA1),
+        onTertiary = Color(0xFF151917),
+        background = Color(0xFF121316),
         onBackground = Color(0xFFF4F4F5),
-        surface = Color(0xFF17171B),
+        surface = Color(0xFF1E2025),
         onSurface = Color(0xFFF4F4F5),
-        surfaceVariant = Color(0xFF222227),
-        onSurfaceVariant = Color(0xFFB4B4BC),
-        outline = Color(0xFF66666F),
-        outlineVariant = Color(0xFF3A3A41),
+        surfaceVariant = Color(0xFF282A30),
+        onSurfaceVariant = Color(0xFFB8BBC2),
+        outline = Color(0xFF666B73),
+        outlineVariant = Color(0xFF3C4047),
         error = Color(0xFFFCA5A5),
         onError = Color(0xFF450A0A),
     )
     val authPalette = DarkPalette.copy(
-        positive = Color(0xFFFBBF24),
-        positiveSoft = Color(0xFF3A2A0B),
-        cardBorder = Color(0xFF3A3A41),
-        mutedText = Color(0xFFB4B4BC),
-        heroStart = Color(0xFF09090B),
-        heroEnd = Color(0xFF26262C),
+        positive = Color(0xFF94AAA1),
+        positiveSoft = Color(0xFF252C29),
+        cardBorder = Color(0xFF3C4047),
+        mutedText = Color(0xFFB8BBC2),
+        heroStart = Color(0xFF121316),
+        heroEnd = Color(0xFF25282D),
     )
     CompositionLocalProvider(LocalAtlasPalette provides authPalette) {
         MaterialTheme(colorScheme = colors, typography = typography, shapes = shapes) {

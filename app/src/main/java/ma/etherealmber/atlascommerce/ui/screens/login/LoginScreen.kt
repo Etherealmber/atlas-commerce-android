@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -37,6 +38,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MoreVert
@@ -46,8 +50,6 @@ import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -106,10 +108,11 @@ fun LoginScreen(
     onChangeServer: () -> Unit,
     onOpenQrDevice: () -> Unit = {},
     onUnlockSavedAccount: (SavedAccountEntry, () -> Unit) -> Unit = { _, _ -> },
+    onOpenAbout: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     AtlasAuthTheme {
-        LoginScreenContent(onChangeServer, onOpenQrDevice, onUnlockSavedAccount, viewModel)
+        LoginScreenContent(onChangeServer, onOpenQrDevice, onUnlockSavedAccount, onOpenAbout, viewModel)
     }
 }
 
@@ -118,6 +121,7 @@ private fun LoginScreenContent(
     onChangeServer: () -> Unit,
     onOpenQrDevice: () -> Unit,
     onUnlockSavedAccount: (SavedAccountEntry, () -> Unit) -> Unit,
+    onOpenAbout: () -> Unit,
     viewModel: LoginViewModel,
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
@@ -129,7 +133,13 @@ private fun LoginScreenContent(
     val followsSystemLanguage = LocalAtlasUsesSystemLanguage.current
     val useSystemLanguage = LocalUseSystemAtlasLanguage.current
     var accountPromptHandled by remember { mutableStateOf(false) }
+    var useAnotherAccount by remember { mutableStateOf(false) }
+    var accountPickerOpen by remember { mutableStateOf(false) }
     var languageDialogOpen by remember { mutableStateOf(false) }
+    var helpServicesOpen by remember { mutableStateOf(false) }
+    var helpTopic by remember { mutableStateOf<LoginHelpTopic?>(null) }
+    var recoveryDialogOpen by remember { mutableStateOf(false) }
+
     LaunchedEffect(savedAccounts, state.step) {
         if (accountPromptHandled) return@LaunchedEffect
         if (state.step != LoginViewModel.Step.CREDENTIALS) {
@@ -138,7 +148,6 @@ private fun LoginScreenContent(
         }
         if (savedAccounts.isNotEmpty()) {
             val savedAccount = savedAccounts.firstOrNull { it.canUseDeviceUnlock } ?: savedAccounts.first()
-            // Keep the regular password form visible; local unlock is an explicit alternative below.
             viewModel.onUsernameChange(savedAccount.username)
             accountPromptHandled = true
         } else {
@@ -146,13 +155,32 @@ private fun LoginScreenContent(
             if (savedAccounts.isEmpty()) accountPromptHandled = true
         }
     }
-    val host = server?.let { ServerUrl.display(it.baseUrl) } ?: atlasText("Serveur non sélectionné", "No server selected", "لم يتم اختيار خادم")
 
+    val rememberedAccount = savedAccounts.firstOrNull { it.username.equals(state.username, ignoreCase = true) }
+        ?.takeUnless { useAnotherAccount }
+    val selectedUnlockAccount = savedAccounts.firstOrNull {
+        it.canUseDeviceUnlock && it.username.equals(state.username, ignoreCase = true)
+    } ?: savedAccounts.firstOrNull { it.canUseDeviceUnlock }
+    val host = server?.let { ServerUrl.display(it.baseUrl) }
+        ?: atlasText("Serveur non sélectionné", "No server selected", "لم يتم اختيار خادم")
+
+    fun useDifferentAccount() {
+        accountPickerOpen = false
+        accountPromptHandled = true
+        useAnotherAccount = true
+        viewModel.onUsernameChange("")
+        viewModel.onPasswordChange("")
+    }
+
+    fun switchAccount() {
+        viewModel.backToCredentials()
+        if (savedAccounts.isEmpty()) useDifferentAccount() else accountPickerOpen = true
+    }
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize().background(
             Brush.verticalGradient(
-                listOf(Color(0xFF09090B), Color(0xFF17171B), Color(0xFF26262C)),
+                listOf(Color(0xFF121316), Color(0xFF1E2025), Color(0xFF282A30)),
             ),
         ),
         contentAlignment = Alignment.TopCenter,
@@ -174,10 +202,7 @@ private fun LoginScreenContent(
         ) {
             LoginAtlasHero(
                 compact = compact || keyboardVisible,
-                host = host,
-                onChangeServer = onChangeServer,
-                onOpenQrDevice = onOpenQrDevice,
-                onOpenLanguage = { languageDialogOpen = true },
+                onOpenHelpServices = { helpServicesOpen = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(if (motionEnabled) Modifier.animateContentSize() else Modifier)
@@ -188,22 +213,40 @@ private fun LoginScreenContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+                    .padding(horizontal = if (compact) 12.dp else 18.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)), RoundedCornerShape(28.dp))
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = if (compact) 20.dp else 28.dp, vertical = 18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                val welcomeTitle = when {
+                    state.step == LoginViewModel.Step.OTP -> atlasText("Vérification", "Verification", "التحقق")
+                    rememberedAccount != null -> atlasText(
+                        "Bienvenue, ${rememberedAccount.displayName.ifBlank { rememberedAccount.username }}",
+                        "Welcome, ${rememberedAccount.displayName.ifBlank { rememberedAccount.username }}",
+                        "مرحبًا، ${rememberedAccount.displayName.ifBlank { rememberedAccount.username }}",
+                    )
+                    else -> atlasText("Bienvenue", "Welcome", "مرحبًا")
+                }
                 Text(
-                    text = if (state.step == LoginViewModel.Step.CREDENTIALS) atlasText("Bon retour", "Welcome back", "مرحبًا بعودتك") else atlasText("Vérification", "Verification", "التحقق"),
+                    text = welcomeTitle,
                     style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(5.dp))
                 Text(
                     text = if (state.step == LoginViewModel.Step.CREDENTIALS) {
-                        atlasText("Connectez-vous à votre espace Atlas Commerce.", "Sign in to your Atlas Commerce workspace.", "سجّل الدخول إلى مساحة Atlas Commerce الخاصة بك.")
+                        if (rememberedAccount != null) {
+                            atlasText("Compte mémorisé sur cet appareil", "Remembered account on this device", "حساب محفوظ على هذا الجهاز")
+                        } else {
+                            atlasText("Connectez-vous à votre espace Atlas Commerce.", "Sign in to your Atlas Commerce workspace.", "سجّل الدخول إلى مساحة Atlas Commerce الخاصة بك.")
+                        }
                     } else {
                         atlasText("Confirmez votre identité pour continuer.", "Verify your identity to continue.", "أكّد هويتك للمتابعة.")
                     },
@@ -211,69 +254,19 @@ private fun LoginScreenContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
 
                 if (state.step == LoginViewModel.Step.CREDENTIALS) {
-                    val unlockAccounts = savedAccounts.filter { it.canUseDeviceUnlock }
-                    unlockAccounts.forEach { savedAccount ->
-                        val accountName = savedAccount.displayName.ifBlank { savedAccount.username }
-                        Surface(
-                            onClick = {
-                                onUnlockSavedAccount(savedAccount) {
-                                    viewModel.signInWithSavedAccount(savedAccount)
-                                }
-                            },
-                            enabled = !state.loading,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Fingerprint,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = MaterialTheme.colorScheme.tertiary,
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        atlasText(
-                                            "Déverrouiller avec la biométrie",
-                                            "Unlock with biometrics",
-                                            "إلغاء القفل بالبصمة",
-                                        ),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                    Text(
-                                        accountName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { switchAccount() },
+                        enabled = !state.loading,
+                        modifier = Modifier.height(40.dp),
+                    ) {
+                        Text(atlasText("Se connecter avec un autre compte", "Sign in with another account", "تسجيل الدخول بحساب آخر"))
                     }
-                    if (unlockAccounts.isNotEmpty()) {
-                        Text(
-                            atlasText(
-                                "Ou utilisez votre mot de passe",
-                                "Or sign in with your password",
-                                "أو سجّل الدخول بكلمة المرور",
-                            ),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 4.dp),
-                        )
-                    }
+                    Spacer(Modifier.height(if (compact) 6.dp else 10.dp))
                     CredentialsForm(
                         state = state,
+                        showUsernameField = rememberedAccount == null || useAnotherAccount,
                         onUsername = viewModel::onUsernameChange,
                         onPassword = viewModel::onPasswordChange,
                         onRememberChange = viewModel::onRememberAccountChange,
@@ -281,13 +274,36 @@ private fun LoginScreenContent(
                         onDismissError = viewModel::dismissError,
                         compact = compact,
                     )
+                    TextButton(
+                        onClick = { recoveryDialogOpen = true },
+                        enabled = !state.loading,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(atlasText("Nom d'utilisateur ou mot de passe oublié ?", "Forgot username or password?", "هل نسيت اسم المستخدم أو كلمة المرور؟"))
+                    }
+
+                    selectedUnlockAccount?.let { savedAccount ->
+                        Spacer(Modifier.height(if (compact) 2.dp else 6.dp))
+                        BiometricUnlockAction(
+                            account = savedAccount,
+                            enabled = !state.loading,
+                            onClick = {
+                                useAnotherAccount = false
+                                viewModel.onUsernameChange(savedAccount.username)
+                                viewModel.onPasswordChange("")
+                                onUnlockSavedAccount(savedAccount) {
+                                    viewModel.signInWithSavedAccount(savedAccount)
+                                }
+                            },
+                        )
+                    }
                 } else {
                     OtpForm(
                         state = state,
                         onOtp = viewModel::onOtpChange,
                         onSubmit = viewModel::submit,
                         onResend = viewModel::resendCode,
-                        onBack = viewModel::backToCredentials,
+                        onBack = { switchAccount() },
                         onDismissError = viewModel::dismissError,
                     )
                 }
@@ -307,9 +323,23 @@ private fun LoginScreenContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Spacer(Modifier.height(8.dp))
             }
         }
+
+        if (helpServicesOpen) {
+            LoginHelpServicesSheet(
+                host = host,
+                languageName = language.nativeLabel,
+                onDismiss = { helpServicesOpen = false },
+                onHelp = { helpServicesOpen = false; helpTopic = LoginHelpTopic.HELP },
+                onContacts = { helpServicesOpen = false; helpTopic = LoginHelpTopic.CONTACTS },
+                onAbout = { helpServicesOpen = false; onOpenAbout() },
+                onLanguages = { helpServicesOpen = false; languageDialogOpen = true },
+                onServers = { helpServicesOpen = false; onChangeServer() },
+                onQr = { helpServicesOpen = false; onOpenQrDevice() },
+            )
+        }
+
         if (languageDialogOpen) {
             LoginLanguageDialog(
                 language = language,
@@ -319,22 +349,39 @@ private fun LoginScreenContent(
                 onDismiss = { languageDialogOpen = false },
             )
         }
+        if (accountPickerOpen) {
+            SavedAccountPickerDialog(
+                accounts = savedAccounts,
+                onSelect = { account ->
+                    accountPickerOpen = false
+                    useAnotherAccount = false
+                    viewModel.onUsernameChange(account.username)
+                    viewModel.onPasswordChange("")
+                    accountPromptHandled = true
+                },
+                onDifferentAccount = ::useDifferentAccount,
+                onDismiss = { accountPickerOpen = false },
+            )
+        }
+        helpTopic?.let { topic ->
+            LoginHelpInfoDialog(topic = topic, onDismiss = { helpTopic = null })
+        }
+        if (recoveryDialogOpen) {
+            LoginHelpInfoDialog(topic = LoginHelpTopic.RECOVERY, onDismiss = { recoveryDialogOpen = false })
+        }
     }
 }
 
 @Composable
 private fun LoginAtlasHero(
     compact: Boolean,
-    host: String,
-    onChangeServer: () -> Unit,
-    onOpenQrDevice: () -> Unit,
-    onOpenLanguage: () -> Unit,
+    onOpenHelpServices: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = Atlas.palette
     Row(
         modifier = modifier
-            .background(Brush.verticalGradient(listOf(Color(0xFF09090B), palette.heroStart, palette.heroEnd)))
+            .background(Brush.verticalGradient(listOf(Color(0xFF121316), palette.heroStart, palette.heroEnd)))
             .padding(horizontal = 22.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -346,63 +393,241 @@ private fun LoginAtlasHero(
             )
         }
         Spacer(Modifier.weight(1f))
-        LoginOverflowMenu(
-            host = host,
-            onChangeServer = onChangeServer,
-            onOpenQrDevice = onOpenQrDevice,
-            onOpenLanguage = onOpenLanguage,
-        )
+        IconButton(onClick = onOpenHelpServices) {
+            Icon(
+                Icons.Outlined.MoreVert,
+                contentDescription = atlasText("Aide et services", "Help and services", "المساعدة والخدمات"),
+                tint = Color.White,
+            )
+        }
+    }
+}
+
+private enum class LoginHelpTopic { HELP, CONTACTS, RECOVERY }
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun LoginHelpServicesSheet(
+    host: String,
+    languageName: String,
+    onDismiss: () -> Unit,
+    onHelp: () -> Unit,
+    onContacts: () -> Unit,
+    onAbout: () -> Unit,
+    onLanguages: () -> Unit,
+    onServers: () -> Unit,
+    onQr: () -> Unit,
+) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        dragHandle = {
+            Box(
+                Modifier.padding(top = 12.dp).size(width = 38.dp, height = 4.dp)
+                    .clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.outline),
+            )
+        },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp).padding(bottom = 26.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        atlasText("Aide et services", "Help & services", "المساعدة والخدمات"),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        atlasText("Accès rapide à l'assistance et aux réglages Atlas.", "Quick access to Atlas help and settings.", "وصول سريع إلى المساعدة وإعدادات Atlas."),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Outlined.Close, contentDescription = atlasText("Fermer", "Close", "إغلاق"))
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                LoginServiceItem(Icons.Outlined.HelpOutline, atlasText("Aide / FAQ", "Help / FAQ", "المساعدة / الأسئلة الشائعة"), onHelp, Modifier.weight(1f))
+                LoginServiceItem(Icons.Outlined.AlternateEmail, atlasText("Contacts", "Contacts", "جهات الاتصال"), onContacts, Modifier.weight(1f))
+                LoginServiceItem(Icons.Outlined.Info, atlasText("À propos", "About", "حول التطبيق"), onAbout, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(20.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                LoginServiceItem(Icons.Outlined.Language, atlasText("Langues", "Languages", "اللغات"), onLanguages, Modifier.weight(1f), subtitle = languageName)
+                LoginServiceItem(Icons.Outlined.Dns, atlasText("Serveurs", "Servers", "الخوادم"), onServers, Modifier.weight(1f), subtitle = host)
+                LoginServiceItem(Icons.Outlined.QrCode2, atlasText("Connexion QR", "QR sign-in", "تسجيل الدخول عبر QR"), onQr, Modifier.weight(1f))
+            }
+        }
     }
 }
 
 @Composable
-private fun LoginOverflowMenu(
-    host: String,
-    onChangeServer: () -> Unit,
-    onOpenQrDevice: () -> Unit,
-    onOpenLanguage: () -> Unit,
+private fun LoginServiceItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
 ) {
-    val language = LocalAtlasLanguage.current
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(
-                Icons.Outlined.MoreVert,
-                contentDescription = atlasText("Plus d'options", "More options", "المزيد من الخيارات"),
-                tint = Color.White,
+    Column(
+        modifier = modifier.clickable(onClick = onClick).padding(horizontal = 3.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Surface(
+            shape = androidx.compose.foundation.shape.CircleShape,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.size(64.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(25.dp))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            minLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (subtitle != null) {
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text(atlasText("Se connecter avec un QR code", "Sign in with QR code", "تسجيل الدخول برمز QR")) },
-                leadingIcon = { Icon(Icons.Outlined.QrCode2, contentDescription = null) },
-                onClick = { expanded = false; onOpenQrDevice() },
-            )
-            DropdownMenuItem(
-                text = {
-                    Column {
-                        Text(atlasText("Choisir un serveur", "Choose server", "اختيار الخادم"))
-                        Text(host, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SavedAccountPickerDialog(
+    accounts: List<SavedAccountEntry>,
+    onSelect: (SavedAccountEntry) -> Unit,
+    onDifferentAccount: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(atlasText("Changer de compte", "Switch account", "تغيير الحساب")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                accounts.forEach { account ->
+                    Surface(
+                        onClick = { onSelect(account) },
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Text(account.displayName.ifBlank { account.username }, fontWeight = FontWeight.SemiBold)
+                            if (account.displayName.isNotBlank()) {
+                                Text(account.username, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
-                },
-                leadingIcon = { Icon(Icons.Outlined.Dns, contentDescription = null) },
-                onClick = { expanded = false; onChangeServer() },
-            )
-            DropdownMenuItem(
-                text = {
-                    Column {
-                        Text(atlasText("Langues", "Languages", "اللغات"))
-                        Text(
-                            language.nativeLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                leadingIcon = { Icon(Icons.Outlined.Language, contentDescription = null) },
-                onClick = { expanded = false; onOpenLanguage() },
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDifferentAccount) {
+                Text(atlasText("Utiliser un autre compte", "Use a different account", "استخدام حساب آخر"))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(atlasText("Annuler", "Cancel", "إلغاء")) } },
+        containerColor = MaterialTheme.colorScheme.surface,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun LoginHelpInfoDialog(topic: LoginHelpTopic, onDismiss: () -> Unit) {
+    val title: String
+    val message: String
+    when (topic) {
+        LoginHelpTopic.HELP -> {
+            title = atlasText("Aide et FAQ", "Help & FAQ", "المساعدة والأسئلة الشائعة")
+            message = atlasText(
+                "Vérifiez le serveur sélectionné et votre connexion. Pour récupérer un accès, contactez l'administrateur de votre espace Atlas Commerce.",
+                "Check the selected server and your connection. To recover access, contact your Atlas Commerce workspace administrator.",
+                "تحقق من الخادم المحدد واتصالك. لاستعادة الوصول، تواصل مع مسؤول مساحة Atlas Commerce.",
             )
         }
+        LoginHelpTopic.CONTACTS -> {
+            title = atlasText("Contacts", "Contacts", "جهات الاتصال")
+            message = atlasText(
+                "Pour confirmer votre nom d'utilisateur ou réinitialiser votre mot de passe, contactez l'administrateur de votre organisation.",
+                "To confirm your username or reset your password, contact your organization administrator.",
+                "لتأكيد اسم المستخدم أو إعادة تعيين كلمة المرور، تواصل مع مسؤول مؤسستك.",
+            )
+        }
+        LoginHelpTopic.RECOVERY -> {
+            title = atlasText("Récupérer l'accès", "Recover account access", "استعادة الوصول إلى الحساب")
+            message = atlasText(
+                "Demandez à l'administrateur de votre espace de confirmer votre nom d'utilisateur ou de réinitialiser votre mot de passe. Atlas ne peut pas réinitialiser le mot de passe depuis cet écran. Après une connexion valide, un code de vérification peut être envoyé par e-mail.",
+                "Ask your workspace administrator to confirm your username or reset your password. Atlas cannot reset it from this screen. After a valid sign-in, a verification code may be sent by email.",
+                "اطلب من مسؤول مساحة العمل تأكيد اسم المستخدم أو إعادة تعيين كلمة المرور. لا يمكن لـ Atlas إعادة تعيينها من هذه الشاشة. بعد تسجيل دخول صحيح، قد يُرسل رمز تحقق عبر البريد الإلكتروني.",
+            )
+        }
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(atlasText("Compris", "Got it", "حسنًا")) }
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun BiometricUnlockAction(
+    account: SavedAccountEntry,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(
+            onClick = onClick,
+            enabled = enabled,
+            shape = androidx.compose.foundation.shape.CircleShape,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.size(62.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Outlined.Fingerprint,
+                    contentDescription = atlasText("Déverrouiller par biométrie", "Unlock with biometrics", "إلغاء القفل بالبصمة"),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(30.dp),
+                )
+            }
+        }
+        TextButton(onClick = onClick, enabled = enabled) {
+            Text(atlasText("Utiliser la biométrie ou le code de l'appareil", "Use biometrics or device PIN", "استخدم البصمة أو رمز الجهاز"))
+        }
+        Text(
+            account.displayName.ifBlank { account.username },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -538,6 +763,7 @@ private fun LanguageChoiceRow(
 @Composable
 private fun CredentialsForm(
     state: LoginViewModel.UiState,
+    showUsernameField: Boolean,
     onUsername: (String) -> Unit,
     onPassword: (String) -> Unit,
     onRememberChange: (Boolean) -> Unit,
@@ -547,27 +773,37 @@ private fun CredentialsForm(
 ) {
     Column(Modifier.fillMaxWidth()) {
         Text(
-            text = atlasText("Identifiant et mot de passe", "Username and password", "اسم المستخدم وكلمة المرور"),
+            text = if (showUsernameField) {
+                atlasText("Identifiant et mot de passe", "Username and password", "اسم المستخدم وكلمة المرور")
+            } else {
+                atlasText("Mot de passe", "Password", "كلمة المرور")
+            },
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(2.dp))
         Text(
-            text = atlasText("Utilisez les identifiants de votre espace Atlas.", "Use the credentials for your Atlas workspace.", "استخدم بيانات اعتماد مساحة Atlas الخاصة بك."),
+            text = if (showUsernameField) {
+                atlasText("Utilisez les identifiants de votre espace Atlas.", "Use the credentials for your Atlas workspace.", "استخدم بيانات اعتماد مساحة Atlas الخاصة بك.")
+            } else {
+                atlasText("Saisissez le mot de passe de ce compte.", "Enter this account's password.", "أدخل كلمة مرور هذا الحساب.")
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(if (compact) 8.dp else 14.dp))
-        AtlasTextField(
-            value = state.username,
-            onValueChange = onUsername,
-            label = atlasText("Identifiant", "Username", "اسم المستخدم"),
-            leadingIcon = Icons.Outlined.Person,
-            keyboardType = KeyboardType.Text,
-            imeAction = ImeAction.Next,
-            enabled = !state.loading,
-        )
-        Spacer(Modifier.height(if (compact) 6.dp else 10.dp))
+        if (showUsernameField) {
+            AtlasTextField(
+                value = state.username,
+                onValueChange = onUsername,
+                label = atlasText("Identifiant", "Username", "اسم المستخدم"),
+                leadingIcon = Icons.Outlined.Person,
+                keyboardType = KeyboardType.Text,
+                imeAction = ImeAction.Next,
+                enabled = !state.loading,
+            )
+            Spacer(Modifier.height(if (compact) 6.dp else 10.dp))
+        }
         AtlasTextField(
             value = state.password,
             onValueChange = onPassword,
