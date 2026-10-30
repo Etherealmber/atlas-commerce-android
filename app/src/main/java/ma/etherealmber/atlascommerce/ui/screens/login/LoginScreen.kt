@@ -303,7 +303,7 @@ private fun LoginScreenContent(
                         onOtp = viewModel::onOtpChange,
                         onSubmit = viewModel::submit,
                         onResend = viewModel::resendCode,
-                        onBack = switchAccount,
+                        onBack = { switchAccount() },
                         onDismissError = viewModel::dismissError,
                     )
                 }
