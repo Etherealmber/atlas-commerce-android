@@ -1014,15 +1014,21 @@ class AppUpdateManager internal constructor(
         }
     }
 
-    /**
-     * Re-expands the full download progress bar when tapping the Top Bar mini ball.
-     */
+    /** Reopens the update banner/installer from its persistent Top Bar icon. */
     fun showDownloadBanner() {
         synchronized(lock) {
-            val current = _state.value
-            if (current is UpdateState.Downloading && !current.info.mandatory) {
-                hideActiveDownloadInForeground = false
-                _state.value = current.copy(hiddenInForeground = false)
+            when (val current = _state.value) {
+                is UpdateState.Downloading -> if (!current.info.mandatory) {
+                    hideActiveDownloadInForeground = false
+                    _state.value = current.copy(hiddenInForeground = false)
+                }
+                is UpdateState.Available -> if (!current.info.mandatory && current.dismissedBanner) {
+                    _state.value = current.copy(dismissedBanner = false)
+                }
+                is UpdateState.ReadyToInstall -> if (!current.info.mandatory && current.dismissedBanner) {
+                    _state.value = current.copy(dismissedBanner = false)
+                }
+                else -> Unit
             }
         }
     }

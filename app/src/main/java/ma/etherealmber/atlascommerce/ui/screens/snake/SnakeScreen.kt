@@ -2,6 +2,7 @@ package ma.etherealmber.atlascommerce.ui.screens.snake
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -9,15 +10,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.KeyboardArrowLeft
-import androidx.compose.material.icons.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -44,6 +48,10 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
     }
     var game by remember { mutableStateOf(SnakeState()) }
     var running by remember { mutableStateOf(false) }
+    val boardFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(isActive, foreground) {
+        if (isActive && foreground) boardFocusRequester.requestFocus()
+    }
     LaunchedEffect(running, pausedByPrompt, game.over, foreground, isActive) {
         while (running && !pausedByPrompt && !game.over && foreground && isActive) {
             delay(240)
@@ -62,8 +70,36 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
             Text(atlasText("Score : ${game.score}", "Score: ${game.score}", "النتيجة: ${game.score}"), style = MaterialTheme.typography.titleMedium)
             val snakeColor = MaterialTheme.colorScheme.primary
             val boardColor = MaterialTheme.colorScheme.surfaceVariant
-            BoxWithConstraints(Modifier.widthIn(max = 440.dp).fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(20.dp)).background(boardColor)
-                .pointerInput(Unit) {
+            BoxWithConstraints(
+                Modifier.widthIn(max = 440.dp).fillMaxWidth().aspectRatio(1f)
+                    .focusRequester(boardFocusRequester)
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        val direction = when (event.key) {
+                            Key.DirectionUp, Key.W -> Direction.UP
+                            Key.DirectionDown, Key.S -> Direction.DOWN
+                            Key.DirectionLeft, Key.A -> Direction.LEFT
+                            Key.DirectionRight, Key.D -> Direction.RIGHT
+                            else -> null
+                        }
+                        when {
+                            direction != null -> {
+                                if (!pausedByPrompt && !game.over) game = game.turn(direction)
+                                true
+                            }
+                            event.key == Key.Enter -> {
+                                if (!pausedByPrompt) {
+                                    if (game.over) { game = SnakeState(); running = true } else running = !running
+                                }
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                    .focusable()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(boardColor)
+                    .pointerInput(Unit) {
                     var drag = Offset.Zero
                     detectDragGestures(onDragStart = { drag = Offset.Zero }, onDragEnd = {
                         if (drag.getDistance() > 18f) {
@@ -100,34 +136,30 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
             }
             if (game.over) Text(if (game.won) atlasText("Bravo, plateau rempli !", "You filled the board!", "أحسنت، امتلأت اللوحة!") else atlasText("Partie terminée", "Game over", "انتهت اللعبة"), color = MaterialTheme.colorScheme.error)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { if (game.over) { game = SnakeState(); running = true } else running = !running }, enabled = !pausedByPrompt) {
+                Button(
+                    onClick = {
+                        if (game.over) { game = SnakeState(); running = true } else running = !running
+                        boardFocusRequester.requestFocus()
+                    },
+                    enabled = !pausedByPrompt,
+                ) {
                     Text(if (game.over) atlasText("Rejouer", "Play again", "العب مجدداً") else if (running) atlasText("Pause", "Pause", "إيقاف مؤقت") else atlasText("Jouer", "Play", "العب"))
                 }
-                OutlinedButton(onClick = { game = SnakeState(); running = false }) { Text(atlasText("Recommencer", "Restart", "إعادة البدء")) }
+                OutlinedButton(onClick = {
+                    game = SnakeState()
+                    running = false
+                    boardFocusRequester.requestFocus()
+                }) { Text(atlasText("Recommencer", "Restart", "إعادة البدء")) }
             }
-            Text(atlasText("Balayez ou utilisez les flèches.", "Swipe or use the arrows.", "اسحب أو استخدم الأسهم."), style = MaterialTheme.typography.bodySmall)
-            FilledTonalIconButton(
-                onClick = { game = game.turn(Direction.UP) },
-                modifier = Modifier.size(64.dp),
-                enabled = !pausedByPrompt && !game.over,
-            ) { Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = atlasText("Haut", "Up", "أعلى"), modifier = Modifier.size(36.dp)) }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalIconButton(
-                    onClick = { game = game.turn(Direction.LEFT) },
-                    modifier = Modifier.size(64.dp),
-                    enabled = !pausedByPrompt && !game.over,
-                ) { Icon(Icons.Outlined.KeyboardArrowLeft, contentDescription = atlasText("Gauche", "Left", "يسار"), modifier = Modifier.size(36.dp)) }
-                FilledTonalIconButton(
-                    onClick = { game = game.turn(Direction.DOWN) },
-                    modifier = Modifier.size(64.dp),
-                    enabled = !pausedByPrompt && !game.over,
-                ) { Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = atlasText("Bas", "Down", "أسفل"), modifier = Modifier.size(36.dp)) }
-                FilledTonalIconButton(
-                    onClick = { game = game.turn(Direction.RIGHT) },
-                    modifier = Modifier.size(64.dp),
-                    enabled = !pausedByPrompt && !game.over,
-                ) { Icon(Icons.Outlined.KeyboardArrowRight, contentDescription = atlasText("Droite", "Right", "يمين"), modifier = Modifier.size(36.dp)) }
-            }
+            Text(
+                atlasText(
+                    "Balayez ou utilisez les flèches du clavier / WASD. Entrée démarre ou met en pause.",
+                    "Swipe or use the keyboard arrow/WASD keys. Enter starts or pauses.",
+                    "اسحب أو استخدم الأسهم أو WASD. اضغط Enter للبدء أو الإيقاف المؤقت.",
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
         }
     }
 }

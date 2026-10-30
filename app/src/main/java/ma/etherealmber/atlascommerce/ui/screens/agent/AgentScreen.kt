@@ -10,9 +10,11 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +42,12 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -100,6 +108,7 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
+import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 import java.text.NumberFormat
 import java.time.Duration
 import java.time.Instant
@@ -585,7 +594,18 @@ fun AgentScreen(
                         // could race the shell's back handler and navigate away from Agent.
                         clearFocusOnSend = false,
                         singleLine = false,
-                        modifier = Modifier.weight(1f).heightIn(min = 58.dp, max = if (compactComposer) 92.dp else 132.dp),
+                        modifier = Modifier.weight(1f)
+                            .heightIn(min = 58.dp, max = if (compactComposer) 92.dp else 132.dp)
+                            .onPreviewKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyDown && event.key == Key.Enter && !event.isShiftPressed) {
+                                    if (state.input.isNotBlank() && !state.sending && !state.loadingThread && !quotaLocked) {
+                                        viewModel.sendPrompt(responseLanguage = selectedAppLanguage)
+                                    }
+                                    true
+                                } else {
+                                    false
+                                }
+                            },
                     )
                     Spacer(Modifier.width(6.dp))
                     IconButton(
@@ -605,9 +625,39 @@ fun AgentScreen(
 }
 
 @Composable
-fun AtlasAgentMascot(modifier: Modifier = Modifier) {
+fun AtlasAgentMascot(
+    modifier: Modifier = Modifier,
+    isTyping: Boolean = false,
+    isThinking: Boolean = false,
+) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val isEngaged = isTyping || isThinking
     val transition = rememberInfiniteTransition(label = "atlas-agent-mascot")
+    var blinkClosed by remember { mutableStateOf(false) }
+    LaunchedEffect(motionEnabled, isEngaged) {
+        blinkClosed = false
+        if (!motionEnabled) return@LaunchedEffect
+        while (true) {
+            delay(if (isEngaged) 900L else 2_500L)
+            blinkClosed = true
+            delay(110L)
+            blinkClosed = false
+        }
+    }
+    val eyeScale by animateFloatAsState(
+        targetValue = if (motionEnabled && blinkClosed) 0.15f else 1f,
+        animationSpec = tween(90),
+        label = "atlas-agent-eye-blink",
+    )
+    val gaze by transition.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (isEngaged) 440 else 1_300, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "atlas-agent-eye-gaze",
+    )
     val bob by transition.animateFloat(
         initialValue = -1.5f,
         targetValue = 1.5f,
@@ -640,8 +690,18 @@ fun AtlasAgentMascot(modifier: Modifier = Modifier) {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                Box(Modifier.size(4.dp).clip(CircleShape).background(onMascot))
-                Box(Modifier.size(4.dp).clip(CircleShape).background(onMascot))
+                Box(
+                    Modifier.size(5.dp).graphicsLayer {
+                        scaleY = eyeScale
+                        translationX = if (motionEnabled && isEngaged) gaze * 2.2f else 0f
+                    }.clip(CircleShape).background(onMascot),
+                )
+                Box(
+                    Modifier.size(5.dp).graphicsLayer {
+                        scaleY = eyeScale
+                        translationX = if (motionEnabled && isEngaged) gaze * 2.2f else 0f
+                    }.clip(CircleShape).background(onMascot),
+                )
             }
             Box(
                 Modifier
@@ -958,8 +1018,9 @@ private fun ChatBubbleRow(
     isStreaming: Boolean = false,
 ) {
     val isUser = message.fromUser
-    val userGreen = Atlas.palette.positiveSoft
-    val userInk = Atlas.palette.positive
+    val darkTheme = LocalAtlasDarkTheme.current
+    val userGreen = if (darkTheme) Color(0xFF173D2B) else Color(0xFFE8F5E9)
+    val userInk = if (darkTheme) Color(0xFFB7E4C7) else Color(0xFF14532D)
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1134,7 +1195,7 @@ private fun AgentTypingIndicator(label: String) {
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top,
     ) {
-        AgentAvatar()
+        AtlasAgentMascot(Modifier.size(32.dp), isThinking = true)
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
             Text(

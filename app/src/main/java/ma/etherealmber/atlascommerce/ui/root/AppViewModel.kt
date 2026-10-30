@@ -662,7 +662,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun signOut() {
-        viewModelScope.launch { sessionManager.signOut() }
+        sessionManager.lockForBackground()
     }
 }
 

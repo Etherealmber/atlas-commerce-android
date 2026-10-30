@@ -393,6 +393,10 @@ fun MainShell(
             else -> switchTab(MainTab.HOME)
         }
     }
+    BackHandler(enabled = isForeground && tab == MainTab.HOME) {
+        AtlasLogBuffer.log("NAVIGATION", "System Back signs out from the dashboard to the sign-in screen")
+        onSignOut()
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val useRail = maxWidth >= 600.dp
@@ -424,11 +428,17 @@ fun MainShell(
                     listOf(thread, status).filter { it.isNotBlank() }.joinToString(" · ")
                 },
                 titleLeading = if (tab == MainTab.AGENT) {
-                    { AtlasAgentMascot(Modifier.size(32.dp).combinedClickable(
-                        onClick = {},
-                        onLongClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
-                        onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAgentSurprise = true },
-                    )) }
+                    {
+                        AtlasAgentMascot(
+                            modifier = Modifier.size(32.dp).combinedClickable(
+                                onClick = {},
+                                onLongClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
+                                onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAgentSurprise = true },
+                            ),
+                            isTyping = agentState?.input?.isNotBlank() == true,
+                            isThinking = agentState?.sending == true,
+                        )
+                    }
                 } else null,
                 onBack = when (tab) {
                     MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
@@ -436,15 +446,19 @@ fun MainShell(
                     else -> null
                 },
                 actions = {
-                    val hasHiddenDownload =
-                        (updateState as? UpdateState.Downloading)?.let { it.hiddenInForeground && !it.info.mandatory } == true
-                    if (tab !in BackStackTabs) UpdateMiniProgressBall(
-                        state = updateState,
-                        onClick = onShowUpdateProgress,
-                    )
-                    if (hasHiddenDownload && tab !in BackStackTabs) {
-                        Spacer(Modifier.width(6.dp))
+                    val hasHiddenUpdate = when (val state = updateState) {
+                        is UpdateState.Downloading -> state.hiddenInForeground && !state.info.mandatory
+                        is UpdateState.Available -> state.dismissedBanner && !state.info.mandatory
+                        is UpdateState.ReadyToInstall -> state.dismissedBanner && !state.info.mandatory
+                        else -> false
                     }
+                    if (isForeground) {
+                        UpdateMiniProgressBall(
+                            state = updateState,
+                            onClick = onShowUpdateProgress,
+                        )
+                    }
+                    if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
                     when (tab) {
                         MainTab.AGENT -> {
                             IconButton(onClick = { agentHistoryRequested = true }, modifier = Modifier.size(40.dp)) {

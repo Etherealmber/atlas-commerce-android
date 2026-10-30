@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -53,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,12 +65,12 @@ import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
 import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
+import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 
 /**
- * Compact circular mini progress ball displayed directly next to the Profile icon
- * in the Top Bar whenever an update download is hidden in the foreground.
- * Tapping the mini ball re-expands the full download progress bar while keeping
- * all Top Bar controls 100% accessible.
+ * Persistent compact update icon shown in the Top Bar when a download or update
+ * banner is hidden. Downloads retain their progress ring; dismissed available or
+ * install-ready notices show an update glyph. Tapping it reopens the banner.
  */
 @Composable
 fun UpdateMiniProgressBall(
@@ -77,7 +79,12 @@ fun UpdateMiniProgressBall(
     modifier: Modifier = Modifier,
 ) {
     val downloading = state as? UpdateState.Downloading
-    val visible = downloading != null && downloading.hiddenInForeground && !downloading.info.mandatory
+    val hiddenNotice = when (state) {
+        is UpdateState.Available -> state.dismissedBanner && !state.info.mandatory
+        is UpdateState.ReadyToInstall -> state.dismissedBanner && !state.info.mandatory
+        else -> false
+    }
+    val visible = (downloading?.let { it.hiddenInForeground && !it.info.mandatory } == true) || hiddenNotice
 
     AnimatedVisibility(
         visible = visible,
@@ -96,44 +103,44 @@ fun UpdateMiniProgressBall(
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
-            modifier = Modifier.size(34.dp),
+            modifier = Modifier.size(38.dp),
         ) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                if (current?.progressFraction != null) {
-                    CircularProgressIndicator(
-                        progress = { animatedProgress },
-                        modifier = Modifier.size(32.dp),
-                        strokeWidth = 2.6.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                    )
-                } else {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(32.dp),
-                        strokeWidth = 2.4.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-
-                val pct = current?.percent
-                if (pct != null) {
-                    Text(
-                        text = "$pct%",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 10.sp,
-                        ),
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                    )
-                } else {
+                if (current == null) {
                     Icon(
                         imageVector = Icons.Outlined.SystemUpdateAlt,
-                        contentDescription = atlasText("Progression du téléchargement"),
+                        contentDescription = atlasText("Afficher la mise à jour", "Show update", "عرض التحديث"),
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier.size(19.dp),
                     )
+                } else {
+                    if (current.progressFraction != null) {
+                        CircularProgressIndicator(
+                            progress = { animatedProgress },
+                            modifier = Modifier.size(36.dp),
+                            strokeWidth = 2.6.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                        )
+                    } else {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(36.dp),
+                            strokeWidth = 2.4.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    current.percent?.let { pct ->
+                        Text(
+                            text = "$pct%",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 10.sp,
+                            ),
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
         }
@@ -685,22 +692,23 @@ fun SettingsUpdateCard(
             }
 
             is UpdateState.UpToDate -> {
+                val updateSuccessColor = if (LocalAtlasDarkTheme.current) Color(0xFF4ADE80) else Color(0xFF15803D)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Outlined.CheckCircle,
                         contentDescription = null,
-                        tint = Atlas.palette.positive,
+                        tint = updateSuccessColor,
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = atlasText(
-                        "Vous utilisez déjà la dernière version (${AppDetails.VERSION_NAME}).",
-                        "You are already using the latest version (${AppDetails.VERSION_NAME}).",
-                        "أنت تستخدم أحدث إصدار بالفعل (${AppDetails.VERSION_NAME}).",
-                    ),
+                            "Vous utilisez déjà la dernière version (${AppDetails.VERSION_NAME}).",
+                            "You are already using the latest version (${AppDetails.VERSION_NAME}).",
+                            "أنت تستخدم أحدث إصدار بالفعل (${AppDetails.VERSION_NAME}).",
+                        ),
                         style = MaterialTheme.typography.bodySmall,
-                        color = Atlas.palette.positive,
+                        color = updateSuccessColor,
                     )
                 }
                 Spacer(Modifier.height(10.dp))
@@ -883,30 +891,46 @@ fun DownloadProgressBlock(state: UpdateState.Downloading) {
 
 @Composable
 private fun MirrorLatencyChips(mirrorPing: MirrorPingResult) {
-    AtlasChip(
-        text = when {
-            mirrorPing.testing -> atlasText("CDN 1 : test…", "CDN 1: testing…", "CDN 1: جارٍ الاختبار…")
-            mirrorPing.cdn1Online == true -> atlasText("CDN 1 : ${mirrorPing.cdn1Ms} ms", "CDN 1: ${mirrorPing.cdn1Ms} ms", "CDN 1: ${mirrorPing.cdn1Ms} مللي ثانية")
-            mirrorPing.cdn1Online == false -> atlasText("CDN 1 : indisponible", "CDN 1: unavailable", "CDN 1: غير متاح")
-            else -> atlasText("CDN 1 : prêt", "CDN 1: ready", "CDN 1: جاهز")
-        },
-        tone = when (mirrorPing.cdn1Online) {
-            true -> AtlasTone.POSITIVE
-            false -> AtlasTone.WARNING
-            null -> AtlasTone.NEUTRAL
-        },
-    )
-    AtlasChip(
-        text = when {
-            mirrorPing.testing -> atlasText("GitHub : test…", "GitHub: testing…", "GitHub: جارٍ الاختبار…")
-            mirrorPing.githubOnline == true -> atlasText("GitHub : ${mirrorPing.githubMs} ms", "GitHub: ${mirrorPing.githubMs} ms", "GitHub: ${mirrorPing.githubMs} مللي ثانية")
-            mirrorPing.githubOnline == false -> atlasText("GitHub : indisponible", "GitHub: unavailable", "GitHub: غير متاح")
-            else -> atlasText("GitHub : prêt", "GitHub: ready", "GitHub: جاهز")
-        },
-        tone = when (mirrorPing.githubOnline) {
-            true -> AtlasTone.POSITIVE
-            false -> AtlasTone.WARNING
-            null -> AtlasTone.NEUTRAL
-        },
-    )
+    MirrorLatencyChip("CDN 1", mirrorPing.cdn1Online, mirrorPing.cdn1Ms, mirrorPing.testing)
+    MirrorLatencyChip("GitHub", mirrorPing.githubOnline, mirrorPing.githubMs, mirrorPing.testing)
+}
+
+@Composable
+private fun MirrorLatencyChip(label: String, online: Boolean?, latencyMs: Long?, testing: Boolean) {
+    val dark = LocalAtlasDarkTheme.current
+    val (container, foreground) = when {
+        testing -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+        online == false ->
+            (if (dark) Color(0xFF3E2023) else Color(0xFFFEE2E2)) to
+                (if (dark) Color(0xFFFCA5A5) else Color(0xFFB91C1C))
+        online == true && latencyMs != null && latencyMs < 250L ->
+            (if (dark) Color(0xFF173728) else Color(0xFFE8F5E9)) to
+                (if (dark) Color(0xFFA5D6A7) else Color(0xFF166534))
+        online == true && latencyMs != null && latencyMs <= 700L ->
+            (if (dark) Color(0xFF3B2B18) else Color(0xFFFFF3E0)) to
+                (if (dark) Color(0xFFFFCC80) else Color(0xFF9A3412))
+        online == true ->
+            (if (dark) Color(0xFF3E2023) else Color(0xFFFEE2E2)) to
+                (if (dark) Color(0xFFFCA5A5) else Color(0xFFB91C1C))
+        else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val text = when {
+        testing -> atlasText("$label : test…", "$label: testing…", "$label: جارٍ الاختبار…")
+        online == true && latencyMs != null -> atlasText(
+            "$label : $latencyMs ms",
+            "$label: $latencyMs ms",
+            "$label: $latencyMs مللي ثانية",
+        )
+        online == false -> atlasText("$label : indisponible", "$label: unavailable", "$label: غير متاح")
+        else -> atlasText("$label : prêt", "$label: ready", "$label: جاهز")
+    }
+    Surface(shape = RoundedCornerShape(10.dp), color = container, contentColor = foreground) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+    }
 }
