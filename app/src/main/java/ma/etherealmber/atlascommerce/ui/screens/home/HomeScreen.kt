@@ -392,51 +392,49 @@ private fun HomeContent(
     ) {
         item(key = "dashboard_greeting") {
             AtlasEntrance(delayMillis = 0) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = greeting,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
-                    Text(
-                        text = atlasText("Voici l'essentiel de votre activité.", "Here is a snapshot of your business.", "إليك لمحة عن نشاطك التجاري."),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = greeting,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Text(
+                            text = atlasText("Voici l'essentiel de votre activité.", "Here is a snapshot of your business.", "إليك لمحة عن نشاطك التجاري."),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !state.refreshing,
+                        modifier = Modifier.size(56.dp),
+                    ) {
+                        if (state.refreshing) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(28.dp),
+                                strokeWidth = 2.5.dp,
+                            )
+                        } else {
+                            Icon(
+                                Icons.Outlined.Refresh,
+                                contentDescription = atlasText("Actualiser", "Refresh", "تحديث"),
+                                modifier = Modifier.size(32.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                 }
             }
         }
 
         if (state.offline) {
             item { AtlasOfflineBanner() }
-        }
-
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = atlasText("Résumé du jour", "Today's overview", "ملخص اليوم"),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                if (state.refreshing) {
-                    Text(
-                        text = atlasText("Actualisation…", "Refreshing…", "جارٍ التحديث…"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    IconButton(onClick = onRefresh) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser", "Refresh", "تحديث"))
-                    }
-                }
-            }
         }
 
         // Treasury is restricted to Owner/Admin; other roles get operational stock data only.

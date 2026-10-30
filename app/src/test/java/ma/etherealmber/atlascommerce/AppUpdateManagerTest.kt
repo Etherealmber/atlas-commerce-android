@@ -330,6 +330,13 @@ class AppUpdateManagerTest {
             assertTrue(hiddenReady.dismissedBanner)
             assertTrue(hiddenReady.apkFile.exists())
 
+            // The persistent Top Bar update icon can reopen a dismissed install banner.
+            manager.showDownloadBanner()
+            val reopenedReady = manager.state.value as UpdateState.ReadyToInstall
+            assertFalse(reopenedReady.dismissedBanner)
+            assertTrue(reopenedReady.apkFile.exists())
+            manager.dismissBanner()
+
             // Automatic background check must NOT overwrite an already-downloaded ReadyToInstall APK.
             manager.checkForUpdate(manual = false)
             Thread.sleep(150)

@@ -552,7 +552,13 @@ private fun AtlasGate(
                                 onOpenAbout = { overlay = Overlay.ABOUT },
                                 onOpenSnake = { overlay = Overlay.SNAKE },
                                 onOpenDeveloperTools = { overlay = Overlay.DEVELOPER },
-                                onSignOut = viewModel::signOut,
+                                onSignOut = {
+                                    overlay = null
+                                    pendingQrToken = null
+                                    savedShellTab = MainTab.HOME.name
+                                    savedLastBottomTab = MainTab.HOME.name
+                                    viewModel.signOut()
+                                },
                                 onStartUpdateDownload = startSettingsDownloadWithNotificationPermission,
                             )
                         } else {
@@ -718,9 +724,9 @@ private fun AtlasGate(
                     },
                     title = {
                         Text(atlasText(
-                            "Activer le déverrouillage de l'appareil ?",
-                            "Enable device unlock?",
-                            "هل تريد تفعيل إلغاء قفل الجهاز؟",
+                            "Activer la connexion biométrique pour ce compte ?",
+                            "Enable biometric sign-in for this account?",
+                            "هل تريد تفعيل تسجيل الدخول بالبصمة لهذا الحساب؟",
                         ))
                     },
                     text = {

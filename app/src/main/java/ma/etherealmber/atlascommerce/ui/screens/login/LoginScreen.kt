@@ -68,7 +68,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -100,8 +99,6 @@ import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasUsesSystemLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalSetAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalUseSystemAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
-import ma.etherealmber.atlascommerce.ui.theme.Atlas
-import ma.etherealmber.atlascommerce.ui.theme.AtlasAuthTheme
 
 @Composable
 fun LoginScreen(
@@ -111,9 +108,7 @@ fun LoginScreen(
     onOpenAbout: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
-    AtlasAuthTheme {
-        LoginScreenContent(onChangeServer, onOpenQrDevice, onUnlockSavedAccount, onOpenAbout, viewModel)
-    }
+    LoginScreenContent(onChangeServer, onOpenQrDevice, onUnlockSavedAccount, onOpenAbout, viewModel)
 }
 
 @Composable
@@ -160,7 +155,7 @@ private fun LoginScreenContent(
         ?.takeUnless { useAnotherAccount }
     val selectedUnlockAccount = savedAccounts.firstOrNull {
         it.canUseDeviceUnlock && it.username.equals(state.username, ignoreCase = true)
-    } ?: savedAccounts.firstOrNull { it.canUseDeviceUnlock }
+    }
     val host = server?.let { ServerUrl.display(it.baseUrl) }
         ?: atlasText("Serveur non sélectionné", "No server selected", "لم يتم اختيار خادم")
 
@@ -180,7 +175,7 @@ private fun LoginScreenContent(
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize().background(
             Brush.verticalGradient(
-                listOf(Color(0xFF121316), Color(0xFF1E2025), Color(0xFF282A30)),
+                listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surface),
             ),
         ),
         contentAlignment = Alignment.TopCenter,
@@ -378,10 +373,9 @@ private fun LoginAtlasHero(
     onOpenHelpServices: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val palette = Atlas.palette
     Row(
         modifier = modifier
-            .background(Brush.verticalGradient(listOf(Color(0xFF121316), palette.heroStart, palette.heroEnd)))
+            .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surface)))
             .padding(horizontal = 22.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -389,7 +383,7 @@ private fun LoginAtlasHero(
             AtlasBrandWordmark(
                 modifier = Modifier.widthIn(max = 185.dp),
                 height = if (compact) 28.dp else 36.dp,
-                tint = Color.White,
+                tint = MaterialTheme.colorScheme.onBackground,
             )
         }
         Spacer(Modifier.weight(1f))
@@ -397,7 +391,7 @@ private fun LoginAtlasHero(
             Icon(
                 Icons.Outlined.MoreVert,
                 contentDescription = atlasText("Aide et services", "Help and services", "المساعدة والخدمات"),
-                tint = Color.White,
+                tint = MaterialTheme.colorScheme.onBackground,
             )
         }
     }
