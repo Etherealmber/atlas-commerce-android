@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -78,8 +79,19 @@ class AppViewModel @Inject constructor(
     private val deviceUnlockSetupPrompt: DeviceUnlockSetupPrompt,
 ) : ViewModel() {
 
+    private var appInForeground = true
     private var lastForegroundRefreshMs = 0L
     private val foregroundRefreshMinimumIntervalMs = 45_000L
+
+    init {
+        viewModelScope.launch {
+            sessionManager.state.collect { session ->
+                if (!appInForeground && session is SessionState.Active) {
+                    sessionManager.lockForBackground()
+                }
+            }
+        }
+    }
 
     val deviceShortId: String get() = deviceIdentity.shortId()
     val deviceFingerprint: String get() = deviceIdentity.fingerprint
@@ -303,6 +315,7 @@ class AppViewModel @Inject constructor(
         updateManager.installApk(context)
 
     fun onAppResumed(context: Context) {
+        appInForeground = true
         updateManager.onAppResumed(context, autoCheck = autoCheckUpdates.value)
         if (sessionManager.state.value is SessionState.Active) {
             val now = SystemClock.elapsedRealtime()
@@ -317,7 +330,9 @@ class AppViewModel @Inject constructor(
     }
 
     fun onAppStopped() {
+        appInForeground = false
         updateManager.onAppStopped()
+        sessionManager.lockForBackground()
     }
 
     fun refreshAgentPolicy() {

@@ -139,7 +139,8 @@ private fun ServerSetupScreenContent(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             tonalElevation = 1.dp,
         ) {
             Column(Modifier.fillMaxWidth().padding(18.dp)) {

@@ -585,6 +585,17 @@ class SessionManager @Inject constructor(
         return res
     }
 
+    /** Immediately lock the UI and persist that backgrounded sessions require sign-in. */
+    fun lockForBackground() {
+        if (_state.value !is SessionState.Active) return
+        purgeInMemorySession()
+        _state.value = SessionState.SignedOut
+        scope.launch {
+            runCatching { preferences.disableSessionRestore(disabled = true) }
+            runCatching { preferences.clearSession() }
+        }
+    }
+
     suspend fun signOut(reason: String? = null) {
         purgeInMemorySession()
         runCatching { preferences.disableSessionRestore(disabled = true) }

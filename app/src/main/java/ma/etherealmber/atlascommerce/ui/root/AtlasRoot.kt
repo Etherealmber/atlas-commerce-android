@@ -340,11 +340,17 @@ private fun AtlasGate(
         viewModel.installDownloadedUpdate(context)
     }
 
-    DisposableEffect(lifecycleOwner, context) {
+    DisposableEffect(lifecycleOwner, context, session) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> viewModel.onAppResumed(context)
-                Lifecycle.Event.ON_STOP -> viewModel.onAppStopped()
+                Lifecycle.Event.ON_STOP -> {
+                    if (session is SessionState.Active) {
+                        overlay = null
+                        pendingQrToken = null
+                    }
+                    viewModel.onAppStopped()
+                }
                 Lifecycle.Event.ON_DESTROY -> Unit
                 else -> Unit
             }
@@ -491,6 +497,7 @@ private fun AtlasGate(
                             pendingQrToken = null
                             overlay = Overlay.QR_DEVICE
                         },
+                        onOpenAbout = { overlay = Overlay.ABOUT },
                         onUnlockSavedAccount = { entry, afterAuthentication ->
                             val authActivity = context.findActivity() as? FragmentActivity
                             if (authActivity == null || !DeviceUnlockAuthenticator.isAvailable(authActivity)) {
