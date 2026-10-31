@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,12 +52,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.net.ProbeReport
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
-import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
@@ -112,7 +111,7 @@ private fun ServerSetupScreenContent(
             .statusBarsPadding()
             .navigationBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = density.screenPadding, vertical = density.sectionGap),
+            .padding(horizontal = density.screenPadding, vertical = 6.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -152,7 +151,7 @@ private fun ServerSetupScreenContent(
                 )
             }
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(8.dp))
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
@@ -160,7 +159,7 @@ private fun ServerSetupScreenContent(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             tonalElevation = 1.dp,
         ) {
-            Column(Modifier.fillMaxWidth().padding(18.dp)) {
+            Column(Modifier.fillMaxWidth().padding(12.dp)) {
                 when {
                     step == null -> {
                         Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
@@ -216,14 +215,16 @@ private fun ServerSetupScreenContent(
                     }
                     else -> {
                         if (savedServers.isNotEmpty()) {
-                            TextButton(onClick = { step = ServerSetupStep.PICK_SAVED }) {
-                                Text(atlasText("Retour aux serveurs enregistrés", "Back to saved servers", "العودة إلى الخوادم المحفوظة"))
+                            TextButton(
+                                onClick = { step = ServerSetupStep.PICK_SAVED },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                            ) {
+                                Text(atlasText("Serveurs enregistrés", "Saved servers", "الخوادم المحفوظة"), style = MaterialTheme.typography.labelLarge)
                             }
-                            Spacer(Modifier.height(4.dp))
                         }
                         if (savedServers.isNotEmpty()) {
                             Text(atlasText("ÉTAPE 2 · NOUVELLE ADRESSE", "STEP 2 · NEW SERVER", "الخطوة ٢ · خادم جديد"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(6.dp))
                         }
                         if (devPresets.isNotEmpty()) {
                             Text(atlasText("ENVIRONNEMENTS LOCAUX (DEBUG)", "LOCAL ENVIRONMENTS (DEBUG)", "البيئات المحلية (تصحيح)"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -249,8 +250,6 @@ private fun ServerSetupScreenContent(
                             }
                             Spacer(Modifier.height(8.dp))
                         }
-                        Text(atlasText("ADRESSE DU SERVEUR", "SERVER ADDRESS", "عنوان الخادم"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(8.dp))
                         AtlasTextField(
                             value = state.input,
                             onValueChange = viewModel::onInputChange,
@@ -259,41 +258,55 @@ private fun ServerSetupScreenContent(
                             leadingIcon = Icons.Outlined.Dns,
                             keyboardType = KeyboardType.Uri,
                             imeAction = ImeAction.Done,
-                            supportingText = atlasText("HTTPS chiffré est requis pour les serveurs de production.", "Encrypted HTTPS is required for production servers.", "اتصال HTTPS المشفّر مطلوب لخوادم الإنتاج."),
+                            supportingText = atlasText("HTTPS requis pour les serveurs de production.", "HTTPS required for production servers.", "HTTPS مطلوب لخوادم الإنتاج."),
                             onDone = viewModel::test,
                         )
-                        Spacer(Modifier.height(10.dp))
-                        AtlasCard {
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(Modifier.height(6.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        ) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text(atlasText("Enregistrer ce serveur", "Save this server", "حفظ هذا الخادم"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                                    Text(atlasText("Facultatif. Vous pourrez le choisir rapidement la prochaine fois.", "Optional. You can select it quickly next time.", "اختياري. يمكنك اختياره بسرعة في المرة القادمة."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(atlasText("Facultatif · accès rapide plus tard", "Optional · quick access next time", "اختياري · وصول سريع لاحقاً"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                 }
                                 Switch(checked = state.rememberServer, onCheckedChange = viewModel::onRememberServerChange)
                             }
-                            if (state.rememberServer) {
-                                Spacer(Modifier.height(10.dp))
-                                AtlasTextField(
-                                    value = state.label,
-                                    onValueChange = viewModel::onLabelChange,
-                                    label = atlasText("Nom du serveur (facultatif)", "Server name (optional)", "اسم الخادم (اختياري)"),
-                                    placeholder = atlasText("Ex. Boutique principale", "e.g. Main shop", "مثال: المتجر الرئيسي"),
-                                    leadingIcon = Icons.Outlined.BookmarkBorder,
-                                    imeAction = ImeAction.Done,
-                                    onDone = viewModel::test,
-                                )
-                            }
                         }
-                        Spacer(Modifier.height(10.dp))
-                        AtlasOutlinedButton(
-                            text = if (state.testing) atlasText("Test en cours…", "Testing…", "جارٍ الاختبار…") else atlasText("Tester la connexion", "Test connection", "اختبار الاتصال"),
-                            onClick = viewModel::test,
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = !state.testing && state.input.isNotBlank(),
-                            icon = Icons.Outlined.Dns,
-                        )
+                        if (state.rememberServer) {
+                            Spacer(Modifier.height(8.dp))
+                            AtlasTextField(
+                                value = state.label,
+                                onValueChange = viewModel::onLabelChange,
+                                label = atlasText("Nom du serveur (facultatif)", "Server name (optional)", "اسم الخادم (اختياري)"),
+                                placeholder = atlasText("Ex. Boutique principale", "e.g. Main shop", "مثال: المتجر الرئيسي"),
+                                leadingIcon = Icons.Outlined.BookmarkBorder,
+                                imeAction = ImeAction.Done,
+                                onDone = viewModel::test,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AtlasOutlinedButton(
+                                text = if (state.testing) atlasText("Test…", "Testing…", "جارٍ الاختبار…") else atlasText("Tester", "Test", "اختبار"),
+                                onClick = viewModel::test,
+                                modifier = Modifier.weight(1f),
+                                enabled = !state.testing && state.input.isNotBlank(),
+                                icon = Icons.Outlined.Dns,
+                            )
+                            AtlasButton(
+                                text = if (state.saving) atlasText("Connexion…", "Connecting…", "جارٍ الاتصال…") else atlasText("Continuer", "Continue", "متابعة"),
+                                onClick = { viewModel.continueToLogin { onClose?.invoke() } },
+                                modifier = Modifier.weight(1f),
+                                enabled = state.canContinue,
+                                loading = state.saving,
+                            )
+                        }
                         if (state.testing) {
-                            Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(4.dp))
                             Text(atlasText("Vérification du serveur…", "Checking the server…", "جارٍ التحقق من الخادم…"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         state.report?.takeUnless { state.testing }?.let { report ->
@@ -304,32 +317,12 @@ private fun ServerSetupScreenContent(
                             Spacer(Modifier.height(10.dp))
                             AtlasErrorCard(message = atlasNotice(error, LocalAtlasLanguage.current), title = atlasText("Adresse refusée", "Address rejected", "تم رفض العنوان"))
                         }
-                        Spacer(Modifier.height(density.sectionGap))
-                        AtlasButton(
-                            text = if (state.saving) atlasText("Enregistrement…", "Saving…", "جارٍ الحفظ…") else atlasText("Continuer vers la connexion", "Continue to sign in", "المتابعة إلى تسجيل الدخول"),
-                            onClick = { viewModel.continueToLogin { onClose?.invoke() } },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = state.canContinue,
-                            loading = state.saving,
-                        )
+
                     }
                 }
             }
         }
 
-        if (step != null) {
-            Spacer(Modifier.height(density.sectionGap))
-            Text(
-                text = atlasText(
-                    "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · Licence ${AppDetails.LICENSE_NAME}",
-                    "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · License ${AppDetails.LICENSE_NAME}",
-                    "${AppDetails.NAME} ${AppDetails.VERSION_NAME} · الترخيص ${AppDetails.LICENSE_NAME}",
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(24.dp))
-        }
     }
 
     forgetTarget?.let { target ->

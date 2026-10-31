@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.sale
 
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
@@ -188,7 +190,7 @@ fun SaleScreen(
                 item {
                     AtlasErrorCard(
                         title = atlasText("Vente non enregistrée"),
-                        message = state.error.orEmpty(),
+                        message = atlasNotice(state.error.orEmpty(), LocalAtlasLanguage.current),
                     )
                 }
             }

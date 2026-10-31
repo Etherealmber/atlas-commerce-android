@@ -77,6 +77,7 @@ import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalSetAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasUsesSystemLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalUseSystemAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.screens.devices.QrDeviceMode
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrDeviceScreen
 import ma.etherealmber.atlascommerce.ui.screens.settings.DeveloperDiagnosticsScreen
 import ma.etherealmber.atlascommerce.ui.screens.legal.AboutScreen
@@ -282,6 +283,7 @@ private fun AtlasGate(
         }
     }
     var pendingQrToken by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingQrMode by rememberSaveable { mutableStateOf(QrDeviceMode.SIGN_IN_PHONE) }
     var requestedTab by rememberSaveable { mutableStateOf<String?>(null) }
     var notificationPermissionPrompted by rememberSaveable { mutableStateOf(false) }
     var deviceUnlockSetupRequest by remember { mutableStateOf<DeviceUnlockSetupPrompt.Request?>(null) }
@@ -362,6 +364,7 @@ private fun AtlasGate(
     LaunchedEffect(deepLinkQrToken) {
         if (!deepLinkQrToken.isNullOrBlank()) {
             pendingQrToken = deepLinkQrToken
+            pendingQrMode = if (session is SessionState.Active) QrDeviceMode.AUTHORIZE_PC else QrDeviceMode.SIGN_IN_PHONE
             overlay = Overlay.QR_DEVICE
             onDeepLinkConsumed()
         }
@@ -452,6 +455,7 @@ private fun AtlasGate(
         if (onboardingDone && openQrAfterOnboarding && baseStage == RootStage.LOGIN) {
             openQrAfterOnboarding = false
             pendingQrToken = null
+            pendingQrMode = QrDeviceMode.SIGN_IN_PHONE
             overlay = Overlay.QR_DEVICE
         }
     }
@@ -494,6 +498,7 @@ private fun AtlasGate(
                         onChangeServer = { overlay = Overlay.SERVER },
                         onOpenQrDevice = {
                             pendingQrToken = null
+                            pendingQrMode = QrDeviceMode.SIGN_IN_PHONE
                             overlay = Overlay.QR_DEVICE
                         },
                         onOpenAbout = { overlay = Overlay.ABOUT },
@@ -541,6 +546,7 @@ private fun AtlasGate(
                                 onChangeServer = { overlay = Overlay.SERVER },
                                 onOpenQrDevice = { token ->
                                     pendingQrToken = token
+                                    pendingQrMode = QrDeviceMode.AUTHORIZE_PC
                                     overlay = Overlay.QR_DEVICE
                                 },
                                 onOpenNotifications = {
@@ -591,6 +597,7 @@ private fun AtlasGate(
 
                         Overlay.QR_DEVICE -> QrDeviceScreen(
                             currentUser = activeUser,
+                            mode = pendingQrMode,
                             initialToken = pendingQrToken,
                             onClose = {
                                 overlay = null

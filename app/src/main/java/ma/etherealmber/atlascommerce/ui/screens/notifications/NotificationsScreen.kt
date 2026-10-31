@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.notifications
 
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
 import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleScopeSummary
@@ -216,7 +218,7 @@ fun NotificationsScreen(
 
                 !state.error.isNullOrBlank() && state.alerts.isEmpty() && state.actions.isEmpty() -> {
                     item {
-                        AtlasErrorCard(message = state.error.orEmpty(), onRetry = viewModel::refresh)
+                        AtlasErrorCard(message = atlasNotice(state.error.orEmpty(), LocalAtlasLanguage.current), onRetry = viewModel::refresh)
                     }
                 }
 

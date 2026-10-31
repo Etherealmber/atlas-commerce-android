@@ -59,6 +59,53 @@ class LocalizationRegressionTest {
     }
 
     @Test
+    fun dynamicRuntimeNoticesPreserveValuesAcrossLanguages() {
+        assertEquals(
+            "Network error (503) — check your entry and connection.",
+            atlasNotice("Erreur réseau (503) — vérifiez votre saisie et votre connexion.", AppLanguage.ENGLISH),
+        )
+        assertTrue(
+            atlasNotice(
+                "Requête bloquée par la vérification anti-bot Cloudflare (403). Vérifiez l'adresse du serveur ou autorisez /api/*.",
+                AppLanguage.ARABIC,
+            ).contains("403"),
+        )
+        assertTrue(
+            atlasNotice(
+                "Ceci est un code-barres produit (5901234123457). Cet écran sert uniquement aux QR codes de sécurité PC — utilisez l'onglet Scan pour le stock.",
+                AppLanguage.ENGLISH,
+            ).contains("5901234123457"),
+        )
+        assertTrue(
+            atlasNotice("Session QR expired — scannez un nouveau QR code.", AppLanguage.ARABIC)
+                .contains("منتهية الصلاحية"),
+        )
+        assertEquals(
+            "Session QR expirée — scannez un nouveau QR code.",
+            atlasNotice("Session QR expired — scannez un nouveau QR code.", AppLanguage.FRENCH),
+        )
+        assertEquals(
+            "Connection timed out — check the address and make sure your Atlas Commerce site is online.",
+            atlasNotice(
+                "Délai d'attente dépassé — vérifiez que l'adresse saisie est correcte et que votre site Atlas Commerce est bien en ligne.",
+                AppLanguage.ENGLISH,
+            ),
+        )
+        assertEquals(
+            "The message is too long. Limit it to 1,800 characters.",
+            atlasNotice("Le message est trop long. Limitez-le à 1 800 caractères.", AppLanguage.ENGLISH),
+        )
+        assertEquals(
+            "Reserved for administrators (owner/admin).",
+            atlasNotice("Réservé aux administrateurs (owner/admin).", AppLanguage.ENGLISH),
+        )
+        assertEquals(
+            "Couldn't load this conversation. Check your connection and try again.",
+            atlasNotice("Impossible de charger cette discussion. Vérifiez la connexion puis réessayez.", AppLanguage.ENGLISH),
+        )
+    }
+
+    @Test
     fun notificationCopyUsesSelectedLanguageWithoutTranslatingUserText() {
         assertEquals("المخزون", localizedNotificationRole("magasinier", AppLanguage.ARABIC))
         assertEquals("Secretary", localizedNotificationRole("secretaire", AppLanguage.ENGLISH))

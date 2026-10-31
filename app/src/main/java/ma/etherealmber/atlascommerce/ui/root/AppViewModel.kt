@@ -102,6 +102,8 @@ class AppViewModel @Inject constructor(
 
     private val _automaticCrashReportsAvailable = MutableStateFlow(false)
     val automaticCrashReportsAvailable: StateFlow<Boolean> = _automaticCrashReportsAvailable.asStateFlow()
+    private val _crashReportsAvailabilityChecked = MutableStateFlow(false)
+    val crashReportsAvailabilityChecked: StateFlow<Boolean> = _crashReportsAvailabilityChecked.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -118,6 +120,7 @@ class AppViewModel @Inject constructor(
             CrashReportConsent.applyStoredConsent(applicationContext)
             _automaticCrashReportsEnabled.value = available && CrashReportConsent.isEnabled(applicationContext)
             _automaticCrashReportsAvailable.value = available
+            _crashReportsAvailabilityChecked.value = true
         }
     }
 

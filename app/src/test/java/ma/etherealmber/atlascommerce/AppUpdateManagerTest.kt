@@ -21,6 +21,7 @@ import ma.etherealmber.atlascommerce.core.net.ApiErrorPayload
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
+import ma.etherealmber.atlascommerce.core.update.DownloadNetworkTransport
 import ma.etherealmber.atlascommerce.core.update.UpdateFormatter
 import ma.etherealmber.atlascommerce.core.update.formatReleaseNotesForDisplay
 import ma.etherealmber.atlascommerce.core.update.UpdateInfo
@@ -96,7 +97,7 @@ class AppUpdateManagerTest {
     }
 
     @Test
-    fun downloadParallelismIsSourceSpecific() {
+    fun downloadParallelismIsSourceSpecificAndR2Friendly() {
         val manager = AppUpdateManager(
             updatesDirProvider = { tempDir },
             baseUrlProvider = { "https://example.invalid" },
@@ -108,10 +109,13 @@ class AppUpdateManagerTest {
             notifier = RecordingNotifier(),
             scope = scope,
         )
-        assertEquals(6, manager.connectionsForSource("GitHub"))
-        assertEquals(6, manager.connectionsForSource("github"))
-        assertEquals(4, manager.connectionsForSource("CDN 1"))
-        assertEquals(4, manager.connectionsForSource(null))
+        assertEquals(4, manager.connectionsForSource("GitHub", DownloadNetworkTransport.WIFI))
+        assertEquals(4, manager.connectionsForSource("github", DownloadNetworkTransport.CELLULAR))
+        assertEquals(16, manager.connectionsForSource("CDN 1", DownloadNetworkTransport.WIFI))
+        assertEquals(6, manager.connectionsForSource("CDN 1", DownloadNetworkTransport.CELLULAR))
+        assertEquals(4, manager.connectionsForSource("CDN 1", DownloadNetworkTransport.OTHER))
+        assertEquals(4, manager.connectionsForSource("R2", DownloadNetworkTransport.WIFI))
+        assertEquals(4, manager.connectionsForSource(null, DownloadNetworkTransport.WIFI))
     }
 
     @Test

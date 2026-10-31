@@ -92,6 +92,8 @@ import ma.etherealmber.atlascommerce.ui.components.FinanceReportActionsDialog
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelection
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelectionDialog
 import ma.etherealmber.atlascommerce.ui.components.StatusChip
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
 import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
@@ -243,7 +245,7 @@ fun HomeScreen(
         state.loading && dashboard == null -> AtlasLoading(message = "Chargement du tableau de bord…")
         dashboard == null -> HomeErrorContent(
             user = user,
-            message = state.error ?: "Vérifiez l'adresse du serveur et votre connexion.",
+            message = atlasNotice(state.error ?: "Vérifiez l'adresse du serveur et votre connexion.", LocalAtlasLanguage.current),
             offline = state.offline,
             onRetry = viewModel::refresh,
             onOpenProducts = onOpenProducts,

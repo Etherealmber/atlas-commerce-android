@@ -85,6 +85,8 @@ import ma.etherealmber.atlascommerce.ui.components.CameraVisualStyle
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.ProductCreateDialog
 import ma.etherealmber.atlascommerce.ui.components.ScanFeedback
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
@@ -632,7 +634,7 @@ private fun ScanResultPanel(
                 state.error != null -> {
                     AtlasErrorCard(
                         title = atlasText("Recherche impossible", "Search failed", "تعذّر البحث"),
-                        message = state.error.orEmpty(),
+                        message = atlasNotice(state.error.orEmpty(), LocalAtlasLanguage.current),
                         onRetry = onRetry,
                     )
                     Spacer(Modifier.height(6.dp))

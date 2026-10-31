@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.employees
 
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
@@ -175,12 +176,30 @@ fun EmployeesScreen(
                         Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = atlasText("Mois suivant"))
                     }
                 }
+                if (selectedMonth != currentMonth) {
+                    TextButton(
+                        onClick = { viewModel.selectFinancePeriod(currentMonth.toString()) },
+                        enabled = !state.financeLoading,
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        Text(atlasText("Revenir au mois en cours", "Return to current month", "العودة إلى الشهر الحالي"))
+                    }
+                }
+                Text(
+                    text = atlasText(
+                        "Utilisez les flèches pour changer de mois. Le mois choisi filtre les fiches de paie et les totaux ci-dessous. Les données viennent du serveur, en lecture seule; celles du mois en cours peuvent évoluer jusqu'à sa clôture. Les périodes futures ne sont pas disponibles. Les mois antérieurs sont demandés au serveur; une période sans données affiche une liste vide.",
+                        "Use the arrows to change months. The selected month filters the payroll records and totals below. Data comes from the server and is read-only; current-month figures may change until month-end. Future months aren't available. Earlier months are requested from the server; a period with no data shows an empty list.",
+                        "استخدم الأسهم لتغيير الشهر. يحدد الشهر المختار سجلات الرواتب والإجماليات أدناه. البيانات من الخادم ومتاحة للقراءة فقط؛ وقد تتغير أرقام الشهر الحالي حتى نهايته. الأشهر المستقبلية غير متاحة. تُطلب الأشهر السابقة من الخادم، وتظهر قائمة فارغة للفترات التي لا تحتوي على بيانات.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
         state.financeError?.let { error ->
             item(key = "employees_error") {
-                AtlasErrorCard(title = atlasText("Données indisponibles"), message = error, onRetry = viewModel::refresh)
+                AtlasErrorCard(title = atlasText("Données indisponibles"), message = atlasNotice(error, language), onRetry = viewModel::refresh)
             }
         }
 
@@ -201,6 +220,40 @@ fun EmployeesScreen(
                     value = payroll?.let { atlasMoneyCompact(it.totals.amountDue, it.currency) } ?: "—",
                     modifier = Modifier.weight(1f),
                 )
+            }
+        }
+
+        item(key = "payroll_explanation") {
+            AtlasCard {
+                Text(
+                    atlasText("Comprendre les chiffres", "How to read these figures", "كيفية فهم الأرقام"),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    atlasText(
+                        "Employés correspond au nombre de fiches de paie de la période. « À payer » et « Montant dû » reprennent les totaux fournis par le serveur. La période de paie et l'échéance de chaque fiche peuvent différer du mois sélectionné. Le statut de chaque fiche est évalué selon son état et son échéance à la date de référence indiquée.",
+                        "Employees is the number of payroll records for this period. To pay and Amount due use totals returned by the server. A record's pay period and due date may differ from the selected month. Each record's status is evaluated using its state and due date as of the reference date shown.",
+                        "يمثل عدد الموظفين عدد سجلات الرواتب لهذه الفترة. يعرض «مستحق الدفع» و«المبلغ المستحق» الإجماليات التي يرسلها الخادم. قد تختلف فترة الدفع وتاريخ الاستحقاق لكل سجل عن الشهر المحدد. تُحدد حالة كل سجل بناءً على حالته وتاريخ استحقاقه في التاريخ المرجعي المعروض.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                payroll?.takeIf { it.asOf.isNotBlank() }?.let { payrollData ->
+                    Spacer(Modifier.height(6.dp))
+                    val asOf = payrollData.asOf
+                    val payrollTimezone = payrollData.timezone.takeIf(String::isNotBlank) ?: timezone
+                    Text(
+                        atlasText(
+                            "Statuts évalués au ${atlasShortDate(asOf)} · fuseau $payrollTimezone",
+                            "Statuses evaluated as of ${atlasShortDate(asOf)} · timezone $payrollTimezone",
+                            "الحالات محسوبة حتى ${atlasShortDate(asOf)} · المنطقة الزمنية $payrollTimezone",
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
