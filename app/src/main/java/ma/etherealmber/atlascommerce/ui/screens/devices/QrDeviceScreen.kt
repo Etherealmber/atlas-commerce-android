@@ -95,6 +95,7 @@ import ma.etherealmber.atlascommerce.ui.theme.Atlas
 @Composable
 fun QrDeviceScreen(
     currentUser: SessionUser?,
+    mode: QrDeviceMode,
     initialToken: String? = null,
     onClose: () -> Unit,
     onToast: (String) -> Unit,
@@ -109,11 +110,19 @@ fun QrDeviceScreen(
     val language = LocalAtlasLanguage.current
     val statusMessage = state.statusMessage?.let { atlasNotice(it, language) }
     val errorMessage = state.error?.let { atlasNotice(it, language) }
-    val cameraPermissionDeniedMessage = atlasText(
-        "Caméra refusée — collez le lien ou code QR ci-dessous.",
-        "Camera permission denied — paste a QR link or token below.",
-        "تم رفض إذن الكاميرا — الصق رابط QR أو الرمز أدناه.",
-    )
+    val cameraPermissionDeniedMessage = if (mode == QrDeviceMode.SIGN_IN_PHONE) {
+        atlasText(
+            "Caméra refusée — collez le lien ou code QR ci-dessous.",
+            "Camera permission denied — paste a QR link or token below.",
+            "تم رفض إذن الكاميرا — الصق رابط QR أو الرمز أدناه.",
+        )
+    } else {
+        atlasText(
+            "Autorisez l'accès à la caméra pour scanner le QR affiché sur l'ordinateur.",
+            "Allow camera access to scan the QR displayed on the computer.",
+            "اسمح باستخدام الكاميرا لمسح رمز QR المعروض على الكمبيوتر.",
+        )
+    }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -154,8 +163,9 @@ fun QrDeviceScreen(
         }
     }
 
-    LaunchedEffect(initialToken) {
-        viewModel.consumeInitialToken(initialToken)
+    LaunchedEffect(initialToken, mode) {
+        viewModel.resetScan()
+        viewModel.consumeInitialToken(initialToken, mode)
     }
 
     LaunchedEffect(Unit) {
@@ -168,9 +178,11 @@ fun QrDeviceScreen(
         }
     }
 
-    // Auto-close after pre-login QR authentication succeeds
-    LaunchedEffect(currentUser, state.step) {
-        if (currentUser != null && state.step == QrDeviceViewModel.Step.COMPLETED && state.statusDto == null) {
+    // A phone sign-in completes this route; PC authorization stays open to show its result.
+    LaunchedEffect(mode, state.step) {
+        if (mode == QrDeviceMode.SIGN_IN_PHONE &&
+            state.step == QrDeviceViewModel.Step.COMPLETED && state.statusDto == null
+        ) {
             onClose()
         }
     }
@@ -218,7 +230,7 @@ fun QrDeviceScreen(
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = if (currentUser != null) atlasText("Scanner un poste PC", "Scan a PC sign-in QR", "امسح رمز تسجيل الدخول للكمبيوتر") else atlasText("Connexion mobile par QR", "Connect this phone with QR", "ربط هذا الهاتف عبر QR"),
+                    text = if (mode == QrDeviceMode.AUTHORIZE_PC) atlasText("Autoriser un PC", "Authorize a PC", "السماح لجهاز كمبيوتر") else atlasText("Connexion du téléphone par QR", "Sign in on this phone with QR", "تسجيل الدخول على هذا الهاتف عبر QR"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -336,7 +348,7 @@ fun QrDeviceScreen(
                                 BarcodeCameraView(
                                     active = true,
                                     style = CameraVisualStyle.QR_DEVICE_SECURITY,
-                                    onDetected = viewModel::handleRawScan,
+                                    onDetected = { raw -> viewModel.handleRawScan(raw, mode) },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             } else {
@@ -376,7 +388,11 @@ fun QrDeviceScreen(
                                         )
                                         Spacer(Modifier.height(6.dp))
                                         Text(
-                                            text = atlasText("Appuyez ci-dessous pour démarrer la caméra QR, ou collez directement le lien ci-dessous.", "Start the QR camera below, or paste a QR link directly.", "ابدأ كاميرا QR أدناه أو الصق رابط QR مباشرة."),
+                                            text = if (mode == QrDeviceMode.AUTHORIZE_PC) {
+                                                atlasText("Démarrez la caméra et scannez le QR de connexion affiché sur le PC.", "Start the camera and scan the sign-in QR shown on the PC.", "شغّل الكاميرا وامسح رمز تسجيل الدخول المعروض على الكمبيوتر.")
+                                            } else {
+                                                atlasText("Démarrez la caméra pour scanner le QR et connecter ce téléphone.", "Start the camera to scan the QR and sign in on this phone.", "شغّل الكاميرا لمسح الرمز وتسجيل الدخول على هذا الهاتف.")
+                                            },
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             textAlign = TextAlign.Center,
@@ -409,42 +425,44 @@ fun QrDeviceScreen(
 
                         SecurityCard {
                             Text(
-                                text = if (currentUser != null) {
-                                    atlasText("Sur l'ordinateur, ouvrez l'écran de connexion Atlas Commerce puis cliquez sur « Connexion par QR ».", "On the computer, open Atlas Commerce sign-in and choose “Sign in with QR”.", "على الكمبيوتر، افتح تسجيل الدخول إلى Atlas Commerce واختر «تسجيل الدخول عبر QR».")
+                                text = if (mode == QrDeviceMode.AUTHORIZE_PC) {
+                                    atlasText("Sur le PC, choisissez « Connexion par QR » à l'écran de connexion. Le compte déjà ouvert sur ce téléphone sera autorisé.", "On the PC, choose “Sign in with QR” on its sign-in screen. The account already signed in on this phone will be authorized.", "على الكمبيوتر، اختر «تسجيل الدخول عبر QR». سيتم اعتماد الحساب المسجل على هذا الهاتف.")
                                 } else {
-                                    atlasText("Sur un ordinateur déjà connecté, ouvrez Paramètres → Appareils → « Connecter un téléphone par QR ».", "On a signed-in computer, open Settings → Devices → “Connect a phone with QR”.", "على كمبيوتر مسجّل الدخول، افتح الإعدادات ← الأجهزة ← «ربط هاتف عبر QR».")
+                                    atlasText("Sur un ordinateur déjà connecté au compte, ouvrez Paramètres → Appareils → « Connecter un téléphone par QR ».", "On a computer already signed in to the account, open Settings → Devices → “Connect a phone with QR”.", "على كمبيوتر مسجل الدخول إلى الحساب، افتح الإعدادات ← الأجهزة ← «ربط هاتف عبر QR».")
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            Spacer(Modifier.height(10.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                OutlinedTextField(
-                                    value = state.manualInput,
-                                    onValueChange = viewModel::onManualInputChange,
-                                    label = { Text(atlasText("Lien ou jeton QR", "QR link or token", "رابط أو رمز QR"), color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                    placeholder = { Text("https://.../login-qr?t=…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                    leadingIcon = {
-                                        Icon(Icons.Outlined.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                    },
-                                    singleLine = true,
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                    ),
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Button(
-                                    onClick = viewModel::submitManual,
-                                    enabled = state.manualInput.isNotBlank() && !state.loading,
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            if (mode == QrDeviceMode.SIGN_IN_PHONE) {
+                                Spacer(Modifier.height(10.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    Text(atlasText("Lier", "Link", "ربط"), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                                    OutlinedTextField(
+                                        value = state.manualInput,
+                                        onValueChange = viewModel::onManualInputChange,
+                                        label = { Text(atlasText("Lien ou jeton QR", "QR link or token", "رابط أو رمز QR"), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                        placeholder = { Text("https://.../login-qr?t=…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                        leadingIcon = {
+                                            Icon(Icons.Outlined.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                        },
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                        ),
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Button(
+                                        onClick = { viewModel.submitManual(mode) },
+                                        enabled = state.manualInput.isNotBlank() && !state.loading,
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    ) {
+                                        Text(atlasText("Lier", "Link", "ربط"), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }

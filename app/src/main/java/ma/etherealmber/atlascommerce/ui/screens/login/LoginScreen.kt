@@ -35,7 +35,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Dns
@@ -203,6 +202,7 @@ private fun LoginScreenContent(
             LoginAtlasHero(
                 compact = compact || keyboardVisible,
                 onOpenHelpServices = { helpServicesOpen = true },
+                onOpenDataCache = { dataCacheManagerOpen = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(if (motionEnabled) Modifier.animateContentSize() else Modifier)
@@ -331,7 +331,6 @@ private fun LoginScreenContent(
                 onLanguages = { helpServicesOpen = false; languageDialogOpen = true },
                 onServers = { helpServicesOpen = false; onChangeServer() },
                 onQr = { helpServicesOpen = false; onOpenQrDevice() },
-                onOpenDataCache = { helpServicesOpen = false; dataCacheManagerOpen = true },
             )
         }
 
@@ -374,6 +373,7 @@ private fun LoginScreenContent(
 private fun LoginAtlasHero(
     compact: Boolean,
     onOpenHelpServices: () -> Unit,
+    onOpenDataCache: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -390,6 +390,13 @@ private fun LoginAtlasHero(
             )
         }
         Spacer(Modifier.weight(1f))
+        IconButton(onClick = onOpenDataCache) {
+            Icon(
+                Icons.Outlined.Inventory2,
+                contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
+                tint = MaterialTheme.colorScheme.onBackground,
+            )
+        }
         IconButton(onClick = onOpenHelpServices) {
             Icon(
                 Icons.Outlined.MoreVert,
@@ -414,7 +421,6 @@ private fun LoginHelpServicesSheet(
     onLanguages: () -> Unit,
     onServers: () -> Unit,
     onQr: () -> Unit,
-    onOpenDataCache: () -> Unit,
 ) {
     androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -460,24 +466,7 @@ private fun LoginHelpServicesSheet(
                 LoginServiceItem(Icons.Outlined.Dns, atlasText("Serveurs", "Servers", "الخوادم"), onServers, Modifier.weight(1f), subtitle = host)
                 LoginServiceItem(Icons.Outlined.QrCode2, atlasText("Connexion QR", "QR sign-in", "تسجيل الدخول عبر QR"), onQr, Modifier.weight(1f))
             }
-            Spacer(Modifier.height(18.dp))
-            Surface(
-                onClick = onOpenDataCache,
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"), fontWeight = FontWeight.SemiBold)
-                        Text(atlasText("Gérer le stockage sur cet appareil", "Manage storage on this device", "إدارة التخزين على هذا الجهاز"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+
         }
     }
 }
@@ -894,7 +883,6 @@ private fun OtpForm(
         }
     }
 }
-
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

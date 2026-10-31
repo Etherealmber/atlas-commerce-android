@@ -27,6 +27,8 @@ import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
 import javax.inject.Inject
 
+enum class QrDeviceMode { AUTHORIZE_PC, SIGN_IN_PHONE }
+
 @HiltViewModel
 class QrDeviceViewModel @Inject constructor(
     private val authRepository: AuthRepository,
@@ -101,21 +103,32 @@ class QrDeviceViewModel @Inject constructor(
         _state.update { it.copy(manualInput = value, error = null) }
     }
 
-    fun consumeInitialToken(token: String?) {
+    fun consumeInitialToken(token: String?, mode: QrDeviceMode) {
         val clean = QrTokenParser.extractQrToken(token) ?: return
         if (clean != _state.value.activeToken) {
-            handleRawScan(clean)
+            handleRawScan(clean, mode)
         }
     }
 
-    fun submitManual() {
+    fun submitManual(mode: QrDeviceMode) {
+        if (mode != QrDeviceMode.SIGN_IN_PHONE) return
         val raw = _state.value.manualInput.trim()
         if (raw.isBlank()) return
-        handleRawScan(raw)
+        handleRawScan(raw, mode)
     }
 
-    fun handleRawScan(raw: String) {
+    fun handleRawScan(raw: String, mode: QrDeviceMode) {
         if (_state.value.loading || _state.value.step != Step.IDLE) return
+
+        val signedIn = sessionManager.state.value is SessionState.Active
+        if (mode == QrDeviceMode.AUTHORIZE_PC && !signedIn) {
+            _state.update { it.copy(error = "Connectez-vous sur ce téléphone avant d'autoriser un ordinateur.") }
+            return
+        }
+        if (mode == QrDeviceMode.SIGN_IN_PHONE && signedIn) {
+            _state.update { it.copy(error = "Déconnectez-vous avant d'utiliser le QR de connexion du téléphone.") }
+            return
+        }
 
         if (QrTokenParser.looksLikeProductBarcode(raw)) {
             _state.update {
@@ -140,11 +153,9 @@ class QrDeviceViewModel @Inject constructor(
         _scanFeedbackEvents.tryEmit(Unit)
         _state.update { it.copy(cameraEnabled = false) }
 
-        val signedIn = sessionManager.state.value is SessionState.Active
-        if (signedIn) {
-            previewPcBind(token)
-        } else {
-            claimPhoneLogin(token)
+        when (mode) {
+            QrDeviceMode.AUTHORIZE_PC -> previewPcBind(token)
+            QrDeviceMode.SIGN_IN_PHONE -> claimPhoneLogin(token)
         }
     }
 

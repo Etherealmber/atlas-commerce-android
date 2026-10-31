@@ -106,6 +106,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.AtlasTypingDots
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
@@ -538,7 +539,7 @@ fun AgentScreen(
                         item(key = "agent_err") {
                             AtlasErrorCard(
                                 title = atlasText("Réponse IA indisponible", "AI response unavailable", "تعذّرت استجابة الذكاء الاصطناعي"),
-                                message = state.error.orEmpty(),
+                                message = atlasNotice(state.error.orEmpty(), LocalAtlasLanguage.current),
                             )
                         }
                     }

@@ -31,6 +31,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import ma.etherealmber.atlascommerce.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -38,6 +40,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
+import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import java.time.LocalDate
 import kotlin.math.abs
@@ -71,7 +75,8 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
     var dailyBest by remember(preferences, todayKey) {
         mutableIntStateOf(if (preferences.getString("daily_date", null) == todayKey) preferences.getInt("daily_best", 0) else 0)
     }
-    var speedMillis by remember(preferences) { mutableIntStateOf(preferences.getInt("speed_ms", 170)) }
+    // v2 avoids carrying forward the old, noticeably faster tick on existing installs.
+    var speedMillis by remember(preferences) { mutableIntStateOf(preferences.getInt("snake_speed_ms_v2", 300)) }
     var wrapWalls by remember(preferences) { mutableStateOf(preferences.getBoolean("wrap_walls", false)) }
 
     var page by remember { mutableStateOf(SnakePage.MENU) }
@@ -165,7 +170,7 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                 modifier = Modifier.fillMaxSize().padding(padding),
                 speedMillis = speedMillis,
                 wrapWalls = wrapWalls,
-                onSpeed = { speedMillis = it; preferences.edit().putInt("speed_ms", it).apply() },
+                onSpeed = { speedMillis = it; preferences.edit().putInt("snake_speed_ms_v2", it).apply() },
                 onWrapWalls = {
                     wrapWalls = it
                     preferences.edit().putBoolean("wrap_walls", it).apply()
@@ -202,7 +207,7 @@ private fun MenuPage(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            atlasText("Ramassez des pommes. Attrapez la couronne dorée !", "Collect apples. Catch the golden crown!", "اجمع التفاح والتقط التاج الذهبي!"),
+            atlasText("Ramassez les logos Atlas et attrapez les couronnes !", "Collect Atlas logos and catch the crowns!", "اجمع شعارات Atlas والتقط التيجان!" ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -215,7 +220,11 @@ private fun MenuPage(
         ) {
             Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                    StatBadge(icon = { AppleGlyph(Modifier.size(22.dp)) }, label = atlasText("Record", "Best", "الأفضل"), value = bestScore)
+                    StatBadge(
+                        icon = { AtlasAvatar(AppDetails.GITHUB_AVATAR_URL, AppDetails.GITHUB_HANDLE, size = 22.dp) },
+                        label = atlasText("Meilleur score", "Best · @Etherealmber", "أفضل نتيجة"),
+                        value = bestScore,
+                    )
                     StatBadge(icon = { CrownGlyph(Modifier.size(24.dp)) }, label = atlasText("Couronnes", "Crowns", "التيجان"), value = bestCrowns)
                 }
                 BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -266,13 +275,17 @@ private fun GameplayPage(
 ) {
     Column(modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
-            StatBadge(icon = { AppleGlyph(Modifier.size(20.dp)) }, label = atlasText("Pommes", "Apples", "التفاح"), value = game.score)
+            StatBadge(icon = { AtlasLogoGlyph(Modifier.size(22.dp)) }, label = atlasText("Logos", "Atlas logos", "شعارات Atlas"), value = game.score)
             StatBadge(icon = { CrownGlyph(Modifier.size(22.dp)) }, label = atlasText("Couronnes", "Crowns", "التيجان"), value = game.crowns)
-            StatBadge(icon = { AppleGlyph(Modifier.size(17.dp)) }, label = atlasText("Record", "Best", "الأفضل"), value = bestScore)
+            StatBadge(
+                icon = { AtlasAvatar(AppDetails.GITHUB_AVATAR_URL, AppDetails.GITHUB_HANDLE, size = 20.dp) },
+                label = atlasText("Record", "Best", "الأفضل"),
+                value = bestScore,
+            )
         }
         if (dailyMode) {
             Text(
-                atlasText("Défi : $dailyTarget pommes", "Daily goal: $dailyTarget apples", "الهدف اليومي: $dailyTarget تفاحات"),
+                atlasText("Défi : $dailyTarget logos", "Daily goal: $dailyTarget Atlas logos", "الهدف اليومي: $dailyTarget شعاراً"),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -377,7 +390,7 @@ private fun SettingsPage(
         Text(atlasText("Ajustez votre partie", "Tune your game", "اضبط لعبتك"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(atlasText("Vitesse", "Speed", "السرعة"), style = MaterialTheme.typography.titleMedium)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(220 to atlasText("Lente", "Slow", "بطيئة"), 170 to atlasText("Classique", "Classic", "كلاسيكية"), 125 to atlasText("Rapide", "Fast", "سريعة")).forEach { (speed, title) ->
+            listOf(380 to atlasText("Lente", "Slow", "بطيئة"), 300 to atlasText("Classique", "Classic", "كلاسيكية"), 220 to atlasText("Rapide", "Fast", "سريعة")).forEach { (speed, title) ->
                 if (speedMillis == speed) Button(onClick = { onSpeed(speed) }, modifier = Modifier.weight(1f)) { Text(title) }
                 else OutlinedButton(onClick = { onSpeed(speed) }, modifier = Modifier.weight(1f)) { Text(title) }
             }
@@ -395,7 +408,7 @@ private fun SettingsPage(
             Switch(checked = wrapWalls, onCheckedChange = onWrapWalls)
         }
         Text(
-            atlasText("Les pommes allongent le serpent. Une couronne apparaît après cinq pommes et donne deux segments bonus.", "Apples grow the snake. A crown appears after five apples and awards two bonus segments.", "التفاح يطيل الثعبان. يظهر التاج بعد خمس تفاحات ويمنح قطعتين إضافيتين."),
+            atlasText("Les logos Atlas allongent le serpent. Une couronne apparaît après cinq logos et donne deux segments bonus.", "Atlas logos grow the snake. A crown appears after five logos and awards two bonus segments.", "شعارات Atlas تطيل الثعبان. يظهر التاج بعد خمسة شعارات ويمنح قطعتين إضافيتين."),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -412,7 +425,7 @@ private fun DailyPage(modifier: Modifier, target: Int, dailyBest: Int, onStart: 
         CrownGlyph(Modifier.size(64.dp))
         Text(atlasText("Défi du jour", "Daily challenge", "تحدي اليوم"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
-            atlasText("Ramassez $target pommes en une seule partie. Évitez les murs et votre propre queue.", "Collect $target apples in one run. Avoid the walls and your own tail.", "اجمع $target تفاحات في جولة واحدة. تجنب الجدران وذيلك."),
+            atlasText("Ramassez $target logos Atlas en une seule partie. Évitez les murs et votre propre queue.", "Collect $target Atlas logos in one run. Avoid walls and your own tail.", "اجمع $target من شعارات Atlas في جولة واحدة. تجنب الجدران وذيلك."),
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
         )
@@ -439,32 +452,56 @@ private fun StatBadge(icon: @Composable () -> Unit, label: String, value: Int) {
 
 @Composable
 private fun SnakeBoard(game: SnakeState, modifier: Modifier = Modifier, showEyes: Boolean) {
-    Box(
-        modifier.clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFFBDE9A7))
-            .border(2.dp, Color(0xFF438847), RoundedCornerShape(18.dp)),
+    val colors = MaterialTheme.colorScheme
+    BoxWithConstraints(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(colors.surfaceContainerLow)
+            .border(1.dp, colors.outlineVariant, RoundedCornerShape(18.dp)),
     ) {
+        val cellSize = maxWidth / BOARD_SIZE
         Canvas(Modifier.fillMaxSize()) {
             val cell = size.width / BOARD_SIZE
-            val light = Color(0xFFBDE9A7)
-            val dark = Color(0xFFA8DC91)
+            val light = colors.surfaceContainerLow
+            val dark = colors.surfaceContainerHigh
             for (y in 0 until BOARD_SIZE) for (x in 0 until BOARD_SIZE) {
                 drawRect(if ((x + y) % 2 == 0) light else dark, Offset(x * cell, y * cell), Size(cell, cell))
             }
-            game.food.takeIf { it.x in 0 until BOARD_SIZE && it.y in 0 until BOARD_SIZE }?.let { drawApple(it, cell) }
             game.crown?.let { drawCrownAt(it, cell) }
             game.body.forEachIndexed { index, point ->
                 val inset = cell * 0.075f
                 val topLeft = Offset(point.x * cell + inset, point.y * cell + inset)
                 val segmentSize = Size(cell - inset * 2, cell - inset * 2)
-                drawRoundRect(Color(0xFF126D91).copy(alpha = 0.22f), Offset(topLeft.x, topLeft.y + cell * 0.055f), segmentSize, CornerRadius(cell * 0.33f))
+                drawRoundRect(colors.onSurface.copy(alpha = 0.12f), Offset(topLeft.x, topLeft.y + cell * 0.055f), segmentSize, CornerRadius(cell * 0.33f))
                 drawRoundRect(
-                    color = if (index == 0) Color(0xFF21A8C9) else if (index % 2 == 0) Color(0xFF188FB2) else Color(0xFF1683A8),
+                    color = if (index == 0) colors.tertiary else if (index % 2 == 0) colors.primary else colors.primary.copy(alpha = 0.82f),
                     topLeft = topLeft,
                     size = segmentSize,
                     cornerRadius = CornerRadius(cell * 0.34f),
                 )
                 if (index == 0 && showEyes) drawSnakeEyes(point, cell, game.direction)
+            }
+        }
+        if (game.food.x in 0 until BOARD_SIZE && game.food.y in 0 until BOARD_SIZE) {
+            val tokenSize = cellSize * 0.84f
+            Box(
+                modifier = Modifier
+                    .offset(
+                        x = cellSize * game.food.x + (cellSize - tokenSize) / 2,
+                        y = cellSize * game.food.y + (cellSize - tokenSize) / 2,
+                    )
+                    .size(tokenSize)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(colors.secondaryContainer)
+                    .border(1.dp, colors.outlineVariant, androidx.compose.foundation.shape.CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_launcher_foreground),
+                    contentDescription = atlasText("Logo Atlas à collecter", "Atlas logo to collect", "شعار Atlas للجمع"),
+                    tint = colors.onSecondaryContainer,
+                    modifier = Modifier.fillMaxSize().padding(tokenSize * 0.14f),
+                )
             }
         }
         if (game.over) {
@@ -486,19 +523,6 @@ private fun SnakeBoard(game: SnakeState, modifier: Modifier = Modifier, showEyes
             }
         }
     }
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawApple(cellPoint: Cell, cell: Float) {
-    val center = Offset((cellPoint.x + 0.5f) * cell, (cellPoint.y + 0.56f) * cell)
-    drawCircle(Color(0xFFB71C32), cell * 0.31f, center)
-    drawCircle(Color(0xFFE83C4E), cell * 0.245f, Offset(center.x - cell * 0.055f, center.y - cell * 0.045f))
-    drawLine(Color(0xFF684126), Offset(center.x, center.y - cell * 0.22f), Offset(center.x + cell * 0.025f, center.y - cell * 0.4f), strokeWidth = cell * 0.075f)
-    val leaf = Path().apply {
-        moveTo(center.x + cell * 0.02f, center.y - cell * 0.29f)
-        quadraticTo(center.x + cell * 0.25f, center.y - cell * 0.46f, center.x + cell * 0.21f, center.y - cell * 0.24f)
-        quadraticTo(center.x + cell * 0.1f, center.y - cell * 0.18f, center.x + cell * 0.02f, center.y - cell * 0.29f)
-    }
-    drawPath(leaf, Color(0xFF2E8B45))
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCrownAt(point: Cell, cell: Float) {
@@ -536,17 +560,20 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSnakeEyes(head:
 }
 
 @Composable
-private fun AppleGlyph(modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val center = Offset(size.width * 0.5f, size.height * 0.58f)
-        drawCircle(Color(0xFFE83C4E), size.minDimension * 0.36f, center)
-        drawLine(Color(0xFF684126), Offset(center.x, center.y - size.height * 0.24f), Offset(center.x + size.width * 0.04f, center.y - size.height * 0.46f), strokeWidth = size.minDimension * 0.08f)
-        val leaf = Path().apply {
-            moveTo(center.x + size.width * 0.02f, center.y - size.height * 0.32f)
-            quadraticTo(center.x + size.width * 0.38f, center.y - size.height * 0.52f, center.x + size.width * 0.25f, center.y - size.height * 0.25f)
-            close()
-        }
-        drawPath(leaf, Color(0xFF388E3C))
+private fun AtlasLogoGlyph(modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Box(
+        modifier = modifier
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(colors.secondaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_launcher_foreground),
+            contentDescription = null,
+            tint = colors.onSecondaryContainer,
+            modifier = Modifier.fillMaxSize().padding(2.dp),
+        )
     }
 }
 

@@ -336,6 +336,12 @@ fun ProfileScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    IconButton(onClick = { showDataCacheManager = true }) {
+                        Icon(
+                            Icons.Outlined.Inventory2,
+                            contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
+                        )
+                    }
                     IconButton(
                         onClick = {
                             draftDisplayName = user.displayName
@@ -696,17 +702,6 @@ fun ProfileScreen(
             }
         }
 
-        AtlasCard(onClick = { showDataCacheManager = true }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(atlasText("Gestionnaire de données et cache", "Data & cache manager", "مدير البيانات والذاكرة المؤقتة"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Text(atlasText("Stockage local, comptes, serveurs et préférences", "Local storage, accounts, servers, and settings", "التخزين المحلي والحسابات والخوادم والإعدادات"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
     }
 
     if (showDataCacheManager) {
@@ -815,6 +810,9 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
 
     val autoCheckUpdates by appViewModel.autoCheckUpdates.collectAsStateWithLifecycle()
+    val automaticCrashReportsEnabled by appViewModel.automaticCrashReportsEnabled.collectAsStateWithLifecycle()
+    val automaticCrashReportsAvailable by appViewModel.automaticCrashReportsAvailable.collectAsStateWithLifecycle()
+    val crashReportsAvailabilityChecked by appViewModel.crashReportsAvailabilityChecked.collectAsStateWithLifecycle()
     val parallelUpdateDownload by appViewModel.parallelUpdateDownload.collectAsStateWithLifecycle()
     val followLatestRelease by appViewModel.followLatestRelease.collectAsStateWithLifecycle()
     val serverSelection by appViewModel.server.collectAsStateWithLifecycle()
@@ -834,23 +832,6 @@ fun SettingsScreen(
     val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
-    val automaticCrashReportsEnabled by appViewModel.automaticCrashReportsEnabled.collectAsStateWithLifecycle()
-    val automaticCrashReportsAvailable by appViewModel.automaticCrashReportsAvailable.collectAsStateWithLifecycle()
-    val crashReportsUnavailableToast = atlasText(
-        "Impossible d'activer Crashlytics dans cette version.",
-        "Could not enable Crashlytics in this build.",
-        "تعذّر تفعيل Crashlytics في هذا الإصدار.",
-    )
-    val crashReportsEnabledToast = atlasText(
-        "Rapports de plantage activés.",
-        "Crash reports enabled.",
-        "تم تفعيل تقارير الأعطال.",
-    )
-    val crashReportsDisabledToast = atlasText(
-        "Envoi automatique désactivé.",
-        "Automatic reporting disabled.",
-        "تم تعطيل الإرسال التلقائي.",
-    )
     var showProblemReportDialog by remember { mutableStateOf(false) }
     var showReleaseHistoryDialog by remember { mutableStateOf(false) }
     var buildTapCount by remember { mutableIntStateOf(0) }
@@ -1096,7 +1077,7 @@ fun SettingsScreen(
         AtlasCard {
             SettingsToggleRow(
                 title = atlasText("Téléchargement accéléré multi-connexions", "Multi-connection accelerated downloads", "تنزيلات سريعة متعددة الاتصالات"),
-                subtitle = atlasText("Télécharge les mises à jour via 4 connexions HTTP Range parallèles haute vitesse.", "Downloads updates using four high-speed parallel HTTP Range connections.", "تنزيل التحديثات عبر أربعة اتصالات HTTP Range متوازية وعالية السرعة."),
+                subtitle = atlasText("Adapte le nombre de connexions au réseau (CDN : 6 sur mobile, 16 en Wi-Fi ; GitHub reste limité à 4).", "Adapts connections to the network (CDN: 6 on mobile, 16 on Wi-Fi; GitHub stays capped at 4).", "يكيّف عدد الاتصالات حسب الشبكة (CDN: 6 على بيانات الهاتف و16 على Wi-Fi؛ يظل GitHub محدوداً بـ4)."),
                 checked = parallelUpdateDownload,
                 onCheckedChange = appViewModel::setParallelUpdateDownload,
             )
@@ -1229,59 +1210,83 @@ fun SettingsScreen(
                 onCheckedChange = appViewModel::setAutoCheckUpdates,
             )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
-            if (automaticCrashReportsAvailable) {
-                SettingsToggleRow(
-                    title = atlasText("Rapports de plantage automatiques (Firebase)", "Automatic crash reports (Firebase)", "تقارير الأعطال التلقائية (Firebase)"),
-                    subtitle = atlasText(
-                        "Désactivés par défaut. Si vous les activez, les rapports de plantage vont à Firebase Crashlytics. Aucune donnée Analytics n'est activée.",
-                        "Off by default. If enabled, crash reports go to Firebase Crashlytics. No Analytics data is enabled.",
-                        "معطلة افتراضياً. عند تفعيلها، تُرسل تقارير الأعطال إلى Firebase Crashlytics. لا يتم تفعيل Analytics.",
-                    ),
-                    checked = automaticCrashReportsEnabled,
-                    onCheckedChange = { enabled ->
-                        appViewModel.setAutomaticCrashReportsEnabled(enabled) { succeeded ->
-                            onToast(
-                                when {
-                                    !succeeded -> crashReportsUnavailableToast
-                                    enabled -> crashReportsEnabledToast
-                                    else -> crashReportsDisabledToast
-                                },
-                            )
-                        }
-                    },
-                )
-                AtlasDivider(Modifier.padding(vertical = 8.dp))
-            } else {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                    shape = MaterialTheme.shapes.large,
-                ) {
+            when {
+                !crashReportsAvailabilityChecked -> {
                     Row(
-                        Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Outlined.BugReport, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                atlasText("Rapports de plantage automatiques", "Automatic crash reports", "تقارير الأعطال التلقائية"),
-                                style = MaterialTheme.typography.titleSmall,
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            atlasText("Vérification de Crashlytics…", "Checking Crashlytics…", "جارٍ التحقق من Crashlytics…"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                automaticCrashReportsAvailable -> {
+                    SettingsToggleRow(
+                        title = atlasText("Rapports de plantage automatiques (Firebase)", "Automatic crash reports (Firebase)", "تقارير الأعطال التلقائية (Firebase)"),
+                        subtitle = if (automaticCrashReportsEnabled) {
+                            atlasText(
+                                "Firebase Crashlytics est configuré. L'envoi automatique est activé selon votre choix; aucune donnée Analytics n'est collectée.",
+                                "Firebase Crashlytics is configured. Automatic reporting is enabled by your choice; no Analytics data is collected.",
+                                "تم إعداد Firebase Crashlytics. الإرسال التلقائي مفعّل باختيارك، ولا يتم جمع بيانات Analytics.",
                             )
-                            Text(
-                                atlasText(
-                                    "Indisponibles dans cette installation : Firebase Crashlytics n'est pas configuré. Les rapports restent désactivés. Aucune donnée Analytics n'est collectée.",
-                                    "Unavailable in this installation: Firebase Crashlytics is not configured. Reports remain off. No Analytics data is collected.",
-                                    "غير متاحة في هذا التثبيت: لم يتم إعداد Firebase Crashlytics. ستظل التقارير متوقفة. لا يتم جمع بيانات Analytics.",
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        } else {
+                            atlasText(
+                                "Firebase Crashlytics est configuré et prêt. Les rapports restent désactivés jusqu'à votre accord; aucune donnée Analytics n'est collectée.",
+                                "Firebase Crashlytics is configured and ready. Reports stay off until you opt in; no Analytics data is collected.",
+                                "تم إعداد Firebase Crashlytics وهو جاهز. تظل التقارير متوقفة حتى توافق؛ ولا يتم جمع بيانات Analytics.",
                             )
+                        },
+                        checked = automaticCrashReportsEnabled,
+                        onCheckedChange = { enabled ->
+                            appViewModel.setAutomaticCrashReportsEnabled(enabled) { succeeded ->
+                                onToast(
+                                    when {
+                                        !succeeded -> atlasText("Impossible de modifier le réglage Crashlytics.", "Could not update the Crashlytics setting.", "تعذر تحديث إعداد Crashlytics.")
+                                        enabled -> atlasText("Rapports de plantage activés.", "Crash reports enabled.", "تم تفعيل تقارير الأعطال.")
+                                        else -> atlasText("Envoi automatique désactivé.", "Automatic reporting disabled.", "تم تعطيل الإرسال التلقائي.")
+                                    },
+                                )
+                            }
+                        },
+                    )
+                }
+                else -> {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                        shape = MaterialTheme.shapes.large,
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Outlined.BugReport, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    atlasText("Rapports de plantage automatiques", "Automatic crash reports", "تقارير الأعطال التلقائية"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    atlasText(
+                                        "Indisponibles dans cette version : Firebase Crashlytics n'est pas configuré. Cette installation ne peut pas envoyer de rapports.",
+                                        "Unavailable in this build: Firebase Crashlytics is not configured. This installation cannot send reports.",
+                                        "غير متاحة في هذا الإصدار: لم يتم إعداد Firebase Crashlytics. لا يمكن لهذا التثبيت إرسال التقارير.",
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
-                AtlasDivider(Modifier.padding(vertical = 8.dp))
             }
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsRow(
                 icon = Icons.Outlined.AutoAwesomeMotion,
                 title = atlasText("Revoir l'écran de bienvenue", "Replay the welcome screen", "إعادة عرض شاشة الترحيب"),

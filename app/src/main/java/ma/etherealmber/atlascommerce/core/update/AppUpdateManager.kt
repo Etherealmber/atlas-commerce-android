@@ -2,6 +2,8 @@ package ma.etherealmber.atlascommerce.core.update
 
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -51,6 +53,22 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
+internal enum class DownloadNetworkTransport { WIFI, CELLULAR, OTHER }
+
+private fun detectDownloadNetworkTransport(context: Context): DownloadNetworkTransport = runCatching {
+    val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        ?: return@runCatching DownloadNetworkTransport.OTHER
+    val network = connectivity.activeNetwork
+        ?: return@runCatching DownloadNetworkTransport.OTHER
+    val capabilities = connectivity.getNetworkCapabilities(network)
+        ?: return@runCatching DownloadNetworkTransport.OTHER
+    when {
+        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> DownloadNetworkTransport.WIFI
+        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> DownloadNetworkTransport.CELLULAR
+        else -> DownloadNetworkTransport.OTHER
+    }
+}.getOrDefault(DownloadNetworkTransport.OTHER)
+
 /**
  * Application-scoped manager for checking, pinging (`CDN 1` vs `GitHub`),
  * downloading across parallel HTTP `Range` instances (with automatic single-stream
@@ -76,6 +94,7 @@ class AppUpdateManager internal constructor(
     private val cdn1LatestJsonUrl: String? = null,
     private val githubLatestJsonUrl: String? = null,
     private val releasesApiUrl: String? = null,
+    private val networkTransportProvider: () -> DownloadNetworkTransport = { DownloadNetworkTransport.OTHER },
 ) {
 
     @Inject
@@ -123,6 +142,7 @@ class AppUpdateManager internal constructor(
         cdn1LatestJsonUrl = UpdateDefaults.CDN1_LATEST_JSON_URL,
         githubLatestJsonUrl = UpdateDefaults.GITHUB_LATEST_JSON_URL,
         releasesApiUrl = UpdateDefaults.GITHUB_RELEASES_API_URL,
+        networkTransportProvider = { detectDownloadNetworkTransport(context) },
     )
 
     private val lock = Any()
@@ -648,9 +668,10 @@ class AppUpdateManager internal constructor(
     }
 
     /**
-     * Parallel HTTP `Range` downloader using source-tuned connection counts (4 for the CDN path,
-     * 6 for GitHub release assets), with concurrent TCP/TLS streams writing disjoint file offsets,
-     * with zero-overhead single-stream reuse whenever the server replies `200 OK` without `Range`.
+     * Parallel HTTP `Range` downloader. Only the CDN/R2 mirror adapts to the active network:
+     * 6 ranges on cellular, 16 on Wi-Fi, and 4 when the transport is unknown. GitHub remains at
+     * 4 connections on every network because that mirror is more restrictive. Standard R2 has a monthly Class B read allowance, not a
+     * per-download concurrency cap. If a server ignores Range, reuse its full response.
      */
     private suspend fun downloadFromUrl(
         info: UpdateInfo,
@@ -704,12 +725,19 @@ class AppUpdateManager internal constructor(
         }
     }
 
-    /**
-     * Cloudflare's published R2 limits do not specify a per-client GET/range concurrency ceiling;
-     * keep the CDN/custom-domain path at four streams and use two extra ranges for GitHub assets.
-     */
-    internal fun connectionsForSource(sourceLabel: String?): Int =
-        if (sourceLabel.equals("GitHub", ignoreCase = true)) GITHUB_PARALLEL_CONNECTIONS else PARALLEL_CONNECTIONS
+    /** Keep GitHub fixed; adapt parallelism only for the first-party CDN/R2 mirror. */
+    internal fun connectionsForSource(
+        sourceLabel: String?,
+        transport: DownloadNetworkTransport = networkTransportProvider(),
+    ): Int = when {
+        sourceLabel.equals("GitHub", ignoreCase = true) -> GITHUB_PARALLEL_CONNECTIONS
+        sourceLabel.equals("CDN 1", ignoreCase = true) -> when (transport) {
+            DownloadNetworkTransport.WIFI -> R2_CDN_WIFI_CONNECTIONS
+            DownloadNetworkTransport.CELLULAR -> R2_CDN_CELLULAR_CONNECTIONS
+            DownloadNetworkTransport.OTHER -> R2_CDN_OTHER_CONNECTIONS
+        }
+        else -> R2_CDN_OTHER_CONNECTIONS
+    }
 
     internal fun parseTotalBytesFromContentRange(headerValue: String?): Long? {
         if (headerValue.isNullOrBlank()) return null
@@ -1210,9 +1238,11 @@ class AppUpdateManager internal constructor(
     }
 
     private companion object {
-        const val PARALLEL_CONNECTIONS = 4
-        const val GITHUB_PARALLEL_CONNECTIONS = 6
-        const val MAX_PARALLEL_CONNECTIONS = 8
+        const val R2_CDN_OTHER_CONNECTIONS = 4
+        const val R2_CDN_CELLULAR_CONNECTIONS = 6
+        const val R2_CDN_WIFI_CONNECTIONS = 16
+        const val GITHUB_PARALLEL_CONNECTIONS = 4
+        const val MAX_PARALLEL_CONNECTIONS = 16
         const val MAX_SEGMENT_RETRIES = 2
         const val MIN_PARALLEL_BYTES = 16 * 1024L
         const val STREAM_BUFFER_BYTES = 32 * 1024

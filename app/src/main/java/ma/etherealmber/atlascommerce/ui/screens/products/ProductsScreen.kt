@@ -1,6 +1,8 @@
 package ma.etherealmber.atlascommerce.ui.screens.products
 
 import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
@@ -199,7 +201,7 @@ fun ProductsScreen(
 
             !state.error.isNullOrBlank() -> {
                 Column(Modifier.padding(horizontal = density.screenPadding)) {
-                    AtlasErrorCard(message = state.error.orEmpty(), onRetry = viewModel::refresh)
+                    AtlasErrorCard(message = atlasNotice(state.error.orEmpty(), LocalAtlasLanguage.current), onRetry = viewModel::refresh)
                 }
             }
 

@@ -547,7 +547,7 @@ private val commonTranslations = mapOf(
     "Catalogue produits avec recherche, stock faible et mode hors ligne." to ("Product catalog with search, low-stock alerts and offline mode." to "كتالوج المنتجات مع البحث وتنبيهات انخفاض المخزون والعمل دون اتصال."),
     "Scan de codes-barres pour ajouter un article au panier." to ("Scan barcodes to add items to the cart." to "امسح الباركود لإضافة المنتجات إلى السلة."),
     "Vente rapide : ticket VR sans TVA, prêt à encaisser sur le web." to ("Quick sale: VAT-free VR receipt, ready for payment on the web." to "بيع سريع: إيصال VR بدون ضريبة، جاهز للتحصيل عبر الويب."),
-    "Mises à jour accélérées multi-connexions (4 flux HTTP Range) et diagnostic @atlas-bot." to ("Accelerated multi-connection updates (4 HTTP Range streams) and @atlas-bot diagnostics." to "تحديثات متعددة الاتصالات أسرع (4 تدفقات HTTP Range) وتشخيص عبر @atlas-bot."),
+    "Mises à jour accélérées multi-connexions (CDN : 6 sur mobile, 16 en Wi-Fi ; GitHub limité à 4) et diagnostic @atlas-bot." to ("Adaptive multi-connection updates (CDN: 6 on mobile, 16 on Wi-Fi; GitHub capped at 4) and @atlas-bot diagnostics." to "تحديثات متعددة الاتصالات متكيفة (CDN: 6 على الهاتف، 16 على Wi-Fi؛ GitHub محدود بـ4) وتشخيص @atlas-bot."),
     "Atlas Commerce fonctionne avec votre propre serveur. L'administrateur du serveur voit les ventes, le stock et les comptes. Choisissez un serveur de confiance et un mot de passe fort, et activez la double authentification côté web." to ("Atlas Commerce uses your own server. Its administrator can see sales, inventory and accounts. Choose a trusted server, use a strong password and enable two-factor authentication on the web app." to "يعمل Atlas Commerce عبر خادمك الخاص. يمكن لمسؤول الخادم الاطلاع على المبيعات والمخزون والحسابات. اختر خادماً موثوقاً واستخدم كلمة مرور قوية وفعّل المصادقة الثنائية في تطبيق الويب."),
     "Merci de ne pas ouvrir d'issue publique pour une faille. Écrivez à ${AppDetails.SECURITY_EMAIL} ou à @${AppDetails.GITHUB_HANDLE} avec les étapes de reproduction." to ("Please do not open a public issue for a security vulnerability. Email ${AppDetails.SECURITY_EMAIL} or contact @${AppDetails.GITHUB_HANDLE} with reproduction steps." to "يرجى عدم فتح بلاغ عام عن ثغرة أمنية. راسل ${AppDetails.SECURITY_EMAIL} أو @${AppDetails.GITHUB_HANDLE} مع خطوات إعادة إنتاجها."),
     "Contacter la sécurité" to ("Contact security" to "التواصل مع فريق الأمان"),
@@ -579,7 +579,7 @@ private val commonTranslations = mapOf(
     "Confirmer avant création du ticket" to ("Confirm before creating receipt" to "التأكيد قبل إنشاء الإيصال"),
     "Affiche un récapitulatif du montant avant d'envoyer la vente au serveur." to ("Show an amount summary before sending the sale to the server." to "عرض ملخص للمبلغ قبل إرسال البيع إلى الخادم."),
     "Téléchargement accéléré multi-connexions" to ("Faster multi-connection downloads" to "تنزيل أسرع عبر اتصالات متعددة"),
-    "Télécharge les mises à jour via 4 connexions HTTP Range parallèles haute vitesse." to ("Downloads updates over four high-speed parallel HTTP Range connections." to "تنزيل التحديثات عبر أربعة اتصالات HTTP Range متوازية وعالية السرعة."),
+    "Adapte le nombre de connexions au réseau (CDN : 6 sur mobile, 16 en Wi-Fi ; GitHub reste limité à 4)." to ("Adapts connections to the network (CDN: 6 on mobile, 16 on Wi-Fi; GitHub stays capped at 4)." to "يكيّف عدد الاتصالات حسب الشبكة (CDN: 6 على بيانات الهاتف و16 على Wi-Fi؛ يظل GitHub محدوداً بـ4)."),
     "Toujours suivre la dernière version publiée" to ("Always follow the latest published release" to "اتباع أحدث إصدار منشور دائمًا"),
     "Considère toute version publiée en dernier sur GitHub Releases ou CDN 1 comme la version active." to ("Treat the newest version on GitHub Releases or CDN 1 as the active release." to "اعتبار أحدث إصدار على GitHub Releases أو CDN 1 هو الإصدار النشط."),
     "Recherche automatique des mises à jour" to ("Automatically check for updates" to "البحث تلقائيًا عن التحديثات"),
@@ -640,6 +640,8 @@ private val commonTranslations = mapOf(
     "Caméra refusée — collez le lien ou code QR ci-dessous." to ("Camera permission denied — paste the link or QR code below." to "تم رفض إذن الكاميرا — الصق الرابط أو رمز QR أدناه."),
     "Scanner un poste PC" to ("Scan a PC" to "مسح رمز الكمبيوتر"),
     "Connexion mobile par QR" to ("Mobile sign-in by QR" to "تسجيل الدخول للهاتف عبر QR"),
+    "Connectez-vous sur ce téléphone avant d'autoriser un ordinateur." to ("Sign in on this phone before authorizing a computer." to "سجّل الدخول على هذا الهاتف قبل السماح لجهاز كمبيوتر."),
+    "Déconnectez-vous avant d'utiliser le QR de connexion du téléphone." to ("Sign out before using the phone sign-in QR." to "سجّل الخروج قبل استخدام رمز تسجيل الدخول للهاتف."),
     "APPAIRAGE SÉCURISÉ · HORS CATALOGUE STOCK" to ("SECURE PAIRING · OUTSIDE STOCK CATALOG" to "اقتران آمن · خارج كتالوج المخزون"),
     "Couper la caméra" to ("Turn camera off" to "إيقاف الكاميرا"),
     "Activer la caméra" to ("Turn camera on" to "تشغيل الكاميرا"),
@@ -797,6 +799,35 @@ private val commonTranslations = mapOf(
     "Isolation multi-comptes, sessions, chiffrement" to ("Account isolation, sessions, encryption" to "عزل الحسابات والجلسات والتشفير"),
     "Seuil dépassé" to ("Threshold exceeded" to "تم تجاوز الحد"),
     "Atlas Agent peut se tromper. Votre message sera transmis au serveur Atlas et au fournisseur IA configuré. N'envoyez pas de mots de passe ni de données personnelles inutiles." to ("Atlas Agent can make mistakes. Your message will be sent to the Atlas server and configured AI provider. Do not include passwords or unnecessary personal data." to "قد يخطئ مساعد Atlas. ستُرسل رسالتك إلى خادم Atlas ومزوّد الذكاء الاصطناعي المُعدّ. لا ترسل كلمات مرور أو بيانات شخصية غير ضرورية."),
+    "Accès à Atlas Agent suspendu pour ce compte. Contactez un administrateur." to ("Atlas Agent access is suspended for this account. Contact an administrator." to "تم تعليق وصول Atlas Agent لهذا الحساب. تواصل مع المسؤول."),
+    "Quota quotidien atteint — réinitialisation à minuit UTC. Veuillez patienter." to ("Daily quota reached — resets at midnight UTC. Please wait." to "تم بلوغ الحد اليومي — يُعاد ضبطه عند منتصف الليل UTC. يرجى الانتظار."),
+    "Quota hebdomadaire atteint — réinitialisation lundi à 00:00 UTC. Veuillez patienter." to ("Weekly quota reached — resets Monday at 00:00 UTC. Please wait." to "تم بلوغ الحد الأسبوعي — يُعاد ضبطه يوم الاثنين عند 00:00 UTC. يرجى الانتظار."),
+    "Impossible de lire l'image." to ("Couldn't read the image." to "تعذّرت قراءة الصورة."),
+    "Impossible de décoder l'image." to ("Couldn't decode the image." to "تعذّر فك ترميز الصورة."),
+    "Format non pris en charge. Joignez une image, un PDF, un TXT, un CSV, un Markdown ou un JSON." to ("Unsupported format. Attach an image, PDF, TXT, CSV, Markdown, or JSON file." to "تنسيق غير مدعوم. أرفق صورة أو ملف PDF أو TXT أو CSV أو Markdown أو JSON."),
+    "Impossible d'ouvrir le document." to ("Couldn't open the document." to "تعذّر فتح المستند."),
+    "Impossible d'écrire le PDF sélectionné." to ("Couldn't write the selected PDF." to "تعذّرت كتابة ملف PDF المحدد."),
+    "Impossible d'écrire le fichier choisi." to ("Couldn't write the selected file." to "تعذّرت كتابة الملف المحدد."),
+    "Saisissez votre identifiant et votre mot de passe." to ("Enter your username and password." to "أدخل اسم المستخدم وكلمة المرور."),
+    "Saisissez les 6 chiffres du code reçu par e-mail." to ("Enter all six digits of the code sent by email." to "أدخل الأرقام الستة للرمز المرسل عبر البريد الإلكتروني."),
+    "Impossible de joindre ce serveur. Vérifiez votre connexion puis réessayez." to ("Couldn't reach this server. Check your connection, then try again." to "تعذّر الوصول إلى هذا الخادم. تحقق من اتصالك ثم أعد المحاولة."),
+    "Vérifiez l'adresse du serveur et votre connexion." to ("Check the server address and your connection." to "تحقق من عنوان الخادم واتصالك بالإنترنت."),
+    "La connexion prend trop de temps. Réessayez dans quelques instants." to ("The connection is taking too long. Try again in a moment." to "الاتصال يستغرق وقتاً طويلاً. أعد المحاولة بعد قليل."),
+    "La connexion a été interrompue. Vérifiez votre réseau puis réessayez." to ("The connection was interrupted. Check your network, then try again." to "انقطع الاتصال. تحقق من الشبكة ثم أعد المحاولة."),
+    "Une erreur inattendue est survenue. Réessayez." to ("An unexpected error occurred. Please try again." to "حدث خطأ غير متوقع. يرجى المحاولة مجدداً."),
+    "Réponse inattendue du serveur." to ("Unexpected response from the server." to "استجابة غير متوقعة من الخادم."),
+    "Action refusée par le serveur." to ("Action was rejected by the server." to "رفض الخادم الإجراء."),
+    "Une erreur du service est survenue. Réessayez plus tard." to ("A service error occurred. Try again later." to "حدث خطأ في الخدمة. أعد المحاولة لاحقاً."),
+    "Une mise à jour est requise pour continuer. Téléchargez la dernière version." to ("An update is required to continue. Download the latest version." to "يلزم تحديث للمتابعة. نزّل أحدث إصدار."),
+    "Session expirée — reconnectez-vous." to ("Session expired — sign in again." to "انتهت الجلسة — سجّل الدخول مجدداً."),
+    "Réservé aux administrateurs (owner/admin)." to ("Reserved for administrators (owner/admin)." to "مخصص للمسؤولين (المالك/المسؤول)."),
+    "Impossible de charger cette discussion. Vérifiez la connexion puis réessayez." to ("Couldn't load this conversation. Check your connection and try again." to "تعذّر تحميل هذه المحادثة. تحقق من اتصالك ثم أعد المحاولة."),
+    "Saisie invalide — vérifiez que les informations tapées sont exactes." to ("Invalid input — check that the information you entered is correct." to "البيانات غير صالحة — تحقق من صحة المعلومات التي أدخلتها."),
+    "Identifiant ou mot de passe incorrect — vérifiez attentivement votre saisie." to ("Incorrect username or password — check your entry carefully." to "اسم المستخدم أو كلمة المرور غير صحيحة — تحقق من البيانات."),
+    "Accès non autorisé pour ce rôle ou cet appareil." to ("Access is not authorized for this role or device." to "الوصول غير مسموح لهذا الدور أو الجهاز."),
+    "Élément ou service introuvable (404) — vérifiez que ce que vous avez tapé est correct et que votre serveur Atlas Commerce est à jour." to ("Item or service not found (404) — check what you entered and make sure your Atlas Commerce server is up to date." to "العنصر أو الخدمة غير موجودة (404) — تحقق مما أدخلته ومن تحديث خادم Atlas Commerce."),
+    "Limite temporaire atteinte — veuillez patienter quelques instants." to ("Temporary rate limit reached — please wait a moment." to "تم بلوغ الحد المؤقت — يرجى الانتظار قليلاً."),
+    "Ce site ne répond pas comme une API Atlas Commerce. Vérifiez que l'URL saisie est exacte et qu'Atlas Commerce Web y est installé." to ("This site doesn't appear to be an Atlas Commerce API. Check the URL and make sure Atlas Commerce Web is installed there." to "لا يبدو هذا الموقع واجهة Atlas Commerce. تحقق من الرابط ومن تثبيت Atlas Commerce Web عليه."),
 )
 
 /** Look up reviewed translations for shared static copy. Unknown text is left unchanged. */
@@ -900,6 +931,28 @@ fun atlasNotice(message: String, language: AppLanguage): String {
     }
     template(Regex("^Serveur Atlas Commerce vérifié · (\\d+) ms$")) { m ->
         Triple(m.value, "Atlas Commerce server verified · ${m.groupValues[1]} ms", "تم التحقق من خادم Atlas Commerce · ${m.groupValues[1]} مللي ثانية")
+    }?.let { return it }
+    template(Regex("^Requête bloquée par la vérification anti-bot Cloudflare \\((\\d+)\\)\\. Vérifiez l'adresse du serveur ou autorisez /api/\\*\\.$")) { m ->
+        Triple(m.value, "Request blocked by Cloudflare bot protection (${m.groupValues[1]}). Allow /api/* in your firewall or check the server address.", "حجبت حماية Cloudflare لمكافحة الروبوتات الطلب (${m.groupValues[1]}). اسمح بالمسار /api/* في جدار الحماية أو تحقق من عنوان الخادم.")
+    }?.let { return it }
+    template(Regex("^Service temporairement indisponible \\((\\d+)\\) — vérifiez l'état de votre serveur Atlas Commerce Web\\.$")) { m ->
+        Triple(m.value, "Service temporarily unavailable (${m.groupValues[1]}) — check your Atlas Commerce Web server status.", "الخدمة غير متاحة مؤقتاً (${m.groupValues[1]}) — تحقق من حالة خادم Atlas Commerce Web.")
+    }?.let { return it }
+    template(Regex("^Erreur réseau \\((\\d+)\\) — vérifiez votre saisie et votre connexion\\.$")) { m ->
+        Triple(m.value, "Network error (${m.groupValues[1]}) — check your entry and connection.", "خطأ في الشبكة (${m.groupValues[1]}) — تحقق من البيانات والاتصال.")
+    }?.let { return it }
+    template(Regex("^Ceci est un code-barres produit \\((.+)\\)\\. Cet écran sert uniquement aux QR codes de sécurité PC — utilisez l'onglet Scan pour le stock\\.$")) { m ->
+        Triple(m.value, "This is a product barcode (${m.groupValues[1]}). This screen is only for secure PC QR codes — use the Scan tab for inventory.", "هذا باركود منتج (${m.groupValues[1]}). هذه الشاشة مخصصة لرموز QR الآمنة للكمبيوتر فقط — استخدم تبويب المسح للمخزون.")
+    }?.let { return it }
+    template(Regex("^Session QR (.+) — scannez un nouveau QR code\\.$")) { m ->
+        val status = when (m.groupValues[1].lowercase()) {
+            "expired", "expirée", "expired_at" -> Triple("expirée", "expired", "منتهية الصلاحية")
+            "claimed", "consumed", "used", "déjà utilisée" -> Triple("déjà utilisée", "already used", "مستخدمة مسبقاً")
+            "revoked", "révoquée" -> Triple("révoquée", "revoked", "ملغاة")
+            "denied", "refused", "refusée" -> Triple("refusée", "rejected", "مرفوضة")
+            else -> Triple(m.groupValues[1], m.groupValues[1], m.groupValues[1])
+        }
+        Triple("Session QR ${status.first} — scannez un nouveau QR code.", "QR session ${status.second} — scan a new QR code.", "جلسة QR ${status.third} — امسح رمز QR جديداً.")
     }?.let { return it }
     template(Regex("^Accès bloqué par la protection anti-bot Cloudflare \\((\\d+)\\)\\. Autorisez /api/\\* dans votre pare-feu ou vérifiez le domaine saisi\\.$")) { m ->
         Triple(m.value, "Cloudflare blocked access (${m.groupValues[1]}). Allow /api/* in your firewall or check the domain.", "حجبت حماية Cloudflare الوصول (${m.groupValues[1]}). اسمح بالمسار /api/* في جدار الحماية أو تحقّق من النطاق.")
