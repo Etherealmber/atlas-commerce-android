@@ -54,6 +54,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.update.UpdateState
@@ -65,6 +66,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.root.roundUpTo50MiB
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import java.text.NumberFormat
 import java.util.Locale
 
 private data class StorageCategory(val label: String, val bytes: Long, val color: Color)
@@ -109,6 +111,17 @@ fun DataCacheManagerDialog(
         savedServers.filter { server ->
             searchQuery.isBlank() || listOf(server.label, ServerUrl.display(server.url))
                 .any { it.contains(searchQuery.trim(), ignoreCase = true) }
+        }
+    }
+    val percentageFormatter = remember(appLanguage) {
+        val locale = when (appLanguage) {
+            AppLanguage.FRENCH -> Locale.FRANCE
+            AppLanguage.ENGLISH -> Locale.UK
+            AppLanguage.ARABIC -> Locale.forLanguageTag("ar-MA")
+        }
+        NumberFormat.getPercentInstance(locale).apply {
+            minimumFractionDigits = 1
+            maximumFractionDigits = 1
         }
     }
     val appStorageCategories = listOf(
@@ -297,7 +310,7 @@ fun DataCacheManagerDialog(
                                         Spacer(Modifier.width(9.dp))
                                         Text(category.label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                                         Text(
-                                            "${Formatter.formatShortFileSize(context, category.bytes)} · ${String.format(Locale.US, "%.1f%%", category.bytes.toDouble() * 100.0 / storage.totalAppBytes)}",
+                                            "${Formatter.formatShortFileSize(context, category.bytes)} · ${percentageFormatter.format(category.bytes.toDouble() / storage.totalAppBytes)}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
