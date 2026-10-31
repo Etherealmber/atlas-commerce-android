@@ -264,7 +264,6 @@ private fun AtlasGate(
     val scope = rememberCoroutineScope()
     var bootSplashFinished by rememberSaveable { mutableStateOf(false) }
     var overlay by rememberSaveable { mutableStateOf<String?>(null) }
-    var openQrAfterOnboarding by rememberSaveable { mutableStateOf(false) }
     val internetAvailable = rememberInternetAvailable()
     var offlineOfferShown by remember { mutableStateOf(false) }
     var showOfflineOffer by remember { mutableStateOf(false) }
@@ -451,15 +450,6 @@ private fun AtlasGate(
     val loginDeviceUnlockTitle = atlasText("Déverrouiller Atlas", "Unlock Atlas", "إلغاء قفل Atlas")
     val loginDeviceUnlockSubtitle = atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك.")
 
-    LaunchedEffect(onboardingDone, baseStage, openQrAfterOnboarding) {
-        if (onboardingDone && openQrAfterOnboarding && baseStage == RootStage.LOGIN) {
-            openQrAfterOnboarding = false
-            pendingQrToken = null
-            pendingQrMode = QrDeviceMode.SIGN_IN_PHONE
-            overlay = Overlay.QR_DEVICE
-        }
-    }
-
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(modifier = Modifier.fillMaxSize()) {
             AtlasPageTransition(
@@ -474,15 +464,7 @@ private fun AtlasGate(
                     )
 
                     RootStage.ONBOARDING -> AtlasWelcomeOnboardingScreen(
-                        onComplete = {
-                            requestNotificationPermissionIfNeeded()
-                            viewModel.completeOnboarding()
-                        },
-                        onOpenQrSignIn = {
-                            openQrAfterOnboarding = true
-                            requestNotificationPermissionIfNeeded()
-                            viewModel.completeOnboarding()
-                        },
+                        onComplete = { viewModel.completeOnboarding() },
                     )
 
                     RootStage.SERVER_SETUP -> ServerSetupScreen()
@@ -503,6 +485,8 @@ private fun AtlasGate(
                         },
                         onOpenAbout = { overlay = Overlay.ABOUT },
                         onToast = showToast,
+                        updateState = updateState,
+                        onShowUpdateProgress = viewModel::showUpdateDownloadBanner,
                         onUnlockSavedAccount = { entry, afterAuthentication ->
                             val authActivity = context.findActivity() as? FragmentActivity
                             if (authActivity == null || !DeviceUnlockAuthenticator.isAvailable(authActivity)) {
@@ -647,7 +631,8 @@ private fun AtlasGate(
 
             if (bootSplashFinished && onboardingDone && serverLoaded && !mandatoryBlocking) {
                 if ((baseStage != RootStage.SHELL || overlay != null) &&
-                    !(baseStage == RootStage.SHELL && savedShellTab == MainTab.SETTINGS.name)
+                    !(baseStage == RootStage.SHELL && savedShellTab == MainTab.SETTINGS.name) &&
+                    !(baseStage == RootStage.LOGIN && overlay == null)
                 ) {
                     UpdateMiniProgressBall(
                         state = updateState,

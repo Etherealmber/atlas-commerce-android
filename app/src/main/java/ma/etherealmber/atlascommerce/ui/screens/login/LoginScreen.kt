@@ -6,12 +6,17 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -65,10 +71,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -77,6 +87,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -85,10 +96,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.AppLanguage
+import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
+import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasBrandWordmark
@@ -106,9 +119,11 @@ fun LoginScreen(
     onUnlockSavedAccount: (SavedAccountEntry, () -> Unit) -> Unit = { _, _ -> },
     onOpenAbout: () -> Unit = {},
     onToast: (String) -> Unit = {},
+    updateState: UpdateState = UpdateState.Idle,
+    onShowUpdateProgress: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
-    LoginScreenContent(onChangeServer, onOpenQrDevice, onUnlockSavedAccount, onOpenAbout, onToast, viewModel)
+    LoginScreenContent(onChangeServer, onOpenQrDevice, onUnlockSavedAccount, onOpenAbout, onToast, updateState, onShowUpdateProgress, viewModel)
 }
 
 @Composable
@@ -118,6 +133,8 @@ private fun LoginScreenContent(
     onUnlockSavedAccount: (SavedAccountEntry, () -> Unit) -> Unit,
     onOpenAbout: () -> Unit,
     onToast: (String) -> Unit,
+    updateState: UpdateState,
+    onShowUpdateProgress: () -> Unit,
     viewModel: LoginViewModel,
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
@@ -198,6 +215,8 @@ private fun LoginScreenContent(
         ) {
             LoginAtlasHero(
                 compact = compact || keyboardVisible,
+                updateState = updateState,
+                onShowUpdateProgress = onShowUpdateProgress,
                 onOpenHelpServices = { helpServicesOpen = true },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -222,30 +241,34 @@ private fun LoginScreenContent(
                     rememberedAccount != null -> atlasText("Bon retour", "Welcome back", "مرحباً بعودتك")
                     else -> atlasText("Bienvenue", "Welcome", "مرحبًا")
                 }
-                Text(
-                    text = welcomeTitle,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                AtlasEntrance(delayMillis = 80, offsetY = 16.dp) {
+                    Text(
+                        text = welcomeTitle,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Spacer(Modifier.height(5.dp))
-                Text(
-                    text = if (state.step == LoginViewModel.Step.CREDENTIALS) {
-                        if (rememberedAccount != null) {
-                            atlasText("Compte conservé sur cet appareil — connectez-vous pour continuer.", "Your account is saved on this device — sign in again to continue.", "حسابك محفوظ على هذا الجهاز — سجّل الدخول مجدداً للمتابعة.")
+                AtlasEntrance(delayMillis = 150, offsetY = 10.dp) {
+                    Text(
+                        text = if (state.step == LoginViewModel.Step.CREDENTIALS) {
+                            if (rememberedAccount != null) {
+                                atlasText("Compte conservé sur cet appareil — connectez-vous pour continuer.", "Your account is saved on this device — sign in again to continue.", "حسابك محفوظ على هذا الجهاز — سجّل الدخول مجدداً للمتابعة.")
+                            } else {
+                                atlasText("Connectez-vous à votre espace Atlas Commerce.", "Sign in to your Atlas Commerce workspace.", "سجّل الدخول إلى مساحة Atlas Commerce الخاصة بك.")
+                            }
                         } else {
-                            atlasText("Connectez-vous à votre espace Atlas Commerce.", "Sign in to your Atlas Commerce workspace.", "سجّل الدخول إلى مساحة Atlas Commerce الخاصة بك.")
-                        }
-                    } else {
-                        atlasText("Confirmez votre identité pour continuer.", "Verify your identity to continue.", "أكّد هويتك للمتابعة.")
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
+                            atlasText("Confirmez votre identité pour continuer.", "Verify your identity to continue.", "أكّد هويتك للمتابعة.")
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
 
                 if (state.step == LoginViewModel.Step.CREDENTIALS) {
                     TextButton(
@@ -365,6 +388,8 @@ private fun LoginScreenContent(
 @Composable
 private fun LoginAtlasHero(
     compact: Boolean,
+    updateState: UpdateState,
+    onShowUpdateProgress: () -> Unit,
     onOpenHelpServices: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -382,6 +407,8 @@ private fun LoginAtlasHero(
             )
         }
         Spacer(Modifier.weight(1f))
+        UpdateMiniProgressBall(state = updateState, onClick = onShowUpdateProgress)
+        Spacer(Modifier.width(8.dp))
         IconButton(onClick = onOpenHelpServices) {
             Icon(
                 Icons.Outlined.MoreVert,
@@ -814,45 +841,98 @@ private fun OtpForm(
     onBack: () -> Unit,
     onDismissError: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Outlined.AlternateEmail,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = atlasText("Vérification de l'appareil", "Device verification", "التحقق من الجهاز"),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
+    val shake = remember { Animatable(0f) }
+    val inputDescription = atlasText("Code de vérification à six chiffres", "Six-digit verification code", "رمز تحقق مكوّن من ستة أرقام")
+
+    LaunchedEffect(state.error) {
+        if (!state.error.isNullOrBlank()) {
+            repeat(2) {
+                shake.animateTo(-8f, tween(45))
+                shake.animateTo(8f, tween(45))
+            }
+            shake.animateTo(0f, tween(45))
         }
-        Spacer(Modifier.height(6.dp))
+    }
+
+    Column(Modifier.fillMaxWidth()) {
         Text(
             text = atlasText("Saisissez le code à 6 chiffres envoyé par e-mail.", "Enter the six-digit code sent by email.", "أدخل الرمز المكوّن من ستة أرقام المرسل عبر البريد الإلكتروني."),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(14.dp))
-        AtlasTextField(
+        BasicTextField(
             value = state.otp,
             onValueChange = onOtp,
-            label = atlasText("Code de vérification", "Verification code", "رمز التحقق"),
-            keyboardType = KeyboardType.NumberPassword,
-            imeAction = ImeAction.Done,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .offset(x = shake.value.dp)
+                .semantics { contentDescription = inputDescription },
             enabled = !state.loading,
-            onDone = onSubmit,
+            singleLine = true,
+            textStyle = TextStyle(color = Color.Transparent, textAlign = TextAlign.Center),
+            cursorBrush = SolidColor(Color.Transparent),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { if (state.canSubmit) onSubmit() }),
+            decorationBox = { innerTextField ->
+                Box {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        repeat(6) { index ->
+                            val digit = state.otp.getOrNull(index)?.toString().orEmpty()
+                            val isCurrent = !state.loading && index == state.otp.length.coerceAtMost(5)
+                            val cellBorder = when {
+                                !state.error.isNullOrBlank() -> MaterialTheme.colorScheme.error
+                                isCurrent -> MaterialTheme.colorScheme.primary
+                                else -> MaterialTheme.colorScheme.outlineVariant
+                            }
+                            Surface(
+                                modifier = Modifier.weight(1f).height(56.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(if (isCurrent) 2.dp else 1.dp, cellBorder),
+                            ) {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    if (digit.isNotEmpty()) {
+                                        Text(
+                                            digit,
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    } else if (isCurrent) {
+                                        Box(
+                                            Modifier.width(2.dp).height(22.dp)
+                                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(1.dp)),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Box(Modifier.fillMaxSize().alpha(0f)) { innerTextField() }
+                }
+            },
         )
         LoginInlineError(state, onDismissError)
-        Spacer(Modifier.height(16.dp))
-        AtlasButton(
-            text = atlasText("Valider le code", "Verify code", "تحقّق من الرمز"),
-            onClick = onSubmit,
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = if (state.loading) {
+                atlasText("Vérification en cours…", "Verifying…", "جارٍ التحقق…")
+            } else {
+                atlasText(
+                    "La vérification démarre automatiquement dès que les 6 chiffres sont saisis.",
+                    "Verification starts automatically when all six digits are entered.",
+                    "يبدأ التحقق تلقائياً بعد إدخال الأرقام الستة.",
+                )
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
-            enabled = state.canSubmit,
-            loading = state.loading,
         )
         Spacer(Modifier.height(6.dp))
         Row(

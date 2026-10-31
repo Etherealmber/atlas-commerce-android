@@ -47,7 +47,7 @@ class LoginViewModel @Inject constructor(
         val canSubmit: Boolean
             get() = !loading && username.isNotBlank() && when (step) {
                 Step.CREDENTIALS -> password.isNotBlank()
-                Step.OTP -> otp.length == 6 && otp.all(Char::isDigit)
+                Step.OTP -> isValidOneTimeCode(otp)
             }
     }
 
@@ -83,8 +83,12 @@ class LoginViewModel @Inject constructor(
     }
 
     fun onOtpChange(value: String) {
+        val previous = _state.value
         val digits = value.filter { it.isDigit() }.take(6)
         _state.update { it.copy(otp = digits, error = null) }
+        if (previous.step == Step.OTP && !previous.loading && digits != previous.otp && isValidOneTimeCode(digits)) {
+            verifyOtp()
+        }
     }
 
     fun signInWithSavedAccount(entry: SavedAccountEntry) {
@@ -138,6 +142,7 @@ class LoginViewModel @Inject constructor(
 
     fun resendCode() {
         if (_state.value.loading) return
+        _state.update { it.copy(otp = "", error = null, info = null) }
         signIn(isResend = true)
     }
 
@@ -190,7 +195,7 @@ class LoginViewModel @Inject constructor(
     private fun verifyOtp() {
         val current = _state.value
         if (current.loading) return
-        if (current.otp.length != 6 || current.otp.any { !it.isDigit() }) {
+        if (!isValidOneTimeCode(current.otp)) {
             _state.update { it.copy(error = "Saisissez les 6 chiffres du code reçu par e-mail.") }
             return
         }
@@ -222,6 +227,9 @@ class LoginViewModel @Inject constructor(
         }
     }
 }
+
+internal fun isValidOneTimeCode(code: String): Boolean =
+    code.length == 6 && code.all(Char::isDigit)
 
 /** Clear the one-time verification flow whenever a session becomes active. */
 internal fun LoginViewModel.UiState.afterAuthentication(): LoginViewModel.UiState = copy(
