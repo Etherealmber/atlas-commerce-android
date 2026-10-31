@@ -1226,6 +1226,21 @@ fun SettingsScreen(
                     }
                 }
                 automaticCrashReportsAvailable -> {
+                    val crashSettingFailureMessage = atlasText(
+                        "Impossible de modifier le réglage Crashlytics.",
+                        "Could not update the Crashlytics setting.",
+                        "تعذر تحديث إعداد Crashlytics.",
+                    )
+                    val crashSettingEnabledMessage = atlasText(
+                        "Rapports de plantage activés.",
+                        "Crash reports enabled.",
+                        "تم تفعيل تقارير الأعطال.",
+                    )
+                    val crashSettingDisabledMessage = atlasText(
+                        "Envoi automatique désactivé.",
+                        "Automatic reporting disabled.",
+                        "تم تعطيل الإرسال التلقائي.",
+                    )
                     SettingsToggleRow(
                         title = atlasText("Rapports de plantage automatiques (Firebase)", "Automatic crash reports (Firebase)", "تقارير الأعطال التلقائية (Firebase)"),
                         subtitle = if (automaticCrashReportsEnabled) {
@@ -1246,9 +1261,9 @@ fun SettingsScreen(
                             appViewModel.setAutomaticCrashReportsEnabled(enabled) { succeeded ->
                                 onToast(
                                     when {
-                                        !succeeded -> atlasText("Impossible de modifier le réglage Crashlytics.", "Could not update the Crashlytics setting.", "تعذر تحديث إعداد Crashlytics.")
-                                        enabled -> atlasText("Rapports de plantage activés.", "Crash reports enabled.", "تم تفعيل تقارير الأعطال.")
-                                        else -> atlasText("Envoi automatique désactivé.", "Automatic reporting disabled.", "تم تعطيل الإرسال التلقائي.")
+                                        !succeeded -> crashSettingFailureMessage
+                                        enabled -> crashSettingEnabledMessage
+                                        else -> crashSettingDisabledMessage
                                     },
                                 )
                             }
