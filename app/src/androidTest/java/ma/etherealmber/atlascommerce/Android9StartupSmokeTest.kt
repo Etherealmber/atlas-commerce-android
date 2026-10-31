@@ -48,9 +48,10 @@ class Android9StartupSmokeTest {
             scenario.onActivity { activity ->
                 Log.i("Android9StartupSmoke", "MainActivity resumed; package=${activity.packageName}")
             }
-            // API 28 emulator first launches can spend several seconds in dexopt and
-            // Compose startup after MainActivity is visible. Give the UI a full minute.
-            val deadline = SystemClock.uptimeMillis() + 60_000L
+            // API 28 CI cold starts can spend several minutes in dexopt before Compose
+            // reaches the first-run screen. Recent runner diagnostics showed over five
+            // minutes between launch and the activity's first displayed frame.
+            val deadline = SystemClock.uptimeMillis() + 6 * 60_000L
             var reachedFirstRun = false
             while (!reachedFirstRun && SystemClock.uptimeMillis() < deadline) {
                 reachedFirstRun = firstRunMarkers.any { marker -> device.findObject(marker) != null }
