@@ -358,29 +358,10 @@ private fun GameplayPage(
                     },
                 showEyes = true,
             )
-            AnimatedVisibility(
+            CrownCollectedToast(
                 visible = crownToastVisible,
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
-                enter = fadeIn() + scaleIn(initialScale = 0.88f),
-                exit = fadeOut() + scaleOut(targetScale = 0.92f),
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC928).copy(alpha = 0.58f)),
-                    shadowElevation = 6.dp,
-                ) {
-                    Row(Modifier.padding(horizontal = 13.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        CrownGlyph(Modifier.size(19.dp))
-                        Spacer(Modifier.width(7.dp))
-                        Text(
-                            atlasText("Couronne +2", "Crown +2", "تاج +٢"),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-            }
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
             DirectionPad(onDirection = onDirection, enabled = running && !pausedByPrompt && !game.over)
@@ -409,6 +390,33 @@ private fun GameplayPage(
             else -> atlasText("Touchez une direction pour tourner", "Tap a direction to turn", "اضغط اتجاهاً للانعطاف")
         }
         Text(message, Modifier.padding(top = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun CrownCollectedToast(visible: Boolean, modifier: Modifier = Modifier) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn() + scaleIn(initialScale = 0.88f),
+        exit = fadeOut() + scaleOut(targetScale = 0.92f),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC928).copy(alpha = 0.58f)),
+            shadowElevation = 6.dp,
+        ) {
+            Row(Modifier.padding(horizontal = 13.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                CrownGlyph(Modifier.size(19.dp))
+                Spacer(Modifier.width(7.dp))
+                Text(
+                    atlasText("Couronne +2", "Crown +2", "تاج +٢"),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
     }
 }
 
