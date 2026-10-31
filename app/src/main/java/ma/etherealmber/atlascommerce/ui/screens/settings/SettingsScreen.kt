@@ -2,6 +2,7 @@ package ma.etherealmber.atlascommerce.ui.screens.settings
 
 import android.content.Intent
 import android.provider.Settings
+import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -94,6 +95,7 @@ import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.ThemeMode
+import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
@@ -840,6 +842,7 @@ fun SettingsScreen(
     val agentPolicy by appViewModel.agentPolicy.collectAsStateWithLifecycle()
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val updateDownloadSource by appViewModel.updateDownloadSource.collectAsStateWithLifecycle()
+    val localStorageSummary by appViewModel.localStorageSummary.collectAsStateWithLifecycle()
     val shakeToReportEnabled by appViewModel.shakeToReportEnabled.collectAsStateWithLifecycle()
     val mirrorPing by appViewModel.mirrorPing.collectAsStateWithLifecycle()
     val releaseChangelog by appViewModel.releaseChangelog.collectAsStateWithLifecycle()
@@ -850,6 +853,7 @@ fun SettingsScreen(
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
     var showReleaseHistoryDialog by remember { mutableStateOf(false) }
+    var confirmClearUpdatePackage by remember { mutableStateOf(false) }
     var buildTapCount by remember { mutableIntStateOf(0) }
     var lastBuildTapAt by remember { mutableLongStateOf(0L) }
 
@@ -954,6 +958,39 @@ fun SettingsScreen(
         )
     }
 
+    if (confirmClearUpdatePackage) {
+        val updatePackageClearedMessage = atlasText("Fichier de mise à jour supprimé.", "Downloaded update removed.", "تم حذف ملف التحديث.")
+        val updatePackageBusyMessage = atlasText("Impossible de supprimer le fichier. Si un téléchargement est actif, attendez sa fin puis réessayez.", "Could not remove the downloaded update. If a download is active, wait for it to finish and try again.", "تعذّر حذف الملف. إذا كان هناك تنزيل نشط، انتظر حتى يكتمل ثم أعد المحاولة.")
+        AlertDialog(
+            onDismissRequest = { confirmClearUpdatePackage = false },
+            title = { Text(atlasText("Supprimer le fichier téléchargé ?", "Delete downloaded update?", "حذف ملف التحديث المُنزّل؟")) },
+            text = {
+                Text(
+                    atlasText(
+                        "Cela supprime uniquement l'installateur conservé sur cet appareil, pas l'application actuelle. Atlas le supprime aussi automatiquement après une mise à jour réussie, au prochain démarrage.",
+                        "This only removes the installer stored on this device, not the app you're using. Atlas also removes it automatically after a successful update, on the next launch.",
+                        "سيؤدي هذا إلى حذف ملف التثبيت المحفوظ على هذا الجهاز فقط، وليس التطبيق الحالي. كما يحذفه Atlas تلقائياً بعد نجاح التحديث عند التشغيل التالي.",
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    appViewModel.clearCachedUpdateFiles { cleared ->
+                        confirmClearUpdatePackage = false
+                        onToast(if (cleared) updatePackageClearedMessage else updatePackageBusyMessage)
+                    }
+                }) {
+                    Text(atlasText("Supprimer", "Delete", "حذف"), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearUpdatePackage = false }) {
+                    Text(atlasText("Annuler", "Cancel", "إلغاء"))
+                }
+            },
+        )
+    }
+
     if (showProblemReportDialog) {
         ProblemReportDialog(
             screenOrigin = atlasText("Paramètres", "Settings", "الإعدادات"),
@@ -969,6 +1006,11 @@ fun SettingsScreen(
         appViewModel.refreshCachedProductCount()
         appViewModel.refreshLocalStorageSummary()
         appViewModel.refreshReleaseChangelog()
+    }
+    LaunchedEffect(updateState) {
+        if (updateState is UpdateState.ReadyToInstall) {
+            appViewModel.refreshLocalStorageSummary()
+        }
     }
 
     Column(
@@ -1057,6 +1099,17 @@ fun SettingsScreen(
 
         AtlasCard {
             SettingsToggleRow(
+                title = atlasText("Recherche automatique des mises à jour", "Check for updates automatically", "التحقق تلقائياً من التحديثات"),
+                subtitle = atlasText(
+                    "Vérifie à l'ouverture et environ toutes les 12 h en arrière-plan, selon les règles batterie d'Android.",
+                    "Checks at launch and about every 12 hours in the background, subject to Android battery rules.",
+                    "يتحقق عند التشغيل وكل 12 ساعة تقريباً في الخلفية، وفقاً لقيود بطارية Android.",
+                ),
+                checked = autoCheckUpdates,
+                onCheckedChange = appViewModel::setAutoCheckUpdates,
+            )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            SettingsToggleRow(
                 title = atlasText("Téléchargement accéléré multi-connexions", "Multi-connection accelerated downloads", "تنزيلات سريعة متعددة الاتصالات"),
                 subtitle = atlasText("Adapte le nombre de connexions au réseau (CDN : 6 sur mobile, 16 en Wi-Fi ; GitHub reste limité à 4).", "Adapts connections to the network (CDN: 6 on mobile, 16 on Wi-Fi; GitHub stays capped at 4).", "يكيّف عدد الاتصالات حسب الشبكة (CDN: 6 على بيانات الهاتف و16 على Wi-Fi؛ يظل GitHub محدوداً بـ4)."),
                 checked = parallelUpdateDownload,
@@ -1068,6 +1121,28 @@ fun SettingsScreen(
                 subtitle = atlasText("Considère toute version publiée en dernier sur GitHub Releases ou CDN 1 comme la version active.", "Treat the latest version published on GitHub Releases or CDN 1 as the active release.", "اعتبار أحدث إصدار منشور على GitHub Releases أو CDN 1 هو الإصدار النشط."),
                 checked = followLatestRelease,
                 onCheckedChange = appViewModel::setFollowLatestRelease,
+            )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            val downloadedUpdateBytes = localStorageSummary.updateDownloadBytes
+            AtlasOutlinedButton(
+                text = if (downloadedUpdateBytes > 0L) {
+                    atlasText("Supprimer le fichier de mise à jour · ${Formatter.formatShortFileSize(context, downloadedUpdateBytes)}", "Delete downloaded update · ${Formatter.formatShortFileSize(context, downloadedUpdateBytes)}", "حذف ملف التحديث · ${Formatter.formatShortFileSize(context, downloadedUpdateBytes)}")
+                } else {
+                    atlasText("Aucun fichier de mise à jour téléchargé", "No downloaded update file", "لا يوجد ملف تحديث مُنزّل")
+                },
+                onClick = { confirmClearUpdatePackage = true },
+                enabled = downloadedUpdateBytes > 0L && updateState !is UpdateState.Downloading,
+                icon = Icons.Outlined.DeleteOutline,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                atlasText(
+                    "Atlas supprime automatiquement l'installateur après l'installation réussie de la mise à jour et le prochain démarrage. Vous pouvez aussi le supprimer ici.",
+                    "Atlas automatically removes the installer after the update installs successfully and Atlas is opened again. You can also remove it here.",
+                    "يحذف Atlas ملف التثبيت تلقائياً بعد تثبيت التحديث بنجاح وفتح Atlas مجدداً. ويمكنك حذفه من هنا أيضاً.",
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1180,17 +1255,6 @@ fun SettingsScreen(
 
         // Updates and optional diagnostics stay in Settings; local data management lives in Profile.
         AtlasCard {
-            SettingsToggleRow(
-                title = atlasText("Recherche automatique des mises à jour", "Check for updates automatically", "التحقق تلقائياً من التحديثات"),
-                subtitle = atlasText(
-                    "Vérifie à l'ouverture et environ toutes les 12 h en arrière-plan, selon les règles batterie d'Android.",
-                    "Checks at launch and about every 12 hours in the background, subject to Android battery rules.",
-                    "يتحقق عند التشغيل وكل 12 ساعة تقريباً في الخلفية، وفقاً لقيود بطارية Android.",
-                ),
-                checked = autoCheckUpdates,
-                onCheckedChange = appViewModel::setAutoCheckUpdates,
-            )
-            AtlasDivider(Modifier.padding(vertical = 8.dp))
             when {
                 !crashReportsAvailabilityChecked -> {
                     Row(

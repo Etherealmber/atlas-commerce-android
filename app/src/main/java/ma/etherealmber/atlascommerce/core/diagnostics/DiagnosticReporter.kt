@@ -89,6 +89,10 @@ object AtlasLogBuffer {
 
     fun recentEntries(): List<String> = synchronized(entries) { entries.toList() }
 
+    fun clearRecentEntries() {
+        synchronized(entries) { entries.clear() }
+    }
+
     fun installCrashBreadcrumbHandler(context: Context) {
         val crashFile = crashBreadcrumbFile(context)
         val previous = Thread.getDefaultUncaughtExceptionHandler()

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,7 +26,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -82,6 +85,7 @@ fun EmployeesScreen(
     val locale = when (language) { AppLanguage.FRENCH -> Locale.FRANCE; AppLanguage.ENGLISH -> Locale.UK; AppLanguage.ARABIC -> Locale.forLanguageTag("ar-MA") }
     var query by rememberSaveable(user.scopeIdentity) { mutableStateOf("") }
     var paymentFilter by rememberSaveable(user.scopeIdentity) { mutableStateOf("Tous") }
+    var payrollInfoOpen by remember { mutableStateOf(false) }
 
     val timezone = state.finance?.timezone?.takeIf { it.isNotBlank() } ?: "Africa/Casablanca"
     val currentMonth = remember(timezone) {
@@ -114,6 +118,44 @@ fun EmployeesScreen(
     if (state.loading && state.finance == null && state.payroll == null) {
         AtlasLoading(message = atlasText("Chargement des données employés…", "Loading employee data…", "جارٍ تحميل بيانات الموظفين…"))
         return
+    }
+
+    if (payrollInfoOpen) {
+        AlertDialog(
+            onDismissRequest = { payrollInfoOpen = false },
+            title = { Text(atlasText("À propos des chiffres", "About these figures", "حول هذه الأرقام")) },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        atlasText(
+                            "Le nombre d'employés correspond aux fiches de paie, pas au nombre de personnes; la période de paie ou la date d'échéance d'une fiche peut différer du mois choisi. Le mois sélectionné filtre les fiches. Les totaux viennent du serveur et sont en lecture seule; les chiffres du mois en cours peuvent évoluer jusqu'à sa clôture. Les mois futurs ne sont pas disponibles.",
+                            "The Employees count represents payroll records, not unique people; a record's pay period or due date may differ from the selected month. The selected month filters the records. Totals come from the server and are read-only; current-month figures can change until month-end. Future months aren't available.",
+                            "يمثل عدد الموظفين سجلات الرواتب وليس عدد الأشخاص؛ وقد تختلف فترة الراتب أو تاريخ استحقاق السجل عن الشهر المحدد. يحدد الشهر المختار السجلات. تأتي الإجماليات من الخادم وهي للقراءة فقط؛ وقد تتغير أرقام الشهر الحالي حتى نهايته. الأشهر المستقبلية غير متاحة.",
+                        ),
+                    )
+                    payroll?.takeIf { it.asOf.isNotBlank() }?.let { data ->
+                        val referenceTimezone = data.timezone.takeIf(String::isNotBlank) ?: timezone
+                        Text(
+                            atlasText(
+                                "Les statuts sont évalués au ${atlasShortDate(data.asOf)} · $referenceTimezone.",
+                                "Statuses are evaluated as of ${atlasShortDate(data.asOf)} · $referenceTimezone.",
+                                "تُقيّم الحالات حتى ${atlasShortDate(data.asOf)} · $referenceTimezone.",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { payrollInfoOpen = false }) {
+                    Text(atlasText("Fermer", "Close", "إغلاق"))
+                }
+            },
+        )
     }
 
     LazyColumn(
@@ -161,13 +203,21 @@ fun EmployeesScreen(
                     ) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Mois précédent"))
                     }
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(monthLabel, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            if (selectedMonth == currentMonth) atlasText("Mois en cours · données provisoires") else atlasText("Période de paie sélectionnée", "Selected payroll period", "فترة الرواتب المحددة"),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(monthLabel, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (selectedMonth == currentMonth) atlasText("Mois en cours · données provisoires") else atlasText("Période de paie sélectionnée", "Selected payroll period", "فترة الرواتب المحددة"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        IconButton(onClick = { payrollInfoOpen = true }) {
+                            Icon(
+                                Icons.Outlined.Info,
+                                contentDescription = atlasText("À propos des chiffres de paie", "About payroll figures", "حول أرقام الرواتب"),
+                            )
+                        }
                     }
                     IconButton(
                         onClick = { viewModel.selectFinancePeriod(selectedMonth.plusMonths(1).toString()) },
@@ -185,15 +235,7 @@ fun EmployeesScreen(
                         Text(atlasText("Revenir au mois en cours", "Return to current month", "العودة إلى الشهر الحالي"))
                     }
                 }
-                Text(
-                    text = atlasText(
-                        "Utilisez les flèches pour changer de mois. Le mois choisi filtre les fiches de paie et les totaux ci-dessous. Les données viennent du serveur, en lecture seule; celles du mois en cours peuvent évoluer jusqu'à sa clôture. Les périodes futures ne sont pas disponibles. Les mois antérieurs sont demandés au serveur; une période sans données affiche une liste vide.",
-                        "Use the arrows to change months. The selected month filters the payroll records and totals below. Data comes from the server and is read-only; current-month figures may change until month-end. Future months aren't available. Earlier months are requested from the server; a period with no data shows an empty list.",
-                        "استخدم الأسهم لتغيير الشهر. يحدد الشهر المختار سجلات الرواتب والإجماليات أدناه. البيانات من الخادم ومتاحة للقراءة فقط؛ وقد تتغير أرقام الشهر الحالي حتى نهايته. الأشهر المستقبلية غير متاحة. تُطلب الأشهر السابقة من الخادم، وتظهر قائمة فارغة للفترات التي لا تحتوي على بيانات.",
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+
             }
         }
 
@@ -220,40 +262,6 @@ fun EmployeesScreen(
                     value = payroll?.let { atlasMoneyCompact(it.totals.amountDue, it.currency) } ?: "—",
                     modifier = Modifier.weight(1f),
                 )
-            }
-        }
-
-        item(key = "payroll_explanation") {
-            AtlasCard {
-                Text(
-                    atlasText("Comprendre les chiffres", "How to read these figures", "كيفية فهم الأرقام"),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    atlasText(
-                        "Employés correspond au nombre de fiches de paie de la période. « À payer » et « Montant dû » reprennent les totaux fournis par le serveur. La période de paie et l'échéance de chaque fiche peuvent différer du mois sélectionné. Le statut de chaque fiche est évalué selon son état et son échéance à la date de référence indiquée.",
-                        "Employees is the number of payroll records for this period. To pay and Amount due use totals returned by the server. A record's pay period and due date may differ from the selected month. Each record's status is evaluated using its state and due date as of the reference date shown.",
-                        "يمثل عدد الموظفين عدد سجلات الرواتب لهذه الفترة. يعرض «مستحق الدفع» و«المبلغ المستحق» الإجماليات التي يرسلها الخادم. قد تختلف فترة الدفع وتاريخ الاستحقاق لكل سجل عن الشهر المحدد. تُحدد حالة كل سجل بناءً على حالته وتاريخ استحقاقه في التاريخ المرجعي المعروض.",
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                payroll?.takeIf { it.asOf.isNotBlank() }?.let { payrollData ->
-                    Spacer(Modifier.height(6.dp))
-                    val asOf = payrollData.asOf
-                    val payrollTimezone = payrollData.timezone.takeIf(String::isNotBlank) ?: timezone
-                    Text(
-                        atlasText(
-                            "Statuts évalués au ${atlasShortDate(asOf)} · fuseau $payrollTimezone",
-                            "Statuses evaluated as of ${atlasShortDate(asOf)} · timezone $payrollTimezone",
-                            "الحالات محسوبة حتى ${atlasShortDate(asOf)} · المنطقة الزمنية $payrollTimezone",
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
         }
 

@@ -119,6 +119,72 @@ class AppUpdateManagerTest {
     }
 
     @Test
+    fun startupCleanupRemovesInstalledAndInterruptedPackagesButKeepsNewerUpdate() {
+        val installed = File(tempDir, "atlas-commerce-v9.apk").apply { writeBytes(byteArrayOf(1)) }
+        val interrupted = File(tempDir, "atlas-commerce-v11.apk.part").apply { writeBytes(byteArrayOf(2)) }
+        val newer = File(tempDir, "atlas-commerce-v11.apk").apply { writeBytes(byteArrayOf(3)) }
+        val manager = AppUpdateManager(
+            updatesDirProvider = { tempDir },
+            baseUrlProvider = { "https://example.invalid" },
+            currentVersionCode = 10,
+            currentVersionName = "1.0.10",
+            probeClient = client,
+            downloadClient = client,
+            moshi = moshi,
+            notifier = RecordingNotifier(),
+            scope = scope,
+        )
+
+        awaitCondition {
+            !installed.exists() &&
+                !interrupted.exists() &&
+                newer.exists()
+        }
+    }
+
+    @Test
+    fun clearingCachedFilesDoesNotDismissMandatoryUpdatePolicy() {
+        ServerSocket(0).use { server ->
+            val port = server.localPort
+            val serverThread = Thread {
+                server.accept().use { socket ->
+                    val reader = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
+                    while (reader.readLine()?.isNotEmpty() == true) Unit
+                    val body = """{"success":true,"ok":true,"updateAvailable":true,"versionCode":11,"versionName":"1.0.11","apkUrl":"/updates/latest.apk","mandatory":true}"""
+                    val bytes = body.toByteArray(StandardCharsets.UTF_8)
+                    val out = socket.getOutputStream()
+                    out.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray(StandardCharsets.UTF_8))
+                    out.write(bytes)
+                    out.flush()
+                }
+            }.apply { isDaemon = true; start() }
+            val manager = AppUpdateManager(
+                updatesDirProvider = { tempDir },
+                baseUrlProvider = { "http://127.0.0.1:$port" },
+                currentVersionCode = 10,
+                currentVersionName = "1.0.10",
+                probeClient = client,
+                downloadClient = client,
+                moshi = moshi,
+                notifier = RecordingNotifier(),
+                scope = scope,
+                allowCleartext = true,
+            )
+
+            manager.checkForUpdate(manual = true)
+            awaitCondition { manager.state.value is UpdateState.Available }
+            assertTrue((manager.state.value as UpdateState.Available).info.mandatory)
+
+            assertTrue(manager.clearCachedUpdateFiles())
+
+            val remainingPolicy = manager.state.value as? UpdateState.Available
+            assertNotNull(remainingPolicy)
+            assertTrue(remainingPolicy?.info?.mandatory == true)
+            serverThread.join(1_000)
+        }
+    }
+
+    @Test
     fun releaseNotesStripRawMarkdownAndKeepReadableBullets() {
         val rendered = formatReleaseNotesForDisplay(
             """## Atlas Commerce 1.1.1

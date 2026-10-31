@@ -71,6 +71,17 @@ class DiagnosticReportMessageTest {
     }
 
     @Test
+    fun `clearing diagnostic logs empties the in-memory ring buffer`() {
+        AtlasLogBuffer.clearRecentEntries()
+        AtlasLogBuffer.log("TEST", "local diagnostic entry")
+        assertTrue(AtlasLogBuffer.recentEntries().isNotEmpty())
+
+        AtlasLogBuffer.clearRecentEntries()
+
+        assertTrue(AtlasLogBuffer.recentEntries().isEmpty())
+    }
+
+    @Test
     fun `log sanitizer removes bearer tokens JWTs email and report tickets`() {
         val jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature0123456789"
         val raw = "Authorization: Bearer superSecret123 rt=reportTicket456 jwt=$jwt user=person@example.com ip=192.168.1.55 mac=aa:bb:cc:dd:ee:ff ipv6=2001:db8::1 time=12:34:56"
