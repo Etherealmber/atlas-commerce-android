@@ -62,7 +62,7 @@ else
           for attempt in $(seq 1 12); do
             timeout 8s adb shell uiautomator dump /sdcard/api28-window.xml >/dev/null 2>&1 || true
             timeout 8s adb pull /sdcard/api28-window.xml api28-release-window.xml >/dev/null 2>&1 || true
-            if grep -Eq "Connectez votre serveur|Connect your server|اربط الخادم الخاص بك|Saisissez l'adresse du site Atlas Commerce de votre organisation\.|Enter your organization's Atlas Commerce site address\.|أدخل عنوان موقع Atlas Commerce الخاص بمؤسستك\." api28-release-window.xml 2>/dev/null; then
+            if grep -Eq "Connectez votre serveur|Connect your server|اربط الخادم الخاص بك|Choisissez un serveur|Choose a server|اختر خادماً|STEP 1 · SAVED SERVERS|ÉTAPE 1 · SERVEURS ENREGISTRÉS|الخطوة ١ · الخوادم المحفوظة|Saisissez l'adresse de votre organisation\.|Enter your organization's server address\.|أدخل عنوان خادم مؤسستك\.|Saisissez l'adresse du site Atlas Commerce de votre organisation\.|Enter your organization's Atlas Commerce site address\.|أدخل عنوان موقع Atlas Commerce الخاص بمؤسستك\." api28-release-window.xml 2>/dev/null; then
               reached_first_run=true
               break
             fi

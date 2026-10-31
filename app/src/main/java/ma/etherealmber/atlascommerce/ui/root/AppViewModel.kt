@@ -97,6 +97,12 @@ class AppViewModel @Inject constructor(
     private var lastForegroundRefreshMs = 0L
     private val foregroundRefreshMinimumIntervalMs = 45_000L
 
+    private val _automaticCrashReportsEnabled = MutableStateFlow(false)
+    val automaticCrashReportsEnabled: StateFlow<Boolean> = _automaticCrashReportsEnabled.asStateFlow()
+
+    private val _automaticCrashReportsAvailable = MutableStateFlow(false)
+    val automaticCrashReportsAvailable: StateFlow<Boolean> = _automaticCrashReportsAvailable.asStateFlow()
+
     init {
         viewModelScope.launch {
             sessionManager.state.collect { session ->
@@ -104,6 +110,14 @@ class AppViewModel @Inject constructor(
                     sessionManager.lockForBackground()
                 }
             }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            // Discover Crashlytics in the configured Firebase build and restore the user's
+            // explicit opt-in. Both state flows used by Settings must reflect persisted consent.
+            val available = CrashReportConsent.isConfigured(applicationContext)
+            CrashReportConsent.applyStoredConsent(applicationContext)
+            _automaticCrashReportsEnabled.value = available && CrashReportConsent.isEnabled(applicationContext)
+            _automaticCrashReportsAvailable.value = available
         }
     }
 
@@ -149,12 +163,6 @@ class AppViewModel @Inject constructor(
 
     val developerModeEnabled: StateFlow<Boolean> = preferences.developerModeEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-    private val _automaticCrashReportsEnabled = MutableStateFlow(false)
-    val automaticCrashReportsEnabled: StateFlow<Boolean> = _automaticCrashReportsEnabled.asStateFlow()
-
-    private val _automaticCrashReportsAvailable = MutableStateFlow(false)
-    val automaticCrashReportsAvailable: StateFlow<Boolean> = _automaticCrashReportsAvailable.asStateFlow()
 
     val autoOpenCamera: StateFlow<Boolean> = preferences.autoOpenCamera
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)

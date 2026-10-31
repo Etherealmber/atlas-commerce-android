@@ -25,9 +25,20 @@ class Android9StartupSmokeTest {
         // New installs choose a server before onboarding or sign-in. Accept the localized
         // server-setup heading because the app follows the emulator's system language.
         val firstRunMarkers = listOf(
+            // Address entry is the usual clean-install route. A restored saved-server
+            // list is still a valid first-run setup screen, so accept its step heading too.
             By.textContains("Connectez votre serveur"),
             By.textContains("Connect your server"),
             By.textContains("اربط الخادم الخاص بك"),
+            By.textContains("Choisissez un serveur"),
+            By.textContains("Choose a server"),
+            By.textContains("اختر خادماً"),
+            By.textContains("STEP 1 · SAVED SERVERS"),
+            By.textContains("ÉTAPE 1 · SERVEURS ENREGISTRÉS"),
+            By.textContains("الخطوة ١ · الخوادم المحفوظة"),
+            By.textContains("Saisissez l'adresse de votre organisation."),
+            By.textContains("Enter your organization's server address."),
+            By.textContains("أدخل عنوان خادم مؤسستك."),
             By.textContains("Saisissez l'adresse du site Atlas Commerce de votre organisation."),
             By.textContains("Enter your organization's Atlas Commerce site address."),
             By.textContains("أدخل عنوان موقع Atlas Commerce الخاص بمؤسستك."),
@@ -37,7 +48,9 @@ class Android9StartupSmokeTest {
             scenario.onActivity { activity ->
                 Log.i("Android9StartupSmoke", "MainActivity resumed; package=${activity.packageName}")
             }
-            val deadline = SystemClock.uptimeMillis() + 30_000L
+            // API 28 emulator first launches can spend several seconds in dexopt and
+            // Compose startup after MainActivity is visible. Give the UI a full minute.
+            val deadline = SystemClock.uptimeMillis() + 60_000L
             var reachedFirstRun = false
             while (!reachedFirstRun && SystemClock.uptimeMillis() < deadline) {
                 reachedFirstRun = firstRunMarkers.any { marker -> device.findObject(marker) != null }

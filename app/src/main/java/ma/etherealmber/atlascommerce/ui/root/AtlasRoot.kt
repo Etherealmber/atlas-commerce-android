@@ -435,10 +435,9 @@ private fun AtlasGate(
     val rootView = LocalView.current
     SideEffect {
         val window = context.findActivity()?.window ?: return@SideEffect
-        val authScreen = baseStage == RootStage.LOGIN || baseStage == RootStage.SERVER_SETUP
         WindowCompat.getInsetsController(window, rootView).apply {
-            isAppearanceLightStatusBars = if (authScreen) false else !darkTheme
-            isAppearanceLightNavigationBars = if (authScreen) false else !darkTheme
+            isAppearanceLightStatusBars = !darkTheme
+            isAppearanceLightNavigationBars = !darkTheme
         }
     }
     val loginDeviceUnlockUnavailableMessage = atlasText(
@@ -498,6 +497,7 @@ private fun AtlasGate(
                             overlay = Overlay.QR_DEVICE
                         },
                         onOpenAbout = { overlay = Overlay.ABOUT },
+                        onToast = showToast,
                         onUnlockSavedAccount = { entry, afterAuthentication ->
                             val authActivity = context.findActivity() as? FragmentActivity
                             if (authActivity == null || !DeviceUnlockAuthenticator.isAvailable(authActivity)) {

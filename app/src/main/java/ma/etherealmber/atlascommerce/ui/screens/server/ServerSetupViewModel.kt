@@ -7,6 +7,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -29,7 +30,7 @@ class ServerSetupViewModel @Inject constructor(
     data class UiState(
         val input: String = "",
         val label: String = "",
-        val rememberServer: Boolean = true,
+        val rememberServer: Boolean = false,
         val current: String? = null,
         val testing: Boolean = false,
         val saving: Boolean = false,
@@ -44,6 +45,10 @@ class ServerSetupViewModel @Inject constructor(
 
     val savedServers: StateFlow<List<SavedServerEntry>> = serverConfig.savedServers
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val serverConfigLoaded: StateFlow<Boolean> = serverConfig.loaded
+    val savedServersLoaded: StateFlow<Boolean> = serverConfig.savedServers
+        .map { true }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val _state = MutableStateFlow(
         UiState(
@@ -76,6 +81,27 @@ class ServerSetupViewModel @Inject constructor(
             )
         }
         test()
+    }
+
+    fun continueWithSavedServer(entry: SavedServerEntry, onDone: () -> Unit) {
+        if (_state.value.saving) return
+        viewModelScope.launch {
+            _state.update { it.copy(saving = true, error = null) }
+            val previousUrl = serverConfig.selection.value?.baseUrl
+            val targetNormalized = ServerUrl.normalize(entry.url)
+            if (previousUrl != null && !previousUrl.equals(targetNormalized, ignoreCase = true)) {
+                sessionManager.signOut()
+            }
+            serverConfig.select(entry.url, entry.label, rememberServer = true).fold(
+                onSuccess = { selection ->
+                    _state.update { it.copy(saving = false, current = selection.baseUrl) }
+                    onDone()
+                },
+                onFailure = { throwable ->
+                    _state.update { it.copy(saving = false, error = throwable.message ?: "Adresse de serveur invalide.") }
+                },
+            )
+        }
     }
 
     fun forgetServer(entry: SavedServerEntry) {

@@ -63,8 +63,8 @@ sealed interface LoginOutcome {
 
 /**
  * Owns the authenticated session with strict per-server & per-account isolation:
- * restore on start, password + OTP + QR pairing, optional encrypted account
- * vault switching, profile refresh, and full state purge on sign-out/switch.
+ * password + OTP + QR pairing, explicit device-authenticated saved-account
+ * switching, profile refresh, and full state purge on sign-out/background.
  */
 @Singleton
 class SessionManager @Inject constructor(
@@ -111,67 +111,24 @@ class SessionManager @Inject constructor(
 
     private suspend fun restore() {
         try {
-            // Do not give up on a valid stored session just because DataStore is
-            // slow during process startup. The root remains on its splash stage
-            // until both server selection and session restoration are complete.
+            // A process can be killed without delivering ON_STOP. Treat every
+            // cold process start as a locked session: clear the active token and
+            // require the user to authenticate again. Device unlock remains an
+            // explicit action on the login screen, never an automatic restore.
             serverConfig.loaded.filter { it }.first()
-            val stored = preferences.readSession()
-            if (stored == null) {
-                if (!preferences.isSessionRestoreDisabled() && restoreOptedInSavedSession()) return
-                purgeInMemorySession()
-                _state.value = SessionState.SignedOut
-                return
+            val hadActiveSession = preferences.readSession() != null
+            if (hadActiveSession) {
+                preferences.disableSessionRestore(disabled = true)
+                preferences.clearSession()
             }
-
-            val storedServer = ServerUrl.normalize(stored.serverUrl)
-            var currentServer = serverConfig.selection.value?.baseUrl?.let(ServerUrl::normalize)
-            if (currentServer == null && storedServer != null) {
-                // The session record is authoritative if a prior preference
-                // write left the server selection blank. Reuse that server
-                // rather than sending a returning user back to setup/login.
-                val restoredSelection = serverConfig.select(storedServer, rememberServer = false)
-                currentServer = restoredSelection.getOrNull()?.baseUrl
-            }
-
-            val resolvedServer = when {
-                currentServer == null -> null
-                storedServer == null -> currentServer // legacy session records
-                currentServer.equals(storedServer, ignoreCase = true) -> currentServer
-                else -> null
-            }
-            val token = resolvedServer?.let { cryptoStore.decrypt(stored.tokenCipher) }
-            if (resolvedServer == null || token.isNullOrBlank()) {
-                purgeInMemorySession()
-                runCatching { preferences.clearSession() }
-                if (!preferences.isSessionRestoreDisabled() && restoreOptedInSavedSession()) return
-                _state.value = SessionState.SignedOut
-                return
-            }
-
-            val username = stored.username.ifBlank { "utilisateur" }
-            runCatching { preferences.bindActiveScope(resolvedServer, username) }
-            runCatching { offlineCache.bindScope(resolvedServer, username) }
-            tokenHolder.set(token)
-            _state.value = SessionState.Active(
-                SessionUser(
-                    username = username,
-                    role = stored.role.ifBlank { "user" },
-                    displayName = stored.displayName.ifBlank { username },
-                    email = stored.email,
-                    avatarUrl = stored.avatarUrl,
-                    serverUrl = resolvedServer,
-                ),
-            )
-            runCatching { refreshProfile() }
+            purgeInMemorySession()
+            _state.value = SessionState.SignedOut
         } catch (error: kotlinx.coroutines.CancellationException) {
             throw error
         } catch (error: Throwable) {
-            // A transient local startup error must not erase the encrypted
-            // session record. Leave sign-in available and allow the next launch
-            // to retry restoration.
             ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
                 tag = "AUTH",
-                message = "Could not restore saved session (${error.javaClass.simpleName})",
+                message = "Could not initialize a locked session (${error.javaClass.simpleName})",
                 level = "WARN",
             )
             purgeInMemorySession()
@@ -181,47 +138,6 @@ class SessionManager @Inject constructor(
                 _state.value = SessionState.SignedOut
             }
         }
-    }
-
-    /**
-     * Recover the active session from an explicitly saved + device-unlock-enabled
-     * account when the primary session record is absent. A deliberate sign-out
-     * disables this fallback until the next successful sign-in.
-     */
-    private suspend fun restoreOptedInSavedSession(): Boolean {
-        val selectedServer = serverConfig.selection.value?.baseUrl?.let(ServerUrl::normalize) ?: return false
-        val entry = preferences.savedAccountsForServer(selectedServer)
-            .first()
-            .firstOrNull { it.canUseDeviceUnlock }
-            ?: return false
-        val resolvedServer = ServerUrl.normalize(entry.serverUrl) ?: return false
-        if (!resolvedServer.equals(selectedServer, ignoreCase = true)) return false
-        val token = cryptoStore.decrypt(entry.tokenCipher)?.takeIf { it.isNotBlank() } ?: return false
-
-        runCatching { preferences.bindActiveScope(resolvedServer, entry.username) }
-        runCatching { offlineCache.bindScope(resolvedServer, entry.username) }
-        tokenHolder.set(token)
-        preferences.writeSession(
-            serverUrl = resolvedServer,
-            tokenCipher = entry.tokenCipher,
-            username = entry.username,
-            role = entry.role,
-            displayName = entry.displayName,
-            email = entry.email,
-            avatarUrl = entry.avatarUrl,
-        )
-        _state.value = SessionState.Active(
-            SessionUser(
-                username = entry.username,
-                role = entry.role.ifBlank { "user" },
-                displayName = entry.displayName.ifBlank { entry.username },
-                email = entry.email,
-                avatarUrl = entry.avatarUrl,
-                serverUrl = resolvedServer,
-            ),
-        )
-        runCatching { refreshProfile() }
-        return true
     }
 
     suspend fun signIn(

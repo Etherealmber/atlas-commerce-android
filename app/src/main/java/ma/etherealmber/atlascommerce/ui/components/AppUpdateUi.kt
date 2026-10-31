@@ -226,11 +226,11 @@ fun AppUpdateBanner(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         TextButton(onClick = onDismiss) {
-                            Text(atlasText("Plus tard"))
+                            Text(atlasText("Plus tard", "Later", "لاحقاً"))
                         }
                         Spacer(Modifier.width(8.dp))
                         AtlasButton(
-                            text = "Télécharger",
+                            text = atlasText("Télécharger", "Download", "تنزيل"),
                             onClick = onDownload,
                             icon = Icons.Outlined.SystemUpdateAlt,
                         )
@@ -252,7 +252,7 @@ fun AppUpdateBanner(
                                     onOpenSettings()
                                 },
                             ) {
-                                Text(atlasText("Voir dans Paramètres"))
+                                Text(atlasText("Voir dans Paramètres", "View in Settings", "عرض في الإعدادات"))
                             }
                             Spacer(Modifier.width(4.dp))
                         }
@@ -263,7 +263,7 @@ fun AppUpdateBanner(
                                 modifier = Modifier.size(18.dp),
                             )
                             Spacer(Modifier.width(4.dp))
-                            Text(atlasText("Masquer"))
+                            Text(atlasText("Masquer", "Hide", "إخفاء"))
                         }
                     }
                 }
@@ -289,7 +289,7 @@ fun AppUpdateBanner(
                             )
                             Text(
                                 text = if (state.awaitingInstallPermission) {
-                                    atlasText("Autorisez « Installer des applis inconnues » dans les réglages Android pour lancer l'installation.")
+                                    atlasText("Autorisez « Installer des applis inconnues » dans les réglages Android pour lancer l'installation.", "Allow installs from this source in Android settings to continue.", "اسمح بالتثبيت من هذا المصدر في إعدادات Android للمتابعة.")
                                 } else {
                                     atlasText(
                                         "Téléchargement terminé à 100 %. Lancez l'installation maintenant.",
@@ -314,9 +314,9 @@ fun AppUpdateBanner(
                         Spacer(Modifier.width(8.dp))
                         AtlasButton(
                             text = if (state.awaitingInstallPermission) {
-                                "Autoriser et installer"
+                                atlasText("Autoriser et installer", "Allow and install", "السماح والتثبيت")
                             } else {
-                                "Installer maintenant"
+                                atlasText("Installer maintenant", "Install now", "ثبّت الآن")
                             },
                             onClick = onInstall,
                         )
@@ -351,7 +351,7 @@ fun AppUpdateBanner(
                         horizontalArrangement = Arrangement.End,
                     ) {
                         AtlasButton(
-                            text = "Réessayer",
+                            text = atlasText("Réessayer", "Retry", "إعادة المحاولة"),
                             onClick = onDownload,
                             icon = Icons.Outlined.Refresh,
                         )
@@ -396,7 +396,7 @@ fun MandatoryUpdateScreen(
         AtlasMark(size = 68.dp)
         Spacer(Modifier.height(18.dp))
         Text(
-            text = atlasText("Mise à jour requise"),
+            text = atlasText("Mise à jour requise", "Update required", "التحديث مطلوب"),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
@@ -406,14 +406,14 @@ fun MandatoryUpdateScreen(
 
         AtlasCard(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = atlasText("Cette version d'Atlas Commerce doit être mise à jour avant de continuer."),
+                text = atlasText("Cette version d'Atlas Commerce doit être mise à jour avant de continuer.", "Update Atlas Commerce before continuing.", "حدّث Atlas Commerce قبل المتابعة."),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(10.dp))
             AtlasDivider()
             Spacer(Modifier.height(10.dp))
             Text(
-                text = atlasText("Nouveautés"),
+                text = atlasText("Nouveautés", "What's new", "الجديد"),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -451,9 +451,9 @@ fun MandatoryUpdateScreen(
                     Spacer(Modifier.height(12.dp))
                     AtlasButton(
                         text = if (state.awaitingInstallPermission) {
-                            "Autoriser et installer"
+                            atlasText("Autoriser et installer", "Allow and install", "السماح والتثبيت")
                         } else {
-                            "Installer la mise à jour"
+                            atlasText("Installer la mise à jour", "Install update", "تثبيت التحديث")
                         },
                         onClick = onInstall,
                         modifier = Modifier.fillMaxWidth(),
@@ -462,12 +462,12 @@ fun MandatoryUpdateScreen(
 
                 is UpdateState.Error -> {
                     AtlasErrorCard(
-                        title = atlasText("Téléchargement interrompu"),
+                        title = atlasText("Téléchargement interrompu", "Download interrupted", "تم إيقاف التنزيل"),
                         message = atlasNotice(state.message, LocalAtlasLanguage.current),
                     )
                     Spacer(Modifier.height(12.dp))
                     AtlasButton(
-                        text = "Réessayer le téléchargement",
+                        text = atlasText("Réessayer le téléchargement", "Retry download", "إعادة محاولة التنزيل"),
                         onClick = onDownload,
                         icon = Icons.Outlined.Refresh,
                         modifier = Modifier.fillMaxWidth(),
@@ -488,7 +488,7 @@ fun MandatoryUpdateScreen(
         if (state !is UpdateState.Downloading) {
             Spacer(Modifier.height(12.dp))
             TextButton(onClick = onChangeServer) {
-                Text(atlasText("Changer de serveur"))
+                Text(atlasText("Changer de serveur", "Change server", "تغيير الخادم"))
             }
         }
     }
@@ -524,7 +524,7 @@ fun SettingsUpdateCard(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = atlasText("Mise à jour & Miroirs CDN"),
+                text = atlasText("Mise à jour & Miroirs CDN", "Updates & CDN mirrors", "التحديثات ومرايا CDN"),
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.weight(1f),
             )
@@ -673,7 +673,7 @@ fun SettingsUpdateCard(
                 )
                 Spacer(Modifier.height(10.dp))
                 AtlasOutlinedButton(
-                    text = atlasText("Vérifier les mises à jour"),
+                    text = atlasText("Vérifier les mises à jour", "Check for updates", "التحقق من التحديثات"),
                     onClick = onCheck,
                     icon = Icons.Outlined.Refresh,
                 )
@@ -684,7 +684,7 @@ fun SettingsUpdateCard(
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        text = atlasText("Recherche de mises à jour sur le serveur…"),
+                        text = atlasText("Recherche de mises à jour sur le serveur…", "Checking the server for updates…", "جارٍ التحقق من التحديثات على الخادم…"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -775,7 +775,7 @@ fun SettingsUpdateCard(
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = if (state.awaitingInstallPermission) {
-                        atlasText("Activez l'autorisation « Installer des applis inconnues » pour terminer l'installation.")
+                        atlasText("Activez l'autorisation « Installer des applis inconnues » pour terminer l'installation.", "Allow installs from this source in Android settings to finish.", "اسمح بالتثبيت من هذا المصدر في إعدادات Android لإكمال التثبيت.")
                     } else {
                         atlasText(
                             "Appuyez ci-dessous pour ouvrir l'installateur Android.",
@@ -789,9 +789,9 @@ fun SettingsUpdateCard(
                 Spacer(Modifier.height(10.dp))
                 AtlasButton(
                     text = if (state.awaitingInstallPermission) {
-                        "Autoriser et installer"
+                        atlasText("Autoriser et installer", "Allow and install", "السماح والتثبيت")
                     } else {
-                        "Installer maintenant"
+                        atlasText("Installer maintenant", "Install now", "ثبّت الآن")
                     },
                     onClick = onInstall,
                     modifier = Modifier.fillMaxWidth(),
@@ -807,7 +807,7 @@ fun SettingsUpdateCard(
                 Spacer(Modifier.height(10.dp))
                 if (state.info != null) {
                     AtlasButton(
-                        text = "Réessayer le téléchargement",
+                        text = atlasText("Réessayer le téléchargement", "Retry download", "إعادة محاولة التنزيل"),
                         onClick = onDownload,
                         icon = Icons.Outlined.Refresh,
                         modifier = Modifier.fillMaxWidth(),
