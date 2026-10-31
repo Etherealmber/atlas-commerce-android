@@ -192,6 +192,26 @@ class AppUpdateManager internal constructor(
         moshi.adapter<List<GitHubReleaseDto>>(type)
     }
 
+    init {
+        // Cache files are app-private and a completed APK remains after Android's installer
+        // returns. On the next process launch, remove packages already installed and any
+        // interrupted .part transfer; retain only a newer, still-usable downloaded package.
+        scope.launch(ioDispatcher) { cleanupObsoleteUpdateFiles() }
+    }
+
+    internal fun cleanupObsoleteUpdateFiles() = synchronized(lock) {
+        if (isDownloadingLocked()) return@synchronized
+        val directory = runCatching { updatesDirProvider() }.getOrNull() ?: return@synchronized
+        val installedApkPattern = Regex("^atlas-commerce-v(\\d+)\\.apk$")
+        directory.listFiles().orEmpty().forEach { file ->
+            val installedVersion = installedApkPattern.matchEntire(file.name)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            val isInterruptedDownload = file.name.endsWith(".apk.part", ignoreCase = true)
+            if (isInterruptedDownload || (installedVersion != null && installedVersion <= currentVersionCode)) {
+                runCatching { file.delete() }
+            }
+        }
+    }
+
     val isDownloading: Boolean
         get() = synchronized(lock) {
             _state.value is UpdateState.Downloading || downloadJob?.isActive == true
@@ -200,7 +220,8 @@ class AppUpdateManager internal constructor(
     /** Clear the cached update package only when no transfer is in progress. */
     fun clearCachedUpdateFiles(): Boolean = synchronized(lock) {
         if (isDownloadingLocked()) return@synchronized false
-        runCatching { updatesDirProvider().deleteRecursively() }.getOrDefault(false)
+        val deleted = runCatching { updatesDirProvider().deleteRecursively() }.getOrDefault(false)
+        if (!deleted) return@synchronized false
         if (_state.value is UpdateState.ReadyToInstall || _state.value is UpdateState.Error || _state.value is UpdateState.Available) {
             _state.value = UpdateState.Idle
         }

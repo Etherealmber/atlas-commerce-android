@@ -68,6 +68,7 @@ data class LocalStorageSummary(
     val diagnosticsBytes: Long = 0L,
     val updateDownloadBytes: Long = 0L,
     val deviceFreeBytes: Long? = null,
+    val deviceTotalBytes: Long? = null,
     val recommendedFreeBytes: Long = 69L * 1024L * 1024L,
 )
 
@@ -272,8 +273,10 @@ class AppViewModel @Inject constructor(
                 val files = applicationContext.filesDir
                 val finance = File(cache, "finance")
                 val diagnostics = File(cache, "diagnostics")
+                val persistentDiagnostics = File(files, "diagnostics")
                 val updates = File(cache, "updates")
                 val updateBytes = updates.directorySizeBytes()
+                val deviceStats = StatFs(applicationContext.dataDir.absolutePath)
                 val mib = 1024L * 1024L
                 LocalStorageSummary(
                     totalAppBytes = applicationContext.dataDir.directorySizeBytes(),
@@ -281,9 +284,10 @@ class AppViewModel @Inject constructor(
                     offlineCatalogBytes = File(files, "atlas-cache").directorySizeBytes(),
                     financeReportBytes = finance.directorySizeBytes(),
                     financeReportCount = finance.walkTopDown().count { it.isFile && it.extension.equals("pdf", ignoreCase = true) },
-                    diagnosticsBytes = diagnostics.directorySizeBytes(),
+                    diagnosticsBytes = diagnostics.directorySizeBytes() + persistentDiagnostics.directorySizeBytes(),
                     updateDownloadBytes = updateBytes,
-                    deviceFreeBytes = StatFs(applicationContext.dataDir.absolutePath).availableBytes,
+                    deviceFreeBytes = deviceStats.availableBytes,
+                    deviceTotalBytes = deviceStats.totalBytes,
                     // Keep a 69 MiB working reserve, expanding it for an in-progress update's
                     // staged download and install overhead. The UI rounds this recommendation up.
                     recommendedFreeBytes = maxOf(69L * mib, updateBytes * 2L + 32L * mib),
@@ -381,6 +385,14 @@ class AppViewModel @Inject constructor(
 
     fun installDownloadedUpdate(context: Context): Boolean =
         updateManager.installApk(context)
+
+    fun clearCachedUpdateFiles(onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val cleared = withContext(Dispatchers.IO) { updateManager.clearCachedUpdateFiles() }
+            refreshLocalStorageSummary()
+            onDone(cleared)
+        }
+    }
 
     fun onAppResumed(context: Context) {
         appInForeground = true
@@ -608,6 +620,21 @@ class AppViewModel @Inject constructor(
         onDone(true)
     }
 
+    fun clearDiagnosticLogs(onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val cleared = withContext(Dispatchers.IO) {
+                val diagnosticDirectories = listOf(
+                    File(applicationContext.cacheDir, "diagnostics"),
+                    File(applicationContext.filesDir, "diagnostics"),
+                )
+                AtlasLogBuffer.clearRecentEntries()
+                diagnosticDirectories.all { directory -> !directory.exists() || directory.deleteRecursively() }
+            }
+            refreshLocalStorageSummary()
+            onDone(cleared)
+        }
+    }
+
     fun clearFinanceReportCache(onDone: (String) -> Unit) {
         viewModelScope.launch {
             val removed = withContext(Dispatchers.IO) {
@@ -624,7 +651,7 @@ class AppViewModel @Inject constructor(
     /** Clears local app data only; this does not delete company records from the server. */
     fun clearAllLocalAppData(onDone: (String) -> Unit) {
         viewModelScope.launch {
-            val updateFilesCleared = updateManager.clearCachedUpdateFiles()
+            val updateFilesCleared = withContext(Dispatchers.IO) { updateManager.clearCachedUpdateFiles() }
             sessionManager.signOut()
             serverConfig.clear()
             preferences.clearAllLocalPreferences()
@@ -632,8 +659,10 @@ class AppViewModel @Inject constructor(
             withContext(Dispatchers.IO) {
                 File(applicationContext.cacheDir, "finance").deleteRecursively()
                 File(applicationContext.cacheDir, "diagnostics").deleteRecursively()
+                File(applicationContext.filesDir, "diagnostics").deleteRecursively()
                 File(applicationContext.filesDir, "atlas-cache").deleteRecursively()
             }
+            AtlasLogBuffer.clearRecentEntries()
             val updateNote = if (updateFilesCleared) "" else " Le téléchargement de mise à jour actif est conservé jusqu'à sa fin."
             refreshLocalStorageSummary()
             onDone("Données locales supprimées.$updateNote Les données de l'entreprise sur le serveur n'ont pas été modifiées.")

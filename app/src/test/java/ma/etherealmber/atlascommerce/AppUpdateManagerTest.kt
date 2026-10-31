@@ -119,6 +119,30 @@ class AppUpdateManagerTest {
     }
 
     @Test
+    fun startupCleanupRemovesInstalledAndInterruptedPackagesButKeepsNewerUpdate() {
+        val installed = File(tempDir, "atlas-commerce-v9.apk").apply { writeBytes(byteArrayOf(1)) }
+        val interrupted = File(tempDir, "atlas-commerce-v11.apk.part").apply { writeBytes(byteArrayOf(2)) }
+        val newer = File(tempDir, "atlas-commerce-v11.apk").apply { writeBytes(byteArrayOf(3)) }
+        val manager = AppUpdateManager(
+            updatesDirProvider = { tempDir },
+            baseUrlProvider = { "https://example.invalid" },
+            currentVersionCode = 10,
+            currentVersionName = "1.0.10",
+            probeClient = client,
+            downloadClient = client,
+            moshi = moshi,
+            notifier = RecordingNotifier(),
+            scope = scope,
+        )
+
+        manager.cleanupObsoleteUpdateFiles()
+
+        assertFalse(installed.exists())
+        assertFalse(interrupted.exists())
+        assertTrue(newer.exists())
+    }
+
+    @Test
     fun releaseNotesStripRawMarkdownAndKeepReadableBullets() {
         val rendered = formatReleaseNotesForDisplay(
             """## Atlas Commerce 1.1.1
