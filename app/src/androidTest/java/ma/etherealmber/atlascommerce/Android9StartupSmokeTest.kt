@@ -22,10 +22,6 @@ class Android9StartupSmokeTest {
         val launchIntent = checkNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         val device = UiDevice.getInstance(instrumentation)
-        // Make the test deterministic even if the emulator image restored app data from a prior run.
-        val clearResult = device.executeShellCommand("pm clear ${context.packageName}")
-        Log.i("Android9StartupSmoke", "Cleared target app data before first-run check: $clearResult")
-        assertTrue("Could not reset target app to a clean install: $clearResult", clearResult.contains("Success"))
         // New installs choose a server before onboarding or sign-in. Accept the localized
         // server-setup heading because the app follows the emulator's system language.
         val firstRunMarkers = listOf(

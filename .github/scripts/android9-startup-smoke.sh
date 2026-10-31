@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set +e
 
+# Reset persisted app state outside instrumentation so pm clear cannot disrupt UiAutomation.
+installed_package=$(adb shell pm list packages ma.etherealmber.atlascommerce 2>/dev/null | tr -d '\r')
+if printf '%s\n' "$installed_package" | grep -Fxq 'package:ma.etherealmber.atlascommerce'; then
+  clear_result=$(adb shell pm clear ma.etherealmber.atlascommerce 2>&1 | tr -d '\r')
+  echo "Reset installed Atlas app before instrumentation: $clear_result"
+  if [ "$clear_result" != "Success" ]; then
+    echo "Could not reset the installed app to first-run state."
+    exit 1
+  fi
+else
+  echo "Atlas app is not installed yet; instrumentation will install it as a clean first run."
+fi
+
 # Keep a stuck instrumentation runner from consuming the entire emulator job budget.
 timeout --signal=TERM --kill-after=30s 15m ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain --stacktrace 2>&1 | tee api28-gradle.log
 debug_status=${PIPESTATUS[0]}
