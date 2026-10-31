@@ -161,7 +161,7 @@ fun DataCacheManagerDialog(
                                     color = MaterialTheme.colorScheme.onErrorContainer,
                                 )
                                 TextButton(onClick = {
-                                    runCatching { context.startActivity(Intent(Settings.ACTION_MANAGE_STORAGE)) }
+                                    runCatching { context.startActivity(Intent("android.os.storage.action.MANAGE_STORAGE")) }
                                         .onFailure { runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS)) } }
                                 }) {
                                     Text(atlasText("Libérer de l'espace", "Free up space", "إخلاء مساحة"))
