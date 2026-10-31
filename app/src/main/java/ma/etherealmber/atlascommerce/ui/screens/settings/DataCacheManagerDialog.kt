@@ -418,7 +418,7 @@ fun DataCacheManagerDialog(
         val diagnosticLogsClearedMessage = atlasText("Journaux supprimés.", "Diagnostic logs cleared.", "تم مسح سجلات التشخيص.")
         val diagnosticLogsFailedMessage = atlasText("Impossible de supprimer certains journaux.", "Some diagnostic logs could not be deleted.", "تعذّر حذف بعض سجلات التشخيص.")
         val updateDownloadClearedMessage = atlasText("Téléchargement supprimé.", "Downloaded update removed.", "تم حذف التحديث المُنزّل.")
-        val updateDownloadFailedMessage = atlasText("Terminez le téléchargement avant de le supprimer.", "Finish the download before deleting it.", "أكمل التنزيل قبل حذفه.")
+        val updateDownloadFailedMessage = atlasText("Impossible de supprimer le téléchargement. Si un téléchargement est actif, attendez sa fin puis réessayez.", "Could not remove the downloaded update. If a download is active, wait for it to finish and try again.", "تعذّر حذف التحديث المُنزّل. إذا كان هناك تنزيل نشط، انتظر حتى يكتمل ثم أعد المحاولة.")
         val title: String
         val message: String
         when (action) {
@@ -478,7 +478,9 @@ fun DataCacheManagerDialog(
                             onToast(it)
                         }
                     }
-                    appViewModel.refreshLocalStorageSummary()
+                    if (action != DataManagerAction.ClearDiagnosticLogs && action != DataManagerAction.ClearDownloadedUpdate) {
+                        appViewModel.refreshLocalStorageSummary()
+                    }
                 }) { Text(atlasText("Supprimer", "Delete", "حذف"), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { pendingAction = null }) { Text(atlasText("Annuler", "Cancel", "إلغاء")) } },

@@ -960,7 +960,7 @@ fun SettingsScreen(
 
     if (confirmClearUpdatePackage) {
         val updatePackageClearedMessage = atlasText("Fichier de mise à jour supprimé.", "Downloaded update removed.", "تم حذف ملف التحديث.")
-        val updatePackageBusyMessage = atlasText("Attendez la fin du téléchargement avant de supprimer le fichier.", "Wait for the download to finish before deleting it.", "انتظر حتى يكتمل التنزيل قبل حذف الملف.")
+        val updatePackageBusyMessage = atlasText("Impossible de supprimer le fichier. Si un téléchargement est actif, attendez sa fin puis réessayez.", "Could not remove the downloaded update. If a download is active, wait for it to finish and try again.", "تعذّر حذف الملف. إذا كان هناك تنزيل نشط، انتظر حتى يكتمل ثم أعد المحاولة.")
         AlertDialog(
             onDismissRequest = { confirmClearUpdatePackage = false },
             title = { Text(atlasText("Supprimer le fichier téléchargé ?", "Delete downloaded update?", "حذف ملف التحديث المُنزّل؟")) },
