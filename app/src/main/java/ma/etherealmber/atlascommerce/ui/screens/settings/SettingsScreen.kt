@@ -1050,8 +1050,7 @@ fun SettingsScreen(
         )
     }
 
-    if (forgetAccountTarget != null) {
-        val target = forgetAccountTarget!!
+    forgetAccountTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { forgetAccountTarget = null },
             title = { Text(atlasText("Oublier ce compte ?", "Forget this account?", "إزالة هذا الحساب؟")) },
@@ -1073,8 +1072,7 @@ fun SettingsScreen(
         )
     }
 
-    if (forgetServerTarget != null) {
-        val target = forgetServerTarget!!
+    forgetServerTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { forgetServerTarget = null },
             title = { Text(atlasText("Oublier ce serveur ?", "Forget this server?", "إزالة هذا الخادم؟")) },
