@@ -74,7 +74,7 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
 
 ---
 
-## ✨ Key Features (`v1.3.7`)
+## ✨ Key Features (`v1.3.8`)
 
 - **Strict Multi-Server & Multi-Account Isolation (Zero Data Leak)**:
   - Save multiple servers and multiple user accounts on one device with **100% cryptographic & filesystem isolation** (`AES-256-GCM` per server + `SHA-256` scoped offline caches). Switching accounts or servers immediately purges in-memory carts, caches, avatars, notifications, and AI chats.
