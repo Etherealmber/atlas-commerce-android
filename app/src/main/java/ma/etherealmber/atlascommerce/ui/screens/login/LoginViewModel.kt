@@ -87,10 +87,6 @@ class LoginViewModel @Inject constructor(
         _state.update { it.copy(otp = digits, error = null) }
     }
 
-    fun onRememberAccountChange(value: Boolean) {
-        _state.update { it.copy(rememberAccount = value) }
-    }
-
     fun signInWithSavedAccount(entry: SavedAccountEntry) {
         if (_state.value.loading || !entry.canUseDeviceUnlock) return
         viewModelScope.launch {

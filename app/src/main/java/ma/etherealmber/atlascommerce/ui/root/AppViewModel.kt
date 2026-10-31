@@ -57,6 +57,20 @@ import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import ma.etherealmber.atlascommerce.ui.components.AvatarBitmapCache
 import javax.inject.Inject
 
+/** Byte-level inventory of app-private storage and the independently managed cache directories. */
+data class LocalStorageSummary(
+    val totalAppBytes: Long = 0L,
+    val cacheBytes: Long = 0L,
+    val offlineCatalogBytes: Long = 0L,
+    val financeReportBytes: Long = 0L,
+    val financeReportCount: Int = 0,
+    val diagnosticsBytes: Long = 0L,
+    val updateDownloadBytes: Long = 0L,
+)
+
+private fun File.directorySizeBytes(): Long =
+    runCatching { walkTopDown().filter { it.isFile }.sumOf { it.length() } }.getOrDefault(0L)
+
 /**
  * Root view model: appearance, motion & isolated per-user preferences, server choice,
  * saved accounts/servers, live AI quota policy, profile photo & details, connected devices,
@@ -200,6 +214,9 @@ class AppViewModel @Inject constructor(
         .flatMapLatest { sel -> preferences.savedAccountsForServer(sel?.baseUrl) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val allSavedAccounts: StateFlow<List<SavedAccountEntry>> = preferences.savedAccounts
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     val deviceUnlockSetupRequests = deviceUnlockSetupPrompt.events
 
     fun setSavedAccountDeviceUnlock(serverUrl: String, username: String, enabled: Boolean) {
@@ -223,6 +240,30 @@ class AppViewModel @Inject constructor(
 
     private val _cachedProductCount = MutableStateFlow(0)
     val cachedProductCount: StateFlow<Int> = _cachedProductCount.asStateFlow()
+
+    private val _localStorageSummary = MutableStateFlow(LocalStorageSummary())
+    val localStorageSummary: StateFlow<LocalStorageSummary> = _localStorageSummary.asStateFlow()
+
+    fun refreshLocalStorageSummary() {
+        viewModelScope.launch {
+            _localStorageSummary.value = withContext(Dispatchers.IO) {
+                val cache = applicationContext.cacheDir
+                val files = applicationContext.filesDir
+                val finance = File(cache, "finance")
+                val diagnostics = File(cache, "diagnostics")
+                val updates = File(cache, "updates")
+                LocalStorageSummary(
+                    totalAppBytes = applicationContext.dataDir.directorySizeBytes(),
+                    cacheBytes = cache.directorySizeBytes(),
+                    offlineCatalogBytes = File(files, "atlas-cache").directorySizeBytes(),
+                    financeReportBytes = finance.directorySizeBytes(),
+                    financeReportCount = finance.walkTopDown().count { it.isFile && it.extension.equals("pdf", ignoreCase = true) },
+                    diagnosticsBytes = diagnostics.directorySizeBytes(),
+                    updateDownloadBytes = updates.directorySizeBytes(),
+                )
+            }
+        }
+    }
 
     private fun observeActiveSessionDevices() {
         viewModelScope.launch {
@@ -408,6 +449,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             offlineCache.clear()
             _cachedProductCount.value = 0
+            refreshLocalStorageSummary()
             onDone("Cache catalogue hors ligne vidé.")
         }
     }
@@ -547,6 +589,7 @@ class AppViewModel @Inject constructor(
                 directory.deleteRecursively()
                 count
             }
+            refreshLocalStorageSummary()
             onDone(if (removed == 0) "Aucun rapport PDF temporaire à supprimer." else "$removed rapport(s) PDF temporaire(s) supprimé(s).")
         }
     }
@@ -565,6 +608,7 @@ class AppViewModel @Inject constructor(
                 File(applicationContext.filesDir, "atlas-cache").deleteRecursively()
             }
             val updateNote = if (updateFilesCleared) "" else " Le téléchargement de mise à jour actif est conservé jusqu'à sa fin."
+            refreshLocalStorageSummary()
             onDone("Données locales supprimées.$updateNote Les données de l'entreprise sur le serveur n'ont pas été modifiées.")
         }
     }

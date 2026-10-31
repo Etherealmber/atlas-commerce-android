@@ -2,6 +2,7 @@ package ma.etherealmber.atlascommerce.ui.screens.settings
 
 import android.content.Intent
 import android.provider.Settings
+import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -97,6 +98,7 @@ import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
+import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
@@ -801,12 +803,16 @@ fun SettingsScreen(
     val parallelUpdateDownload by appViewModel.parallelUpdateDownload.collectAsStateWithLifecycle()
     val followLatestRelease by appViewModel.followLatestRelease.collectAsStateWithLifecycle()
     val serverSelection by appViewModel.server.collectAsStateWithLifecycle()
+    val themeMode by appViewModel.themeMode.collectAsStateWithLifecycle()
+    val densityMode by appViewModel.densityMode.collectAsStateWithLifecycle()
+    val appLanguage by appViewModel.appLanguage.collectAsStateWithLifecycle()
+    val appLanguageFollowsSystem by appViewModel.appLanguageFollowsSystem.collectAsStateWithLifecycle()
     val savedServers by appViewModel.savedServers.collectAsStateWithLifecycle()
+    val allSavedAccounts by appViewModel.allSavedAccounts.collectAsStateWithLifecycle()
+    val localStorageSummary by appViewModel.localStorageSummary.collectAsStateWithLifecycle()
     val agentPolicy by appViewModel.agentPolicy.collectAsStateWithLifecycle()
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val updateDownloadSource by appViewModel.updateDownloadSource.collectAsStateWithLifecycle()
-    val appLanguage by appViewModel.appLanguage.collectAsStateWithLifecycle()
-    val appLanguageFollowsSystem by appViewModel.appLanguageFollowsSystem.collectAsStateWithLifecycle()
     val shakeToReportEnabled by appViewModel.shakeToReportEnabled.collectAsStateWithLifecycle()
     val mirrorPing by appViewModel.mirrorPing.collectAsStateWithLifecycle()
     val releaseChangelog by appViewModel.releaseChangelog.collectAsStateWithLifecycle()
@@ -837,6 +843,9 @@ fun SettingsScreen(
     var showReleaseHistoryDialog by remember { mutableStateOf(false) }
     var showClearReportsDialog by remember { mutableStateOf(false) }
     var showClearLocalDataDialog by remember { mutableStateOf(false) }
+    var showDataCacheManagerDialog by remember { mutableStateOf(false) }
+    var forgetAccountTarget by remember { mutableStateOf<SavedAccountEntry?>(null) }
+    var forgetServerTarget by remember { mutableStateOf<SavedServerEntry?>(null) }
     var buildTapCount by remember { mutableIntStateOf(0) }
     var lastBuildTapAt by remember { mutableLongStateOf(0L) }
 
@@ -890,6 +899,196 @@ fun SettingsScreen(
                 }) { Text(atlasText("Supprimer")) }
             },
             dismissButton = { TextButton(onClick = { showClearReportsDialog = false }) { Text(atlasText("Annuler")) } },
+        )
+    }
+
+    if (showDataCacheManagerDialog) {
+        AlertDialog(
+            onDismissRequest = { showDataCacheManagerDialog = false },
+            title = { Text(atlasText("Données et cache", "Data & cache manager", "مدير البيانات والذاكرة المؤقتة")) },
+            text = {
+                Column(
+                    modifier = Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        atlasText(
+                            "Aperçu du stockage privé de cet appareil. Les données de l'entreprise sur le serveur ne sont ni affichées ni modifiées.",
+                            "Overview of this device's private app storage. Company data on the server is not shown or changed.",
+                            "نظرة عامة على التخزين الخاص بالتطبيق على هذا الجهاز. لا تُعرض بيانات الشركة على الخادم ولا تتغير.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    StorageManagerValueRow(
+                        atlasText("Stockage privé total", "Total private app storage", "إجمالي تخزين التطبيق الخاص"),
+                        Formatter.formatShortFileSize(context, localStorageSummary.totalAppBytes),
+                    )
+                    StorageManagerValueRow(
+                        atlasText("Cache total", "Total cache", "إجمالي الذاكرة المؤقتة"),
+                        Formatter.formatShortFileSize(context, localStorageSummary.cacheBytes),
+                    )
+                    StorageManagerValueRow(
+                        atlasText("Catalogue hors ligne", "Offline catalog", "الكتالوج دون اتصال"),
+                        atlasText(
+                            "$cachedProductCount article(s) · ${Formatter.formatShortFileSize(context, localStorageSummary.offlineCatalogBytes)}",
+                            "$cachedProductCount items · ${Formatter.formatShortFileSize(context, localStorageSummary.offlineCatalogBytes)}",
+                            "$cachedProductCount عنصر · ${Formatter.formatShortFileSize(context, localStorageSummary.offlineCatalogBytes)}",
+                        ),
+                    )
+                    StorageManagerValueRow(
+                        atlasText("Rapports PDF temporaires", "Temporary PDF reports", "تقارير PDF المؤقتة"),
+                        atlasText(
+                            "${localStorageSummary.financeReportCount} fichier(s) · ${Formatter.formatShortFileSize(context, localStorageSummary.financeReportBytes)}",
+                            "${localStorageSummary.financeReportCount} files · ${Formatter.formatShortFileSize(context, localStorageSummary.financeReportBytes)}",
+                            "${localStorageSummary.financeReportCount} ملف · ${Formatter.formatShortFileSize(context, localStorageSummary.financeReportBytes)}",
+                        ),
+                    )
+                    StorageManagerValueRow(
+                        atlasText("Journaux de diagnostic", "Diagnostic logs", "سجلات التشخيص"),
+                        Formatter.formatShortFileSize(context, localStorageSummary.diagnosticsBytes),
+                    )
+                    StorageManagerValueRow(
+                        atlasText("Téléchargements de mise à jour", "Update downloads", "تنزيلات التحديث"),
+                        Formatter.formatShortFileSize(context, localStorageSummary.updateDownloadBytes),
+                    )
+                    AtlasDivider(Modifier.padding(vertical = 2.dp))
+                    Text(
+                        atlasText("Comptes enregistrés (${allSavedAccounts.size})", "Saved accounts (${allSavedAccounts.size})", "الحسابات المحفوظة (${allSavedAccounts.size})"),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (allSavedAccounts.isEmpty()) {
+                        Text(atlasText("Aucun compte enregistré.", "No saved accounts.", "لا توجد حسابات محفوظة."), style = MaterialTheme.typography.bodySmall)
+                    }
+                    allSavedAccounts.forEach { entry ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(entry.displayName.ifBlank { entry.username }, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    "@${entry.username} · ${ServerUrl.display(entry.serverUrl)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            TextButton(onClick = { forgetAccountTarget = entry }) {
+                                Text(atlasText("Oublier", "Forget", "إزالة"))
+                            }
+                        }
+                    }
+                    Text(
+                        atlasText("Serveurs enregistrés (${savedServers.size})", "Saved servers (${savedServers.size})", "الخوادم المحفوظة (${savedServers.size})"),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (savedServers.isEmpty()) {
+                        Text(atlasText("Aucun serveur enregistré.", "No saved servers.", "لا توجد خوادم محفوظة."), style = MaterialTheme.typography.bodySmall)
+                    }
+                    savedServers.forEach { entry ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(entry.label.ifBlank { ServerUrl.display(entry.url) }, style = MaterialTheme.typography.bodyMedium)
+                                Text(ServerUrl.display(entry.url), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            TextButton(onClick = { forgetServerTarget = entry }) {
+                                Text(atlasText("Oublier", "Forget", "إزالة"))
+                            }
+                        }
+                    }
+                    AtlasDivider(Modifier.padding(vertical = 2.dp))
+                    Text(
+                        atlasText(
+                            "Les préférences (thème, langue, affichage et options système) sont conservées dans le stockage privé. Le jeton de session et les secrets ne sont jamais affichés.",
+                            "Preferences (theme, language, display, and system options) are kept in private storage. Session tokens and secrets are never shown.",
+                            "تُحفظ التفضيلات (المظهر واللغة والعرض وخيارات النظام) في التخزين الخاص. لا يتم عرض رموز الجلسات أو الأسرار مطلقاً.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    StorageManagerValueRow(
+                        atlasText("Thème", "Theme", "المظهر"),
+                        when (themeMode) {
+                            ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
+                            ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
+                            ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+                        },
+                    )
+                    StorageManagerValueRow(
+                        atlasText("Langue", "Language", "اللغة"),
+                        if (appLanguageFollowsSystem) atlasText("Système", "System", "النظام") else appLanguage.nativeLabel,
+                    )
+                    StorageManagerValueRow(
+                        atlasText("Densité d'affichage", "Display density", "كثافة العرض"),
+                        when (densityMode) {
+                            DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
+                            DensityMode.COMFORT -> atlasText("Confort", "Comfort", "مريح")
+                        },
+                    )
+                    StorageManagerValueRow(
+                        atlasText("Mises à jour automatiques", "Automatic updates", "التحديثات التلقائية"),
+                        if (autoCheckUpdates) atlasText("Activées", "On", "مفعلة") else atlasText("Désactivées", "Off", "متوقفة"),
+                    )
+                    TextButton(onClick = { appViewModel.clearOfflineCache(onToast) }, enabled = cachedProductCount > 0) {
+                        Text(atlasText("Vider le catalogue hors ligne", "Clear offline catalog", "مسح الكتالوج دون اتصال"))
+                    }
+                    TextButton(onClick = { showClearReportsDialog = true }, enabled = localStorageSummary.financeReportCount > 0) {
+                        Text(atlasText("Supprimer les PDF temporaires", "Delete temporary PDFs", "حذف ملفات PDF المؤقتة"))
+                    }
+                    TextButton(onClick = {
+                        showDataCacheManagerDialog = false
+                        showClearLocalDataDialog = true
+                    }) {
+                        Text(atlasText("Effacer toutes les données locales…", "Clear all local data…", "مسح جميع البيانات المحلية…"))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDataCacheManagerDialog = false }) { Text(atlasText("Fermer", "Close", "إغلاق")) }
+            },
+        )
+    }
+
+    forgetAccountTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { forgetAccountTarget = null },
+            title = { Text(atlasText("Oublier ce compte ?", "Forget this account?", "إزالة هذا الحساب؟")) },
+            text = {
+                Text(atlasText(
+                    "Supprimer les informations de connexion enregistrées pour @${target.username} sur cet appareil ? La session active ne sera pas interrompue.",
+                    "Remove saved sign-in details for @${target.username} from this device? The active session will remain signed in.",
+                    "هل تريد إزالة معلومات تسجيل الدخول المحفوظة لـ @${target.username} من هذا الجهاز؟ ستظل الجلسة الحالية نشطة.",
+                ))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    forgetAccountTarget = null
+                    appViewModel.forgetSavedAccount(target) { onToast(it) }
+                    appViewModel.refreshLocalStorageSummary()
+                }) { Text(atlasText("Oublier", "Forget", "إزالة")) }
+            },
+            dismissButton = { TextButton(onClick = { forgetAccountTarget = null }) { Text(atlasText("Annuler", "Cancel", "إلغاء")) } },
+        )
+    }
+
+    forgetServerTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { forgetServerTarget = null },
+            title = { Text(atlasText("Oublier ce serveur ?", "Forget this server?", "إزالة هذا الخادم؟")) },
+            text = { Text(atlasText(
+                "Retirer ${target.label.ifBlank { ServerUrl.display(target.url) }} de la liste des serveurs enregistrés sur cet appareil ?",
+                "Remove ${target.label.ifBlank { ServerUrl.display(target.url) }} from this device's saved-server list?",
+                "هل تريد إزالة ${target.label.ifBlank { ServerUrl.display(target.url) }} من قائمة الخوادم المحفوظة على هذا الجهاز؟",
+            )) },
+            confirmButton = {
+                TextButton(onClick = {
+                    forgetServerTarget = null
+                    appViewModel.forgetSavedServer(target) { onToast(it) }
+                    appViewModel.refreshLocalStorageSummary()
+                }) { Text(atlasText("Oublier", "Forget", "إزالة")) }
+            },
+            dismissButton = { TextButton(onClick = { forgetServerTarget = null }) { Text(atlasText("Annuler", "Cancel", "إلغاء")) } },
         )
     }
 
@@ -986,6 +1185,7 @@ fun SettingsScreen(
         appViewModel.loadDevices()
         appViewModel.refreshAgentPolicy()
         appViewModel.refreshCachedProductCount()
+        appViewModel.refreshLocalStorageSummary()
         appViewModel.refreshReleaseChangelog()
     }
 
@@ -1264,6 +1464,20 @@ fun SettingsScreen(
                     enabled = cachedProductCount > 0,
                 )
             }
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
+            SettingsRow(
+                icon = Icons.Outlined.Inventory2,
+                title = atlasText("Gestionnaire de données et cache", "Data & cache manager", "مدير البيانات والذاكرة المؤقتة"),
+                subtitle = atlasText(
+                    "Consulter le stockage, les comptes, les serveurs et les caches locaux.",
+                    "Review local storage, saved accounts, servers, and caches.",
+                    "عرض التخزين والحسابات والخوادم وذاكرة التخزين المحلية.",
+                ),
+                onClick = {
+                    appViewModel.refreshLocalStorageSummary()
+                    showDataCacheManagerDialog = true
+                },
+            )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsToggleRow(
                 title = atlasText("Recherche automatique des mises à jour", "Check for updates automatically", "التحقق تلقائياً من التحديثات"),
@@ -1569,6 +1783,23 @@ private fun ConnectedDeviceRow(
                 tint = MaterialTheme.colorScheme.error,
             )
         }
+    }
+}
+
+@Composable
+private fun StorageManagerValueRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.width(10.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+        )
     }
 }
 

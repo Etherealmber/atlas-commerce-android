@@ -585,7 +585,7 @@ class SessionManager @Inject constructor(
         return res
     }
 
-    /** Immediately lock the UI and persist that backgrounded sessions require sign-in. */
+    /** Lock the local UI and disable automatic restoration until the next successful sign-in. */
     fun lockForBackground() {
         if (_state.value !is SessionState.Active) return
         purgeInMemorySession()
