@@ -1007,6 +1007,11 @@ fun SettingsScreen(
         appViewModel.refreshLocalStorageSummary()
         appViewModel.refreshReleaseChangelog()
     }
+    LaunchedEffect(updateState) {
+        if (updateState is UpdateState.ReadyToInstall) {
+            appViewModel.refreshLocalStorageSummary()
+        }
+    }
 
     Column(
         modifier = Modifier

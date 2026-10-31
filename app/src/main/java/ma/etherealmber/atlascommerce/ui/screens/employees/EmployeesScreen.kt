@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -124,12 +125,15 @@ fun EmployeesScreen(
             onDismissRequest = { payrollInfoOpen = false },
             title = { Text(atlasText("À propos des chiffres", "About these figures", "حول هذه الأرقام")) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Text(
                         atlasText(
-                            "Le mois choisi filtre les fiches. Les totaux viennent du serveur et sont en lecture seule; les chiffres du mois en cours peuvent évoluer jusqu'à sa clôture. Les mois futurs ne sont pas disponibles.",
-                            "The selected month filters the records. Totals come from the server and are read-only; current-month figures can change until month-end. Future months aren't available.",
-                            "يحدد الشهر المختار السجلات. تأتي الإجماليات من الخادم وهي للقراءة فقط؛ وقد تتغير أرقام الشهر الحالي حتى نهايته. الأشهر المستقبلية غير متاحة.",
+                            "Le nombre d'employés correspond aux fiches de paie, pas au nombre de personnes; la période de paie ou la date d'échéance d'une fiche peut différer du mois choisi. Le mois sélectionné filtre les fiches. Les totaux viennent du serveur et sont en lecture seule; les chiffres du mois en cours peuvent évoluer jusqu'à sa clôture. Les mois futurs ne sont pas disponibles.",
+                            "The Employees count represents payroll records, not unique people; a record's pay period or due date may differ from the selected month. The selected month filters the records. Totals come from the server and are read-only; current-month figures can change until month-end. Future months aren't available.",
+                            "يمثل عدد الموظفين سجلات الرواتب وليس عدد الأشخاص؛ وقد تختلف فترة الراتب أو تاريخ استحقاق السجل عن الشهر المحدد. يحدد الشهر المختار السجلات. تأتي الإجماليات من الخادم وهي للقراءة فقط؛ وقد تتغير أرقام الشهر الحالي حتى نهايته. الأشهر المستقبلية غير متاحة.",
                         ),
                     )
                     payroll?.takeIf { it.asOf.isNotBlank() }?.let { data ->

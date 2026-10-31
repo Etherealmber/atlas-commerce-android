@@ -129,6 +129,11 @@ fun DataCacheManagerDialog(
         appViewModel.refreshLocalStorageSummary()
         appViewModel.refreshCachedProductCount()
     }
+    LaunchedEffect(updateState) {
+        if (updateState is UpdateState.ReadyToInstall) {
+            appViewModel.refreshLocalStorageSummary()
+        }
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -180,7 +185,7 @@ fun DataCacheManagerDialog(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (savedAccounts.size + savedServers.size >= 4) {
+                    if (savedAccounts.size + savedServers.size >= 4 || searchQuery.isNotBlank()) {
                         AtlasTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },

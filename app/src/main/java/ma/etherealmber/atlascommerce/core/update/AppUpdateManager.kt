@@ -222,8 +222,17 @@ class AppUpdateManager internal constructor(
         if (isDownloadingLocked()) return@synchronized false
         val deleted = runCatching { updatesDirProvider().deleteRecursively() }.getOrDefault(false)
         if (!deleted) return@synchronized false
-        if (_state.value is UpdateState.ReadyToInstall || _state.value is UpdateState.Error || _state.value is UpdateState.Available) {
-            _state.value = UpdateState.Idle
+        when (val current = _state.value) {
+            is UpdateState.ReadyToInstall -> {
+                _state.value = if (current.info.mandatory) {
+                    UpdateState.Available(info = current.info, dismissedBanner = false)
+                } else {
+                    UpdateState.Idle
+                }
+            }
+            is UpdateState.Available -> if (!current.info.mandatory) _state.value = UpdateState.Idle
+            is UpdateState.Error -> if (current.info?.mandatory != true) _state.value = UpdateState.Idle
+            else -> Unit
         }
         notifier.cancel()
         settingsStartedDownload = false

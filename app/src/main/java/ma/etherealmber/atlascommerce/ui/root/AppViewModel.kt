@@ -628,7 +628,9 @@ class AppViewModel @Inject constructor(
                     File(applicationContext.filesDir, "diagnostics"),
                 )
                 AtlasLogBuffer.clearRecentEntries()
-                diagnosticDirectories.all { directory -> !directory.exists() || directory.deleteRecursively() }
+                diagnosticDirectories
+                    .map { directory -> !directory.exists() || directory.deleteRecursively() }
+                    .all { it }
             }
             refreshLocalStorageSummary()
             onDone(cleared)
@@ -656,16 +658,20 @@ class AppViewModel @Inject constructor(
             serverConfig.clear()
             preferences.clearAllLocalPreferences()
             offlineCache.clearAll()
-            withContext(Dispatchers.IO) {
+            val diagnosticsCleared = withContext(Dispatchers.IO) {
                 File(applicationContext.cacheDir, "finance").deleteRecursively()
-                File(applicationContext.cacheDir, "diagnostics").deleteRecursively()
-                File(applicationContext.filesDir, "diagnostics").deleteRecursively()
+                val cacheDiagnostics = File(applicationContext.cacheDir, "diagnostics")
+                val persistentDiagnostics = File(applicationContext.filesDir, "diagnostics")
+                val cacheDiagnosticsCleared = !cacheDiagnostics.exists() || cacheDiagnostics.deleteRecursively()
+                val persistentDiagnosticsCleared = !persistentDiagnostics.exists() || persistentDiagnostics.deleteRecursively()
                 File(applicationContext.filesDir, "atlas-cache").deleteRecursively()
+                cacheDiagnosticsCleared && persistentDiagnosticsCleared
             }
             AtlasLogBuffer.clearRecentEntries()
             val updateNote = if (updateFilesCleared) "" else " Le téléchargement de mise à jour actif est conservé jusqu'à sa fin."
+            val diagnosticsNote = if (diagnosticsCleared) "" else " Certains journaux de diagnostic n'ont pas pu être supprimés."
             refreshLocalStorageSummary()
-            onDone("Données locales supprimées.$updateNote Les données de l'entreprise sur le serveur n'ont pas été modifiées.")
+            onDone("Données locales supprimées.$updateNote$diagnosticsNote Les données de l'entreprise sur le serveur n'ont pas été modifiées.")
         }
     }
 
