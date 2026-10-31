@@ -92,7 +92,8 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
             val snakeColor = MaterialTheme.colorScheme.primary
             val boardColor = MaterialTheme.colorScheme.surfaceVariant
             BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val boardSide = (300.dp + game.score * 12.dp).coerceAtMost(maxWidth.coerceAtMost(440.dp))
+                val maxBoardSide = if (maxWidth < 440.dp) maxWidth else 440.dp
+                val boardSide = (300.dp + 12.dp * game.score.toFloat()).coerceAtMost(maxBoardSide)
                 val cell = boardSide / BOARD_SIZE
                 Box(
                     Modifier.align(Alignment.Center).size(boardSide)
