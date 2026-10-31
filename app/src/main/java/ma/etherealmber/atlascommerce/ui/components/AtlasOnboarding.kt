@@ -53,6 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -60,7 +61,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
@@ -73,7 +73,6 @@ import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
-import ma.etherealmber.atlascommerce.ui.theme.AtlasAuthTheme
 
 private data class AtlasWelcomeSlide(
     val title: Triple<String, String, String>,
@@ -124,81 +123,142 @@ private val AtlasAmber = Color(0xFFFFC66D)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun AtlasWelcomeOnboardingScreen(onComplete: () -> Unit) {
-    AtlasAuthTheme {
-        val pagerState = rememberPagerState(pageCount = { welcomeSlides.size })
-        val animationsEnabled = LocalAtlasAnimationsEnabled.current
-        val language = LocalAtlasLanguage.current
-        val scope = rememberCoroutineScope()
+fun AtlasWelcomeOnboardingScreen(
+    isLoggedIn: Boolean = false,
+    onComplete: () -> Unit,
+) {
+    val pagerState = rememberPagerState(pageCount = { welcomeSlides.size })
+    val animationsEnabled = LocalAtlasAnimationsEnabled.current
+    val language = LocalAtlasLanguage.current
+    val scope = rememberCoroutineScope()
+    var showTutorial by rememberSaveable { mutableStateOf(false) }
+    var tutorialStep by rememberSaveable { mutableIntStateOf(0) }
 
-        LaunchedEffect(pagerState.currentPage, pagerState.isScrollInProgress, animationsEnabled) {
-            if (animationsEnabled && !pagerState.isScrollInProgress && pagerState.currentPage < welcomeSlides.lastIndex) {
-                delay(8_000)
-                if (!pagerState.isScrollInProgress && pagerState.currentPage < welcomeSlides.lastIndex) {
-                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                }
+    LaunchedEffect(showTutorial, pagerState.currentPage, pagerState.isScrollInProgress, animationsEnabled) {
+        if (!showTutorial && animationsEnabled && !pagerState.isScrollInProgress && pagerState.currentPage < welcomeSlides.lastIndex) {
+            delay(8_000)
+            if (!showTutorial && !pagerState.isScrollInProgress && pagerState.currentPage < welcomeSlides.lastIndex) {
+                pagerState.animateScrollToPage(pagerState.currentPage + 1)
             }
         }
+    }
 
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 22.dp),
-            ) {
-                Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
-                    AtlasMark(Modifier.align(Alignment.CenterStart), size = 28.dp)
-                    Row(
-                        Modifier.align(Alignment.Center),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        welcomeSlides.indices.forEach { page ->
-                            val selected = page == pagerState.currentPage
-                            val dotWidth by animateDpAsState(
-                                if (selected) 26.dp else 7.dp,
-                                spring(dampingRatio = 0.78f, stiffness = 500f),
-                                label = "onboarding_dot_width_$page",
-                            )
-                            val dotColor by animateColorAsState(
-                                when {
-                                    selected -> AtlasCyan
-                                    page < pagerState.currentPage -> AtlasPurple.copy(alpha = 0.72f)
-                                    else -> MaterialTheme.colorScheme.outlineVariant
-                                },
-                                tween(260),
-                                label = "onboarding_dot_color_$page",
-                            )
-                            Box(
-                                Modifier
-                                    .width(dotWidth)
-                                    .height(7.dp)
-                                    .clip(CircleShape)
-                                    .background(dotColor)
-                                    .clickable { scope.launch { pagerState.animateScrollToPage(page) } }
-                                    .semantics { contentDescription = "${page + 1} / ${welcomeSlides.size}" },
-                            )
-                        }
-                    }
-                    Surface(
-                        modifier = Modifier.align(Alignment.CenterEnd).clickable(onClick = onComplete),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ) {
-                        Text(
-                            atlasText("Se connecter", "Sign in", "تسجيل الدخول"),
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
+    val escapeLabel = if (isLoggedIn) {
+        atlasText("Aller au tableau de bord", "Go to dashboard", "الذهاب إلى لوحة التحكم")
+    } else {
+        atlasText("Se connecter", "Log in", "تسجيل الدخول")
+    }
+    val indicatorCount = if (showTutorial) 3 else welcomeSlides.size
+    val indicatorPage = if (showTutorial) tutorialStep else pagerState.currentPage
+
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 22.dp),
+        ) {
+            Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
+                AtlasMark(Modifier.align(Alignment.CenterStart), size = 28.dp)
+                Row(
+                    Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    repeat(indicatorCount) { page ->
+                        val selected = page == indicatorPage
+                        val dotWidth by animateDpAsState(
+                            if (selected) 26.dp else 7.dp,
+                            spring(dampingRatio = 0.78f, stiffness = 500f),
+                            label = "onboarding_dot_width_$showTutorial-$page",
+                        )
+                        val dotColor by animateColorAsState(
+                            when {
+                                selected -> AtlasCyan
+                                page < indicatorPage -> AtlasPurple.copy(alpha = 0.72f)
+                                else -> MaterialTheme.colorScheme.outlineVariant
+                            },
+                            tween(260),
+                            label = "onboarding_dot_color_$showTutorial-$page",
+                        )
+                        Box(
+                            Modifier
+                                .width(dotWidth)
+                                .height(7.dp)
+                                .clip(CircleShape)
+                                .background(dotColor)
+                                .then(
+                                    if (showTutorial) Modifier
+                                    else Modifier.clickable { scope.launch { pagerState.animateScrollToPage(page) } },
+                                )
+                                .semantics { contentDescription = "${page + 1} / $indicatorCount" },
                         )
                     }
                 }
+                Surface(
+                    modifier = Modifier.align(Alignment.CenterEnd).clickable(onClick = onComplete),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ) {
+                    Text(
+                        escapeLabel,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
+            }
 
+            if (showTutorial) {
+                WelcomeTutorialContent(
+                    step = tutorialStep,
+                    animationsEnabled = animationsEnabled,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (tutorialStep > 0) {
+                        TextButton(onClick = { tutorialStep = (tutorialStep - 1).coerceAtLeast(0) }) {
+                            Text(atlasText("Retour", "Back", "السابق"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            if (tutorialStep < 2) tutorialStep += 1 else onComplete()
+                        },
+                        modifier = Modifier.weight(1f).height(50.dp),
+                        shape = RoundedCornerShape(17.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
+                    ) {
+                        Text(
+                            if (tutorialStep < 2) atlasText("Suivant", "Next", "التالي")
+                            else atlasText("Terminer", "Finish tour", "إنهاء الجولة"),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+                TextButton(
+                    onClick = onComplete,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) {
+                    Text(
+                        atlasText("Passer le tutoriel", "Skip tutorial", "تخطي الجولة"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            } else {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -222,7 +282,10 @@ fun AtlasWelcomeOnboardingScreen(onComplete: () -> Unit) {
                         onClick = {
                             if (pagerState.currentPage < welcomeSlides.lastIndex) {
                                 scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-                            } else onComplete()
+                            } else {
+                                tutorialStep = 0
+                                showTutorial = true
+                            }
                         },
                         modifier = Modifier.weight(1f).height(50.dp),
                         shape = RoundedCornerShape(17.dp),
@@ -232,27 +295,190 @@ fun AtlasWelcomeOnboardingScreen(onComplete: () -> Unit) {
                         ),
                     ) {
                         Text(
-                            if (pagerState.currentPage == welcomeSlides.lastIndex) atlasText("Commencer", "Get started", "ابدأ")
+                            if (pagerState.currentPage == welcomeSlides.lastIndex) atlasText("Découvrir l'application", "Take a quick tour", "جولة سريعة")
                             else atlasText("Continuer", "Continue", "متابعة"),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                         )
                     }
                 }
+            }
 
-                Text(
-                    text = atlasText(
-                        "En rejoignant Atlas, vous acceptez nos conditions d'utilisation et notre politique de confidentialité.",
-                        "By joining Atlas, you acknowledge our Terms of Service and Privacy Policy.",
-                        "بانضمامك إلى Atlas، فإنك توافق على شروط الخدمة وسياسة الخصوصية.",
-                    ),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
+            Text(
+                text = atlasText(
+                    "En rejoignant Atlas, vous acceptez nos conditions d'utilisation et notre politique de confidentialité.",
+                    "By joining Atlas, you acknowledge our Terms of Service and Privacy Policy.",
+                    "بانضمامك إلى Atlas، فإنك توافق على شروط الخدمة وسياسة الخصوصية.",
+                ),
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WelcomeTutorialContent(
+    step: Int,
+    animationsEnabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val safeStep = step.coerceIn(0, 2)
+    val titles = listOf(
+        atlasText("Votre aperçu du jour", "Your daily snapshot", "ملخص يومك"),
+        atlasText("Gardez le stock en vue", "Keep stock in view", "تابع المخزون بسهولة"),
+        atlasText("Vendez en quelques gestes", "Sell in a few taps", "أتمم البيع بخطوات بسيطة"),
+    )
+    val descriptions = listOf(
+        atlasText("Repérez d'un coup d'œil les ventes et les alertes importantes.", "Spot sales and important alerts at a glance.", "اطّلع بسرعة على المبيعات والتنبيهات المهمة."),
+        atlasText("Consultez les articles et leurs niveaux de stock avant de réapprovisionner.", "Check products and stock levels before you restock.", "راجع المنتجات ومستويات مخزونها قبل إعادة التزويد."),
+        atlasText("Prévisualisez une facture et le total avant de confirmer une vraie vente.", "Review a receipt and total before confirming a real sale.", "راجع الإيصال والإجمالي قبل تأكيد عملية بيع حقيقية."),
+    )
+
+    Column(
+        modifier.padding(horizontal = 2.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier.fillMaxWidth().weight(1f).heightIn(min = 230.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (animationsEnabled) {
+                AnimatedContent(targetState = safeStep, label = "tutorial_demo_step") { visibleStep ->
+                    TutorialDemoCard(visibleStep, Modifier.fillMaxWidth())
+                }
+            } else {
+                TutorialDemoCard(safeStep, Modifier.fillMaxWidth())
             }
         }
+        Surface(
+            shape = CircleShape,
+            color = AtlasCyan.copy(alpha = 0.12f),
+            border = BorderStroke(1.dp, AtlasCyan.copy(alpha = 0.3f)),
+        ) {
+            Text(
+                atlasText("APERÇU · DONNÉES FICTIVES", "DEMO · SAMPLE DATA", "عرض · بيانات تجريبية"),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            titles[safeStep],
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            descriptions[safeStep],
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(10.dp))
+    }
+}
+
+@Composable
+private fun TutorialDemoCard(step: Int, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.padding(horizontal = 8.dp).widthIn(max = 420.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 8.dp,
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AtlasMark(size = 22.dp)
+                Spacer(Modifier.width(8.dp))
+                Text("Atlas Commerce", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
+                Icon(
+                    imageVector = when (step) {
+                        0 -> Icons.Outlined.AutoAwesome
+                        1 -> Icons.Outlined.Inventory2
+                        else -> Icons.Outlined.ReceiptLong
+                    },
+                    contentDescription = null,
+                    tint = AtlasCyan,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            when (step) {
+                0 -> {
+                    Text(atlasText("Aujourd'hui", "Today", "اليوم"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        TutorialMetricCard(atlasText("Ventes", "Sales", "المبيعات"), "12 480 DH", AtlasCyan, Modifier.weight(1f))
+                        TutorialMetricCard(atlasText("Alertes stock", "Low stock", "تنبيه المخزون"), "4", AtlasAmber, Modifier.weight(1f))
+                    }
+                    TutorialInfoRow(atlasText("Factures du jour", "Today's invoices", "فواتير اليوم"), "8")
+                }
+                1 -> {
+                    Text(atlasText("Stock récent", "Recent stock", "المخزون مؤخراً"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    TutorialProductRow(atlasText("Café en grains", "Coffee beans", "حبوب القهوة"), atlasText("12 unités", "12 units", "12 وحدة"), AtlasCyan)
+                    TutorialProductRow(atlasText("Gobelets papier", "Paper cups", "أكواب ورقية"), atlasText("4 unités · bas", "4 units · low", "4 وحدات · منخفض"), AtlasAmber)
+                    TutorialProductRow(atlasText("Eau pétillante", "Sparkling water", "مياه غازية"), atlasText("28 unités", "28 units", "28 وحدة"), AtlasPurple)
+                }
+                else -> {
+                    Text(atlasText("Aperçu du ticket", "Receipt preview", "معاينة الإيصال"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    TutorialInfoRow(atlasText("2 × Mug Atlas", "2 × Atlas mug", "2 × كوب Atlas"), "180 DH")
+                    TutorialInfoRow(atlasText("Sous-total", "Subtotal", "المجموع الفرعي"), "180 DH")
+                    Surface(shape = RoundedCornerShape(13.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                        Text(
+                            atlasText("Aperçu uniquement · aucune vente enregistrée", "Preview only · no sale is recorded", "معاينة فقط · لم يتم تسجيل أي بيع"),
+                            modifier = Modifier.fillMaxWidth().padding(11.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TutorialMetricCard(label: String, value: String, accent: Color, modifier: Modifier = Modifier) {
+    Surface(
+        modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = accent.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.3f)),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        }
+    }
+}
+
+@Composable
+private fun TutorialInfoRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun TutorialProductRow(name: String, stock: String, accent: Color) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = RoundedCornerShape(10.dp), color = accent.copy(alpha = 0.14f)) {
+            Icon(Icons.Outlined.Inventory2, null, Modifier.padding(8.dp).size(18.dp), tint = accent)
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(name, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+        Text(stock, style = MaterialTheme.typography.labelSmall, color = accent, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -273,25 +499,29 @@ private fun WelcomeSlideContent(page: Int, language: AppLanguage) {
             WelcomeIllustration(page)
         }
         Spacer(Modifier.height(8.dp))
-        Text(
-            text = chooseLanguage(slide.title, language),
-            modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.headlineSmall,
-            fontSize = 27.sp,
-            lineHeight = 32.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center,
-        )
+        AtlasEntrance(delayMillis = 70, offsetY = 14.dp, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = chooseLanguage(slide.title, language),
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.headlineSmall,
+                fontSize = 27.sp,
+                lineHeight = 32.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
+            )
+        }
         Spacer(Modifier.height(9.dp))
-        Text(
-            text = chooseLanguage(slide.subtitle, language),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF9CA3AF),
-            lineHeight = 23.sp,
-            textAlign = TextAlign.Center,
-        )
+        AtlasEntrance(delayMillis = 150, offsetY = 10.dp, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = chooseLanguage(slide.subtitle, language),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 23.sp,
+                textAlign = TextAlign.Center,
+            )
+        }
         Spacer(Modifier.height(14.dp))
     }
 }
@@ -366,6 +596,8 @@ private fun WorkspaceIllustration(bob: Float, drop: Float, motion: Boolean) {
                     Spacer(Modifier.width(6.dp))
                     Text("Atlas", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))
+                    Icon(Icons.Outlined.AutoAwesome, null, tint = AtlasCyan, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(6.dp))
                     Box(Modifier.size(6.dp).clip(CircleShape).background(AtlasMint))
                 }
                 Surface(shape = RoundedCornerShape(13.dp), color = AtlasBlue.copy(alpha = 0.12f)) {
@@ -422,16 +654,7 @@ private fun WorkspaceIllustration(bob: Float, drop: Float, motion: Boolean) {
                 Text(atlasText("Ticket de caisse", "POS receipt", "إيصال نقطة البيع"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
             }
         }
-        Surface(
-            Modifier.align(Alignment.Center).offset(y = (-31).dp).size(47.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.background,
-            border = BorderStroke(1.dp, AtlasCyan.copy(alpha = .6f)),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Outlined.AutoAwesome, null, tint = AtlasCyan, modifier = Modifier.size(24.dp))
-            }
-        }
+
     }
 }
 
@@ -472,10 +695,10 @@ private fun ConnectionIllustration(bob: Float, motion: Boolean) {
                 Box(Modifier.align(Alignment.BottomEnd).padding(end = 11.dp, bottom = 9.dp).size(13.dp).clip(CircleShape).background(AtlasMint))
             }
         }
-        AvatarBadge("A", AtlasCyan, Modifier.align(Alignment.TopStart).padding(start = 44.dp, top = 26.dp).graphicsLayer { scaleX = if (motion) 1f + bob / 60f else 1f; scaleY = if (motion) 1f + bob / 60f else 1f })
-        AvatarBadge("M", AtlasMagenta, Modifier.align(Alignment.TopEnd).padding(end = 48.dp, top = 34.dp).graphicsLayer { scaleX = if (motion) 1f - bob / 60f else 1f; scaleY = if (motion) 1f - bob / 60f else 1f })
-        AvatarBadge("S", AtlasAmber, Modifier.align(Alignment.BottomStart).padding(start = 40.dp, bottom = 34.dp))
-        AvatarBadge("Y", AtlasPurple, Modifier.align(Alignment.BottomEnd).padding(end = 44.dp, bottom = 26.dp).graphicsLayer { translationY = if (motion) -bob else 0f })
+        IllustratedAvatarBadge(0, AtlasCyan, Modifier.align(Alignment.TopStart).padding(start = 44.dp, top = 26.dp).graphicsLayer { scaleX = if (motion) 1f + bob / 45f else 1f; scaleY = if (motion) 1f + bob / 45f else 1f })
+        IllustratedAvatarBadge(1, AtlasMagenta, Modifier.align(Alignment.TopEnd).padding(end = 48.dp, top = 34.dp).graphicsLayer { scaleX = if (motion) 1f - bob / 45f else 1f; scaleY = if (motion) 1f - bob / 45f else 1f })
+        IllustratedAvatarBadge(2, AtlasAmber, Modifier.align(Alignment.BottomStart).padding(start = 40.dp, bottom = 34.dp).graphicsLayer { translationY = if (motion) bob / 2f else 0f })
+        IllustratedAvatarBadge(3, AtlasPurple, Modifier.align(Alignment.BottomEnd).padding(end = 44.dp, bottom = 26.dp).graphicsLayer { translationY = if (motion) -bob else 0f })
         Surface(
             Modifier.align(Alignment.TopCenter).padding(top = 1.dp),
             shape = RoundedCornerShape(20.dp),
@@ -488,16 +711,91 @@ private fun ConnectionIllustration(bob: Float, motion: Boolean) {
 }
 
 @Composable
-private fun AvatarBadge(letter: String, color: Color, modifier: Modifier = Modifier) {
+private fun IllustratedAvatarBadge(variant: Int, accent: Color, modifier: Modifier = Modifier) {
     Surface(
-        modifier = modifier.size(53.dp),
+        modifier = modifier.size(56.dp),
         shape = CircleShape,
-        color = color.copy(alpha = .19f),
-        border = BorderStroke(1.5.dp, color.copy(alpha = .82f)),
-        shadowElevation = 5.dp,
+        color = accent.copy(alpha = .16f),
+        border = BorderStroke(1.5.dp, accent.copy(alpha = .86f)),
+        shadowElevation = 6.dp,
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(letter, color = color, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
+        Canvas(Modifier.fillMaxSize().padding(3.dp)) {
+            val w = size.width
+            val h = size.height
+            val skin = when (variant) {
+                1 -> Color(0xFFD99B72)
+                2 -> Color(0xFF8C5D42)
+                else -> Color(0xFFF0BD98)
+            }
+            val hair = when (variant) {
+                1 -> Color(0xFF33251F)
+                2 -> Color(0xFF211B19)
+                3 -> Color(0xFF704A35)
+                else -> Color(0xFF60402D)
+            }
+            val shirt = if (variant % 2 == 0) Color(0xFFF7F5F1) else Color(0xFFEAEFF5)
+
+            drawCircle(accent.copy(alpha = .12f), radius = size.minDimension * .49f)
+            val jacket = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * .25f, h * .59f)
+                lineTo(w * .39f, h * .55f)
+                lineTo(w * .5f, h * .68f)
+                lineTo(w * .61f, h * .55f)
+                lineTo(w * .75f, h * .59f)
+                lineTo(w * .98f, h * 1.02f)
+                lineTo(w * .02f, h * 1.02f)
+                close()
+            }
+            drawPath(jacket, accent.copy(alpha = .86f))
+            drawRoundRect(
+                color = skin,
+                topLeft = Offset(w * .42f, h * .51f),
+                size = androidx.compose.ui.geometry.Size(w * .16f, h * .22f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * .05f),
+            )
+            val shirtFront = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * .38f, h * .59f)
+                lineTo(w * .5f, h * .72f)
+                lineTo(w * .62f, h * .59f)
+                lineTo(w * .59f, h * .93f)
+                lineTo(w * .41f, h * .93f)
+                close()
+            }
+            drawPath(shirtFront, shirt)
+            val faceTop = if (variant == 3) .20f else .23f
+            drawOval(
+                color = skin,
+                topLeft = Offset(w * .29f, h * faceTop),
+                size = androidx.compose.ui.geometry.Size(w * .42f, h * .42f),
+            )
+            drawOval(
+                color = hair,
+                topLeft = Offset(w * .27f, h * .13f),
+                size = androidx.compose.ui.geometry.Size(w * .46f, h * .26f),
+            )
+            drawRoundRect(
+                color = hair,
+                topLeft = Offset(w * .25f, h * .24f),
+                size = androidx.compose.ui.geometry.Size(w * .10f, h * .20f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * .05f),
+            )
+            drawRoundRect(
+                color = hair,
+                topLeft = Offset(w * .65f, h * .23f),
+                size = androidx.compose.ui.geometry.Size(w * .10f, h * .21f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * .05f),
+            )
+            drawCircle(Color(0xFF362A26), radius = w * .018f, center = Offset(w * .41f, h * .42f))
+            drawCircle(Color(0xFF362A26), radius = w * .018f, center = Offset(w * .59f, h * .42f))
+            val tie = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * .47f, h * .70f)
+                lineTo(w * .53f, h * .70f)
+                lineTo(w * .55f, h * .86f)
+                lineTo(w * .5f, h * .95f)
+                lineTo(w * .45f, h * .86f)
+                close()
+            }
+            drawPath(tie, AtlasAmber)
         }
     }
 }

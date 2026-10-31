@@ -464,6 +464,7 @@ private fun AtlasGate(
                     )
 
                     RootStage.ONBOARDING -> AtlasWelcomeOnboardingScreen(
+                        isLoggedIn = activeUser != null,
                         onComplete = { viewModel.completeOnboarding() },
                     )
 
