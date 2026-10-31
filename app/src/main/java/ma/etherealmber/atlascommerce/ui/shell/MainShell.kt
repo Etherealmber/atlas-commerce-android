@@ -108,6 +108,7 @@ import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.core.update.UpdateState
+import ma.etherealmber.atlascommerce.ui.screens.settings.DataCacheManagerDialog
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasSurpriseDialog
 import ma.etherealmber.atlascommerce.ui.components.nextSurprise
@@ -161,6 +162,15 @@ enum class MainTab(val label: String, val icon: ImageVector) {
                 Roles.normalize(role) == Roles.STOCK -> listOf(HOME, SCAN, PRODUCTS)
                 else -> listOf(HOME, PRODUCTS, SCAN, BALANCE)
             }
+
+        /** Put a permitted launch tab first; invalid/stale preferences safely fall back to Home. */
+        fun orderedBottomTabsForRole(role: String?, preferredTabName: String?): List<MainTab> {
+            val allowedTabs = bottomTabsForRole(role)
+            val first = allowedTabs.firstOrNull { it.name == preferredTabName }
+                ?: allowedTabs.firstOrNull { it == HOME }
+                ?: allowedTabs.first()
+            return listOf(first) + allowedTabs.filterNot { it == first }
+        }
     }
 }
 
@@ -215,9 +225,8 @@ fun MainShell(
     val agentPolicy by appViewModel.agentPolicy.collectAsStateWithLifecycle()
 
     val roleTabs = MainTab.bottomTabsForRole(user.role)
-    val resolvedInitial = roleTabs
-        .firstOrNull { it.name == defaultStartTab }
-        ?.name ?: MainTab.HOME.name
+    val orderedRoleTabs = MainTab.orderedBottomTabsForRole(user.role, defaultStartTab)
+    val resolvedInitial = orderedRoleTabs.first().name
 
     var internalTabName by rememberSaveable(user.scopeIdentity) { mutableStateOf(resolvedInitial) }
     var internalLastBottomTabName by rememberSaveable(user.scopeIdentity) { mutableStateOf(resolvedInitial) }
@@ -252,6 +261,7 @@ fun MainShell(
     var showProblemReportDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showShakeReportPrompt by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showAgentQuotaDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
+    var showDataCacheManagerDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var pendingAgentReportRequest by remember(user.scopeIdentity) { mutableStateOf<AgentNavigationSuggestion?>(null) }
     LaunchedEffect(tab) {
         if (tab != MainTab.AGENT) showAgentQuotaDialog = false
@@ -266,6 +276,14 @@ fun MainShell(
         enabled = isForeground && shakeToReportEnabled && !showProblemReportDialog && !showShakeReportPrompt,
         onShake = { showShakeReportPrompt = true },
     )
+
+    if (showDataCacheManagerDialog) {
+        DataCacheManagerDialog(
+            onDismiss = { showDataCacheManagerDialog = false },
+            onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+            appViewModel = appViewModel,
+        )
+    }
 
     if (showAvatarSurprise || showAgentSurprise) {
         AtlasSurpriseDialog(surpriseIndex) { showAvatarSurprise = false; showAgentSurprise = false }
@@ -488,6 +506,12 @@ fun MainShell(
                         MainTab.SALE, MainTab.SETTINGS -> Unit
 
                         MainTab.PROFILE -> {
+                            IconButton(onClick = { showDataCacheManagerDialog = true }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Inventory2,
+                                    contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
+                                )
+                            }
                             IconButton(onClick = { switchTab(MainTab.SETTINGS) }) {
                                 Icon(
                                     imageVector = Icons.Outlined.Settings,
@@ -711,7 +735,7 @@ fun MainShell(
         },
     ) {
         AtlasFloatingBottomBar(
-            tabs = roleTabs,
+            tabs = orderedRoleTabs,
             selected = tab,
             onSelect = switchTab,
         )

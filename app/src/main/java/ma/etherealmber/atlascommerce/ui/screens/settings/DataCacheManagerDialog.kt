@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.settings
 
+import android.content.Intent
+import android.provider.Settings
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -51,6 +53,7 @@ import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
+import ma.etherealmber.atlascommerce.ui.root.roundUpTo50MiB
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
 private sealed interface DataManagerAction {
@@ -61,7 +64,7 @@ private sealed interface DataManagerAction {
     data object ClearAllLocalData : DataManagerAction
 }
 
-/** Local-only storage controls, available from Profile and the signed-out login help menu. */
+/** Local-only storage controls, available from the signed-in Profile top bar. */
 @Composable
 fun DataCacheManagerDialog(
     onDismiss: () -> Unit,
@@ -129,7 +132,46 @@ fun DataCacheManagerDialog(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    val recommendedFreeBytes = roundUpTo50MiB(storage.recommendedFreeBytes)
+                    val lowDeviceStorage = storage.deviceFreeBytes?.let { it < recommendedFreeBytes } == true
+                    if (lowDeviceStorage) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.errorContainer,
+                        ) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        atlasText("Espace de stockage faible", "Low device storage", "مساحة تخزين الجهاز منخفضة"),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                    )
+                                }
+                                Text(
+                                    atlasText(
+                                        "Atlas recommande au moins ${Formatter.formatShortFileSize(context, recommendedFreeBytes)} d'espace libre pour fonctionner normalement. Il reste ${Formatter.formatShortFileSize(context, storage.deviceFreeBytes ?: 0L)}. Libérez de l'espace sur l'appareil ou utilisez le nettoyage local ci-dessous.",
+                                        "Atlas recommends at least ${Formatter.formatShortFileSize(context, recommendedFreeBytes)} free for normal operation. ${Formatter.formatShortFileSize(context, storage.deviceFreeBytes ?: 0L)} is available. Free space on your device or use the local cleanup options below.",
+                                        "يوصي Atlas بتوفير ${Formatter.formatShortFileSize(context, recommendedFreeBytes)} على الأقل للعمل بشكل طبيعي. المتاح حالياً ${Formatter.formatShortFileSize(context, storage.deviceFreeBytes ?: 0L)}. أفرغ مساحة على الجهاز أو استخدم خيارات التنظيف أدناه.",
+                                    ),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                                TextButton(onClick = {
+                                    runCatching { context.startActivity(Intent(Settings.ACTION_MANAGE_STORAGE)) }
+                                        .onFailure { runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS)) } }
+                                }) {
+                                    Text(atlasText("Libérer de l'espace", "Free up space", "إخلاء مساحة"))
+                                }
+                            }
+                        }
+                    }
                     ManagerSection(title = atlasText("Stockage", "Storage", "التخزين"), icon = Icons.Outlined.Storage) {
+                        ManagerValueRow(atlasText("Espace libre sur l'appareil", "Device free space", "المساحة الحرة على الجهاز"), storage.deviceFreeBytes?.let { Formatter.formatShortFileSize(context, it) } ?: atlasText("Calcul…", "Checking…", "جارٍ الحساب…"))
+                        ManagerValueRow(atlasText("Recommandé pour Atlas", "Recommended for Atlas", "الموصى به لـ Atlas"), Formatter.formatShortFileSize(context, recommendedFreeBytes))
                         ManagerValueRow(atlasText("Stockage privé total", "Total app storage", "إجمالي تخزين التطبيق"), Formatter.formatShortFileSize(context, storage.totalAppBytes))
                         ManagerValueRow(atlasText("Cache", "Cache", "الذاكرة المؤقتة"), Formatter.formatShortFileSize(context, storage.cacheBytes))
                         ManagerValueRow(
