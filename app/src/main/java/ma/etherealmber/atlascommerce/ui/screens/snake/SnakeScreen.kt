@@ -27,7 +27,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.content.Context
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -48,7 +50,21 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
     }
     var game by remember { mutableStateOf(SnakeState()) }
     var running by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val gamePreferences = remember(context) {
+        context.getSharedPreferences("atlas_snake_progress", Context.MODE_PRIVATE)
+    }
+    var bestScore by remember(gamePreferences) {
+        mutableStateOf(gamePreferences.getInt("best_score", 0))
+    }
     val boardFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(game.score) {
+        if (game.score > bestScore) {
+            bestScore = game.score
+            gamePreferences.edit().putInt("best_score", bestScore).apply()
+        }
+    }
     LaunchedEffect(isActive, foreground) {
         if (isActive && foreground) boardFocusRequester.requestFocus()
     }
@@ -68,10 +84,18 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(atlasText("Mangez les logos Atlas !", "Collect the Atlas logos!", "اجمع شعارات Atlas!"), style = MaterialTheme.typography.titleMedium)
             Text(atlasText("Score : ${game.score}", "Score: ${game.score}", "النتيجة: ${game.score}"), style = MaterialTheme.typography.titleMedium)
+            Text(
+                atlasText("Meilleur score : $bestScore", "Best score: $bestScore", "أفضل نتيجة: $bestScore"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             val snakeColor = MaterialTheme.colorScheme.primary
             val boardColor = MaterialTheme.colorScheme.surfaceVariant
-            BoxWithConstraints(
-                Modifier.widthIn(max = 440.dp).fillMaxWidth().aspectRatio(1f)
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val boardSide = (300.dp + game.score * 12.dp).coerceAtMost(maxWidth.coerceAtMost(440.dp))
+                val cell = boardSide / BOARD_SIZE
+                Box(
+                    Modifier.align(Alignment.Center).size(boardSide)
                     .focusRequester(boardFocusRequester)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -110,7 +134,6 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                         }
                     }) { change, amount -> change.consume(); drag += amount }
                 }) {
-                val cell = maxWidth / BOARD_SIZE
                 Canvas(Modifier.fillMaxSize()) {
                     val side = size.width / BOARD_SIZE
                     game.body.forEachIndexed { index, point ->
@@ -132,6 +155,7 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                         contentDescription = atlasText("Logo Atlas à collecter", "Atlas logo to collect", "شعار Atlas للجمع"),
                         modifier = Modifier.padding(cell * 0.16f),
                     )
+                }
                 }
             }
             if (game.over) Text(if (game.won) atlasText("Bravo, plateau rempli !", "You filled the board!", "أحسنت، امتلأت اللوحة!") else atlasText("Partie terminée", "Game over", "انتهت اللعبة"), color = MaterialTheme.colorScheme.error)

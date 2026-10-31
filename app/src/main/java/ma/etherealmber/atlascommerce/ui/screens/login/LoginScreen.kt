@@ -55,7 +55,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -264,7 +263,6 @@ private fun LoginScreenContent(
                         showUsernameField = rememberedAccount == null || useAnotherAccount,
                         onUsername = viewModel::onUsernameChange,
                         onPassword = viewModel::onPasswordChange,
-                        onRememberChange = viewModel::onRememberAccountChange,
                         onSubmit = viewModel::submit,
                         onDismissError = viewModel::dismissError,
                         compact = compact,
@@ -614,7 +612,7 @@ private fun BiometricUnlockAction(
             }
         }
         TextButton(onClick = onClick, enabled = enabled) {
-            Text(atlasText("Utiliser la biométrie ou le code de l'appareil", "Use biometrics or device PIN", "استخدم البصمة أو رمز الجهاز"))
+            Text(atlasText("Déverrouiller avec la biométrie", "Unlock with biometrics", "إلغاء القفل بالبصمة"))
         }
         Text(
             account.displayName.ifBlank { account.username },
@@ -760,7 +758,6 @@ private fun CredentialsForm(
     showUsernameField: Boolean,
     onUsername: (String) -> Unit,
     onPassword: (String) -> Unit,
-    onRememberChange: (Boolean) -> Unit,
     onSubmit: () -> Unit,
     onDismissError: () -> Unit,
     compact: Boolean,
@@ -811,30 +808,6 @@ private fun CredentialsForm(
         )
         LoginInlineError(state, onDismissError)
         Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = atlasText("Mémoriser ce compte", "Remember this account", "تذكّر هذا الحساب"),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium,
-                )
-                Text(
-                    text = if (compact) atlasText("Chiffré ici · propre à ce serveur.", "Encrypted on this device · tied to this server.", "مشفّر على هذا الجهاز · مرتبط بهذا الخادم.") else atlasText("Chiffré localement et visible uniquement sur ce serveur.", "Encrypted locally and available only on this server.", "مشفّر محليًا ومتاح على هذا الخادم فقط."),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Switch(
-                checked = state.rememberAccount,
-                onCheckedChange = onRememberChange,
-                enabled = !state.loading,
-            )
-        }
-        Spacer(Modifier.height(if (compact) 9.dp else 16.dp))
         AtlasButton(
             text = atlasText("Se connecter", "Sign in", "تسجيل الدخول"),
             onClick = onSubmit,
