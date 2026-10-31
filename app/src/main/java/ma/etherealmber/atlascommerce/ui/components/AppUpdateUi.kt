@@ -37,6 +37,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material.icons.outlined.NotificationsActive
@@ -108,8 +109,16 @@ fun UpdateMiniProgressBall(
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                 if (current == null) {
                     Icon(
-                        imageVector = Icons.Outlined.SystemUpdateAlt,
-                        contentDescription = atlasText("Afficher la mise à jour", "Show update", "عرض التحديث"),
+                        imageVector = if (state is UpdateState.ReadyToInstall) {
+                            Icons.Outlined.CheckCircle
+                        } else {
+                            Icons.Outlined.FileDownload
+                        },
+                        contentDescription = if (state is UpdateState.ReadyToInstall) {
+                            atlasText("Afficher l'installation de la mise à jour", "Show update installation", "عرض تثبيت التحديث")
+                        } else {
+                            atlasText("Afficher le téléchargement de la mise à jour", "Show update download", "عرض تنزيل التحديث")
+                        },
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(19.dp),
                     )
@@ -129,17 +138,36 @@ fun UpdateMiniProgressBall(
                             color = MaterialTheme.colorScheme.primary,
                         )
                     }
-                    current.percent?.let { pct ->
-                        Text(
-                            text = "$pct%",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                lineHeight = 10.sp,
-                            ),
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
+                    val progressDescription = current.percent?.let { pct ->
+                        atlasText(
+                            "Téléchargement de la mise à jour ${current.info.displayVersion} en cours · $pct %",
+                            "Downloading update ${current.info.displayVersion} · $pct%",
+                            "جارٍ تنزيل التحديث ${current.info.displayVersion} · $pct٪",
                         )
+                    } ?: atlasText(
+                        "Téléchargement de la mise à jour ${current.info.displayVersion} en cours",
+                        "Downloading update ${current.info.displayVersion}",
+                        "جارٍ تنزيل التحديث ${current.info.displayVersion}",
+                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Outlined.FileDownload,
+                            contentDescription = progressDescription,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        current.percent?.let { pct ->
+                            Text(
+                                text = "$pct%",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = 9.sp,
+                                ),
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
@@ -232,7 +260,7 @@ fun AppUpdateBanner(
                         AtlasButton(
                             text = atlasText("Télécharger", "Download", "تنزيل"),
                             onClick = onDownload,
-                            icon = Icons.Outlined.SystemUpdateAlt,
+                            icon = Icons.Outlined.FileDownload,
                         )
                     }
                 }
@@ -478,7 +506,7 @@ fun MandatoryUpdateScreen(
                     AtlasButton(
                         text = atlasText("Télécharger ${info.displayVersion}", "Download ${info.displayVersion}", "تنزيل ${info.displayVersion}"),
                         onClick = onDownload,
-                        icon = Icons.Outlined.SystemUpdateAlt,
+                        icon = Icons.Outlined.FileDownload,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -746,7 +774,7 @@ fun SettingsUpdateCard(
                 AtlasButton(
                     text = atlasText("Télécharger ${state.info.displayVersion}", "Download ${state.info.displayVersion}", "تنزيل ${state.info.displayVersion}"),
                     onClick = onDownload,
-                    icon = Icons.Outlined.SystemUpdateAlt,
+                    icon = Icons.Outlined.FileDownload,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

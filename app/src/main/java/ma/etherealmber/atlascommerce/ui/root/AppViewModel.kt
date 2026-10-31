@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce.ui.root
 import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
+import android.os.StatFs
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -57,7 +58,7 @@ import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import ma.etherealmber.atlascommerce.ui.components.AvatarBitmapCache
 import javax.inject.Inject
 
-/** Byte-level inventory of app-private storage and the independently managed cache directories. */
+/** Byte-level inventory of app-private storage and device space relevant to normal operation. */
 data class LocalStorageSummary(
     val totalAppBytes: Long = 0L,
     val cacheBytes: Long = 0L,
@@ -66,7 +67,16 @@ data class LocalStorageSummary(
     val financeReportCount: Int = 0,
     val diagnosticsBytes: Long = 0L,
     val updateDownloadBytes: Long = 0L,
+    val deviceFreeBytes: Long? = null,
+    val recommendedFreeBytes: Long = 69L * 1024L * 1024L,
 )
+
+/** Round up (never down) to the next 50 MiB boundary for a readable storage recommendation. */
+internal fun roundUpTo50MiB(bytes: Long): Long {
+    if (bytes <= 0L) return 0L
+    val step = 50L * 1024L * 1024L
+    return ((bytes - 1L) / step + 1L) * step
+}
 
 private fun File.directorySizeBytes(): Long =
     runCatching { walkTopDown().filter { it.isFile }.sumOf { it.length() } }.getOrDefault(0L)
@@ -263,6 +273,8 @@ class AppViewModel @Inject constructor(
                 val finance = File(cache, "finance")
                 val diagnostics = File(cache, "diagnostics")
                 val updates = File(cache, "updates")
+                val updateBytes = updates.directorySizeBytes()
+                val mib = 1024L * 1024L
                 LocalStorageSummary(
                     totalAppBytes = applicationContext.dataDir.directorySizeBytes(),
                     cacheBytes = cache.directorySizeBytes(),
@@ -270,7 +282,11 @@ class AppViewModel @Inject constructor(
                     financeReportBytes = finance.directorySizeBytes(),
                     financeReportCount = finance.walkTopDown().count { it.isFile && it.extension.equals("pdf", ignoreCase = true) },
                     diagnosticsBytes = diagnostics.directorySizeBytes(),
-                    updateDownloadBytes = updates.directorySizeBytes(),
+                    updateDownloadBytes = updateBytes,
+                    deviceFreeBytes = StatFs(applicationContext.dataDir.absolutePath).availableBytes,
+                    // Keep a 69 MiB working reserve, expanding it for an in-progress update's
+                    // staged download and install overhead. The UI rounds this recommendation up.
+                    recommendedFreeBytes = maxOf(69L * mib, updateBytes * 2L + 32L * mib),
                 )
             }
         }

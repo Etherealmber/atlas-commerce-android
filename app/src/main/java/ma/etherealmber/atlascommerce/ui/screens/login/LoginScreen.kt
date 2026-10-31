@@ -41,7 +41,6 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MoreVert
@@ -94,7 +93,6 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasBrandWordmark
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
-import ma.etherealmber.atlascommerce.ui.screens.settings.DataCacheManagerDialog
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasUsesSystemLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalSetAtlasLanguage
@@ -137,7 +135,6 @@ private fun LoginScreenContent(
     var helpServicesOpen by remember { mutableStateOf(false) }
     var helpTopic by remember { mutableStateOf<LoginHelpTopic?>(null) }
     var recoveryDialogOpen by remember { mutableStateOf(false) }
-    var dataCacheManagerOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(savedAccounts, state.step) {
         if (accountPromptHandled) return@LaunchedEffect
@@ -202,7 +199,6 @@ private fun LoginScreenContent(
             LoginAtlasHero(
                 compact = compact || keyboardVisible,
                 onOpenHelpServices = { helpServicesOpen = true },
-                onOpenDataCache = { dataCacheManagerOpen = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(if (motionEnabled) Modifier.animateContentSize() else Modifier)
@@ -363,9 +359,6 @@ private fun LoginScreenContent(
         if (recoveryDialogOpen) {
             LoginHelpInfoDialog(topic = LoginHelpTopic.RECOVERY, onDismiss = { recoveryDialogOpen = false })
         }
-        if (dataCacheManagerOpen) {
-            DataCacheManagerDialog(onDismiss = { dataCacheManagerOpen = false }, onToast = onToast)
-        }
     }
 }
 
@@ -373,7 +366,6 @@ private fun LoginScreenContent(
 private fun LoginAtlasHero(
     compact: Boolean,
     onOpenHelpServices: () -> Unit,
-    onOpenDataCache: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -390,13 +382,6 @@ private fun LoginAtlasHero(
             )
         }
         Spacer(Modifier.weight(1f))
-        IconButton(onClick = onOpenDataCache) {
-            Icon(
-                Icons.Outlined.Inventory2,
-                contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
-                tint = MaterialTheme.colorScheme.onBackground,
-            )
-        }
         IconButton(onClick = onOpenHelpServices) {
             Icon(
                 Icons.Outlined.MoreVert,

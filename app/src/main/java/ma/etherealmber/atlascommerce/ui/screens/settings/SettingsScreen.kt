@@ -45,7 +45,6 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.SportsEsports
-import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.OpenInNew
@@ -60,10 +59,10 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -163,7 +162,6 @@ fun ProfileScreen(
     val savingProfile by appViewModel.savingProfile.collectAsStateWithLifecycle()
 
     var confirmSignOut by remember { mutableStateOf(false) }
-    var showDataCacheManager by remember { mutableStateOf(false) }
     var showEditProfile by remember { mutableStateOf(false) }
     var draftDisplayName by remember(user.displayName) { mutableStateOf(user.displayName) }
     var draftEmail by remember(user.email) { mutableStateOf(user.email) }
@@ -336,12 +334,6 @@ fun ProfileScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = { showDataCacheManager = true }) {
-                        Icon(
-                            Icons.Outlined.Inventory2,
-                            contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
-                        )
-                    }
                     IconButton(
                         onClick = {
                             draftDisplayName = user.displayName
@@ -488,90 +480,65 @@ fun ProfileScreen(
                     fontWeight = FontWeight.SemiBold,
                 )
             }
+            val roleAllowedTabs = MainTab.bottomTabsForRole(user.role)
+            val selectedLaunchTab = roleAllowedTabs.firstOrNull { it.name == defaultStartTab }
+                ?: roleAllowedTabs.firstOrNull { it == MainTab.HOME }
+                ?: roleAllowedTabs.first()
             Spacer(Modifier.height(10.dp))
-            Text(
-                text = atlasText("Thème"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            SettingsChoiceRow(
+                title = atlasText("Thème", "Theme", "المظهر"),
+                value = when (themeMode) {
+                    ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
+                    ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
+                    ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+                },
+                selectedKey = themeMode.name,
+                options = ThemeMode.entries.map { mode ->
+                    mode.name to when (mode) {
+                        ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
+                        ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
+                        ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+                    }
+                },
+                onSelected = { key -> ThemeMode.entries.firstOrNull { it.name == key }?.let(appViewModel::setThemeMode) },
             )
-            Spacer(Modifier.height(4.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ThemeMode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = themeMode == mode,
-                        onClick = { appViewModel.setThemeMode(mode) },
-                        label = {
-                            Text(
-                                when (mode) {
-                                    ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
-                                    ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
-                                    ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
-                                },
-                            )
-                        },
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = atlasText("Langue", "Language", "اللغة"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            SettingsChoiceRow(
+                title = atlasText("Langue", "Language", "اللغة"),
+                value = if (appLanguageFollowsSystem) {
+                    atlasText("Système · ${AppLanguage.fromSystemLocale().nativeLabel}", "System · ${AppLanguage.fromSystemLocale().nativeLabel}", "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}")
+                } else appLanguage.nativeLabel,
+                selectedKey = if (appLanguageFollowsSystem) "SYSTEM" else appLanguage.name,
+                options = listOf("SYSTEM" to atlasText("Système · ${AppLanguage.fromSystemLocale().nativeLabel}", "System · ${AppLanguage.fromSystemLocale().nativeLabel}", "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}")) +
+                    AppLanguage.entries.map { it.name to it.nativeLabel },
+                onSelected = { key ->
+                    if (key == "SYSTEM") appViewModel.followSystemAppLanguage()
+                    else AppLanguage.entries.firstOrNull { it.name == key }?.let(appViewModel::setAppLanguage)
+                },
             )
-            Spacer(Modifier.height(4.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = appLanguageFollowsSystem,
-                    onClick = { appViewModel.followSystemAppLanguage() },
-                    label = { Text(atlasText("Système · ${AppLanguage.fromSystemLocale().nativeLabel}", "System · ${AppLanguage.fromSystemLocale().nativeLabel}", "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}")) },
-                )
-                AppLanguage.entries.forEach { language ->
-                    FilterChip(
-                        selected = !appLanguageFollowsSystem && appLanguage == language,
-                        onClick = { appViewModel.setAppLanguage(language) },
-                        label = { Text(language.nativeLabel) },
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = atlasText("Densité d'affichage"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            SettingsChoiceRow(
+                title = atlasText("Densité d'affichage", "Display density", "كثافة العرض"),
+                value = when (densityMode) {
+                    DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
+                    DensityMode.COMFORT -> atlasText("Confort", "Comfort", "مريح")
+                },
+                selectedKey = densityMode.name,
+                options = DensityMode.entries.map { mode ->
+                    mode.name to when (mode) {
+                        DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
+                        DensityMode.COMFORT -> atlasText("Confort", "Comfort", "مريح")
+                    }
+                },
+                onSelected = { key -> DensityMode.entries.firstOrNull { it.name == key }?.let(appViewModel::setDensityMode) },
             )
-            Spacer(Modifier.height(4.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DensityMode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = densityMode == mode,
-                        onClick = { appViewModel.setDensityMode(mode) },
-                        label = {
-                            Text(
-                                when (mode) {
-                                    DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
-                                    DensityMode.COMFORT -> atlasText("Confort", "Comfort", "مريح")
-                                },
-                            )
-                        },
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = atlasText("Onglet d'ouverture au lancement"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            SettingsChoiceRow(
+                title = atlasText("Onglet d'ouverture au lancement", "Tab to open at launch", "علامة التبويب عند التشغيل"),
+                value = settingsTabLabel(selectedLaunchTab),
+                selectedKey = selectedLaunchTab.name,
+                options = roleAllowedTabs.map { it.name to settingsTabLabel(it) },
+                onSelected = { key ->
+                    if (roleAllowedTabs.any { it.name == key }) appViewModel.setDefaultStartTab(key)
+                },
             )
-            Spacer(Modifier.height(4.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MainTab.bottomTabsForRole(user.role).forEach { item ->
-                    FilterChip(
-                        selected = defaultStartTab == item.name,
-                        onClick = { appViewModel.setDefaultStartTab(item.name) },
-                        label = { Text(settingsTabLabel(item)) },
-                    )
-                }
-            }
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsToggleRow(
                 title = atlasText("Animations fluides", "Smooth animations", "حركات سلسة"),
@@ -704,10 +671,6 @@ fun ProfileScreen(
 
     }
 
-    if (showDataCacheManager) {
-        DataCacheManagerDialog(onDismiss = { showDataCacheManager = false }, onToast = onToast)
-    }
-
     if (showEditProfile) {
         AlertDialog(
             onDismissRequest = { if (!savingProfile) showEditProfile = false },
@@ -791,6 +754,62 @@ fun ProfileScreen(
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
+private fun SettingsChoiceRow(
+    title: String,
+    value: String,
+    selectedKey: String,
+    options: List<Pair<String, String>>,
+    onSelected: (String) -> Unit,
+) {
+    var pickerOpen by remember(title) { mutableStateOf(false) }
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable { pickerOpen = true },
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
+            }
+            Text(atlasText("Modifier", "Change", "تغيير"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+    if (pickerOpen) {
+        AlertDialog(
+            onDismissRequest = { pickerOpen = false },
+            title = { Text(title) },
+            text = {
+                Column {
+                    options.forEach { (key, label) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable { onSelected(key); pickerOpen = false }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = key == selectedKey,
+                                onClick = { onSelected(key); pickerOpen = false },
+                            )
+                            Text(label, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { pickerOpen = false }) {
+                    Text(atlasText("Fermer", "Close", "إغلاق"))
+                }
+            },
+        )
+    }
+}
+
+@Composable
 fun SettingsScreen(
     user: SessionUser,
     onChangeServer: () -> Unit,
@@ -816,10 +835,7 @@ fun SettingsScreen(
     val parallelUpdateDownload by appViewModel.parallelUpdateDownload.collectAsStateWithLifecycle()
     val followLatestRelease by appViewModel.followLatestRelease.collectAsStateWithLifecycle()
     val serverSelection by appViewModel.server.collectAsStateWithLifecycle()
-    val themeMode by appViewModel.themeMode.collectAsStateWithLifecycle()
-    val densityMode by appViewModel.densityMode.collectAsStateWithLifecycle()
     val appLanguage by appViewModel.appLanguage.collectAsStateWithLifecycle()
-    val appLanguageFollowsSystem by appViewModel.appLanguageFollowsSystem.collectAsStateWithLifecycle()
     val savedServers by appViewModel.savedServers.collectAsStateWithLifecycle()
     val agentPolicy by appViewModel.agentPolicy.collectAsStateWithLifecycle()
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
@@ -968,41 +984,6 @@ fun SettingsScreen(
             ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {
-        AtlasCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(atlasText("Langue de l'application", "App language", "لغة التطبيق"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            }
-            Spacer(Modifier.height(8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = appLanguageFollowsSystem,
-                    onClick = { appViewModel.followSystemAppLanguage() },
-                    label = { Text(atlasText("Système · ${AppLanguage.fromSystemLocale().nativeLabel}", "System · ${AppLanguage.fromSystemLocale().nativeLabel}", "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}")) },
-                )
-                AppLanguage.entries.forEach { language ->
-                    FilterChip(
-                        selected = !appLanguageFollowsSystem && appLanguage == language,
-                        onClick = { appViewModel.setAppLanguage(language) },
-                        label = { Text(language.nativeLabel) },
-                    )
-                }
-            }
-        }
-        AtlasCard {
-            SettingsToggleRow(
-                title = atlasText("Signaler un problème en secouant", "Shake to report a problem", "هز الهاتف للإبلاغ عن مشكلة"),
-                subtitle = atlasText(
-                    "Affiche une confirmation uniquement. Aucun rapport ni diagnostic n'est envoyé sans votre accord.",
-                    "Only opens a confirmation. No report or diagnostics are sent without your approval.",
-                    "يعرض طلب تأكيد فقط. لا يُرسل أي تقرير أو بيانات تشخيصية دون موافقتك.",
-                ),
-                checked = shakeToReportEnabled,
-                onCheckedChange = appViewModel::setShakeToReportEnabled,
-            )
-        }
-
         // 1. Connected Devices & QR PC Pairing
         AtlasCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1419,6 +1400,20 @@ fun SettingsScreen(
                     "لن يُرفق ملخص تقني خاص إلا عند إرسال البلاغ. تُشارك لقطات الشاشة (حتى 3) بشكل منفصل ولا تُرسل مع النموذج.",
                 ),
                 onClick = { showProblemReportDialog = true },
+            )
+        }
+
+        // Keep the accidental shake shortcut well below the frequently used settings.
+        AtlasCard {
+            SettingsToggleRow(
+                title = atlasText("Signaler un problème en secouant", "Shake to report a problem", "هز الهاتف للإبلاغ عن مشكلة"),
+                subtitle = atlasText(
+                    "Affiche une confirmation uniquement. Aucun rapport ni diagnostic n'est envoyé sans votre accord.",
+                    "Only opens a confirmation. No report or diagnostics are sent without your approval.",
+                    "يعرض طلب تأكيد فقط. لا يُرسل أي تقرير أو بيانات تشخيصية دون موافقتك.",
+                ),
+                checked = shakeToReportEnabled,
+                onCheckedChange = appViewModel::setShakeToReportEnabled,
             )
         }
 
