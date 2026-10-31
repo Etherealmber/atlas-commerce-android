@@ -95,6 +95,7 @@ import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.ThemeMode
+import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
@@ -958,6 +959,8 @@ fun SettingsScreen(
     }
 
     if (confirmClearUpdatePackage) {
+        val updatePackageClearedMessage = atlasText("Fichier de mise à jour supprimé.", "Downloaded update removed.", "تم حذف ملف التحديث.")
+        val updatePackageBusyMessage = atlasText("Attendez la fin du téléchargement avant de supprimer le fichier.", "Wait for the download to finish before deleting it.", "انتظر حتى يكتمل التنزيل قبل حذف الملف.")
         AlertDialog(
             onDismissRequest = { confirmClearUpdatePackage = false },
             title = { Text(atlasText("Supprimer le fichier téléchargé ?", "Delete downloaded update?", "حذف ملف التحديث المُنزّل؟")) },
@@ -974,13 +977,7 @@ fun SettingsScreen(
                 TextButton(onClick = {
                     appViewModel.clearCachedUpdateFiles { cleared ->
                         confirmClearUpdatePackage = false
-                        onToast(
-                            if (cleared) {
-                                atlasText("Fichier de mise à jour supprimé.", "Downloaded update removed.", "تم حذف ملف التحديث.")
-                            } else {
-                                atlasText("Attendez la fin du téléchargement avant de supprimer le fichier.", "Wait for the download to finish before deleting it.", "انتظر حتى يكتمل التنزيل قبل حذف الملف.")
-                            },
-                        )
+                        onToast(if (cleared) updatePackageClearedMessage else updatePackageBusyMessage)
                     }
                 }) {
                     Text(atlasText("Supprimer", "Delete", "حذف"), color = MaterialTheme.colorScheme.error)

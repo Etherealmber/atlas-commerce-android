@@ -397,6 +397,10 @@ fun DataCacheManagerDialog(
     }
 
     pendingAction?.let { action ->
+        val diagnosticLogsClearedMessage = atlasText("Journaux supprimés.", "Diagnostic logs cleared.", "تم مسح سجلات التشخيص.")
+        val diagnosticLogsFailedMessage = atlasText("Impossible de supprimer certains journaux.", "Some diagnostic logs could not be deleted.", "تعذّر حذف بعض سجلات التشخيص.")
+        val updateDownloadClearedMessage = atlasText("Téléchargement supprimé.", "Downloaded update removed.", "تم حذف التحديث المُنزّل.")
+        val updateDownloadFailedMessage = atlasText("Terminez le téléchargement avant de le supprimer.", "Finish the download before deleting it.", "أكمل التنزيل قبل حذفه.")
         val title: String
         val message: String
         when (action) {
@@ -446,16 +450,10 @@ fun DataCacheManagerDialog(
                         DataManagerAction.ClearOfflineCatalog -> appViewModel.clearOfflineCache(onToast)
                         DataManagerAction.ClearTemporaryReports -> appViewModel.clearFinanceReportCache(onToast)
                         DataManagerAction.ClearDiagnosticLogs -> appViewModel.clearDiagnosticLogs { cleared ->
-                            onToast(
-                                if (cleared) atlasText("Journaux supprimés.", "Diagnostic logs cleared.", "تم مسح سجلات التشخيص.")
-                                else atlasText("Impossible de supprimer certains journaux.", "Some diagnostic logs could not be deleted.", "تعذّر حذف بعض سجلات التشخيص.")
-                            )
+                            onToast(if (cleared) diagnosticLogsClearedMessage else diagnosticLogsFailedMessage)
                         }
                         DataManagerAction.ClearDownloadedUpdate -> appViewModel.clearCachedUpdateFiles { cleared ->
-                            onToast(
-                                if (cleared) atlasText("Téléchargement supprimé.", "Downloaded update removed.", "تم حذف التحديث المُنزّل.")
-                                else atlasText("Terminez le téléchargement avant de le supprimer.", "Finish the download before deleting it.", "أكمل التنزيل قبل حذفه.")
-                            )
+                            onToast(if (cleared) updateDownloadClearedMessage else updateDownloadFailedMessage)
                         }
                         DataManagerAction.ClearAllLocalData -> appViewModel.clearAllLocalAppData {
                             onDismiss()
