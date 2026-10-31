@@ -35,12 +35,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MoreVert
@@ -93,6 +95,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasBrandWordmark
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
+import ma.etherealmber.atlascommerce.ui.screens.settings.DataCacheManagerDialog
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasUsesSystemLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalSetAtlasLanguage
@@ -105,9 +108,10 @@ fun LoginScreen(
     onOpenQrDevice: () -> Unit = {},
     onUnlockSavedAccount: (SavedAccountEntry, () -> Unit) -> Unit = { _, _ -> },
     onOpenAbout: () -> Unit = {},
+    onToast: (String) -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
-    LoginScreenContent(onChangeServer, onOpenQrDevice, onUnlockSavedAccount, onOpenAbout, viewModel)
+    LoginScreenContent(onChangeServer, onOpenQrDevice, onUnlockSavedAccount, onOpenAbout, onToast, viewModel)
 }
 
 @Composable
@@ -116,6 +120,7 @@ private fun LoginScreenContent(
     onOpenQrDevice: () -> Unit,
     onUnlockSavedAccount: (SavedAccountEntry, () -> Unit) -> Unit,
     onOpenAbout: () -> Unit,
+    onToast: (String) -> Unit,
     viewModel: LoginViewModel,
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
@@ -133,6 +138,7 @@ private fun LoginScreenContent(
     var helpServicesOpen by remember { mutableStateOf(false) }
     var helpTopic by remember { mutableStateOf<LoginHelpTopic?>(null) }
     var recoveryDialogOpen by remember { mutableStateOf(false) }
+    var dataCacheManagerOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(savedAccounts, state.step) {
         if (accountPromptHandled) return@LaunchedEffect
@@ -217,11 +223,7 @@ private fun LoginScreenContent(
             ) {
                 val welcomeTitle = when {
                     state.step == LoginViewModel.Step.OTP -> atlasText("Vérification", "Verification", "التحقق")
-                    rememberedAccount != null -> atlasText(
-                        "Bienvenue, ${rememberedAccount.displayName.ifBlank { rememberedAccount.username }}",
-                        "Welcome, ${rememberedAccount.displayName.ifBlank { rememberedAccount.username }}",
-                        "مرحبًا، ${rememberedAccount.displayName.ifBlank { rememberedAccount.username }}",
-                    )
+                    rememberedAccount != null -> atlasText("Bon retour", "Welcome back", "مرحباً بعودتك")
                     else -> atlasText("Bienvenue", "Welcome", "مرحبًا")
                 }
                 Text(
@@ -237,7 +239,7 @@ private fun LoginScreenContent(
                 Text(
                     text = if (state.step == LoginViewModel.Step.CREDENTIALS) {
                         if (rememberedAccount != null) {
-                            atlasText("Compte mémorisé sur cet appareil", "Remembered account on this device", "حساب محفوظ على هذا الجهاز")
+                            atlasText("Compte conservé sur cet appareil — connectez-vous pour continuer.", "Your account is saved on this device — sign in again to continue.", "حسابك محفوظ على هذا الجهاز — سجّل الدخول مجدداً للمتابعة.")
                         } else {
                             atlasText("Connectez-vous à votre espace Atlas Commerce.", "Sign in to your Atlas Commerce workspace.", "سجّل الدخول إلى مساحة Atlas Commerce الخاصة بك.")
                         }
@@ -278,7 +280,6 @@ private fun LoginScreenContent(
                     selectedUnlockAccount?.let { savedAccount ->
                         Spacer(Modifier.height(if (compact) 2.dp else 6.dp))
                         BiometricUnlockAction(
-                            account = savedAccount,
                             enabled = !state.loading,
                             onClick = {
                                 useAnotherAccount = false
@@ -330,6 +331,7 @@ private fun LoginScreenContent(
                 onLanguages = { helpServicesOpen = false; languageDialogOpen = true },
                 onServers = { helpServicesOpen = false; onChangeServer() },
                 onQr = { helpServicesOpen = false; onOpenQrDevice() },
+                onOpenDataCache = { helpServicesOpen = false; dataCacheManagerOpen = true },
             )
         }
 
@@ -361,6 +363,9 @@ private fun LoginScreenContent(
         }
         if (recoveryDialogOpen) {
             LoginHelpInfoDialog(topic = LoginHelpTopic.RECOVERY, onDismiss = { recoveryDialogOpen = false })
+        }
+        if (dataCacheManagerOpen) {
+            DataCacheManagerDialog(onDismiss = { dataCacheManagerOpen = false }, onToast = onToast)
         }
     }
 }
@@ -409,6 +414,7 @@ private fun LoginHelpServicesSheet(
     onLanguages: () -> Unit,
     onServers: () -> Unit,
     onQr: () -> Unit,
+    onOpenDataCache: () -> Unit,
 ) {
     androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -453,6 +459,24 @@ private fun LoginHelpServicesSheet(
                 LoginServiceItem(Icons.Outlined.Language, atlasText("Langues", "Languages", "اللغات"), onLanguages, Modifier.weight(1f), subtitle = languageName)
                 LoginServiceItem(Icons.Outlined.Dns, atlasText("Serveurs", "Servers", "الخوادم"), onServers, Modifier.weight(1f), subtitle = host)
                 LoginServiceItem(Icons.Outlined.QrCode2, atlasText("Connexion QR", "QR sign-in", "تسجيل الدخول عبر QR"), onQr, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(18.dp))
+            Surface(
+                onClick = onOpenDataCache,
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"), fontWeight = FontWeight.SemiBold)
+                        Text(atlasText("Gérer le stockage sur cet appareil", "Manage storage on this device", "إدارة التخزين على هذا الجهاز"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
@@ -589,37 +613,25 @@ private fun LoginHelpInfoDialog(topic: LoginHelpTopic, onDismiss: () -> Unit) {
 
 @Composable
 private fun BiometricUnlockAction(
-    account: SavedAccountEntry,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(
-            onClick = onClick,
-            enabled = enabled,
-            shape = androidx.compose.foundation.shape.CircleShape,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            modifier = Modifier.size(62.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    Icons.Outlined.Fingerprint,
-                    contentDescription = atlasText("Déverrouiller par biométrie", "Unlock with biometrics", "إلغاء القفل بالبصمة"),
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(30.dp),
-                )
-            }
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = androidx.compose.foundation.shape.CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.size(62.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                Icons.Outlined.Fingerprint,
+                contentDescription = atlasText("Déverrouiller par biométrie", "Unlock with biometrics", "إلغاء القفل بالبصمة"),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(30.dp),
+            )
         }
-        TextButton(onClick = onClick, enabled = enabled) {
-            Text(atlasText("Déverrouiller avec la biométrie", "Unlock with biometrics", "إلغاء القفل بالبصمة"))
-        }
-        Text(
-            account.displayName.ifBlank { account.username },
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
     }
 }
 
