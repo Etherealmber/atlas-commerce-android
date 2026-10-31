@@ -1,6 +1,11 @@
 package ma.etherealmber.atlascommerce.ui.screens.snake
 
 import android.content.Context
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -83,6 +88,8 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
     var dailyMode by remember { mutableStateOf(false) }
     var running by remember { mutableStateOf(false) }
     var game by remember { mutableStateOf(SnakeState(wrapWalls = wrapWalls)) }
+    var crownToastVisible by remember { mutableStateOf(false) }
+    var observedCrowns by remember { mutableIntStateOf(0) }
     val boardFocusRequester = remember { FocusRequester() }
 
     fun startGame(daily: Boolean) {
@@ -116,6 +123,20 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
         }
     }
     LaunchedEffect(game.over) { if (game.over) running = false }
+    LaunchedEffect(game.crowns) {
+        when {
+            game.crowns > observedCrowns -> {
+                observedCrowns = game.crowns
+                crownToastVisible = true
+                delay(1_350)
+                crownToastVisible = false
+            }
+            game.crowns < observedCrowns -> {
+                observedCrowns = game.crowns
+                crownToastVisible = false
+            }
+        }
+    }
 
     Scaffold(topBar = {
         TopAppBar(
@@ -144,6 +165,7 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                 game = game,
                 bestScore = bestScore,
                 bestCrowns = bestCrowns,
+                crownToastVisible = crownToastVisible,
                 dailyMode = dailyMode,
                 dailyTarget = dailyTarget,
                 running = running,
@@ -221,11 +243,15 @@ private fun MenuPage(
             Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                     StatBadge(
-                        icon = { AtlasAvatar(AppDetails.GITHUB_AVATAR_URL, AppDetails.GITHUB_HANDLE, size = 22.dp) },
-                        label = atlasText("Meilleur score", "Best · @Etherealmber", "أفضل نتيجة"),
+                        icon = { CrownGlyph(Modifier.size(24.dp)) },
+                        label = atlasText("Record perso", "Personal best", "أفضل نتيجة شخصية"),
                         value = bestScore,
                     )
-                    StatBadge(icon = { CrownGlyph(Modifier.size(24.dp)) }, label = atlasText("Couronnes", "Crowns", "التيجان"), value = bestCrowns)
+                    StatBadge(
+                        icon = { AtlasAvatar(AppDetails.GITHUB_AVATAR_URL, AppDetails.GITHUB_HANDLE, size = 22.dp) },
+                        label = atlasText("Couronnes", "Crowns", "التيجان"),
+                        value = bestCrowns,
+                    )
                 }
                 BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     val previewSide = (maxWidth - 12.dp).coerceAtMost(340.dp)
@@ -263,6 +289,7 @@ private fun GameplayPage(
     game: SnakeState,
     bestScore: Int,
     bestCrowns: Int,
+    crownToastVisible: Boolean,
     dailyMode: Boolean,
     dailyTarget: Int,
     running: Boolean,
@@ -275,11 +302,15 @@ private fun GameplayPage(
 ) {
     Column(modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
-            StatBadge(icon = { AtlasLogoGlyph(Modifier.size(22.dp)) }, label = atlasText("Logos", "Atlas logos", "شعارات Atlas"), value = game.score)
-            StatBadge(icon = { CrownGlyph(Modifier.size(22.dp)) }, label = atlasText("Couronnes", "Crowns", "التيجان"), value = game.crowns)
+            StatBadge(icon = { AtlasLogoGlyph(Modifier.size(22.dp)) }, label = atlasText("Atlas", "Atlas", "Atlas"), value = game.score)
             StatBadge(
-                icon = { AtlasAvatar(AppDetails.GITHUB_AVATAR_URL, AppDetails.GITHUB_HANDLE, size = 20.dp) },
-                label = atlasText("Record", "Best", "الأفضل"),
+                icon = { AtlasAvatar(AppDetails.GITHUB_AVATAR_URL, AppDetails.GITHUB_HANDLE, size = 22.dp) },
+                label = atlasText("Couronnes", "Crowns", "التيجان"),
+                value = game.crowns,
+            )
+            StatBadge(
+                icon = { CrownGlyph(Modifier.size(22.dp)) },
+                label = atlasText("Record perso", "Personal best", "أفضل نتيجة شخصية"),
                 value = bestScore,
             )
         }
@@ -327,6 +358,29 @@ private fun GameplayPage(
                     },
                 showEyes = true,
             )
+            AnimatedVisibility(
+                visible = crownToastVisible,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
+                enter = fadeIn() + scaleIn(initialScale = 0.88f),
+                exit = fadeOut() + scaleOut(targetScale = 0.92f),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC928).copy(alpha = 0.58f)),
+                    shadowElevation = 6.dp,
+                ) {
+                    Row(Modifier.padding(horizontal = 13.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CrownGlyph(Modifier.size(19.dp))
+                        Spacer(Modifier.width(7.dp))
+                        Text(
+                            atlasText("Couronne +2", "Crown +2", "تاج +٢"),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
             DirectionPad(onDirection = onDirection, enabled = running && !pausedByPrompt && !game.over)
@@ -585,13 +639,18 @@ private fun CrownGlyph(modifier: Modifier = Modifier) {
         val top = size.height * 0.18f
         val bottom = size.height * 0.82f
         val crown = Path().apply {
-            moveTo(left, top + size.height * 0.18f)
-            lineTo(left + size.width * 0.08f, bottom - size.height * 0.12f)
+            moveTo(left, top + size.height * 0.24f)
+            quadraticTo(left + size.width * 0.02f, top + size.height * 0.13f, left + size.width * 0.12f, top + size.height * 0.22f)
+            lineTo(size.width * 0.33f, top + size.height * 0.36f)
+            quadraticTo(size.width * 0.39f, top + size.height * 0.40f, size.width * 0.43f, top + size.height * 0.30f)
+            lineTo(size.width * 0.48f, top + size.height * 0.10f)
+            quadraticTo(size.width * 0.5f, top - size.height * 0.01f, size.width * 0.52f, top + size.height * 0.10f)
+            lineTo(size.width * 0.57f, top + size.height * 0.30f)
+            quadraticTo(size.width * 0.61f, top + size.height * 0.40f, size.width * 0.67f, top + size.height * 0.36f)
+            lineTo(right - size.width * 0.12f, top + size.height * 0.22f)
+            quadraticTo(right - size.width * 0.02f, top + size.height * 0.13f, right, top + size.height * 0.24f)
             lineTo(right - size.width * 0.08f, bottom - size.height * 0.12f)
-            lineTo(right, top + size.height * 0.18f)
-            lineTo(size.width * 0.68f, top + size.height * 0.34f)
-            lineTo(size.width * 0.5f, top)
-            lineTo(size.width * 0.32f, top + size.height * 0.34f)
+            quadraticTo(size.width * 0.5f, bottom, left + size.width * 0.08f, bottom - size.height * 0.12f)
             close()
         }
         drawPath(crown, Color(0xFFFFC928))
