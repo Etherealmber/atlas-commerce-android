@@ -6,6 +6,7 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
 import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -195,12 +196,15 @@ fun EmployeesScreen(
                             )
                             IconButton(
                                 onClick = { payrollInfoOpen = true },
-                                modifier = Modifier.size(40.dp),
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp)),
                             ) {
                                 Icon(
                                     Icons.Outlined.Info,
                                     contentDescription = atlasText("À propos des chiffres de paie", "About payroll figures", "حول أرقام الرواتب"),
-                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(21.dp),
                                 )
                             }
                         }
@@ -268,7 +272,7 @@ fun EmployeesScreen(
                     TextButton(
                         onClick = { currentMonth?.toString()?.let(viewModel::selectFinancePeriod) },
                         enabled = !state.financeLoading,
-                        modifier = Modifier.align(Alignment.End),
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
                     ) {
                         Text(atlasText("Revenir au mois en cours", "Return to current month", "العودة إلى الشهر الحالي"))
                     }

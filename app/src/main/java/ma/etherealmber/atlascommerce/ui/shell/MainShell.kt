@@ -262,9 +262,11 @@ fun MainShell(
     var showShakeReportPrompt by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showAgentQuotaDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showDataCacheManagerDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
+    var productHistoryActive by remember(user.scopeIdentity) { mutableStateOf(false) }
     var pendingAgentReportRequest by remember(user.scopeIdentity) { mutableStateOf<AgentNavigationSuggestion?>(null) }
     LaunchedEffect(tab) {
         if (tab != MainTab.AGENT) showAgentQuotaDialog = false
+        if (tab != MainTab.PRODUCTS) productHistoryActive = false
     }
 
     val shakeDisabledMessage = atlasText(
@@ -403,7 +405,7 @@ fun MainShell(
         }
     }
 
-    BackHandler(enabled = isForeground && tab != MainTab.HOME) {
+    BackHandler(enabled = isForeground && tab != MainTab.HOME && !productHistoryActive) {
         AtlasLogBuffer.log("NAVIGATION", "System Back handled by shell on tab=${tab.name}")
         when (tab) {
             MainTab.SETTINGS -> setTabName(MainTab.PROFILE.name)
@@ -432,7 +434,8 @@ fun MainShell(
         modifier = Modifier.fillMaxSize(),
         containerColor = Color.Transparent,
         topBar = {
-            AtlasTopBar(
+            if (!productHistoryActive) {
+                AtlasTopBar(
                 title = tab.localizedLabel(),
                 subtitle = agentState?.let { state ->
                     val thread = state.activeThreadTitle.takeIf(String::isNotBlank)?.let { localizedAgentText(it, atlasLanguage) }
@@ -556,6 +559,7 @@ fun MainShell(
                     }
                 },
             )
+            }
         },
     ) { padding ->
         Box(
@@ -564,7 +568,7 @@ fun MainShell(
                 .padding(padding)
                 .background(MaterialTheme.colorScheme.background),
         ) {
-        val showRail = useRail && tab !in BackStackTabs
+        val showRail = useRail && tab !in BackStackTabs && !productHistoryActive
         if (showRail) {
             NavigationRail(modifier = Modifier.align(Alignment.CenterStart), containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
                 roleTabs.forEach { item ->
@@ -584,7 +588,7 @@ fun MainShell(
         }
         val navigationInset = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
         CompositionLocalProvider(
-            LocalAtlasFloatingDockPadding provides if (!useRail && tab !in BackStackTabs) 96.dp + navigationInset else 0.dp,
+            LocalAtlasFloatingDockPadding provides if (!useRail && tab !in BackStackTabs && !productHistoryActive) 96.dp + navigationInset else 0.dp,
         ) {
         AtlasPageTransition(
             targetState = tab,
@@ -612,6 +616,7 @@ fun MainShell(
                         onOpenScan = { switchTab(MainTab.SCAN) },
                         onOpenSale = { switchTab(MainTab.SALE) },
                         onToast = onToast,
+                        onHistoryPageVisibilityChanged = { productHistoryActive = it },
                     )
 
                     MainTab.SCAN -> ScanScreen(
@@ -643,6 +648,7 @@ fun MainShell(
                     MainTab.PROFILE -> ProfileScreen(
                         user = user,
                         onOpenSettings = { switchTab(MainTab.SETTINGS) },
+                        onOpenQrDevice = { onOpenQrDevice(null) },
                         onSignOut = onSignOut,
                         onToast = onToast,
                     )
@@ -705,7 +711,7 @@ fun MainShell(
         )
     }
     AnimatedVisibility(
-        visible = !useRail && tab !in BackStackTabs,
+        visible = !useRail && tab !in BackStackTabs && !productHistoryActive,
         modifier = Modifier.align(Alignment.BottomCenter).width(floatingBarWidth),
         enter = if (motionEnabled) {
             fadeIn(tween(260, easing = FastOutSlowInEasing)) +

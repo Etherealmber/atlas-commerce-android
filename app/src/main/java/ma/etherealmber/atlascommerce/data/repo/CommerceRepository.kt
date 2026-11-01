@@ -270,7 +270,6 @@ class CommerceRepository @Inject constructor(
             add("Demandé par $sender ($roleLabel)")
             if (request.sku.isNotBlank()) add("Réf: ${request.sku}")
             if (!request.barcode.isNullOrBlank()) add("Code: ${request.barcode}")
-            add("Prix vente: ${request.price} DH")
             if (request.stockQuantity > 0.0) add("Qté initiale: ${request.stockQuantity} ${request.unit}")
             if (!note.isNullOrBlank()) add("Note: ${note.trim()}")
         }
@@ -303,6 +302,7 @@ class CommerceRepository @Inject constructor(
                 unit = request.unit.ifBlank { "unité" },
                 quantity = if (request.stockQuantity > 0.0) request.stockQuantity else 1.0,
                 note = detailText,
+                photoUrl = request.imageUrl,
             ),
         )
 

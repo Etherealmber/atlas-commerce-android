@@ -1,12 +1,15 @@
 package ma.etherealmber.atlascommerce.ui.components
 
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -17,10 +20,13 @@ import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -28,15 +34,18 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import java.util.Locale
 
@@ -56,6 +65,8 @@ fun ProductCreateDialog(
     initialUnit: String = "unité",
     initialQuantity: String = "1",
     initialCategory: String = "",
+    initialImageUrl: String? = null,
+    imageServerBaseUrl: String? = null,
     submitting: Boolean = false,
     onDismiss: () -> Unit,
     onSubmitDirect: (CreateProductRequest) -> Unit,
@@ -67,6 +78,7 @@ fun ProductCreateDialog(
         quantity: Double,
         category: String?,
         note: String?,
+        photoUrl: String?,
     ) -> Unit,
 ) {
     // STRICT ROLE POLICY:
@@ -92,6 +104,22 @@ fun ProductCreateDialog(
     var rawThreshold by remember { mutableStateOf("5") }
     var category by remember(initialCategory) { mutableStateOf(initialCategory) }
     var note by remember { mutableStateOf("") }
+    var photoUrl by remember(initialImageUrl) { mutableStateOf(initialImageUrl) }
+    var encodingPhoto by remember { mutableStateOf(false) }
+    var photoError by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val photoScope = rememberCoroutineScope()
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            photoScope.launch {
+                encodingPhoto = true
+                val encoded = AvatarBitmapCache.encodeGalleryAvatarDataUri(context, uri)
+                photoUrl = encoded
+                photoError = encoded == null
+                encodingPhoto = false
+            }
+        }
+    }
 
     val parsedQty = rawQty.replace(',', '.').toDoubleOrNull()
     val parsedPrice = rawPrice.replace(',', '.').toDoubleOrNull()
@@ -105,15 +133,15 @@ fun ProductCreateDialog(
     }
     val reqUnitOk = unit.trim().isNotBlank()
     val reqQtyOk = parsedQty != null && parsedQty >= 0.0
-    val reqPriceOk = parsedPrice != null && parsedPrice >= 0.0
+    val reqPriceOk = !modeDirect || (parsedPrice != null && parsedPrice >= 0.0)
 
-    val checks = listOf(
-        "Nom *" to reqNameOk,
-        (if (modeDirect) "SKU *" else "Code/SKU *") to reqCodeOrSkuOk,
-        "Unité *" to reqUnitOk,
-        "Qté *" to reqQtyOk,
-        "Prix *" to reqPriceOk,
-    )
+    val checks = buildList {
+        add("Nom *" to reqNameOk)
+        add((if (modeDirect) "SKU *" else "Code/SKU *") to reqCodeOrSkuOk)
+        add("Unité *" to reqUnitOk)
+        add("Qté *" to reqQtyOk)
+        if (modeDirect) add("Prix *" to reqPriceOk)
+    }
 
     val completedCount = checks.count { it.second }
     val allValid = checks.all { it.second }
@@ -270,22 +298,74 @@ fun ProductCreateDialog(
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AtlasAvatar(
+                        avatarUrl = photoUrl,
+                        label = name.ifBlank { barcode.ifBlank { "Atlas" } },
+                        size = 52.dp,
+                        serverBaseUrl = imageServerBaseUrl,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            atlasText("Photo du produit (facultative)", "Product photo (optional)", "صورة المنتج (اختيارية)"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            atlasText("Ajoutez une image si vous le souhaitez.", "Add an image if you like.", "أضف صورة إذا رغبت."),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (encodingPhoto) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        IconButton(onClick = { photoPicker.launch("image/*") }) {
+                            Icon(Icons.Outlined.PhotoCamera, contentDescription = atlasText("Choisir une photo", "Choose a photo", "اختيار صورة"))
+                        }
+                    }
+                    if (photoUrl != null) {
+                        IconButton(onClick = { photoUrl = null }) {
+                            Icon(Icons.Outlined.DeleteOutline, contentDescription = atlasText("Retirer la photo", "Remove photo", "إزالة الصورة"))
+                        }
+                    }
+                }
+                if (photoError) {
+                    Text(
+                        atlasText("Impossible de lire cette image. Essayez un autre fichier.", "Could not read that image. Try another file.", "تعذرت قراءة الصورة. جرّب ملفاً آخر."),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                if (modeDirect) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = rawQty,
+                            onValueChange = { s -> rawQty = s.filter { it.isDigit() || it == '.' || it == ',' } },
+                            label = { Text(atlasText("Quantité *")) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = rawPrice,
+                            onValueChange = { s -> rawPrice = s.filter { it.isDigit() || it == '.' || it == ',' } },
+                            label = { Text(atlasText("Prix MAD *")) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                } else {
                     OutlinedTextField(
                         value = rawQty,
                         onValueChange = { s -> rawQty = s.filter { it.isDigit() || it == '.' || it == ',' } },
                         label = { Text(atlasText("Quantité *")) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = rawPrice,
-                        onValueChange = { s -> rawPrice = s.filter { it.isDigit() || it == '.' || it == ',' } },
-                        label = { Text(atlasText("Prix MAD *")) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
 
@@ -322,7 +402,7 @@ fun ProductCreateDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = allValid && !submitting,
+                enabled = allValid && !submitting && !encodingPhoto,
                 onClick = {
                     val qty = parsedQty ?: 0.0
                     val generatedSku = sku.trim().ifBlank {
@@ -343,6 +423,7 @@ fun ProductCreateDialog(
                                 stockQuantity = qty,
                                 lowStockThreshold = parsedThreshold,
                                 description = note.trim().ifBlank { null },
+                                imageUrl = photoUrl,
                             ),
                         )
                     } else {
@@ -354,6 +435,7 @@ fun ProductCreateDialog(
                             qty,
                             category.trim().ifBlank { null },
                             note.trim().ifBlank { null },
+                            photoUrl,
                         )
                     }
                 },

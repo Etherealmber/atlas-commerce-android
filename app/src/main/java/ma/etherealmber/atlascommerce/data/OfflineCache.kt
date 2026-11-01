@@ -7,6 +7,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.core.security.AtRestCipher
+import ma.etherealmber.atlascommerce.core.security.CryptoStore
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -24,18 +26,21 @@ import javax.inject.Singleton
 class OfflineCache internal constructor(
     private val directory: File,
     private val moshi: Moshi,
+    private val cryptoStore: AtRestCipher,
 ) {
 
     @Inject
     constructor(
         @ApplicationContext context: Context,
         moshi: Moshi,
-    ) : this(File(context.filesDir, "atlas-cache"), moshi)
+        cryptoStore: CryptoStore,
+    ) : this(File(context.filesDir, "atlas-cache"), moshi, cryptoStore)
 
     init {
         directory.mkdirs()
-        // Purge any legacy un-scoped global `products.json` immediately on startup
+        // Purge the old un-scoped global file and migrate account-scoped plaintext catalogs.
         File(directory, LEGACY_PRODUCTS_FILE).delete()
+        migrateLegacyCatalogFiles()
     }
 
     @Volatile
@@ -64,13 +69,14 @@ class OfflineCache internal constructor(
 
     suspend fun saveProducts(products: List<ProductDto>) = withContext(Dispatchers.IO) {
         val key = activeScopeKey ?: return@withContext
-        write("products_$key.json") { productAdapter.toJson(products) }
+        write("products_$key.json") { cryptoStore.encryptAtRest(productAdapter.toJson(products)) }
     }
 
     suspend fun readProducts(): List<ProductDto> = withContext(Dispatchers.IO) {
         val key = activeScopeKey ?: return@withContext emptyList()
         val raw = read("products_$key.json") ?: return@withContext emptyList()
-        runCatching { productAdapter.fromJson(raw) }.getOrNull().orEmpty()
+        val clearText = cryptoStore.decryptAtRest(raw) ?: return@withContext emptyList()
+        runCatching { productAdapter.fromJson(clearText) }.getOrNull().orEmpty()
     }
 
     /** Clears only the active `(serverUrl, username)` cache file. */
@@ -117,6 +123,22 @@ class OfflineCache internal constructor(
         return digest.take(8).joinToString("") { "%02x".format(it) }
     }
 
+    private fun migrateLegacyCatalogFiles() {
+        directory.listFiles()
+            ?.filter { it.isFile && it.name.startsWith("products_") && it.extension.equals("json", true) }
+            ?.forEach { file ->
+                runCatching {
+                    val stored = file.readText()
+                    if (!stored.startsWith(AT_REST_PREFIX)) {
+                        file.writeText(cryptoStore.encryptAtRest(stored))
+                    }
+                }.onFailure {
+                    // Fail closed: never leave a plaintext product catalog behind if encryption fails.
+                    runCatching { file.delete() }
+                }
+            }
+    }
+
     private inline fun write(name: String, block: () -> String) {
         runCatching { File(directory, name).writeText(block()) }
     }
@@ -126,6 +148,7 @@ class OfflineCache internal constructor(
     }.getOrNull()
 
     private companion object {
+        const val AT_REST_PREFIX = "v2:"
         const val LEGACY_PRODUCTS_FILE = "products.json"
     }
 }

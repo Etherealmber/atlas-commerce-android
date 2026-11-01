@@ -87,19 +87,21 @@ class SessionGuardInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val response = chain.proceed(request)
-        if (response.code == 401 && request.header("Authorization") != null) {
-            val code = runCatching {
-                response.peekBody(MAX_PEEK).string().let { body ->
-                    CODE_REGEX.find(body)?.groupValues?.getOrNull(1)
-                }
-            }.getOrNull()
-            if (code == null || code !in USER_MISTAKE_CODES) {
+        if (response.code in setOf(401, 403) && request.header("Authorization") != null) {
+            val errorBody = runCatching { response.peekBody(MAX_PEEK).string() }.getOrDefault("")
+            val code = CODE_REGEX.find(errorBody)?.groupValues?.getOrNull(1)
+            val revoked = code?.contains("REVOK", ignoreCase = true) == true ||
+                code == "SESSION_EXPIRED" ||
+                errorBody.contains("révoqué", ignoreCase = true) ||
+                errorBody.contains("revoked", ignoreCase = true)
+            val expired = response.code == 401 && (code == null || code !in USER_MISTAKE_CODES)
+            if (expired || (response.code == 403 && revoked)) {
                 ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
                     tag = "AUTH",
-                    message = "Session guard received HTTP 401 for ${request.url.encodedPath}; code=${code ?: "missing"}; ending the authenticated session",
+                    message = "Session guard received HTTP ${response.code} for ${request.url.encodedPath}; code=${code ?: "missing"}; ending the authenticated session",
                     level = "WARN",
                 )
-                sessionEvents.notifyExpired()
+                sessionEvents.notifyExpired(request.header("Authorization").orEmpty())
             }
         }
         return response

@@ -820,6 +820,7 @@ private val commonTranslations = mapOf(
     "Une erreur du service est survenue. Réessayez plus tard." to ("A service error occurred. Try again later." to "حدث خطأ في الخدمة. أعد المحاولة لاحقاً."),
     "Une mise à jour est requise pour continuer. Téléchargez la dernière version." to ("An update is required to continue. Download the latest version." to "يلزم تحديث للمتابعة. نزّل أحدث إصدار."),
     "Session expirée — reconnectez-vous." to ("Session expired — sign in again." to "انتهت الجلسة — سجّل الدخول مجدداً."),
+    "Cet appareil ou cette session a été révoqué. Reconnectez-vous." to ("This device or session was revoked. Sign in again." to "تم إلغاء صلاحية هذا الجهاز أو الجلسة. سجّل الدخول مجدداً."),
     "Réservé aux administrateurs (owner/admin)." to ("Reserved for administrators (owner/admin)." to "مخصص للمسؤولين (المالك/المسؤول)."),
     "Impossible de charger cette discussion. Vérifiez la connexion puis réessayez." to ("Couldn't load this conversation. Check your connection and try again." to "تعذّر تحميل هذه المحادثة. تحقق من اتصالك ثم أعد المحاولة."),
     "Saisie invalide — vérifiez que les informations tapées sont exactes." to ("Invalid input — check that the information you entered is correct." to "البيانات غير صالحة — تحقق من صحة المعلومات التي أدخلتها."),

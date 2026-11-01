@@ -72,7 +72,12 @@ class AuthRepository @Inject constructor(
     }
 
     suspend fun submitUserReport(request: UserReportRequest): ApiResult<UserReportReceiptDto> =
-        runner.envelope { apiProvider.api().submitUserReport(request) }
+        when (val result = runner.statusRaw { apiProvider.api().submitUserReport(request) }) {
+            is ApiResult.Failure -> result
+            is ApiResult.Success -> ApiResult.Success(
+                result.data.data ?: UserReportReceiptDto(),
+            )
+        }
 
     suspend fun me(): ApiResult<MeDto> = runner.envelope { apiProvider.api().me() }
 

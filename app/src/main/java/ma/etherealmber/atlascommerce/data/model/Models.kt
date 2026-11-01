@@ -600,6 +600,7 @@ data class CreateProductRequest(
     @Json(name = "stock_quantity") val stockQuantity: Double = 0.0,
     @Json(name = "low_stock_threshold") val lowStockThreshold: Double = 5.0,
     val description: String? = null,
+    @Json(name = "image_url") val imageUrl: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -627,6 +628,7 @@ data class SubmitProductRequestBody(
     val quantity: Double = 1.0,
     val category: String? = null,
     val note: String? = null,
+    @Json(name = "photo_url") val photoUrl: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
