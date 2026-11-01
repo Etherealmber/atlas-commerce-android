@@ -353,6 +353,6 @@ class ProductsViewModel @Inject constructor(
     }
 
     private companion object {
-        const val SEARCH_DEBOUNCE_MS = 280L
+        const val SEARCH_DEBOUNCE_MS = 400L
     }
 }

@@ -6,10 +6,21 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasQuantity
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -82,12 +93,14 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.ProductCreateDialog
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun ProductsScreen(
     user: SessionUser,
     onOpenScan: () -> Unit,
     onOpenSale: () -> Unit,
     onToast: (String) -> Unit,
+    onHistoryPageVisibilityChanged: (Boolean) -> Unit = {},
     viewModel: ProductsViewModel = hiltViewModel(),
 ) {
     val dockPadding = LocalAtlasFloatingDockPadding.current
@@ -106,8 +119,45 @@ fun ProductsScreen(
     LaunchedEffect(Unit) {
         viewModel.messages.collect { message -> onToast(message) }
     }
+    LaunchedEffect(historyTarget != null) {
+        onHistoryPageVisibilityChanged(historyTarget != null)
+    }
+    BackHandler(enabled = historyTarget != null && canSell) {
+        historyTarget = null
+    }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    SharedTransitionLayout {
+    val sharedTransitionScope = this
+    AnimatedContent(
+        targetState = historyTarget,
+        modifier = Modifier.fillMaxSize(),
+        contentKey = { destination -> destination?.id ?: "product-catalog" },
+        transitionSpec = {
+            if (!motionEnabled) {
+                EnterTransition.None togetherWith ExitTransition.None
+            } else if (targetState != null) {
+                (slideInHorizontally(animationSpec = tween(320)) { it } + fadeIn(tween(220))) togetherWith
+                    (slideOutHorizontally(animationSpec = tween(250)) { -it / 5 } + fadeOut(tween(180)))
+            } else {
+                (slideInHorizontally(animationSpec = tween(280)) { -it / 5 } + fadeIn(tween(220))) togetherWith
+                    (slideOutHorizontally(animationSpec = tween(320)) { it } + fadeOut(tween(180)))
+            }
+        },
+        label = "product_catalog_push_navigation",
+    ) { destination ->
+        val animatedVisibilityScope = this
+        if (destination != null && canSell) {
+            ProductHistoryScreen(
+                product = destination,
+                currency = state.currency,
+                serverBaseUrl = user.serverUrl,
+                sharedTransitionScope = sharedTransitionScope,
+                animatedVisibilityScope = animatedVisibilityScope,
+                onBack = { historyTarget = null },
+            )
+        } else {
+        Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -297,6 +347,8 @@ fun ProductsScreen(
                                 product = product,
                                 currency = state.currency,
                                 serverBaseUrl = user.serverUrl,
+                                sharedTransitionScope = sharedTransitionScope,
+                                animatedVisibilityScope = animatedVisibilityScope,
                                 canSell = canSell,
                                 onOpen = {
                                     if (canSell) historyTarget = product else selected = product
@@ -312,6 +364,8 @@ fun ProductsScreen(
                 }
             }
         }
+        }
+    }
     }
 
     if (showCreateDialog) {
@@ -354,16 +408,6 @@ fun ProductsScreen(
                 pendingFulfillRequest = null
                 viewModel.submitProductRequest(code, name, sku, unit, qty, cat, note, photoUrl)
             },
-        )
-    }
-
-    val historyProduct = historyTarget
-    if (historyProduct != null && canSell) {
-        ProductHistoryDialog(
-            product = historyProduct,
-            currency = state.currency,
-            serverBaseUrl = user.serverUrl,
-            onDismiss = { historyTarget = null },
         )
     }
 
@@ -481,15 +525,28 @@ private fun ProductRequestRow(
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun ProductRow(
     product: ProductDto,
     currency: String,
     serverBaseUrl: String,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
     canSell: Boolean,
     onOpen: () -> Unit,
     onAdd: () -> Unit,
 ) {
+    val sharedArtworkModifier = if (LocalAtlasAnimationsEnabled.current) {
+        with(sharedTransitionScope) {
+            Modifier.sharedElement(
+                sharedContentState = rememberSharedContentState(key = "product-artwork-${product.id}"),
+                animatedVisibilityScope = animatedVisibilityScope,
+            )
+        }
+    } else {
+        Modifier
+    }
     AtlasCard(onClick = onOpen, padding = 14.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -497,7 +554,7 @@ private fun ProductRow(
                     imageUrl = product.imageUrl,
                     serverBaseUrl = serverBaseUrl,
                     label = product.name,
-                    modifier = Modifier.size(64.dp),
+                    modifier = Modifier.size(64.dp).then(sharedArtworkModifier),
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

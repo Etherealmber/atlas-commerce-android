@@ -216,6 +216,7 @@ fun ProfileScreen(
     val savingProfile by appViewModel.savingProfile.collectAsStateWithLifecycle()
 
     var confirmSignOut by remember { mutableStateOf(false) }
+    var showThemeSwitcher by remember { mutableStateOf(false) }
     var addAccountAfterSignOut by remember { mutableStateOf(false) }
     var showAccountManager by remember { mutableStateOf(false) }
     var showEditProfile by remember { mutableStateOf(false) }
@@ -1296,7 +1297,6 @@ fun SettingsScreen(
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
-    var showThemeSwitcher by remember { mutableStateOf(false) }
     var showReleaseHistoryDialog by remember { mutableStateOf(false) }
     var confirmClearUpdatePackage by remember { mutableStateOf(false) }
     var buildTapCount by remember { mutableIntStateOf(0) }
