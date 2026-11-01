@@ -651,6 +651,7 @@ fun MainShell(
                         onOpenQrDevice = { onOpenQrDevice(null) },
                         onSignOut = onSignOut,
                         onToast = onToast,
+                        isForeground = isForeground,
                     )
 
                     MainTab.BALANCE -> BalanceScreen(
@@ -662,7 +663,6 @@ fun MainShell(
                     MainTab.SETTINGS -> SettingsScreen(
                         user = user,
                         onChangeServer = onChangeServer,
-                        onOpenQrDevice = { onOpenQrDevice(null) },
                         onOpenLicense = onOpenLicense,
                         onOpenSecurity = onOpenSecurity,
                         onOpenAbout = onOpenAbout,

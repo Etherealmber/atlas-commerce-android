@@ -61,6 +61,7 @@ import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PointOfSale
@@ -115,24 +116,20 @@ import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.session.SessionUser
-import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
-import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
 import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
-import ma.etherealmber.atlascommerce.ui.components.AtlasDeviceListSkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonList
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
 import ma.etherealmber.atlascommerce.ui.i18n.localizeReleaseNotes
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
-import ma.etherealmber.atlascommerce.ui.screens.agent.AgentQuotaCard
 import ma.etherealmber.atlascommerce.ui.screens.legal.EtherealmberAuthorCard
 import ma.etherealmber.atlascommerce.ui.screens.legal.ProblemReportDialog
 import ma.etherealmber.atlascommerce.ui.shell.MainTab
@@ -191,6 +188,7 @@ fun ProfileScreen(
     onOpenQrDevice: () -> Unit,
     onSignOut: () -> Unit,
     onToast: (String) -> Unit,
+    isForeground: Boolean = true,
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -219,10 +217,19 @@ fun ProfileScreen(
     var showThemeSwitcher by remember { mutableStateOf(false) }
     var addAccountAfterSignOut by remember { mutableStateOf(false) }
     var showAccountManager by remember { mutableStateOf(false) }
+    var reopenAccountManagerOnReturn by remember { mutableStateOf(false) }
     var showEditProfile by remember { mutableStateOf(false) }
     var draftDisplayName by remember(user.displayName) { mutableStateOf(user.displayName) }
     var draftEmail by remember(user.email) { mutableStateOf(user.email) }
+    var draftPhone by remember(user.phone) { mutableStateOf(user.phone) }
     var draftClientName by remember(savedClientName) { mutableStateOf(savedClientName) }
+
+    LaunchedEffect(isForeground, user.scopeIdentity) {
+        if (isForeground && reopenAccountManagerOnReturn) {
+            reopenAccountManagerOnReturn = false
+            showAccountManager = true
+        }
+    }
 
     val photoPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
@@ -395,67 +402,33 @@ fun ProfileScreen(
                         onClick = {
                             draftDisplayName = user.displayName
                             draftEmail = user.email
+                            draftPhone = user.phone
                             showEditProfile = true
                         },
                     ) {
                         Icon(Icons.Outlined.Edit, contentDescription = atlasText("Modifier le profil", "Edit profile", "تعديل الملف الشخصي"))
                     }
-                }
-                if (user.email.isNotBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    AtlasInfoRow(label = atlasText("E-mail", "Email", "البريد الإلكتروني"), value = user.email)
+                    IconButton(onClick = { showAccountManager = true }) {
+                        Icon(
+                            Icons.Outlined.SwapHoriz,
+                            contentDescription = atlasText("Changer de compte", "Switch account", "تبديل الحساب"),
+                        )
+                    }
                 }
                 Spacer(Modifier.height(10.dp))
+                AtlasOutlinedButton(
+                    text = atlasText("Appareils liés", "Linked devices", "الأجهزة المرتبطة"),
+                    onClick = onOpenQrDevice,
+                    icon = Icons.Outlined.Devices,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
                 AtlasOutlinedButton(
                     text = atlasText("Se déconnecter de cette session", "Sign out of this session", "تسجيل الخروج من هذه الجلسة"),
                     onClick = { confirmSignOut = true },
                     icon = Icons.Outlined.Logout,
                     modifier = Modifier.fillMaxWidth(),
                 )
-            }
-        }
-
-        // WhatsApp-inspired linked-device entry: keep device/IP details concealed here,
-        // and reveal them only after the user opens device management.
-        AtlasEntrance(delayMillis = 35) {
-            AtlasCard(onClick = onOpenQrDevice) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Devices,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(10.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            atlasText("Appareils liés", "Linked devices", "الأجهزة المرتبطة"),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            atlasText(
-                                "Consultez vos sessions ou associez un ordinateur avec QR.",
-                                "View signed-in devices or link a computer with QR.",
-                                "اعرض الأجهزة المسجّلة أو اربط كمبيوتر عبر QR.",
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
             }
         }
 
@@ -489,38 +462,6 @@ fun ProfileScreen(
                         checked = account.canUseDeviceUnlock,
                         onCheckedChange = updateCurrentDeviceUnlock,
                     )
-                }
-            }
-        }
-
-        // Account/device hub: detailed account information is shown only after opening the manager.
-        AtlasEntrance(delayMillis = 45) {
-            AtlasCard(onClick = { showAccountManager = true }) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AtlasAvatar(
-                        avatarUrl = user.avatarUrl,
-                        label = user.displayName.ifBlank { user.username },
-                        size = 44.dp,
-                        serverBaseUrl = serverSelection?.baseUrl,
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            atlasText("Comptes et appareils", "Accounts & devices", "الحسابات والأجهزة"),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            atlasText(
-                                "Gérez les comptes enregistrés ou liez un appareil.",
-                                "Manage saved accounts or link a device.",
-                                "أدر الحسابات المحفوظة أو اربط جهازاً.",
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Icon(Icons.Outlined.SwapHoriz, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -829,6 +770,7 @@ fun ProfileScreen(
                         AtlasDivider(Modifier.padding(vertical = 2.dp))
                         AtlasCard(onClick = {
                             showAccountManager = false
+                            reopenAccountManagerOnReturn = true
                             onOpenQrDevice()
                         }) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -862,49 +804,111 @@ fun ProfileScreen(
     }
 
     if (showEditProfile) {
-        AlertDialog(
+        Dialog(
             onDismissRequest = { if (!savingProfile) showEditProfile = false },
-            title = { Text(atlasText("Modifier mon profil")) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    AtlasTextField(
-                        value = draftDisplayName,
-                        onValueChange = { draftDisplayName = it },
-                        label = atlasText("Nom affiché *"),
-                        placeholder = atlasText("Ex. Nom complet"),
-                        imeAction = ImeAction.Next,
-                    )
-                    AtlasTextField(
-                        value = draftEmail,
-                        onValueChange = { draftEmail = it },
-                        label = atlasText("Adresse e-mail"),
-                        placeholder = "contact@exemple.com",
-                        keyboardType = KeyboardType.Email,
-                        imeAction = ImeAction.Done,
-                    )
-                }
-            },
-            confirmButton = {
-                AtlasButton(
-                    text = "Enregistrer",
-                    loading = savingProfile,
-                    onClick = {
-                        appViewModel.updateProfileDetails(draftDisplayName, draftEmail) { msg ->
-                            onToast(msg)
-                            showEditProfile = false
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
+                shape = RoundedCornerShape(0.dp),
+                color = MaterialTheme.colorScheme.background,
+            ) {
+                Column(Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 10.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = { if (!savingProfile) showEditProfile = false }, enabled = !savingProfile) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
                         }
-                    },
-                )
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showEditProfile = false },
-                    enabled = !savingProfile,
-                ) {
-                    Text(atlasText("Annuler"))
+                        Column(Modifier.weight(1f)) {
+                            Text(atlasText("Modifier le profil", "Edit profile", "تعديل الملف الشخصي"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text(atlasText("Informations du compte", "Account information", "معلومات الحساب"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    AtlasDivider()
+                    Column(
+                        modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        AtlasCard(padding = 16.dp) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                AtlasAvatar(
+                                    avatarUrl = user.avatarUrl,
+                                    label = user.displayName.ifBlank { user.username },
+                                    size = 64.dp,
+                                    serverBaseUrl = serverSelection?.baseUrl,
+                                )
+                                Spacer(Modifier.width(14.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(user.displayName.ifBlank { user.username }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                    Text("@${user.username}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                IconButton(onClick = { if (!uploadingAvatar) photoPicker.launch("image/*") }, enabled = !uploadingAvatar) {
+                                    if (uploadingAvatar) {
+                                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Icon(Icons.Outlined.PhotoCamera, contentDescription = atlasText("Changer la photo de profil", "Change profile photo", "تغيير صورة الملف الشخصي"))
+                                    }
+                                }
+                            }
+                        }
+                        AtlasTextField(
+                            value = draftDisplayName,
+                            onValueChange = { draftDisplayName = it },
+                            label = atlasText("Nom affiché *", "Display name *", "الاسم المعروض *"),
+                            placeholder = atlasText("Ex. Nom complet", "Full name", "الاسم الكامل"),
+                            imeAction = ImeAction.Next,
+                        )
+                        AtlasTextField(
+                            value = draftEmail,
+                            onValueChange = { draftEmail = it },
+                            label = atlasText("Adresse e-mail", "Email address", "البريد الإلكتروني"),
+                            placeholder = "contact@example.com",
+                            keyboardType = KeyboardType.Email,
+                            imeAction = ImeAction.Next,
+                        )
+                        AtlasTextField(
+                            value = draftPhone,
+                            onValueChange = { draftPhone = it },
+                            label = atlasText("Numéro de téléphone", "Phone number", "رقم الهاتف"),
+                            placeholder = "+212 …",
+                            keyboardType = KeyboardType.Phone,
+                            imeAction = ImeAction.Done,
+                        )
+                    }
+                    AtlasDivider()
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        TextButton(onClick = { showEditProfile = false }, enabled = !savingProfile, modifier = Modifier.weight(1f)) {
+                            Text(atlasText("Annuler", "Cancel", "إلغاء"))
+                        }
+                        AtlasButton(
+                            text = atlasText("Enregistrer", "Save", "حفظ"),
+                            loading = savingProfile,
+                            onClick = {
+                                appViewModel.updateProfileDetails(draftDisplayName, draftEmail, draftPhone) { msg, success ->
+                                    val toastMessage = when {
+                                        success -> atlasText("Profil mis à jour.", "Profile updated.", "تم تحديث الملف الشخصي.")
+                                        msg == "Le nom affiché ne peut pas être vide." -> atlasText(
+                                            "Le nom affiché ne peut pas être vide.",
+                                            "Display name cannot be empty.",
+                                            "لا يمكن أن يكون الاسم المعروض فارغاً.",
+                                        )
+                                        else -> msg
+                                    }
+                                    onToast(toastMessage)
+                                    if (success) showEditProfile = false
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
-            },
-        )
+            }
+        }
     }
 
     if (confirmSignOut) {
@@ -955,8 +959,8 @@ fun ProfileScreen(
  * Dedicated **System & Security Settings** screen (`MainTab.SETTINGS`), opened via the top-right
  * Settings button inside [ProfileScreen].
  *
- * Includes QR PC pairing & connected devices, live Atlas Agent IA quota bars & reset countdown,
- * saved servers management, OTA APK updates, isolated offline cache, and legal information.
+ * Includes saved-server management, OTA APK updates, isolated offline cache, and legal information.
+ * Account/device management lives in Profile; Atlas Agent quota lives in the Agent experience.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -973,7 +977,7 @@ private fun ThemeSettingRow(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Outlined.AutoAwesomeMotion, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Icon(Icons.Outlined.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(atlasText("Thème", "Theme", "المظهر"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1256,7 +1260,6 @@ private fun SettingsChoiceRow(
 fun SettingsScreen(
     user: SessionUser,
     onChangeServer: () -> Unit,
-    onOpenQrDevice: () -> Unit = {},
     onOpenLicense: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -1280,7 +1283,6 @@ fun SettingsScreen(
     val serverSelection by appViewModel.server.collectAsStateWithLifecycle()
     val appLanguage by appViewModel.appLanguage.collectAsStateWithLifecycle()
     val savedServers by appViewModel.savedServers.collectAsStateWithLifecycle()
-    val agentPolicy by appViewModel.agentPolicy.collectAsStateWithLifecycle()
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val updateDownloadSource by appViewModel.updateDownloadSource.collectAsStateWithLifecycle()
     val localStorageSummary by appViewModel.localStorageSummary.collectAsStateWithLifecycle()
@@ -1288,12 +1290,6 @@ fun SettingsScreen(
     val mirrorPing by appViewModel.mirrorPing.collectAsStateWithLifecycle()
     val releaseChangelog by appViewModel.releaseChangelog.collectAsStateWithLifecycle()
     val releaseChangelogLoading by appViewModel.releaseChangelogLoading.collectAsStateWithLifecycle()
-    val devices by appViewModel.devices.collectAsStateWithLifecycle()
-    val session by appViewModel.session.collectAsStateWithLifecycle()
-    val deviceScope = (session as? ma.etherealmber.atlascommerce.core.session.SessionState.Active)?.user?.scopeIdentity
-    var devicesRevealed by remember(deviceScope) { mutableStateOf(false) }
-    val otherDevices = remember(devices, appViewModel) { devices.filterNot(appViewModel::isCurrentDevice) }
-    val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
@@ -1446,8 +1442,6 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(user.scopeIdentity, serverSelection?.baseUrl) {
-        appViewModel.loadDevices()
-        appViewModel.refreshAgentPolicy()
         appViewModel.refreshCachedProductCount()
         appViewModel.refreshLocalStorageSummary()
         appViewModel.refreshReleaseChangelog()
@@ -1471,92 +1465,7 @@ fun SettingsScreen(
             ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {
-        // 1. Connected Devices & QR PC Pairing
-        AtlasCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.Devices,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = atlasText("Appareils connectés & QR PC", "Connected devices & PC QR", "الأجهزة المتصلة وQR الكمبيوتر"),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = atlasText("Autorisez un ordinateur par QR ou révoquez une session à distance.", "Approve a computer with QR or revoke a session remotely.", "وافق على كمبيوتر عبر QR أو ألغِ جلسة عن بُعد."),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (devicesRevealed) {
-                    IconButton(onClick = appViewModel::loadDevices, enabled = !devicesLoading) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les appareils", "Refresh devices", "تحديث الأجهزة"))
-                    }
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            AtlasButton(
-                text = atlasText("Scanner un poste PC (QR)", "Scan a PC sign-in QR", "امسح رمز تسجيل الدخول للكمبيوتر"),
-                onClick = onOpenQrDevice,
-                icon = Icons.Outlined.QrCode2,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            TextButton(
-                onClick = { devicesRevealed = !devicesRevealed },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    if (devicesRevealed) {
-                        atlasText("Masquer les appareils", "Hide devices", "إخفاء الأجهزة")
-                    } else {
-                        atlasText("Afficher les appareils", "Show devices", "إظهار الأجهزة")
-                    },
-                )
-            }
-            if (devicesRevealed) {
-                Text(
-                    atlasText(
-                        "Autres appareils connectés (${otherDevices.size})",
-                        "Other connected devices (${otherDevices.size})",
-                        "أجهزة أخرى متصلة (${otherDevices.size})",
-                    ),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                when {
-                    devicesLoading && otherDevices.isEmpty() -> AtlasDeviceListSkeleton(Modifier.fillMaxWidth(), rows = 2)
-                    otherDevices.isNotEmpty() -> {
-                        otherDevices.forEachIndexed { idx, device ->
-                            if (idx > 0) AtlasDivider(Modifier.padding(vertical = 6.dp))
-                            ConnectedDeviceRow(
-                                device = device,
-                                onRevoke = { appViewModel.revokeDevice(device, onToast) },
-                            )
-                        }
-                    }
-                    !devicesLoading -> Text(
-                        atlasText("Aucun autre appareil connecté.", "No other devices are connected.", "لا توجد أجهزة أخرى متصلة."),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        // 2. Live Atlas Agent IA Quota Bars & Limit Countdown
-        AtlasEntrance(delayMillis = 45, offsetY = 8.dp) {
-            AgentQuotaCard(
-                policy = agentPolicy,
-                onRefresh = appViewModel::refreshAgentPolicy,
-            )
-        }
-
-        // 3. Updates, Fast Parallel Download, Latest Release Tracking & Changelog
+        // Updates, accelerated downloads, and release history
         AtlasEntrance(delayMillis = 90, offsetY = 8.dp) {
             SettingsUpdateCard(
                 state = updateState,
@@ -2036,53 +1945,6 @@ private fun SettingsToggleRow(
             checked = checked,
             onCheckedChange = onCheckedChange,
         )
-    }
-}
-
-@Composable
-private fun ConnectedDeviceRow(
-    device: TrustedDeviceDto,
-    onRevoke: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = atlasText(device.friendlyLabel),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (device.current) {
-                    Spacer(Modifier.width(6.dp))
-                    AtlasChip(text = atlasText("Cet appareil", "This device", "هذا الجهاز"), tone = AtlasTone.POSITIVE)
-                }
-            }
-            val meta = listOfNotNull(
-                device.lastIp?.takeIf { it.isNotBlank() },
-                device.lastSeen?.takeIf { it.isNotBlank() }?.take(16)?.replace('T', ' '),
-            ).joinToString(" · ")
-            if (meta.isNotBlank()) {
-                Text(
-                    text = meta,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        IconButton(onClick = onRevoke) {
-            Icon(
-                imageVector = Icons.Outlined.DeleteOutline,
-                contentDescription = atlasText("Révoquer cet appareil", "Revoke this device", "إلغاء صلاحية هذا الجهاز"),
-                tint = MaterialTheme.colorScheme.error,
-            )
-        }
     }
 }
 

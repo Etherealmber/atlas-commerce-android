@@ -590,6 +590,36 @@ data class ProductDto(
 }
 
 @JsonClass(generateAdapter = true)
+data class ProductMovementDto(
+    val id: Long = 0,
+    @Json(name = "product_id") val productId: Long = 0,
+    val type: String = "",
+    val quantity: Double = 0.0,
+    @Json(name = "previous_quantity") val previousQuantity: Double = 0.0,
+    @Json(name = "new_quantity") val newQuantity: Double = 0.0,
+    val reason: String? = null,
+    val reference: String? = null,
+    @Json(name = "created_by") val createdBy: String? = null,
+    @Json(name = "created_at") val createdAt: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class ProductImageDto(
+    val id: Long = 0,
+    @Json(name = "product_id") val productId: Long = 0,
+    val url: String = "",
+    @Json(name = "is_primary") val isPrimary: Int = 0,
+    @Json(name = "alt_text") val altText: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class ProductImageUploadRequest(
+    @Json(name = "data_url") val dataUrl: String,
+    @Json(name = "is_primary") val isPrimary: Boolean = true,
+    @Json(name = "alt_text") val altText: String = "",
+)
+
+@JsonClass(generateAdapter = true)
 data class CreateProductRequest(
     val name: String,
     val sku: String,

@@ -84,6 +84,7 @@ class AuthRepository @Inject constructor(
     suspend fun updateProfile(
         displayName: String? = null,
         email: String? = null,
+        phone: String? = null,
         avatarUrl: String? = null,
     ): ApiResult<Unit> {
         val res = runner.status {
@@ -91,6 +92,7 @@ class AuthRepository @Inject constructor(
                 ProfileUpdateRequest(
                     displayName = displayName,
                     email = email,
+                    phone = phone,
                     avatarUrl = avatarUrl,
                 ),
             )

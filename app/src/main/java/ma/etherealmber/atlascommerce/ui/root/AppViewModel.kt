@@ -572,11 +572,12 @@ class AppViewModel @Inject constructor(
     fun updateProfileDetails(
         displayName: String,
         email: String,
-        onDone: (String) -> Unit,
+        phone: String,
+        onDone: (String, Boolean) -> Unit,
     ) {
         val cleanName = displayName.trim()
         if (cleanName.isEmpty()) {
-            onDone("Le nom affiché ne peut pas être vide.")
+            onDone("Le nom affiché ne peut pas être vide.", false)
             return
         }
         viewModelScope.launch {
@@ -585,16 +586,17 @@ class AppViewModel @Inject constructor(
                 val res = sessionManager.updateProfile(
                     displayName = cleanName,
                     email = email.trim(),
+                    phone = phone.trim(),
                 )
             ) {
                 is ApiResult.Failure -> {
                     _savingProfile.value = false
-                    onDone(res.message)
+                    onDone(res.message, false)
                 }
 
                 is ApiResult.Success -> {
                     _savingProfile.value = false
-                    onDone("Profil mis à jour.")
+                    onDone("Profil mis à jour.", true)
                 }
             }
         }
