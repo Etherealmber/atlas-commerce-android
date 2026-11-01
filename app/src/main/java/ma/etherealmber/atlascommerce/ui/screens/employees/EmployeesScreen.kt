@@ -95,11 +95,12 @@ fun EmployeesScreen(
     val selectedMonth = remember(selectedPeriod) {
         selectedPeriod?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
     }
-    val monthLabel = remember(selectedMonth, locale) {
+    val formattedMonth = remember(selectedMonth, locale) {
         selectedMonth?.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale))
             ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
-            ?: atlasText("Chargement du mois…", "Loading month…", "جارٍ تحميل الشهر…")
     }
+    val monthLabel = formattedMonth
+        ?: atlasText("Chargement du mois…", "Loading month…", "جارٍ تحميل الشهر…")
     val payroll = state.payroll
     val visibleRows = remember(payroll?.rows, query, paymentFilter) {
         payroll?.rows.orEmpty().filter { row ->
@@ -140,12 +141,12 @@ fun EmployeesScreen(
                         ),
                     )
                     payroll?.takeIf { it.asOf.isNotBlank() }?.let { data ->
-                        val referenceTimezone = data.timezone.takeIf(String::isNotBlank) ?: timezone
+                        val timezoneSuffix = data.timezone.takeIf(String::isNotBlank)?.let { " · $it" }.orEmpty()
                         Text(
                             atlasText(
-                                "Les statuts sont évalués au ${atlasShortDate(data.asOf)} · $referenceTimezone.",
-                                "Statuses are evaluated as of ${atlasShortDate(data.asOf)} · $referenceTimezone.",
-                                "تُقيّم الحالات حتى ${atlasShortDate(data.asOf)} · $referenceTimezone.",
+                                "Les statuts sont évalués au ${atlasShortDate(data.asOf)}$timezoneSuffix.",
+                                "Statuses are evaluated as of ${atlasShortDate(data.asOf)}$timezoneSuffix.",
+                                "تُقيّم الحالات حتى ${atlasShortDate(data.asOf)}$timezoneSuffix.",
                             ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
