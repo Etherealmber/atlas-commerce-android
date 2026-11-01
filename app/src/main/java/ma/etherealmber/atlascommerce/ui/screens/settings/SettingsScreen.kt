@@ -396,11 +396,7 @@ fun ProfileScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = atlasText(
-                                "@${user.username} · Appuyez sur la photo pour modifier",
-                                "@${user.username} · Tap the photo to edit",
-                                "@${user.username} · اضغط على الصورة للتعديل",
-                            ),
+                            text = "@${user.username}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1056,8 +1052,8 @@ private fun ThemeSwitcherDialog(
         AnimatedVisibility(visibleState = visibility, enter = enter, exit = exit) {
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth(0.94f)
                     .widthIn(max = 520.dp)
+                    .fillMaxWidth(0.94f)
                     .heightIn(max = dialogMaxHeight),
                 shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -1324,7 +1320,7 @@ private fun SettingsChoiceRow(
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Surface(
-                modifier = Modifier.fillMaxWidth(0.92f).widthIn(max = 460.dp).heightIn(max = maxHeight),
+                modifier = Modifier.widthIn(max = 460.dp).fillMaxWidth(0.92f).heightIn(max = maxHeight),
                 shape = RoundedCornerShape(26.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 6.dp,

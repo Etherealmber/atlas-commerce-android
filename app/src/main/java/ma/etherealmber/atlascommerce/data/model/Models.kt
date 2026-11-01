@@ -691,7 +691,7 @@ data class StockAdjustmentRequestDto(
     @Json(name = "product_name") val productName: String = "",
     val direction: String = "",
     val quantity: Double = 0.0,
-    val reason: String = "",
+    val reason: String? = null,
     val status: String = "pending",
     @Json(name = "requested_by") val requestedBy: String = "",
     @Json(name = "requested_at") val requestedAt: String? = null,

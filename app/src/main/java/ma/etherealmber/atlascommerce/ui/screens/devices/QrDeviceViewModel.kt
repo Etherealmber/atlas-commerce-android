@@ -56,6 +56,7 @@ class QrDeviceViewModel @Inject constructor(
         val error: String? = null,
         val devices: List<TrustedDeviceDto> = emptyList(),
         val devicesLoading: Boolean = false,
+        val devicesLoadError: String? = null,
         val revokingId: String? = null,
         /**
          * Camera is OFF (`false`) on entering Scan Device unless the user starts it explicitly.
@@ -99,7 +100,7 @@ class QrDeviceViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collect { scopeIdentity ->
                     devicesLoadGeneration += 1
-                    _state.update { it.copy(devices = emptyList(), devicesLoading = false, revokingId = null) }
+                    _state.update { it.copy(devices = emptyList(), devicesLoading = false, devicesLoadError = null, revokingId = null) }
                     if (scopeIdentity != null) loadDevices()
                 }
         }
@@ -415,18 +416,18 @@ class QrDeviceViewModel @Inject constructor(
         val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
         if (requestedScope == null) {
             devicesLoadGeneration += 1
-            _state.update { it.copy(devices = emptyList(), devicesLoading = false) }
+            _state.update { it.copy(devices = emptyList(), devicesLoading = false, devicesLoadError = null) }
             return
         }
         val generation = ++devicesLoadGeneration
         viewModelScope.launch {
             if (generation != devicesLoadGeneration || (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
-            _state.update { it.copy(devicesLoading = true) }
+            _state.update { it.copy(devicesLoading = true, devicesLoadError = null) }
             val result = authRepository.devices()
             if (generation != devicesLoadGeneration || (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
             when (result) {
-                is ApiResult.Failure -> _state.update { it.copy(devicesLoading = false) }
-                is ApiResult.Success -> _state.update { it.copy(devicesLoading = false, devices = result.data) }
+                is ApiResult.Failure -> _state.update { it.copy(devicesLoading = false, devicesLoadError = result.message) }
+                is ApiResult.Success -> _state.update { it.copy(devicesLoading = false, devicesLoadError = null, devices = result.data) }
             }
         }
     }

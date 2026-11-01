@@ -98,11 +98,18 @@ internal fun ProductHistoryScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var displayedImageUrl by remember(product.id) { mutableStateOf(product.imageUrl) }
+    var loadedStock by remember(product.id) { mutableStateOf(product.stock) }
     val imageUpdatedMessage = atlasText("Photo du produit mise à jour.", "Product image updated.", "تم تحديث صورة المنتج.")
     val imageReadErrorMessage = atlasText("Impossible de lire cette image.", "Could not read this image.", "تعذرت قراءة هذه الصورة.")
 
     LaunchedEffect(product.id, state.scopeIdentity) {
         viewModel.loadHistory(product.id)
+    }
+    LaunchedEffect(product.stock) {
+        if (loadedStock != product.stock) {
+            loadedStock = product.stock
+            viewModel.loadHistory(product.id, refresh = true)
+        }
     }
     LaunchedEffect(product.imageUrl) {
         displayedImageUrl = product.imageUrl
@@ -246,7 +253,7 @@ internal fun ProductHistoryScreen(
                             "Stock ${productStockDisplay(product.stock, product.unit)}",
                             "المخزون ${productStockDisplay(product.stock, product.unit)}",
                         ),
-                        tone = productStockTone(product.stock),
+                        tone = productStockTone(product.stock, product.trackInventory),
                     )
                     if (product.price > 0.0) AtlasChip(text = atlasMoney(product.price, currency))
                 }

@@ -454,7 +454,9 @@ fun ProductsScreen(
             directAdjustment = canAdjustStock,
             onDismiss = { adjustTarget = null },
             onSubmit = { quantity, out, reason ->
-                viewModel.adjustStock(target, quantity, out, reason)
+                viewModel.adjustStock(target, quantity, out, reason) { updated ->
+                    if (historyTarget?.id == updated.id) historyTarget = updated
+                }
                 adjustTarget = null
             },
         )
@@ -594,7 +596,7 @@ private fun ProductRow(
                         "Stock ${productStockDisplay(product.stock, product.unit)}",
                         "المخزون ${productStockDisplay(product.stock, product.unit)}",
                     ),
-                    tone = productStockTone(product.stock),
+                    tone = productStockTone(product.stock, product.trackInventory),
                 )
                 if (product.neededQuantity > 0.0) {
                     AtlasChip(text = atlasText("Manque ${atlasQuantity(product.neededQuantity)}", "Short by ${atlasQuantity(product.neededQuantity)}", "النقص ${atlasQuantity(product.neededQuantity)}"), tone = if (product.isOutOfStock) AtlasTone.DANGER else AtlasTone.WARNING)
@@ -646,7 +648,7 @@ private fun ProductDetailDialog(
                             "Stock ${productStockDisplay(product.stock, product.unit)}",
                             "المخزون ${productStockDisplay(product.stock, product.unit)}",
                         ),
-                        tone = productStockTone(product.stock),
+                        tone = productStockTone(product.stock, product.trackInventory),
                     )
                 }
                 if (canSell) {

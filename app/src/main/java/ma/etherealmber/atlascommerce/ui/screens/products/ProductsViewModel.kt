@@ -45,6 +45,14 @@ class ProductsViewModel @Inject constructor(
         REQUESTS,
     }
 
+    private data class StockRequestIntent(
+        val scopeIdentity: String,
+        val productId: Long,
+        val quantity: Double,
+        val direction: String,
+        val reason: String,
+    )
+
     data class UiState(
         val query: String = "",
         val products: List<ProductDto> = emptyList(),
@@ -81,6 +89,7 @@ class ProductsViewModel @Inject constructor(
 
     private var searchJob: Job? = null
     private var fetchJob: Job? = null
+    private val pendingStockRequestKeys = LinkedHashMap<StockRequestIntent, String>()
 
     init {
         viewModelScope.launch {
@@ -90,6 +99,7 @@ class ProductsViewModel @Inject constructor(
                 .collect { key ->
                     searchJob?.cancel()
                     fetchJob?.cancel()
+                    synchronized(pendingStockRequestKeys) { pendingStockRequestKeys.clear() }
                     _state.value = UiState()
                     if (key != null) {
                         loadCurrency()
@@ -257,7 +267,13 @@ class ProductsViewModel @Inject constructor(
         }
     }
 
-    fun adjustStock(product: ProductDto, quantity: Double, out: Boolean, reason: String) {
+    fun adjustStock(
+        product: ProductDto,
+        quantity: Double,
+        out: Boolean,
+        reason: String,
+        onUpdated: (ProductDto) -> Unit = {},
+    ) {
         val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
         if (activeUser == null || !Roles.canRequestStockAdjustment(activeUser.role)) {
             _messages.tryEmit("Votre rôle ne permet pas de demander un changement de stock.")
@@ -283,21 +299,48 @@ class ProductsViewModel @Inject constructor(
                         _messages.tryEmit(
                             "${result.data.name} · stock ${AtlasFormat.quantity(result.data.stock)}",
                         )
+                        onUpdated(result.data)
                         fetchState(query = _state.value.query, initial = false)
                     }
                 }
             } else {
+                val direction = if (out) "out" else "in"
+                val intent = StockRequestIntent(
+                    scopeIdentity = requestedScope,
+                    productId = product.id,
+                    quantity = quantity,
+                    direction = direction,
+                    reason = reason.trim(),
+                )
+                val idempotencyKey = synchronized(pendingStockRequestKeys) {
+                    pendingStockRequestKeys[intent] ?: UUID.randomUUID().toString().also { key ->
+                        pendingStockRequestKeys[intent] = key
+                        while (pendingStockRequestKeys.size > 32) {
+                            pendingStockRequestKeys.remove(pendingStockRequestKeys.keys.first())
+                        }
+                    }
+                }
                 when (val result = commerceRepository.submitStockAdjustmentRequest(
                     productId = product.id,
                     quantity = quantity,
-                    direction = if (out) "out" else "in",
-                    reason = reason,
-                    idempotencyKey = UUID.randomUUID().toString(),
+                    direction = direction,
+                    reason = intent.reason,
+                    idempotencyKey = idempotencyKey,
                 )) {
-                    is ApiResult.Failure -> _messages.tryEmit(result.message)
-                    is ApiResult.Success -> _messages.tryEmit(
-                        "Demande de stock envoyée à l'Admin pour validation. Le stock ne changera qu'après approbation.",
-                    )
+                    is ApiResult.Failure -> {
+                        if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope) {
+                            _messages.tryEmit(result.message)
+                        }
+                    }
+                    is ApiResult.Success -> {
+                        if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+                        synchronized(pendingStockRequestKeys) {
+                            if (pendingStockRequestKeys[intent] == idempotencyKey) pendingStockRequestKeys.remove(intent)
+                        }
+                        _messages.tryEmit(
+                            "Demande de stock envoyée à l'Admin pour validation. Le stock ne changera qu'après approbation.",
+                        )
+                    }
                 }
             }
         }

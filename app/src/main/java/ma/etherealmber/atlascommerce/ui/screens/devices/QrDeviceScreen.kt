@@ -539,9 +539,25 @@ fun QrDeviceScreen(
                     }
                 }
 
+                if (!state.devicesLoadError.isNullOrBlank()) {
+                    item {
+                        SecurityCard {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    atlasText("Impossible de charger les appareils. Votre liste n'a pas été modifiée.", "Could not load devices. Your device list has not been changed.", "تعذر تحميل الأجهزة. لم يتم تغيير قائمة أجهزتك."),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                TextButton(onClick = viewModel::loadDevices, enabled = !state.devicesLoading) {
+                                    Text(atlasText("Réessayer", "Retry", "إعادة المحاولة"))
+                                }
+                            }
+                        }
+                    }
+                }
                 if (state.devicesLoading && otherDevices.isEmpty()) {
                     item { AtlasDeviceListSkeleton(Modifier.fillMaxWidth(), rows = 2) }
-                } else if (otherDevices.isEmpty()) {
+                } else if (otherDevices.isEmpty() && state.devicesLoadError.isNullOrBlank()) {
                     item {
                         SecurityCard {
                             Text(
@@ -827,17 +843,23 @@ private fun SecurityDeviceRow(
                 val meta = listOfNotNull(
                     device.lastIp?.takeIf { it.isNotBlank() }?.let { "IP $it" },
                     localizedLastSeen,
-                    device.fingerprint.takeIf { it.isNotBlank() },
                 ).joinToString(" · ")
-                if (detailsVisible && meta.isNotBlank()) {
+                if (detailsVisible) {
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = meta,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    if (meta.isNotBlank()) {
+                        Text(
+                            text = meta,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    device.fingerprint.takeIf { it.isNotBlank() }?.let { fingerprint ->
+                        Text(
+                            text = atlasText("Identifiant : $fingerprint", "Fingerprint: $fingerprint", "بصمة الجهاز: $fingerprint"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             IconButton(onClick = onToggleDetails) {

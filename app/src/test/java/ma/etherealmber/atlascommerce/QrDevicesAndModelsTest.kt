@@ -16,6 +16,7 @@ import ma.etherealmber.atlascommerce.data.model.MobileActionDto
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.QrSessionStatusDto
+import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.screens.products.productStockTone
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
@@ -163,6 +164,7 @@ class QrDevicesAndModelsTest {
         assertEquals(AtlasTone.WARNING, productStockTone(10.0))
         assertEquals(AtlasTone.WARNING, productStockTone(20.0))
         assertEquals(AtlasTone.POSITIVE, productStockTone(20.01))
+        assertEquals(AtlasTone.NEUTRAL, productStockTone(0.0, trackInventory = false))
     }
 
     @Test
@@ -182,6 +184,10 @@ class QrDevicesAndModelsTest {
         assertFalse(Roles.canMutateStock("user"))
         assertFalse(Roles.canAdjustStock("user"))
         assertTrue(Roles.canRequestStockAdjustment("user"))
+
+        val stockRequest = moshi.adapter(StockAdjustmentRequestDto::class.java)
+            .fromJson("""{"id":2,"product_id":7,"reason":null,"status":"pending"}""")
+        assertNull(stockRequest?.reason)
 
         val qr = moshi.adapter(QrSessionStatusDto::class.java)
             .fromJson("""{"status":"claimed","username":"amine","avatar_url":"data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="}""")

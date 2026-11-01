@@ -12,7 +12,8 @@ internal fun productStockDisplay(quantity: Double, unit: String?): String {
 }
 
 /** Stock badge colors requested for the catalog: <10 red, 10–20 orange, >20 green. */
-internal fun productStockTone(quantity: Double): AtlasTone = when {
+internal fun productStockTone(quantity: Double, trackInventory: Boolean = true): AtlasTone = when {
+    !trackInventory -> AtlasTone.NEUTRAL
     quantity < 10.0 -> AtlasTone.DANGER
     quantity <= 20.0 -> AtlasTone.WARNING
     else -> AtlasTone.POSITIVE

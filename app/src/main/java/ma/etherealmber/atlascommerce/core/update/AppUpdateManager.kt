@@ -24,7 +24,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
@@ -747,7 +750,7 @@ class AppUpdateManager internal constructor(
                     // mirror as one stream before failing over to the next mirror.
                     runCatching { partFile.delete() }
                     try {
-                        streamSingleUrl(info, resolvedUrl, sourceLabel, partFile)
+                        streamSingleUrl(info, resolvedUrl, sourceLabel, partFile, expectedTotalBytes = totalBytes)
                     } catch (c: CancellationException) {
                         throw c
                     } catch (singleError: Throwable) {
@@ -758,7 +761,7 @@ class AppUpdateManager internal constructor(
                 return
             }
 
-            streamSingleUrl(info, resolvedUrl, sourceLabel, partFile)
+            streamSingleUrl(info, resolvedUrl, sourceLabel, partFile, expectedTotalBytes = totalBytes)
             return
         }
 
@@ -883,7 +886,21 @@ class AppUpdateManager internal constructor(
         }
     }
 
-    private fun downloadSingleSegmentWithRetry(
+    private suspend fun <T> executeCancellableResponse(
+        request: Request,
+        consume: (Response) -> T,
+    ): T = suspendCancellableCoroutine { continuation ->
+        val call = downloadClient.newCall(request)
+        continuation.invokeOnCancellation { call.cancel() }
+        try {
+            val result = call.execute().use(consume)
+            if (continuation.isActive) continuation.resume(result)
+        } catch (t: Throwable) {
+            if (continuation.isActive) continuation.resumeWithException(t)
+        }
+    }
+
+    private suspend fun downloadSingleSegmentWithRetry(
         channel: FileChannel,
         url: String,
         sourceLabel: String?,
@@ -907,13 +924,13 @@ class AppUpdateManager internal constructor(
                     .header("Accept", "application/vnd.android.package-archive, application/octet-stream, */*")
                     .build()
 
-                downloadClient.newCall(req).execute().use { resp ->
+                executeCancellableResponse(req) { resp ->
                     if (resp.code != 206) {
                         throw IOException(
                             "Le serveur ${sourceLabel ?: ""} n'a pas honoré la plage HTTP (${resp.code}).".trim(),
                         )
                     }
-                    val range = RANGE_CONTENT_REGEX.matchEntire(resp.header("Content-Range").orEmpty())
+                    val range = RANGE_CONTENT_REGEX.matchEntire(resp.header("Content-Range").orEmpty().trim())
                         ?: throw IOException("Plage de téléchargement invalide reçue.")
                     val responseStart = range.groupValues[1].toLongOrNull()
                     val responseEnd = range.groupValues[2].toLongOrNull()
@@ -927,9 +944,11 @@ class AppUpdateManager internal constructor(
                         throw IOException("Taille du segment téléchargé incohérente.")
                     }
                     val buffer = ByteArray(STREAM_BUFFER_BYTES)
+                    var responseBytesRead = 0L
                     body.byteStream().use { input ->
-                        while (cursor <= endByte) {
-                            val maxToRead = minOf(buffer.size.toLong(), endByte - cursor + 1L).toInt()
+                        while (responseBytesRead < expectedResponseLength) {
+                            val remaining = expectedResponseLength - responseBytesRead
+                            val maxToRead = minOf(buffer.size.toLong(), remaining).toInt()
                             val count = input.read(buffer, 0, maxToRead)
                             if (count == -1) break
                             var writtenInSlice = 0
@@ -937,37 +956,58 @@ class AppUpdateManager internal constructor(
                                 val bb = ByteBuffer.wrap(buffer, writtenInSlice, count - writtenInSlice)
                                 writtenInSlice += channel.write(bb, cursor + writtenInSlice)
                             }
+                            responseBytesRead += count
                             cursor += count
                             onBytesWritten(count.toLong())
+                        }
+                        if (responseBytesRead != expectedResponseLength) {
+                            throw IOException("Segment interrompu ($cursor / $expectedTotal octets).")
+                        }
+                        if (input.read() != -1) {
+                            throw IOException("Le serveur a envoyé des octets supplémentaires dans le segment.")
                         }
                     }
                 }
                 if (cursor <= endByte && attempt > MAX_SEGMENT_RETRIES) {
                     throw IOException("Segment interrompu ($cursor / $expectedTotal octets).")
                 }
+            } catch (c: CancellationException) {
+                throw c
             } catch (t: Throwable) {
-                if (attempt > MAX_SEGMENT_RETRIES) throw t
+                if (attempt > MAX_SEGMENT_RETRIES || cursor > endByte) throw t
             }
         }
     }
 
-    private fun streamSingleUrl(
+    private suspend fun streamSingleUrl(
         info: UpdateInfo,
         url: String,
         sourceLabel: String?,
         partFile: File,
+        expectedTotalBytes: Long? = null,
     ) {
         val request = Request.Builder()
             .url(url)
             .get()
+            .header("Accept-Encoding", "identity")
             .header("Accept", "application/vnd.android.package-archive, application/octet-stream, */*")
             .build()
 
-        downloadClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
+        executeCancellableResponse(request) { response ->
+            if (response.code == 206) {
+                throw IOException("Le serveur a renvoyé un contenu partiel pendant le téléchargement complet.")
+            }
+            if (response.code != 200) {
                 throw IOException("Le miroir ${sourceLabel ?: "de téléchargement"} a répondu ${response.code}.")
             }
+            val responseLength = response.body?.contentLength() ?: -1L
+            if (expectedTotalBytes != null && responseLength >= 0L && responseLength != expectedTotalBytes) {
+                throw IOException("La taille du fichier reçu ne correspond pas à celle annoncée par le miroir.")
+            }
             streamOpenResponse(info, sourceLabel, partFile, response)
+            if (expectedTotalBytes != null && partFile.length() != expectedTotalBytes) {
+                throw IOException("Téléchargement incomplet (${UpdateFormatter.dataSize(partFile.length())} / ${UpdateFormatter.dataSize(expectedTotalBytes)}).")
+            }
         }
     }
 
@@ -1045,7 +1085,7 @@ class AppUpdateManager internal constructor(
         if (totalRead <= 0L) {
             throw IOException("Le fichier téléchargé est vide.")
         }
-        if (totalBytes > 0L && totalRead < totalBytes) {
+        if (totalBytes >= 0L && totalRead != totalBytes) {
             throw IOException(
                 "Téléchargement interrompu avant la fin (${UpdateFormatter.dataSize(totalRead)} / ${UpdateFormatter.dataSize(totalBytes)}).",
             )
@@ -1298,7 +1338,7 @@ class AppUpdateManager internal constructor(
     }
 
     private companion object {
-        val RANGE_CONTENT_REGEX = Regex("bytes (\\d+)-(\\d+)/(\\d+)")
+        val RANGE_CONTENT_REGEX = Regex("""bytes\s+(\d+)-(\d+)/(\d+)""", RegexOption.IGNORE_CASE)
         const val R2_CDN_OTHER_CONNECTIONS = 4
         const val R2_CDN_CELLULAR_CONNECTIONS = 6
         const val R2_CDN_WIFI_CONNECTIONS = 16
