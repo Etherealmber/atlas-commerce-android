@@ -233,11 +233,19 @@ fun AgentScreen(
         focusManager.clearFocus()
     }
     val selectedAppLanguage = LocalAtlasLanguage.current
-    val quickPrompts = listOf(
-        atlasText("Quels articles sont en rupture ou à réapprovisionner ?", "Which items are out of stock or need replenishment?", "ما المنتجات التي نفدت أو تحتاج إلى إعادة التخزين؟"),
-        atlasText("Résumé des ventes et impayés du jour", "Summarize today's sales and unpaid invoices", "لخّص مبيعات اليوم والفواتير غير المدفوعة"),
-        atlasText("Quelles demandes scan sont en attente ?", "Which scan requests are pending?", "ما طلبات المسح المعلّقة؟"),
-    )
+    // Financial prompt access cannot be inferred from the mobile role model today: the policy
+    // endpoint exposes only isAdmin, so keep money-related prompts admin-only until the API
+    // provides an explicit capability set.
+    val quickPrompts = buildList {
+        add(atlasText("Quels articles sont en rupture ou à réapprovisionner ?", "Which items are out of stock or need replenishment?", "ما المنتجات التي نفدت أو تحتاج إلى إعادة التخزين؟"))
+        if (state.policy?.isAdmin == true) {
+            add(atlasText("Résumé des ventes et impayés du jour", "Summarize today's sales and unpaid invoices", "لخّص مبيعات اليوم والفواتير غير المدفوعة"))
+        }
+        add(atlasText("Quelles demandes scan sont en attente ?", "Which scan requests are pending?", "ما طلبات المسح المعلّقة؟"))
+    }
+    // Server next-actions carry no role/capability metadata. Hide them for non-admin roles rather
+    // than risk prompting users into actions their account cannot access.
+    val visibleNextActions = if (state.policy?.isAdmin == true) state.nextActions else emptyList()
     val newConversationToast = atlasText("Nouvelle discussion ouverte.", "New conversation started.", "بدأت محادثة جديدة.")
     val density = Atlas.density
     val scope = rememberCoroutineScope()
@@ -246,7 +254,10 @@ fun AgentScreen(
         if (historyRequested) { showHistoryDialog = true; onHistoryHandled() }
     }
     val latestUserPrompt = state.messages.lastOrNull { it.fromUser }?.text.orEmpty()
-    val navigationSuggestion = remember(latestUserPrompt) { detectAgentNavigationSuggestion(latestUserPrompt) }
+    val detectedNavigationSuggestion = remember(latestUserPrompt) { detectAgentNavigationSuggestion(latestUserPrompt) }
+    val navigationSuggestion = detectedNavigationSuggestion?.takeUnless {
+        it.destination == AgentNavigationDestination.BALANCE_REPORT && state.policy?.isAdmin != true
+    }
 
     LaunchedEffect(Unit) {
         viewModel.notices.collect { msg -> onToast(msg) }
@@ -430,12 +441,12 @@ fun AgentScreen(
                         }
                     }
 
-                    if (state.messages.isEmpty() && !state.loadingThread && state.nextActions.isNotEmpty() && !quotaLocked) {
+                    if (state.messages.isEmpty() && !state.loadingThread && visibleNextActions.isNotEmpty() && !quotaLocked) {
                         item(key = "agent_suggestions_hdr") {
                             AtlasSectionHeader(title = atlasText("Actions suggérées par l'IA", "AI suggestions", "اقتراحات الذكاء الاصطناعي"))
                         }
                         items(
-                            items = state.nextActions,
+                            items = visibleNextActions,
                             key = { "suggestion_${it.title}_${it.priority}" },
                         ) { item ->
                             val suggestionPrompt = atlasText(

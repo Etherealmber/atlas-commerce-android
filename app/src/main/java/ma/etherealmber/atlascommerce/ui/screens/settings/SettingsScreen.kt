@@ -28,12 +28,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AutoAwesomeMotion
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
@@ -60,6 +64,8 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -125,6 +131,40 @@ import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.util.findActivity
 import ma.etherealmber.atlascommerce.ui.util.openExternal
 
+@Composable
+private fun AccountManagerRow(
+    avatarUrl: String?,
+    displayName: String,
+    username: String,
+    role: String,
+    serverBaseUrl: String?,
+    active: Boolean,
+    subtitle: String? = null,
+    onClick: (() -> Unit)?,
+    onForget: (() -> Unit)? = null,
+) {
+    AtlasCard(onClick = onClick, padding = 10.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AtlasAvatar(avatarUrl = avatarUrl, label = displayName, size = 42.dp, serverBaseUrl = serverBaseUrl)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(displayName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text("@$username · $role", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (subtitle != null) {
+                    Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (active) {
+                AtlasChip(text = atlasText("Actif", "Active", "نشط"), tone = AtlasTone.POSITIVE)
+            } else if (onForget != null) {
+                IconButton(onClick = onForget) {
+                    Icon(Icons.Outlined.Close, contentDescription = atlasText("Oublier ce compte", "Forget this account", "نسيان هذا الحساب"))
+                }
+            }
+        }
+    }
+}
+
 /**
  * Dedicated **Profile & Personalization** screen (`MainTab.PROFILE`).
  *
@@ -167,6 +207,8 @@ fun ProfileScreen(
     val savingProfile by appViewModel.savingProfile.collectAsStateWithLifecycle()
 
     var confirmSignOut by remember { mutableStateOf(false) }
+    var addAccountAfterSignOut by remember { mutableStateOf(false) }
+    var showAccountManager by remember { mutableStateOf(false) }
     var showEditProfile by remember { mutableStateOf(false) }
     var draftDisplayName by remember(user.displayName) { mutableStateOf(user.displayName) }
     var draftEmail by remember(user.email) { mutableStateOf(user.email) }
@@ -441,74 +483,34 @@ fun ProfileScreen(
             }
         }
 
-        // Quick-switch between other accounts saved specifically on THIS server (100% isolated)
-        if (otherSavedAccounts.isNotEmpty()) {
-            AtlasCard {
-                Text(
-                    text = atlasText("Autres comptes mémorisés sur ce serveur", "Other accounts saved on this server", "حسابات أخرى محفوظة على هذا الخادم"),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = atlasText(
-                        "Les comptes protégés se déverrouillent avec l'appareil ; les autres exigent leur mot de passe.",
-                        "Device unlock is required for saved-account switching; other accounts require their password.",
-                        "يلزم إلغاء قفل الجهاز للتبديل إلى الحسابات المحفوظة؛ وتتطلب الحسابات الأخرى كلمة مرورها.",
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    otherSavedAccounts.forEach { acc ->
-                        AtlasCard(
-                            onClick = if (acc.canUseDeviceUnlock) ({ unlockAndSwitchSavedAccount(acc) }) else null,
-                            padding = 10.dp,
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                AtlasAvatar(
-                                    avatarUrl = acc.avatarUrl,
-                                    label = acc.displayName.ifBlank { acc.username },
-                                    size = 36.dp,
-                                    serverBaseUrl = serverSelection?.baseUrl,
-                                )
-                                Spacer(Modifier.width(10.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        text = acc.displayName.ifBlank { acc.username },
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                    Text(
-                                        text = atlasText(
-                                "@${acc.username} · ${profileRoleLabel(acc.role)}",
-                                "@${acc.username} · ${profileRoleLabel(acc.role)}",
-                                "@${acc.username} · ${profileRoleLabel(acc.role)}",
+        // Account/device hub: detailed account information is shown only after opening the manager.
+        AtlasEntrance(delayMillis = 45) {
+            AtlasCard(onClick = { showAccountManager = true }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AtlasAvatar(
+                        avatarUrl = user.avatarUrl,
+                        label = user.displayName.ifBlank { user.username },
+                        size = 44.dp,
+                        serverBaseUrl = serverSelection?.baseUrl,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            atlasText("Comptes et appareils", "Accounts & devices", "الحسابات والأجهزة"),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            atlasText(
+                                "Gérez les comptes enregistrés ou liez un appareil.",
+                                "Manage saved accounts or link a device.",
+                                "أدر الحسابات المحفوظة أو اربط جهازاً.",
                             ),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    if (!acc.canUseDeviceUnlock) {
-                                        Text(
-                                            atlasText("Mot de passe requis", "Password required", "كلمة المرور مطلوبة"),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                }
-                                IconButton(
-                                    onClick = { appViewModel.forgetSavedAccount(acc, onToast) },
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Close,
-                                        contentDescription = atlasText("Oublier ce compte"),
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                }
-                            }
-                        }
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
+                    Icon(Icons.Outlined.SwapHoriz, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -720,6 +722,136 @@ fun ProfileScreen(
 
     }
 
+    if (showAccountManager) {
+        Dialog(
+            onDismissRequest = { showAccountManager = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
+                shape = RoundedCornerShape(0.dp),
+                color = MaterialTheme.colorScheme.background,
+            ) {
+                Column(Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 10.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = { showAccountManager = false }) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                atlasText("Comptes et appareils", "Accounts & devices", "الحسابات والأجهزة"),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                atlasText("Ce serveur uniquement", "This server only", "هذا الخادم فقط"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    AtlasDivider()
+                    Column(
+                        modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            atlasText("Compte actif", "Active account", "الحساب النشط"),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        AccountManagerRow(
+                            avatarUrl = user.avatarUrl,
+                            displayName = user.displayName.ifBlank { user.username },
+                            username = user.username,
+                            role = profileRoleLabel(user.role),
+                            serverBaseUrl = serverSelection?.baseUrl,
+                            active = true,
+                            onClick = null,
+                        )
+
+                        Text(
+                            atlasText("Autres comptes enregistrés", "Other saved accounts", "حسابات أخرى محفوظة"),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                        if (otherSavedAccounts.isEmpty()) {
+                            Text(
+                                atlasText(
+                                    "Aucun autre compte n'est enregistré sur ce serveur.",
+                                    "No other accounts are saved on this server.",
+                                    "لا توجد حسابات أخرى محفوظة على هذا الخادم.",
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            otherSavedAccounts.forEach { account ->
+                                AccountManagerRow(
+                                    avatarUrl = account.avatarUrl,
+                                    displayName = account.displayName.ifBlank { account.username },
+                                    username = account.username,
+                                    role = profileRoleLabel(account.role),
+                                    serverBaseUrl = serverSelection?.baseUrl,
+                                    active = false,
+                                    subtitle = if (account.canUseDeviceUnlock) {
+                                        atlasText("Déverrouillage de l'appareil activé", "Device unlock enabled", "إلغاء قفل الجهاز مفعّل")
+                                    } else {
+                                        atlasText("Mot de passe requis", "Password required", "كلمة المرور مطلوبة")
+                                    },
+                                    onClick = {
+                                        if (account.canUseDeviceUnlock) {
+                                            unlockAndSwitchSavedAccount(account)
+                                        } else {
+                                            showAccountManager = false
+                                            addAccountAfterSignOut = true
+                                            confirmSignOut = true
+                                        }
+                                    },
+                                    onForget = { appViewModel.forgetSavedAccount(account, onToast) },
+                                )
+                            }
+                        }
+
+                        AtlasDivider(Modifier.padding(vertical = 2.dp))
+                        AtlasCard(onClick = {
+                            showAccountManager = false
+                            onOpenQrDevice()
+                        }) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Outlined.Devices, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(atlasText("Lier un autre appareil", "Link another device", "ربط جهاز آخر"), fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        atlasText("Ouvrir la gestion sécurisée des appareils", "Open secure device management", "فتح إدارة الأجهزة الآمنة"),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        AtlasButton(
+                            text = atlasText("Ajouter ou connecter un autre compte", "Add or sign in to another account", "إضافة حساب آخر أو تسجيل الدخول إليه"),
+                            onClick = {
+                                showAccountManager = false
+                                addAccountAfterSignOut = true
+                                confirmSignOut = true
+                            },
+                            icon = Icons.Outlined.Person,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     if (showEditProfile) {
         AlertDialog(
             onDismissRequest = { if (!savingProfile) showEditProfile = false },
@@ -768,27 +900,43 @@ fun ProfileScreen(
 
     if (confirmSignOut) {
         AlertDialog(
-            onDismissRequest = { confirmSignOut = false },
-            title = { Text(atlasText("Se déconnecter ?")) },
+            onDismissRequest = { confirmSignOut = false; addAccountAfterSignOut = false },
+            title = {
+                Text(
+                    if (addAccountAfterSignOut) atlasText("Changer de compte ?", "Switch accounts?", "تبديل الحساب؟")
+                    else atlasText("Se déconnecter ?", "Sign out?", "تسجيل الخروج؟"),
+                )
+            },
             text = {
                 Text(
-                    atlasText(
-                        "La session active, le panier et les données temporaires seront effacés. Aucune donnée métier n'est supprimée sur le serveur.",
-                        "The active session, cart and temporary data will be cleared. No business data will be deleted from the server.",
-                        "سيتم مسح الجلسة النشطة والسلة والبيانات المؤقتة. لن تُحذف أي بيانات تجارية من الخادم.",
-                    ),
+                    if (addAccountAfterSignOut) {
+                        atlasText(
+                            "La session actuelle sera fermée. Vous pourrez ensuite choisir un compte enregistré ou vous connecter avec un autre compte. Les données du serveur ne sont pas supprimées.",
+                            "Your current session will end. Then you can choose a saved account or sign in with another account. Server data will not be deleted.",
+                            "ستنتهي جلستك الحالية. بعد ذلك يمكنك اختيار حساب محفوظ أو تسجيل الدخول بحساب آخر. لن تُحذف بيانات الخادم.",
+                        )
+                    } else {
+                        atlasText(
+                            "La session active, le panier et les données temporaires seront effacés. Aucune donnée métier n'est supprimée sur le serveur.",
+                            "The active session, cart and temporary data will be cleared. No business data will be deleted from the server.",
+                            "سيتم مسح الجلسة النشطة والسلة والبيانات المؤقتة. لن تُحذف أي بيانات تجارية على الخادم.",
+                        )
+                    },
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         confirmSignOut = false
+                        addAccountAfterSignOut = false
                         onSignOut()
                     },
-                ) { Text(atlasText("Se déconnecter")) }
+                ) { Text(if (addAccountAfterSignOut) atlasText("Continuer", "Continue", "متابعة") else atlasText("Se déconnecter", "Sign out", "تسجيل الخروج")) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmSignOut = false }) { Text(atlasText("Annuler")) }
+                TextButton(onClick = { confirmSignOut = false; addAccountAfterSignOut = false }) {
+                    Text(atlasText("Annuler", "Cancel", "إلغاء"))
+                }
             },
         )
     }
