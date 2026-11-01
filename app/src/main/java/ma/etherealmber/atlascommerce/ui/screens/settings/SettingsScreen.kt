@@ -804,6 +804,12 @@ fun ProfileScreen(
     }
 
     if (showEditProfile) {
+        val profileUpdatedToast = atlasText("Profil mis à jour.", "Profile updated.", "تم تحديث الملف الشخصي.")
+        val emptyDisplayNameToast = atlasText(
+            "Le nom affiché ne peut pas être vide.",
+            "Display name cannot be empty.",
+            "لا يمكن أن يكون الاسم المعروض فارغاً.",
+        )
         Dialog(
             onDismissRequest = { if (!savingProfile) showEditProfile = false },
             properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -891,12 +897,8 @@ fun ProfileScreen(
                             onClick = {
                                 appViewModel.updateProfileDetails(draftDisplayName, draftEmail, draftPhone) { msg, success ->
                                     val toastMessage = when {
-                                        success -> atlasText("Profil mis à jour.", "Profile updated.", "تم تحديث الملف الشخصي.")
-                                        msg == "Le nom affiché ne peut pas être vide." -> atlasText(
-                                            "Le nom affiché ne peut pas être vide.",
-                                            "Display name cannot be empty.",
-                                            "لا يمكن أن يكون الاسم المعروض فارغاً.",
-                                        )
+                                        success -> profileUpdatedToast
+                                        msg == "Le nom affiché ne peut pas être vide." -> emptyDisplayNameToast
                                         else -> msg
                                     }
                                     onToast(toastMessage)

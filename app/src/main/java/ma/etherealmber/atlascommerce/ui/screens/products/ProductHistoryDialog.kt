@@ -166,21 +166,14 @@ internal fun ProductHistoryScreen(
             AtlasCard(padding = 16.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(76.dp)) {
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = if (motionEnabled) {
-                                fadeIn() + scaleIn(initialScale = 0.82f, animationSpec = spring(dampingRatio = 0.78f, stiffness = 360f)) +
-                                    slideInVertically(initialOffsetY = { (it * 0.16f).toInt() })
-                            } else EnterTransition.None,
-                            label = "product-hero-image-${product.id}",
-                        ) {
-                            ProductArtwork(
-                                imageUrl = displayedImageUrl,
-                                serverBaseUrl = serverBaseUrl,
-                                label = product.name,
-                                modifier = Modifier.size(76.dp).then(sharedArtworkModifier),
-                            )
-                        }
+                        ProductHeroArtwork(
+                            imageUrl = displayedImageUrl,
+                            serverBaseUrl = serverBaseUrl,
+                            label = product.name,
+                            modifier = Modifier.size(76.dp).then(sharedArtworkModifier),
+                            motionEnabled = motionEnabled,
+                            productId = product.id,
+                        )
                         if (canEditImage) {
                             Surface(
                                 modifier = Modifier.align(Alignment.BottomEnd),
@@ -309,6 +302,32 @@ internal fun ProductHistoryScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ProductHeroArtwork(
+    imageUrl: String,
+    serverBaseUrl: String,
+    label: String,
+    modifier: Modifier,
+    motionEnabled: Boolean,
+    productId: Long,
+) {
+    AnimatedVisibility(
+        visible = true,
+        enter = if (motionEnabled) {
+            fadeIn() + scaleIn(initialScale = 0.82f, animationSpec = spring(dampingRatio = 0.78f, stiffness = 360f)) +
+                slideInVertically(initialOffsetY = { (it * 0.16f).toInt() })
+        } else EnterTransition.None,
+        label = "product-hero-image-$productId",
+    ) {
+        ProductArtwork(
+            imageUrl = imageUrl,
+            serverBaseUrl = serverBaseUrl,
+            label = label,
+            modifier = modifier,
+        )
     }
 }
 
