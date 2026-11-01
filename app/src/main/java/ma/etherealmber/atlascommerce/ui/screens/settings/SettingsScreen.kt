@@ -139,6 +139,7 @@ import ma.etherealmber.atlascommerce.ui.util.openExternal
 fun ProfileScreen(
     user: SessionUser,
     onOpenSettings: () -> Unit,
+    onOpenQrDevice: () -> Unit,
     onSignOut: () -> Unit,
     onToast: (String) -> Unit,
     appViewModel: AppViewModel = hiltViewModel(),
@@ -359,6 +360,50 @@ fun ProfileScreen(
                     icon = Icons.Outlined.Logout,
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+        }
+
+        // WhatsApp-inspired linked-device entry: keep device/IP details concealed here,
+        // and reveal them only after the user opens device management.
+        AtlasEntrance(delayMillis = 35) {
+            AtlasCard(onClick = onOpenQrDevice) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(44.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Devices,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(10.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            atlasText("Appareils liés", "Linked devices", "الأجهزة المرتبطة"),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            atlasText(
+                                "Consultez vos sessions ou associez un ordinateur avec QR.",
+                                "View signed-in devices or link a computer with QR.",
+                                "اعرض الأجهزة المسجّلة أو اربط كمبيوتر عبر QR.",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
 

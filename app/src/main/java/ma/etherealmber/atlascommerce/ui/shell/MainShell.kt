@@ -643,6 +643,7 @@ fun MainShell(
                     MainTab.PROFILE -> ProfileScreen(
                         user = user,
                         onOpenSettings = { switchTab(MainTab.SETTINGS) },
+                        onOpenQrDevice = { onOpenQrDevice(null) },
                         onSignOut = onSignOut,
                         onToast = onToast,
                     )
