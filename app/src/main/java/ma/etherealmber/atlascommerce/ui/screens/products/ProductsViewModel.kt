@@ -294,8 +294,13 @@ class ProductsViewModel @Inject constructor(
                     type = if (out) "out" else "in",
                     reason = reason,
                 )) {
-                    is ApiResult.Failure -> _messages.tryEmit(result.message)
+                    is ApiResult.Failure -> {
+                        if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope) {
+                            _messages.tryEmit(result.message)
+                        }
+                    }
                     is ApiResult.Success -> {
+                        if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
                         _messages.tryEmit(
                             "${result.data.name} · stock ${AtlasFormat.quantity(result.data.stock)}",
                         )
