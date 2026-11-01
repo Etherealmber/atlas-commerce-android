@@ -418,6 +418,8 @@ private val commonTranslations = mapOf(
     "Demande produit enregistrée." to ("Product request submitted." to "تم إرسال طلب المنتج."),
     "Seul un Administrateur peut écarter une demande produit." to ("Only an Administrator can dismiss a product request." to "يستطيع المسؤول فقط رفض طلب المنتج."),
     "Votre rôle ne permet pas d'ajuster le stock." to ("Your role cannot adjust inventory." to "لا يسمح دورك بتعديل المخزون."),
+    "Votre rôle ne permet pas de demander un changement de stock." to ("Your role cannot request a stock change." to "لا يسمح دورك بطلب تغيير المخزون."),
+    "Demande de stock envoyée à l'Admin pour validation. Le stock ne changera qu'après approbation." to ("Stock request sent to the Admin for approval. Inventory will change only after approval." to "تم إرسال طلب المخزون إلى المسؤول للموافقة. لن يتغير المخزون إلا بعد الموافقة."),
     "Indiquez une quantité supérieure à zéro." to ("Enter a quantity greater than zero." to "أدخل كمية أكبر من صفر."),
     "Hors ligne — catalogue enregistré sur l'appareil." to ("Offline — catalog saved on this device." to "غير متصل — الكتالوج محفوظ على هذا الجهاز."),
     "Veuillez saisir un objet pour la notification." to ("Enter a subject for the notification." to "أدخل عنواناً للإشعار."),

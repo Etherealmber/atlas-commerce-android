@@ -50,6 +50,8 @@ import ma.etherealmber.atlascommerce.data.model.RejectMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.RevokeDeviceRequest
 import ma.etherealmber.atlascommerce.data.model.ReportLinkTicketDto
 import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
+import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestBody
+import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
 import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.data.model.UserReportRequest
@@ -151,11 +153,12 @@ interface AtlasApi {
     @GET("api/settings")
     suspend fun settings(): ApiEnvelope<CompanySettingsDto>
 
+    /** Android catalog cards render cached thumbnails, so `full` is needed for image_url; the server still scrubs role-restricted fields. */
     @GET("api/products")
     suspend fun products(
         @Query("q") query: String?,
         @Query("limit") limit: Int = 300,
-        @Query("fields") fields: String = "mobile",
+        @Query("fields") fields: String = "full",
     ): ApiEnvelope<List<ProductDto>>
 
     @POST("api/products")
@@ -180,6 +183,11 @@ interface AtlasApi {
         @Path("id") id: Long,
         @Body body: StockAdjustRequest,
     ): ApiEnvelope<ProductDto>
+
+    @POST("api/stock-adjustment-requests")
+    suspend fun submitStockAdjustmentRequest(
+        @Body body: StockAdjustmentRequestBody,
+    ): ApiEnvelope<StockAdjustmentRequestDto>
 
     @GET("api/scan/barcode/{code}")
     suspend fun scanBarcode(@Path("code") code: String): ApiEnvelope<ProductDto>

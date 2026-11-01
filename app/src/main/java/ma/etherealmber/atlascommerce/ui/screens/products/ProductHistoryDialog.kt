@@ -86,6 +86,8 @@ internal fun ProductHistoryScreen(
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     canEditImage: Boolean,
+    canAdjustStock: Boolean,
+    onOpenStockAdjust: () -> Unit,
     onBack: () -> Unit,
     onProductImageUpdated: (String) -> Unit,
     onToast: (String) -> Unit,
@@ -96,11 +98,18 @@ internal fun ProductHistoryScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var displayedImageUrl by remember(product.id) { mutableStateOf(product.imageUrl) }
+    var loadedStock by remember(product.id) { mutableStateOf(product.stock) }
     val imageUpdatedMessage = atlasText("Photo du produit mise à jour.", "Product image updated.", "تم تحديث صورة المنتج.")
     val imageReadErrorMessage = atlasText("Impossible de lire cette image.", "Could not read this image.", "تعذرت قراءة هذه الصورة.")
 
     LaunchedEffect(product.id, state.scopeIdentity) {
         viewModel.loadHistory(product.id)
+    }
+    LaunchedEffect(product.stock) {
+        if (loadedStock != product.stock) {
+            loadedStock = product.stock
+            viewModel.loadHistory(product.id, refresh = true)
+        }
     }
     LaunchedEffect(product.imageUrl) {
         displayedImageUrl = product.imageUrl
@@ -239,14 +248,21 @@ internal fun ProductHistoryScreen(
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AtlasChip(
-                        text = atlasText("Stock ${atlasQuantity(product.stock)}", "Stock ${atlasQuantity(product.stock)}", "المخزون ${atlasQuantity(product.stock)}"),
-                        tone = when {
-                            product.isOutOfStock -> AtlasTone.DANGER
-                            product.isLowStock -> AtlasTone.WARNING
-                            else -> AtlasTone.POSITIVE
-                        },
+                        text = atlasText(
+                            "Stock ${productStockDisplay(product.stock, product.unit)}",
+                            "Stock ${productStockDisplay(product.stock, product.unit)}",
+                            "المخزون ${productStockDisplay(product.stock, product.unit)}",
+                        ),
+                        tone = productStockTone(product.stock, product.trackInventory),
                     )
                     if (product.price > 0.0) AtlasChip(text = atlasMoney(product.price, currency))
+                }
+                if (canAdjustStock && product.trackInventory) {
+                    TextButton(onClick = onOpenStockAdjust) {
+                        Icon(Icons.Outlined.Edit, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(atlasText("Modifier le stock", "Edit stock", "تعديل المخزون"))
+                    }
                 }
             }
 

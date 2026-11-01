@@ -16,6 +16,9 @@ import ma.etherealmber.atlascommerce.data.model.MobileActionDto
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.QrSessionStatusDto
+import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
+import ma.etherealmber.atlascommerce.ui.components.AtlasTone
+import ma.etherealmber.atlascommerce.ui.screens.products.productStockTone
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.data.model.VerifyLinkRequest
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentViewModel
@@ -156,6 +159,15 @@ class QrDevicesAndModelsTest {
     }
 
     @Test
+    fun productStockToneUsesRequestedThresholds() {
+        assertEquals(AtlasTone.DANGER, productStockTone(9.0))
+        assertEquals(AtlasTone.WARNING, productStockTone(10.0))
+        assertEquals(AtlasTone.WARNING, productStockTone(20.0))
+        assertEquals(AtlasTone.POSITIVE, productStockTone(20.01))
+        assertEquals(AtlasTone.NEUTRAL, productStockTone(0.0, trackInventory = false))
+    }
+
+    @Test
     fun productNeededQuantityAndNewDtosRoundTripCleanly() {
         val low = ProductDto(id = 1, name = "Granit Noir", stock = 2.0, lowStockThresholdRaw = 10.0)
         assertEquals(8.0, low.neededQuantity, 0.001)
@@ -166,9 +178,16 @@ class QrDevicesAndModelsTest {
         assertTrue(Roles.canMutateStock("owner"))
         assertTrue(Roles.canMutateStock("admin"))
         assertFalse(Roles.canMutateStock("magasinier"))
-        assertTrue(Roles.canAdjustStock("magasinier"))
+        assertFalse(Roles.canAdjustStock("magasinier"))
+        assertTrue(Roles.canRequestStockAdjustment("magasinier"))
+        assertTrue(Roles.canAdjustStock("secretaire"))
         assertFalse(Roles.canMutateStock("user"))
         assertFalse(Roles.canAdjustStock("user"))
+        assertTrue(Roles.canRequestStockAdjustment("user"))
+
+        val stockRequest = moshi.adapter(StockAdjustmentRequestDto::class.java)
+            .fromJson("""{"id":2,"product_id":7,"reason":null,"status":"pending"}""")
+        assertNull(stockRequest?.reason)
 
         val qr = moshi.adapter(QrSessionStatusDto::class.java)
             .fromJson("""{"status":"claimed","username":"amine","avatar_url":"data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="}""")

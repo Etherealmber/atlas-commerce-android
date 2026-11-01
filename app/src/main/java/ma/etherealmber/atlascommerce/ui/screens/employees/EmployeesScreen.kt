@@ -8,6 +8,7 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -196,16 +198,21 @@ fun EmployeesScreen(
                             )
                             IconButton(
                                 onClick = { payrollInfoOpen = true },
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp)),
+                                modifier = Modifier.size(48.dp),
                             ) {
-                                Icon(
-                                    Icons.Outlined.Info,
-                                    contentDescription = atlasText("À propos des chiffres de paie", "About payroll figures", "حول أرقام الرواتب"),
-                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.size(21.dp),
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f), CircleShape),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Info,
+                                        contentDescription = atlasText("À propos des chiffres de paie", "About payroll figures", "حول أرقام الرواتب"),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(19.dp),
+                                    )
+                                }
                             }
                         }
                         Text(
