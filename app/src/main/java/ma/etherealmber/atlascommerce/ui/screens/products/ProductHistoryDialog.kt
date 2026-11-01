@@ -307,7 +307,7 @@ internal fun ProductHistoryScreen(
 
 @Composable
 private fun ProductHeroArtwork(
-    imageUrl: String,
+    imageUrl: String?,
     serverBaseUrl: String,
     label: String,
     modifier: Modifier,
