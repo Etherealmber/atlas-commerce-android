@@ -67,7 +67,6 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.screens.home.HomeViewModel
 import java.time.YearMonth
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -89,16 +88,19 @@ fun EmployeesScreen(
     var paymentFilter by rememberSaveable(user.scopeIdentity) { mutableStateOf("Tous") }
     var payrollInfoOpen by remember { mutableStateOf(false) }
 
-    val timezone = state.finance?.timezone?.takeIf { it.isNotBlank() } ?: "Africa/Casablanca"
-    val currentMonth = remember(timezone) {
-        runCatching { YearMonth.now(ZoneId.of(timezone)) }.getOrElse { YearMonth.now() }
+    val currentMonth = remember(state.serverCurrentFinancePeriod) {
+        state.serverCurrentFinancePeriod?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
     }
-    val period = state.selectedFinancePeriod ?: state.finance?.period ?: currentMonth.toString()
-    val selectedMonth = remember(period) { runCatching { YearMonth.parse(period) }.getOrDefault(currentMonth) }
-    val monthLabel = remember(selectedMonth, locale) {
-        selectedMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale))
-            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
+    val selectedPeriod = state.selectedFinancePeriod ?: state.serverCurrentFinancePeriod
+    val selectedMonth = remember(selectedPeriod) {
+        selectedPeriod?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
     }
+    val formattedMonth = remember(selectedMonth, locale) {
+        selectedMonth?.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale))
+            ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
+    }
+    val monthLabel = formattedMonth
+        ?: atlasText("Chargement du mois…", "Loading month…", "جارٍ تحميل الشهر…")
     val payroll = state.payroll
     val visibleRows = remember(payroll?.rows, query, paymentFilter) {
         payroll?.rows.orEmpty().filter { row ->
@@ -139,12 +141,12 @@ fun EmployeesScreen(
                         ),
                     )
                     payroll?.takeIf { it.asOf.isNotBlank() }?.let { data ->
-                        val referenceTimezone = data.timezone.takeIf(String::isNotBlank) ?: timezone
+                        val timezoneSuffix = data.timezone.takeIf(String::isNotBlank)?.let { " · $it" }.orEmpty()
                         Text(
                             atlasText(
-                                "Les statuts sont évalués au ${atlasShortDate(data.asOf)} · $referenceTimezone.",
-                                "Statuses are evaluated as of ${atlasShortDate(data.asOf)} · $referenceTimezone.",
-                                "تُقيّم الحالات حتى ${atlasShortDate(data.asOf)} · $referenceTimezone.",
+                                "Les statuts sont évalués au ${atlasShortDate(data.asOf)}$timezoneSuffix.",
+                                "Statuses are evaluated as of ${atlasShortDate(data.asOf)}$timezoneSuffix.",
+                                "تُقيّم الحالات حتى ${atlasShortDate(data.asOf)}$timezoneSuffix.",
                             ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -200,14 +202,14 @@ fun EmployeesScreen(
                 AtlasDivider(Modifier.padding(vertical = 10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
-                        onClick = { viewModel.selectFinancePeriod(selectedMonth.minusMonths(1).toString()) },
-                        enabled = !state.financeLoading,
+                        onClick = { selectedMonth?.minusMonths(1)?.toString()?.let(viewModel::selectFinancePeriod) },
+                        enabled = selectedMonth != null && !state.financeLoading,
                     ) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Mois précédent"))
                     }
                     Box(Modifier.weight(1f)) {
                         Column(
-                            modifier = Modifier.align(Alignment.Center).padding(horizontal = 56.dp),
+                            modifier = Modifier.align(Alignment.Center).fillMaxWidth().padding(horizontal = 28.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(
@@ -216,17 +218,23 @@ fun EmployeesScreen(
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                maxLines = 2,
+                                softWrap = true,
+                                overflow = TextOverflow.Clip,
                             )
                             Text(
-                                if (selectedMonth == currentMonth) atlasText("Mois en cours · données provisoires") else atlasText("Période de paie sélectionnée", "Selected payroll period", "فترة الرواتب المحددة"),
+                                when {
+                                    selectedMonth == null || currentMonth == null -> atlasText("Synchronisation du mois serveur…", "Syncing server month…", "جارٍ مزامنة شهر الخادم…")
+                                    selectedMonth == currentMonth -> atlasText("Mois en cours · données provisoires", "Current month · provisional data", "الشهر الحالي · بيانات أولية")
+                                    else -> atlasText("Période de paie sélectionnée", "Selected payroll period", "فترة الرواتب المحددة")
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
+                                maxLines = 3,
+                                softWrap = true,
+                                overflow = TextOverflow.Clip,
                             )
                         }
                         IconButton(
@@ -240,15 +248,15 @@ fun EmployeesScreen(
                         }
                     }
                     IconButton(
-                        onClick = { viewModel.selectFinancePeriod(selectedMonth.plusMonths(1).toString()) },
-                        enabled = !state.financeLoading && selectedMonth < currentMonth,
+                        onClick = { selectedMonth?.plusMonths(1)?.toString()?.let(viewModel::selectFinancePeriod) },
+                        enabled = !state.financeLoading && selectedMonth != null && currentMonth != null && selectedMonth < currentMonth,
                     ) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = atlasText("Mois suivant"))
                     }
                 }
-                if (selectedMonth != currentMonth) {
+                if (selectedMonth != null && currentMonth != null && selectedMonth != currentMonth) {
                     TextButton(
-                        onClick = { viewModel.selectFinancePeriod(currentMonth.toString()) },
+                        onClick = { currentMonth?.toString()?.let(viewModel::selectFinancePeriod) },
                         enabled = !state.financeLoading,
                         modifier = Modifier.align(Alignment.End),
                     ) {

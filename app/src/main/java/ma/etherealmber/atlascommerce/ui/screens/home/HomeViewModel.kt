@@ -41,6 +41,7 @@ class HomeViewModel @Inject constructor(
         val currency: String = "MAD",
         val finance: FinanceMonthlyDto? = null,
         val selectedFinancePeriod: String? = null,
+        val serverCurrentFinancePeriod: String? = null,
         val payroll: PayrollPageDto? = null,
         val financeLoading: Boolean = false,
         val financeError: String? = null,
@@ -154,6 +155,7 @@ class HomeViewModel @Inject constructor(
             val requestedScope = activeUser.scopeIdentity
             val isAdmin = Roles.isAdmin(activeUser.role)
             val requestedFinancePeriod = _state.value.selectedFinancePeriod
+            val knownServerCurrentPeriod = _state.value.serverCurrentFinancePeriod
             _state.update {
                 it.copy(
                     loading = initial && it.dashboard == null,
@@ -166,9 +168,15 @@ class HomeViewModel @Inject constructor(
 
             val dashboardJob = async { commerceRepository.dashboard() }
             val settingsJob = async { commerceRepository.settings() }
-            val financeJob = if (isAdmin) async { commerceRepository.financeMonthly(requestedFinancePeriod) } else null
+            val serverCurrentFinanceJob = if (isAdmin) async { commerceRepository.financeMonthly() } else null
+            val financeJob = when {
+                !isAdmin -> null
+                requestedFinancePeriod == null || requestedFinancePeriod == knownServerCurrentPeriod -> serverCurrentFinanceJob
+                else -> async { commerceRepository.financeMonthly(requestedFinancePeriod) }
+            }
             val dashboardResult = dashboardJob.await()
             val settingsResult = settingsJob.await()
+            val serverCurrentFinance = serverCurrentFinanceJob?.await()?.successOrNull()
             val financeResult = financeJob?.await()
             val finance = financeResult?.successOrNull()
             val payrollResult = if (finance != null && finance.period.isNotBlank()) {
@@ -200,6 +208,11 @@ class HomeViewModel @Inject constructor(
                         !isAdmin -> null
                         financeIsCurrent -> finance?.period ?: requestedFinancePeriod
                         else -> current.selectedFinancePeriod
+                    },
+                    serverCurrentFinancePeriod = if (!isAdmin) null else {
+                        serverCurrentFinance?.period
+                            ?.takeIf { it.matches(Regex("\\d{4}-(0[1-9]|1[0-2])")) }
+                            ?: current.serverCurrentFinancePeriod
                     },
                     finance = when {
                         !isAdmin -> null
