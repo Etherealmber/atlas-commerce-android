@@ -62,7 +62,7 @@ internal fun ProductHistoryScreen(
     val sharedArtworkModifier = if (LocalAtlasAnimationsEnabled.current) {
         with(sharedTransitionScope) {
             Modifier.sharedElement(
-                sharedContentState = rememberSharedContentState(key = "product-artwork-${product.id}"),
+                state = rememberSharedContentState(key = "product-artwork-${product.id}"),
                 animatedVisibilityScope = animatedVisibilityScope,
             )
         }

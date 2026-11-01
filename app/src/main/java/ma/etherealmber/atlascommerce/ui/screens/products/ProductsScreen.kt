@@ -367,6 +367,7 @@ fun ProductsScreen(
         }
     }
     }
+    }
 
     if (showCreateDialog) {
         ProductCreateDialog(
@@ -540,7 +541,7 @@ private fun ProductRow(
     val sharedArtworkModifier = if (LocalAtlasAnimationsEnabled.current) {
         with(sharedTransitionScope) {
             Modifier.sharedElement(
-                sharedContentState = rememberSharedContentState(key = "product-artwork-${product.id}"),
+                state = rememberSharedContentState(key = "product-artwork-${product.id}"),
                 animatedVisibilityScope = animatedVisibilityScope,
             )
         }
