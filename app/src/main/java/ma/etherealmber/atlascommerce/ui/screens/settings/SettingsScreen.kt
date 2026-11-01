@@ -25,6 +25,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -34,6 +35,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -55,7 +57,9 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Language
@@ -63,6 +67,7 @@ import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PointOfSale
 import androidx.compose.material.icons.outlined.QrCode2
@@ -71,6 +76,7 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.window.Dialog
@@ -95,6 +101,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.ui.text.font.FontWeight
@@ -504,6 +511,7 @@ fun ProfileScreen(
                 )
             }
             SettingsChoiceRow(
+                icon = Icons.Outlined.Language,
                 title = atlasText("Langue", "Language", "اللغة"),
                 value = if (appLanguageFollowsSystem) {
                     atlasText("Système · ${AppLanguage.fromSystemLocale().nativeLabel}", "System · ${AppLanguage.fromSystemLocale().nativeLabel}", "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}")
@@ -517,6 +525,7 @@ fun ProfileScreen(
                 },
             )
             SettingsChoiceRow(
+                icon = Icons.Outlined.Tune,
                 title = atlasText("Densité d'affichage", "Display density", "كثافة العرض"),
                 value = when (densityMode) {
                     DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
@@ -532,6 +541,7 @@ fun ProfileScreen(
                 onSelected = { key -> DensityMode.entries.firstOrNull { it.name == key }?.let(appViewModel::setDensityMode) },
             )
             SettingsChoiceRow(
+                icon = Icons.Outlined.Home,
                 title = atlasText("Onglet d'ouverture au lancement", "Tab to open at launch", "علامة التبويب عند التشغيل"),
                 value = settingsTabLabel(selectedLaunchTab),
                 selectedKey = selectedLaunchTab.name,
@@ -815,7 +825,7 @@ fun ProfileScreen(
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Surface(
-                modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
+                modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding(),
                 shape = RoundedCornerShape(0.dp),
                 color = MaterialTheme.colorScheme.background,
             ) {
@@ -864,6 +874,8 @@ fun ProfileScreen(
                             onValueChange = { draftDisplayName = it },
                             label = atlasText("Nom affiché *", "Display name *", "الاسم المعروض *"),
                             placeholder = atlasText("Ex. Nom complet", "Full name", "الاسم الكامل"),
+                            supportingText = atlasText("Nom affiché dans votre espace de travail", "Name shown in your workspace", "الاسم الظاهر في مساحة العمل"),
+                            leadingIcon = Icons.Outlined.Person,
                             imeAction = ImeAction.Next,
                         )
                         AtlasTextField(
@@ -871,6 +883,7 @@ fun ProfileScreen(
                             onValueChange = { draftEmail = it },
                             label = atlasText("Adresse e-mail", "Email address", "البريد الإلكتروني"),
                             placeholder = "contact@example.com",
+                            leadingIcon = Icons.Outlined.Email,
                             keyboardType = KeyboardType.Email,
                             imeAction = ImeAction.Next,
                         )
@@ -879,6 +892,7 @@ fun ProfileScreen(
                             onValueChange = { draftPhone = it },
                             label = atlasText("Numéro de téléphone", "Phone number", "رقم الهاتف"),
                             placeholder = "+212 …",
+                            leadingIcon = Icons.Outlined.Phone,
                             keyboardType = KeyboardType.Phone,
                             imeAction = ImeAction.Done,
                         )
@@ -1031,6 +1045,9 @@ private fun ThemeSwitcherDialog(
             animationSpec = tween(150),
         )
     } else ExitTransition.None
+    val configuration = LocalConfiguration.current
+    val compactLayout = configuration.screenWidthDp < 420
+    val dialogMaxHeight = (configuration.screenHeightDp.dp - 32.dp).coerceAtLeast(300.dp)
 
     Dialog(
         onDismissRequest = { close(apply = false) },
@@ -1038,15 +1055,22 @@ private fun ThemeSwitcherDialog(
     ) {
         AnimatedVisibility(visibleState = visibility, enter = enter, exit = exit) {
             Surface(
-                modifier = Modifier.fillMaxWidth().widthIn(max = 460.dp),
+                modifier = Modifier
+                    .fillMaxWidth(0.94f)
+                    .widthIn(max = 520.dp)
+                    .heightIn(max = dialogMaxHeight),
                 shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 6.dp,
                 shadowElevation = 20.dp,
             ) {
                 Column(
-                    modifier = Modifier.padding(22.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = dialogMaxHeight)
+                        .verticalScroll(rememberScrollState())
+                        .padding(if (compactLayout) 16.dp else 22.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (compactLayout) 12.dp else 16.dp),
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
@@ -1064,16 +1088,29 @@ private fun ThemeSwitcherDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ThemeMode.entries.forEach { mode ->
-                            ThemePreviewCard(
-                                mode = mode,
-                                selected = selectedMode == mode,
-                                enabled = visibility.targetState,
-                                animationsEnabled = animationsEnabled,
-                                modifier = Modifier.weight(1f),
-                                onClick = { selectedMode = mode },
-                            )
+                    if (compactLayout) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ThemeMode.entries.forEach { mode ->
+                                ThemeModeCompactOption(
+                                    mode = mode,
+                                    selected = selectedMode == mode,
+                                    enabled = visibility.targetState,
+                                    onClick = { selectedMode = mode },
+                                )
+                            }
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ThemeMode.entries.forEach { mode ->
+                                ThemePreviewCard(
+                                    mode = mode,
+                                    selected = selectedMode == mode,
+                                    enabled = visibility.targetState,
+                                    animationsEnabled = animationsEnabled,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { selectedMode = mode },
+                                )
+                            }
                         }
                     }
                     Row(
@@ -1093,6 +1130,56 @@ private fun ThemeSwitcherDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ThemeModeCompactOption(
+    mode: ThemeMode,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val title = when (mode) {
+        ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
+        ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
+        ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+    }
+    val description = when (mode) {
+        ThemeMode.SYSTEM -> atlasText("Selon l'appareil", "Follows device", "حسب الجهاز")
+        ThemeMode.LIGHT -> atlasText("Clair et net", "Bright and clear", "فاتح وواضح")
+        ThemeMode.DARK -> atlasText("Confort nocturne", "Night comfort", "مريح ليلاً")
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(34.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        when (mode) {
+                            ThemeMode.SYSTEM -> "◐"
+                            ThemeMode.LIGHT -> "☼"
+                            ThemeMode.DARK -> "☾"
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            RadioButton(selected = selected, onClick = onClick, enabled = enabled)
         }
     }
 }
@@ -1204,6 +1291,7 @@ private fun ThemePreviewCard(
 
 @Composable
 private fun SettingsChoiceRow(
+    icon: ImageVector,
     title: String,
     value: String,
     selectedKey: String,
@@ -1220,6 +1308,8 @@ private fun SettingsChoiceRow(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
@@ -1228,33 +1318,60 @@ private fun SettingsChoiceRow(
         }
     }
     if (pickerOpen) {
-        AlertDialog(
+        val maxHeight = (LocalConfiguration.current.screenHeightDp.dp - 32.dp).coerceAtLeast(280.dp)
+        Dialog(
             onDismissRequest = { pickerOpen = false },
-            title = { Text(title) },
-            text = {
-                Column {
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(0.92f).widthIn(max = 460.dp).heightIn(max = maxHeight),
+                shape = RoundedCornerShape(26.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 18.dp,
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(10.dp))
+                        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    }
                     options.forEach { (key, label) ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth()
-                                .clickable { onSelected(key); pickerOpen = false }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                onSelected(key)
+                                pickerOpen = false
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (key == selectedKey) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = BorderStroke(1.dp, if (key == selectedKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
                         ) {
-                            RadioButton(
-                                selected = key == selectedKey,
-                                onClick = { onSelected(key); pickerOpen = false },
-                            )
-                            Text(label, modifier = Modifier.weight(1f))
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = key == selectedKey,
+                                    onClick = {
+                                        onSelected(key)
+                                        pickerOpen = false
+                                    },
+                                )
+                                Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { pickerOpen = false }) {
+                            Text(atlasText("Fermer", "Close", "إغلاق"))
                         }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { pickerOpen = false }) {
-                    Text(atlasText("Fermer", "Close", "إغلاق"))
-                }
-            },
-        )
+            }
+        }
     }
 }
 

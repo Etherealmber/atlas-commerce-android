@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -566,11 +567,14 @@ private fun HomeContent(
         if (canDisplayFinance) {
             item {
                 AtlasEntrance(delayMillis = 135) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(density.itemGap)) {
+                    Row(
+                        modifier = Modifier.height(IntrinsicSize.Max),
+                        horizontalArrangement = Arrangement.spacedBy(density.itemGap),
+                    ) {
                         AtlasStatTile(
                             label = atlasText("Stock faible", "Low stock", "مخزون منخفض"),
                             value = atlasInteger(dashboard.lowStockCount.toDouble()),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             hint = if (dashboard.lowStockCount > 0) atlasText("À réapprovisionner", "Reorder needed", "يلزم إعادة الطلب") else atlasText("Tout est bon", "All good", "كل شيء على ما يرام"),
                             tone = if (dashboard.lowStockCount > 0) AtlasTone.WARNING else AtlasTone.POSITIVE,
                             icon = Icons.Outlined.Warning,
@@ -578,7 +582,7 @@ private fun HomeContent(
                         AtlasStatTile(
                             label = atlasText("Créances clients", "Customer receivables", "مستحقات العملاء"),
                             value = atlasMoneyCompact(dashboard.unpaidSales.total, state.currency),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             hint = atlasText("${dashboard.unpaidSales.count} facture(s)", "${dashboard.unpaidSales.count} invoice(s)", "${dashboard.unpaidSales.count} فاتورة"),
                             tone = if (dashboard.unpaidSales.overdue > 0) AtlasTone.DANGER else AtlasTone.INFO,
                             icon = Icons.Outlined.ReceiptLong,

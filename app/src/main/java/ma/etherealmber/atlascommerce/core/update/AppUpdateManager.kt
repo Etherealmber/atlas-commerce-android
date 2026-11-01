@@ -731,14 +731,30 @@ class AppUpdateManager internal constructor(
             probeResponse.close()
 
             if (totalBytes != null && totalBytes >= MIN_PARALLEL_BYTES) {
-                downloadParallelRanges(
-                    info = info,
-                    url = resolvedUrl,
-                    sourceLabel = sourceLabel,
-                    partFile = partFile,
-                    totalBytes = totalBytes,
-                    connections = connectionsForSource(sourceLabel),
-                )
+                try {
+                    downloadParallelRanges(
+                        info = info,
+                        url = resolvedUrl,
+                        sourceLabel = sourceLabel,
+                        partFile = partFile,
+                        totalBytes = totalBytes,
+                        connections = connectionsForSource(sourceLabel),
+                    )
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (parallelError: Throwable) {
+                    // Some CDNs intermittently reject concurrent byte ranges. Retry this same
+                    // mirror as one stream before failing over to the next mirror.
+                    runCatching { partFile.delete() }
+                    try {
+                        streamSingleUrl(info, resolvedUrl, sourceLabel, partFile)
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (singleError: Throwable) {
+                        singleError.addSuppressed(parallelError)
+                        throw singleError
+                    }
+                }
                 return
             }
 
@@ -818,6 +834,7 @@ class AppUpdateManager internal constructor(
                         sourceLabel = sourceLabel,
                         startByte = startByte,
                         endByte = endByte,
+                        expectedTotalBytes = totalBytes,
                     ) { delta ->
                         val accumulated = totalReadAtomic.addAndGet(delta)
                         val nowNs = System.nanoTime()
@@ -872,6 +889,7 @@ class AppUpdateManager internal constructor(
         sourceLabel: String?,
         startByte: Long,
         endByte: Long,
+        expectedTotalBytes: Long,
         onBytesWritten: (Long) -> Unit,
     ) {
         var cursor = startByte
@@ -895,7 +913,19 @@ class AppUpdateManager internal constructor(
                             "Le serveur ${sourceLabel ?: ""} n'a pas honoré la plage HTTP (${resp.code}).".trim(),
                         )
                     }
+                    val range = RANGE_CONTENT_REGEX.matchEntire(resp.header("Content-Range").orEmpty())
+                        ?: throw IOException("Plage de téléchargement invalide reçue.")
+                    val responseStart = range.groupValues[1].toLongOrNull()
+                    val responseEnd = range.groupValues[2].toLongOrNull()
+                    val responseTotal = range.groupValues[3].toLongOrNull()
+                    if (responseStart != cursor || responseEnd == null || responseEnd > endByte || responseEnd < cursor || responseTotal != expectedTotalBytes) {
+                        throw IOException("La plage reçue ne correspond pas au segment demandé.")
+                    }
                     val body = resp.body ?: throw IOException("Segment vide reçu.")
+                    val expectedResponseLength = responseEnd - cursor + 1L
+                    if (body.contentLength() >= 0L && body.contentLength() != expectedResponseLength) {
+                        throw IOException("Taille du segment téléchargé incohérente.")
+                    }
                     val buffer = ByteArray(STREAM_BUFFER_BYTES)
                     body.byteStream().use { input ->
                         while (cursor <= endByte) {
@@ -1268,6 +1298,7 @@ class AppUpdateManager internal constructor(
     }
 
     private companion object {
+        val RANGE_CONTENT_REGEX = Regex("bytes (\\d+)-(\\d+)/(\\d+)")
         const val R2_CDN_OTHER_CONNECTIONS = 4
         const val R2_CDN_CELLULAR_CONNECTIONS = 6
         const val R2_CDN_WIFI_CONNECTIONS = 16
@@ -1275,7 +1306,7 @@ class AppUpdateManager internal constructor(
         const val MAX_PARALLEL_CONNECTIONS = 16
         const val MAX_SEGMENT_RETRIES = 2
         const val MIN_PARALLEL_BYTES = 16 * 1024L
-        const val STREAM_BUFFER_BYTES = 32 * 1024
+        const val STREAM_BUFFER_BYTES = 128 * 1024
         const val MIN_VALID_APK_BYTES = 1_024L
         const val RESUME_RECHECK_DEBOUNCE_MS = 5_000L
         const val UI_PROGRESS_MIN_INTERVAL_NS = 80_000_000L

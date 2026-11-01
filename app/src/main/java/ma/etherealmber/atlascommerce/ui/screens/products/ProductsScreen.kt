@@ -115,6 +115,8 @@ fun ProductsScreen(
     val isAdmin = Roles.canCreateProductDirectly(user.role)
     val canSell = Roles.canCreateDocuments(user.role)
     val canAdjustStock = Roles.canAdjustStock(user.role)
+    val canRequestStockAdjustment = Roles.canRequestStockAdjustment(user.role)
+    val canChangeStock = canAdjustStock || canRequestStockAdjustment
     val canEditProductImage = Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY
 
     LaunchedEffect(Unit) {
@@ -156,6 +158,8 @@ fun ProductsScreen(
                 sharedTransitionScope = sharedTransitionScope,
                 animatedVisibilityScope = animatedVisibilityScope,
                 canEditImage = canEditProductImage,
+                canAdjustStock = canAdjustStock,
+                onOpenStockAdjust = { adjustTarget = destination },
                 onBack = { historyTarget = null },
                 onProductImageUpdated = { url ->
                     historyTarget = historyTarget?.takeIf { it.id == destination.id }?.copy(imageUrl = url)
@@ -425,7 +429,8 @@ fun ProductsScreen(
             product = product,
             currency = state.currency,
             canSell = canSell,
-            canAdjustStock = canAdjustStock,
+            canDirectlyAdjustStock = canAdjustStock,
+            canChangeStock = canChangeStock,
             onDismiss = { selected = null },
             onAdd = { quantity ->
                 viewModel.addToCart(product, quantity)
@@ -443,9 +448,10 @@ fun ProductsScreen(
     }
 
     val target = adjustTarget
-    if (target != null && canAdjustStock) {
+    if (target != null && canChangeStock) {
         StockAdjustDialog(
             product = target,
+            directAdjustment = canAdjustStock,
             onDismiss = { adjustTarget = null },
             onSubmit = { quantity, out, reason ->
                 viewModel.adjustStock(target, quantity, out, reason)
@@ -583,12 +589,12 @@ private fun ProductRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AtlasChip(
-                    text = atlasText("Stock ${atlasQuantity(product.stock)}", "Stock ${atlasQuantity(product.stock)}", "المخزون ${atlasQuantity(product.stock)}"),
-                    tone = when {
-                        product.isOutOfStock -> AtlasTone.DANGER
-                        product.isLowStock -> AtlasTone.WARNING
-                        else -> AtlasTone.POSITIVE
-                    },
+                    text = atlasText(
+                        "Stock ${productStockDisplay(product.stock, product.unit)}",
+                        "Stock ${productStockDisplay(product.stock, product.unit)}",
+                        "المخزون ${productStockDisplay(product.stock, product.unit)}",
+                    ),
+                    tone = productStockTone(product.stock),
                 )
                 if (product.neededQuantity > 0.0) {
                     AtlasChip(text = atlasText("Manque ${atlasQuantity(product.neededQuantity)}", "Short by ${atlasQuantity(product.neededQuantity)}", "النقص ${atlasQuantity(product.neededQuantity)}"), tone = if (product.isOutOfStock) AtlasTone.DANGER else AtlasTone.WARNING)
@@ -605,7 +611,8 @@ private fun ProductDetailDialog(
     product: ProductDto,
     currency: String,
     canSell: Boolean,
-    canAdjustStock: Boolean,
+    canDirectlyAdjustStock: Boolean,
+    canChangeStock: Boolean,
     onDismiss: () -> Unit,
     onAdd: (Double) -> Unit,
     onOpenSale: () -> Unit,
@@ -634,8 +641,12 @@ private fun ProductDetailDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     AtlasChip(text = atlasText("Prix ${atlasMoney(product.price, currency)}", "Price ${atlasMoney(product.price, currency)}", "السعر ${atlasMoney(product.price, currency)}"))
                     AtlasChip(
-                        text = atlasText("Stock ${atlasQuantity(product.stock)}", "Stock ${atlasQuantity(product.stock)}", "المخزون ${atlasQuantity(product.stock)}"),
-                        tone = if (product.isLowStock) AtlasTone.WARNING else AtlasTone.POSITIVE,
+                        text = atlasText(
+                            "Stock ${productStockDisplay(product.stock, product.unit)}",
+                            "Stock ${productStockDisplay(product.stock, product.unit)}",
+                            "المخزون ${productStockDisplay(product.stock, product.unit)}",
+                        ),
+                        tone = productStockTone(product.stock),
                     )
                 }
                 if (canSell) {
@@ -685,8 +696,15 @@ private fun ProductDetailDialog(
                 horizontalArrangement = Arrangement.End,
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
-                if (product.trackInventory && canAdjustStock) {
-                    TextButton(onClick = onAdjustStock) { Text(atlasText("Ajuster stock"), maxLines = 1, softWrap = false) }
+                if (product.trackInventory && canChangeStock) {
+                    TextButton(onClick = onAdjustStock) {
+                        Text(
+                            if (canDirectlyAdjustStock) atlasText("Modifier le stock", "Edit stock", "تعديل المخزون")
+                            else atlasText("Demander un changement", "Request stock change", "طلب تغيير المخزون"),
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
                 }
                 if (canSell) {
                     TextButton(onClick = onOpenSale) { Text(atlasText("Voir le panier"), maxLines = 1, softWrap = false) }
@@ -700,6 +718,7 @@ private fun ProductDetailDialog(
 @Composable
 private fun StockAdjustDialog(
     product: ProductDto,
+    directAdjustment: Boolean,
     onDismiss: () -> Unit,
     onSubmit: (quantity: Double, out: Boolean, reason: String) -> Unit,
 ) {
@@ -710,7 +729,12 @@ private fun StockAdjustDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(atlasText("Ajuster le stock")) },
+        title = {
+            Text(
+                if (directAdjustment) atlasText("Ajuster le stock", "Adjust stock", "تعديل المخزون")
+                else atlasText("Demander un ajustement", "Request a stock adjustment", "طلب تعديل المخزون"),
+            )
+        },
         text = {
             Column {
                 Text(
@@ -721,13 +745,25 @@ private fun StockAdjustDialog(
                 )
                 Text(
                     text = atlasText(
-                        "Stock actuel : ${atlasQuantity(product.stock)}",
-                        "Current stock: ${atlasQuantity(product.stock)}",
-                        "المخزون الحالي: ${atlasQuantity(product.stock)}",
+                        "Stock actuel : ${productStockDisplay(product.stock, product.unit)}",
+                        "Current stock: ${productStockDisplay(product.stock, product.unit)}",
+                        "المخزون الحالي: ${productStockDisplay(product.stock, product.unit)}",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (!directAdjustment) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        atlasText(
+                            "Votre demande sera appliquée après approbation par un Admin ou un Secrétaire.",
+                            "Your request will be applied after approval by an Admin or Secretary.",
+                            "سيُطبّق طلبك بعد موافقة المسؤول أو السكرتير.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
@@ -767,7 +803,12 @@ private fun StockAdjustDialog(
             TextButton(
                 onClick = { onSubmit(quantity, isOut, reason) },
                 enabled = quantity > 0.0,
-            ) { Text(atlasText("Valider")) }
+            ) {
+                Text(
+                    if (directAdjustment) atlasText("Appliquer", "Apply", "تطبيق")
+                    else atlasText("Envoyer la demande", "Submit request", "إرسال الطلب"),
+                )
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(atlasText("Annuler")) }

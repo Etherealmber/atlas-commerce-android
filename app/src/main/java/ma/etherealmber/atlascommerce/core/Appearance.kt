@@ -47,10 +47,10 @@ enum class RoleTarget(val key: String, val label: String, val actionType: String
  * - **Admin / Owner (`owner`, `admin`)**: Full access — ONLY roles allowed to create
  *   products immediately in stock (`POST /api/products`), approve/reject product requests,
  *   manage devices, view full treasury & send notifications to all roles.
- * - **Secrétaire (`secretaire`)**: Sales, quick POS tickets, invoices, stock adjustments,
+ * - **Secrétaire (`secretaire`)**: Sales, quick POS tickets, invoices, direct stock adjustments,
  *   receivables & sales/stock alerts; product additions are sent immediately to Admins.
- * - **Magasinier / Stock (`stock`, `magasinier`)**: Warehouse stock checks, stock adjustments,
- *   scanning & immediate product requests to Admins (no sales/treasury access).
+ * - **Magasinier / Stock (`stock`, `magasinier`)**: Warehouse stock checks, stock adjustment
+ *   requests for approval, scanning & product requests to Admins (no sales/treasury access).
  * - **Utilisateur (`user`)**: Catalogue consultation, scanning & immediate product/info
  *   requests routed straight to Admins.
  */
@@ -82,7 +82,7 @@ object Roles {
     fun scopeSummary(role: String?): String = when (normalize(role)) {
         OWNER, ADMIN -> "Accès complet : création directe produits, validations, finances & alertes globales"
         SECRETARY -> "Accès Ventes & Caisse : facturation, stock & envoi direct des nouveaux produits à l'Admin"
-        STOCK -> "Accès Entrepôt : inventaire, ajustements stock & demandes envoyées directement à l'Admin"
+        STOCK -> "Accès Entrepôt : inventaire et demandes de changement de stock soumises à validation"
         else -> "Accès Opérateur : consultation catalogue, scan & demandes transmises à l'Admin"
     }
 
@@ -95,9 +95,13 @@ object Roles {
     /** Kept as explicit alias for callers checking direct product creation authority. */
     fun canMutateStock(role: String?): Boolean = isAdmin(role)
 
-    /** Warehouse & office staff who can record stock movements on existing items. */
+    /** Direct stock changes are restricted to owner/admin/secretary by the backend. */
     fun canAdjustStock(role: String?): Boolean =
-        normalize(role) in setOf(OWNER, ADMIN, SECRETARY, STOCK)
+        normalize(role) in setOf(OWNER, ADMIN, SECRETARY)
+
+    /** Other signed-in operational roles may submit a stock-change request for approval. */
+    fun canRequestStockAdjustment(role: String?): Boolean =
+        normalize(role) in setOf(OWNER, ADMIN, SECRETARY, STOCK, USER)
 
     /** Owner, admin and secretary can issue sales / VR tickets and see treasury KPIs. */
     fun canCreateDocuments(role: String?): Boolean =

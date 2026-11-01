@@ -58,6 +58,8 @@ import ma.etherealmber.atlascommerce.data.model.PutAgentThreadRequest
 import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
 import ma.etherealmber.atlascommerce.data.model.RejectMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
+import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestBody
+import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
 import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -461,6 +463,24 @@ class CommerceRepository @Inject constructor(
         apiProvider.api().adjustStock(
             productId,
             StockAdjustRequest(quantity = quantity, type = type, reason = reason?.takeIf { it.isNotBlank() }),
+        )
+    }
+
+    suspend fun submitStockAdjustmentRequest(
+        productId: Long,
+        quantity: Double,
+        direction: String,
+        reason: String?,
+        idempotencyKey: String,
+    ): ApiResult<StockAdjustmentRequestDto> = runner.envelope {
+        apiProvider.api().submitStockAdjustmentRequest(
+            StockAdjustmentRequestBody(
+                productId = productId,
+                direction = direction,
+                quantity = quantity,
+                reason = reason?.takeIf { it.isNotBlank() },
+                idempotencyKey = idempotencyKey,
+            ),
         )
     }
 

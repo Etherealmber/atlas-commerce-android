@@ -1,7 +1,13 @@
 package ma.etherealmber.atlascommerce.ui.screens.devices
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -32,6 +38,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Refresh
@@ -113,7 +120,18 @@ fun QrDeviceScreen(
     val language = LocalAtlasLanguage.current
     val statusMessage = state.statusMessage?.let { atlasNotice(it, language) }
     val errorMessage = state.error?.let { atlasNotice(it, language) }
-    var deviceDetailsRevealed by remember(currentUser?.scopeIdentity) { mutableStateOf(false) }
+    val connectionHealth = rememberDeviceConnectionHealth()
+    val connectionColor = when (connectionHealth) {
+        DeviceConnectionHealth.ONLINE -> Atlas.palette.positive
+        DeviceConnectionHealth.DEGRADED -> Atlas.palette.warning
+        DeviceConnectionHealth.OFFLINE -> Atlas.palette.danger
+    }
+    val connectionLabel = when (connectionHealth) {
+        DeviceConnectionHealth.ONLINE -> atlasText("Prêt à autoriser", "Ready to approve", "جاهز للموافقة")
+        DeviceConnectionHealth.DEGRADED -> atlasText("Connexion dégradée", "Connection degraded", "الاتصال ضعيف")
+        DeviceConnectionHealth.OFFLINE -> atlasText("Aucune connexion", "No connection", "لا يوجد اتصال")
+    }
+    var expandedDeviceIds by remember(currentUser?.scopeIdentity) { mutableStateOf(emptySet<String>()) }
     val cameraPermissionDeniedMessage = if (mode == QrDeviceMode.SIGN_IN_PHONE) {
         atlasText(
             "Caméra refusée — collez le lien ou code QR ci-dessous.",
@@ -300,13 +318,13 @@ fun QrDeviceScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(999.dp))
-                                    .background(Atlas.palette.positive.copy(alpha = 0.16f))
+                                    .background(connectionColor.copy(alpha = 0.16f))
                                     .padding(horizontal = 10.dp, vertical = 4.dp),
                             ) {
                                 Text(
-                                    text = atlasText("Prêt à autoriser", "Ready to approve", "جاهز للموافقة"),
+                                    text = connectionLabel,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Atlas.palette.positive,
+                                    color = connectionColor,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                             }
@@ -521,58 +539,77 @@ fun QrDeviceScreen(
                     }
                 }
 
-                item {
-                    TextButton(
-                        onClick = { deviceDetailsRevealed = !deviceDetailsRevealed },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            if (deviceDetailsRevealed) {
-                                atlasText("Masquer les appareils", "Hide devices", "إخفاء الأجهزة")
-                            } else {
-                                atlasText("Afficher les appareils", "Show devices", "إظهار الأجهزة")
-                            },
-                        )
-                    }
-                }
-
-                if (deviceDetailsRevealed) {
+                if (state.devicesLoading && otherDevices.isEmpty()) {
+                    item { AtlasDeviceListSkeleton(Modifier.fillMaxWidth(), rows = 2) }
+                } else if (otherDevices.isEmpty()) {
                     item {
-                        Text(
-                            atlasText(
-                                "Autres appareils (${otherDevices.size})",
-                                "Other devices (${otherDevices.size})",
-                                "أجهزة أخرى (${otherDevices.size})",
-                            ),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (state.devicesLoading && otherDevices.isEmpty()) {
-                        item { AtlasDeviceListSkeleton(Modifier.fillMaxWidth(), rows = 2) }
-                    } else if (otherDevices.isEmpty()) {
-                        item {
-                            SecurityCard {
-                                Text(
-                                    text = atlasText("Aucun autre appareil enregistré sur ce compte.", "No other devices are registered to this account.", "لا توجد أجهزة أخرى مسجّلة لهذا الحساب."),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    } else {
-                        items(otherDevices, key = { it.revokeId.ifBlank { it.hashCode().toString() } }) { device ->
-                            SecurityDeviceRow(
-                                device = device,
-                                revoking = state.revokingId == device.revokeId,
-                                onRevoke = { viewModel.revokeDevice(device) },
+                        SecurityCard {
+                            Text(
+                                text = atlasText("Aucun autre appareil enregistré sur ce compte.", "No other devices are registered to this account.", "لا توجد أجهزة أخرى مسجّلة لهذا الحساب."),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
+                } else {
+                    items(otherDevices, key = { it.revokeId.ifBlank { it.hashCode().toString() } }) { device ->
+                        val deviceKey = device.revokeId.ifBlank { device.hashCode().toString() }
+                        SecurityDeviceRow(
+                            device = device,
+                            detailsVisible = deviceKey in expandedDeviceIds,
+                            revoking = state.revokingId == device.revokeId,
+                            onToggleDetails = {
+                                expandedDeviceIds = if (deviceKey in expandedDeviceIds) {
+                                    expandedDeviceIds - deviceKey
+                                } else {
+                                    expandedDeviceIds + deviceKey
+                                }
+                            },
+                            onRevoke = { viewModel.revokeDevice(device) },
+                        )
                     }
                 }
             }
         }
     }
+}
+
+private enum class DeviceConnectionHealth { ONLINE, DEGRADED, OFFLINE }
+
+@Composable
+private fun rememberDeviceConnectionHealth(): DeviceConnectionHealth {
+    val context = LocalContext.current
+    var health by remember(context) { mutableStateOf(DeviceConnectionHealth.DEGRADED) }
+    DisposableEffect(context) {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val handler = Handler(Looper.getMainLooper())
+        fun update() {
+            health = when {
+                manager == null -> DeviceConnectionHealth.OFFLINE
+                manager.activeNetwork == null -> DeviceConnectionHealth.OFFLINE
+                else -> {
+                    val capabilities = manager.getNetworkCapabilities(manager.activeNetwork)
+                    when {
+                        capabilities == null -> DeviceConnectionHealth.DEGRADED
+                        !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) -> DeviceConnectionHealth.OFFLINE
+                        !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) -> DeviceConnectionHealth.DEGRADED
+                        else -> DeviceConnectionHealth.ONLINE
+                    }
+                }
+            }
+        }
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) { handler.post(::update) }
+            override fun onLost(network: Network) { handler.post(::update) }
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) { handler.post(::update) }
+        }
+        update()
+        val registered = manager != null && runCatching { manager.registerDefaultNetworkCallback(callback) }.isSuccess
+        onDispose {
+            if (registered) runCatching { manager?.unregisterNetworkCallback(callback) }
+        }
+    }
+    return health
 }
 
 @Composable
@@ -753,7 +790,9 @@ private fun CompletedPairingCard(
 @Composable
 private fun SecurityDeviceRow(
     device: TrustedDeviceDto,
+    detailsVisible: Boolean,
     revoking: Boolean,
+    onToggleDetails: () -> Unit,
     onRevoke: () -> Unit,
 ) {
     SecurityCard {
@@ -790,16 +829,23 @@ private fun SecurityDeviceRow(
                     localizedLastSeen,
                     device.fingerprint.takeIf { it.isNotBlank() },
                 ).joinToString(" · ")
-                if (meta.isNotBlank()) {
-                    Spacer(Modifier.height(2.dp))
+                if (detailsVisible && meta.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = meta,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+            IconButton(onClick = onToggleDetails) {
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription = if (detailsVisible) atlasText("Masquer les détails", "Hide device details", "إخفاء تفاصيل الجهاز") else atlasText("Afficher les détails", "Show device details", "عرض تفاصيل الجهاز"),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             IconButton(onClick = onRevoke, enabled = !revoking) {
                 if (revoking) {

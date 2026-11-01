@@ -86,6 +86,8 @@ internal fun ProductHistoryScreen(
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     canEditImage: Boolean,
+    canAdjustStock: Boolean,
+    onOpenStockAdjust: () -> Unit,
     onBack: () -> Unit,
     onProductImageUpdated: (String) -> Unit,
     onToast: (String) -> Unit,
@@ -239,14 +241,21 @@ internal fun ProductHistoryScreen(
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AtlasChip(
-                        text = atlasText("Stock ${atlasQuantity(product.stock)}", "Stock ${atlasQuantity(product.stock)}", "المخزون ${atlasQuantity(product.stock)}"),
-                        tone = when {
-                            product.isOutOfStock -> AtlasTone.DANGER
-                            product.isLowStock -> AtlasTone.WARNING
-                            else -> AtlasTone.POSITIVE
-                        },
+                        text = atlasText(
+                            "Stock ${productStockDisplay(product.stock, product.unit)}",
+                            "Stock ${productStockDisplay(product.stock, product.unit)}",
+                            "المخزون ${productStockDisplay(product.stock, product.unit)}",
+                        ),
+                        tone = productStockTone(product.stock),
                     )
                     if (product.price > 0.0) AtlasChip(text = atlasMoney(product.price, currency))
+                }
+                if (canAdjustStock && product.trackInventory) {
+                    TextButton(onClick = onOpenStockAdjust) {
+                        Icon(Icons.Outlined.Edit, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(atlasText("Modifier le stock", "Edit stock", "تعديل المخزون"))
+                    }
                 }
             }
 

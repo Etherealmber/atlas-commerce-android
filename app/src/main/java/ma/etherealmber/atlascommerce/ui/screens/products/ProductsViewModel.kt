@@ -29,6 +29,7 @@ import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import ma.etherealmber.atlascommerce.data.repo.ProductSubmissionOutcome
+import java.util.UUID
 import javax.inject.Inject
 
 @HiltViewModel
@@ -258,28 +259,45 @@ class ProductsViewModel @Inject constructor(
 
     fun adjustStock(product: ProductDto, quantity: Double, out: Boolean, reason: String) {
         val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
-        if (!Roles.canAdjustStock(activeUser?.role)) {
-            _messages.tryEmit("Votre rôle ne permet pas d'ajuster le stock.")
+        if (activeUser == null || !Roles.canRequestStockAdjustment(activeUser.role)) {
+            _messages.tryEmit("Votre rôle ne permet pas de demander un changement de stock.")
             return
         }
         if (quantity <= 0.0) {
             _messages.tryEmit("Indiquez une quantité supérieure à zéro.")
             return
         }
+        val requestedScope = activeUser.scopeIdentity
+        val direct = Roles.canAdjustStock(activeUser.role)
         viewModelScope.launch {
-            val result = commerceRepository.adjustStock(
-                productId = product.id,
-                quantity = quantity,
-                type = if (out) "out" else "in",
-                reason = reason,
-            )
-            when (result) {
-                is ApiResult.Failure -> _messages.tryEmit(result.message)
-                is ApiResult.Success -> {
-                    _messages.tryEmit(
-                        "${result.data.name} · stock ${AtlasFormat.quantity(result.data.stock)}",
+            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+            if (direct) {
+                when (val result = commerceRepository.adjustStock(
+                    productId = product.id,
+                    quantity = quantity,
+                    type = if (out) "out" else "in",
+                    reason = reason,
+                )) {
+                    is ApiResult.Failure -> _messages.tryEmit(result.message)
+                    is ApiResult.Success -> {
+                        _messages.tryEmit(
+                            "${result.data.name} · stock ${AtlasFormat.quantity(result.data.stock)}",
+                        )
+                        fetchState(query = _state.value.query, initial = false)
+                    }
+                }
+            } else {
+                when (val result = commerceRepository.submitStockAdjustmentRequest(
+                    productId = product.id,
+                    quantity = quantity,
+                    direction = if (out) "out" else "in",
+                    reason = reason,
+                    idempotencyKey = UUID.randomUUID().toString(),
+                )) {
+                    is ApiResult.Failure -> _messages.tryEmit(result.message)
+                    is ApiResult.Success -> _messages.tryEmit(
+                        "Demande de stock envoyée à l'Admin pour validation. Le stock ne changera qu'après approbation.",
                     )
-                    fetchState(query = _state.value.query, initial = false)
                 }
             }
         }

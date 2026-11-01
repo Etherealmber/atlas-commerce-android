@@ -675,6 +675,33 @@ data class StockAdjustRequest(
     val reason: String? = null,
 )
 
+@JsonClass(generateAdapter = true)
+data class StockAdjustmentRequestBody(
+    @Json(name = "product_id") val productId: Long,
+    val direction: String,
+    val quantity: Double,
+    val reason: String? = null,
+    @Json(name = "idempotency_key") val idempotencyKey: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class StockAdjustmentRequestDto(
+    val id: Long = 0,
+    @Json(name = "product_id") val productId: Long = 0,
+    @Json(name = "product_name") val productName: String = "",
+    val direction: String = "",
+    val quantity: Double = 0.0,
+    val reason: String = "",
+    val status: String = "pending",
+    @Json(name = "requested_by") val requestedBy: String = "",
+    @Json(name = "requested_at") val requestedAt: String? = null,
+    @Json(name = "decided_by") val decidedBy: String = "",
+    @Json(name = "decided_at") val decidedAt: String? = null,
+    @Json(name = "decision_note") val decisionNote: String = "",
+    @Json(name = "stock_before") val stockBefore: Double? = null,
+    @Json(name = "stock_after") val stockAfter: Double? = null,
+)
+
 // ---------------------------------------------------------------------------
 // Notifications, alerts & mobile actions
 // ---------------------------------------------------------------------------
