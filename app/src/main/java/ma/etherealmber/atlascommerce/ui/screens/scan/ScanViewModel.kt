@@ -344,6 +344,7 @@ class ScanViewModel @Inject constructor(
         quantity: Double,
         category: String?,
         note: String?,
+        photoUrl: String? = null,
     ) {
         val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
         if (!Roles.canCreateProductDirectly(activeUser?.role)) {
@@ -357,6 +358,7 @@ class ScanViewModel @Inject constructor(
                     price = 0.0,
                     stockQuantity = quantity,
                     description = note,
+                    imageUrl = photoUrl,
                 ),
             )
             return
@@ -373,6 +375,7 @@ class ScanViewModel @Inject constructor(
                         quantity = quantity,
                         category = category,
                         note = note,
+                        photoUrl = photoUrl,
                     ),
                 )
             ) {

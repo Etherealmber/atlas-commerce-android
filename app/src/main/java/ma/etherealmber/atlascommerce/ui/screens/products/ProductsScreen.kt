@@ -5,8 +5,12 @@ import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
-import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
 import ma.etherealmber.atlascommerce.ui.i18n.atlasQuantity
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,11 +27,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -59,13 +62,14 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ma.etherealmber.atlascommerce.core.Roles
-import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -90,6 +94,7 @@ fun ProductsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val density = Atlas.density
     var selected by remember { mutableStateOf<ProductDto?>(null) }
+    var historyTarget by remember { mutableStateOf<ProductDto?>(null) }
     var adjustTarget by remember { mutableStateOf<ProductDto?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var pendingFulfillRequest by remember { mutableStateOf<ProductCreationRequestDto?>(null) }
@@ -226,13 +231,16 @@ fun ProductsScreen(
                         horizontalArrangement = Arrangement.spacedBy(density.itemGap),
                         verticalArrangement = Arrangement.spacedBy(density.itemGap),
                     ) {
-                        gridItems(state.openRequests, key = { it.id }) { req ->
-                            ProductRequestRow(
-                                request = req,
-                                isAdmin = isAdmin,
-                                onFulfill = { pendingFulfillRequest = req },
-                                onDismiss = { viewModel.dismissProductRequest(req.id) },
-                            )
+                        gridItemsIndexed(state.openRequests, key = { _, req -> req.id }) { index, req ->
+                            StaggeredCatalogEntry(index = index) {
+                                ProductRequestRow(
+                                    request = req,
+                                    isAdmin = isAdmin,
+                                    serverBaseUrl = user.serverUrl,
+                                    onFulfill = { pendingFulfillRequest = req },
+                                    onDismiss = { viewModel.dismissProductRequest(req.id) },
+                                )
+                            }
                         }
                     }
                 }
@@ -283,18 +291,23 @@ fun ProductsScreen(
                             }
                         }
                     }
-                    gridItems(state.visibleProducts, key = { it.id }) { product ->
-                        ProductRow(
-                            product = product,
-                            currency = state.currency,
-                            canSell = canSell,
-                            onOpen = { selected = product },
-                            onAdd = {
-                                if (canSell) {
-                                    viewModel.addToCart(product)
-                                }
-                            },
-                        )
+                    gridItemsIndexed(state.visibleProducts, key = { _, product -> product.id }) { index, product ->
+                        StaggeredCatalogEntry(index = index) {
+                            ProductRow(
+                                product = product,
+                                currency = state.currency,
+                                serverBaseUrl = user.serverUrl,
+                                canSell = canSell,
+                                onOpen = {
+                                    if (canSell) historyTarget = product else selected = product
+                                },
+                                onAdd = {
+                                    if (canSell) {
+                                        viewModel.addToCart(product)
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -305,15 +318,16 @@ fun ProductsScreen(
         ProductCreateDialog(
             canCreateDirectly = isAdmin,
             initialBarcode = state.query.trim().takeIf { it.all(Char::isDigit) && it.length >= 6 }.orEmpty(),
+            imageServerBaseUrl = user.serverUrl,
             submitting = state.submitting,
             onDismiss = { showCreateDialog = false },
             onSubmitDirect = { req ->
                 showCreateDialog = false
                 viewModel.createProduct(req)
             },
-            onSubmitRequest = { code, name, sku, unit, qty, cat, note ->
+            onSubmitRequest = { code, name, sku, unit, qty, cat, note, photoUrl ->
                 showCreateDialog = false
-                viewModel.submitProductRequest(code, name, sku, unit, qty, cat, note)
+                viewModel.submitProductRequest(code, name, sku, unit, qty, cat, note, photoUrl)
             },
         )
     }
@@ -328,16 +342,28 @@ fun ProductsScreen(
             initialUnit = fulfill.unit ?: "unité",
             initialQuantity = fulfill.quantity?.let { atlasQuantity(it) } ?: "1",
             initialCategory = fulfill.category.orEmpty(),
+            initialImageUrl = fulfill.photoUrl,
+            imageServerBaseUrl = user.serverUrl,
             submitting = state.submitting,
             onDismiss = { pendingFulfillRequest = null },
             onSubmitDirect = { req ->
                 pendingFulfillRequest = null
                 viewModel.createProduct(req, fulfillingRequestId = fulfill.id)
             },
-            onSubmitRequest = { code, name, sku, unit, qty, cat, note ->
+            onSubmitRequest = { code, name, sku, unit, qty, cat, note, photoUrl ->
                 pendingFulfillRequest = null
-                viewModel.submitProductRequest(code, name, sku, unit, qty, cat, note)
+                viewModel.submitProductRequest(code, name, sku, unit, qty, cat, note, photoUrl)
             },
+        )
+    }
+
+    val historyProduct = historyTarget
+    if (historyProduct != null && canSell) {
+        ProductHistoryDialog(
+            product = historyProduct,
+            currency = state.currency,
+            serverBaseUrl = user.serverUrl,
+            onDismiss = { historyTarget = null },
         )
     }
 
@@ -378,14 +404,43 @@ fun ProductsScreen(
 }
 
 @Composable
+private fun StaggeredCatalogEntry(
+    index: Int,
+    content: @Composable () -> Unit,
+) {
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val delayMillis = if (index in 1..8) index * 80 else 0
+    AnimatedVisibility(
+        visible = true,
+        enter = if (motionEnabled) {
+            fadeIn(animationSpec = tween(durationMillis = 280, delayMillis = delayMillis)) +
+                slideInVertically(
+                    animationSpec = tween(durationMillis = 280, delayMillis = delayMillis),
+                    initialOffsetY = { height -> (height * 0.2f).roundToInt() },
+                )
+        } else EnterTransition.None,
+    ) {
+        content()
+    }
+}
+
+@Composable
 private fun ProductRequestRow(
     request: ProductCreationRequestDto,
     isAdmin: Boolean,
+    serverBaseUrl: String,
     onFulfill: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AtlasCard(padding = 12.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            ProductArtwork(
+                imageUrl = request.photoUrl,
+                serverBaseUrl = serverBaseUrl,
+                label = request.name ?: request.code,
+                modifier = Modifier.size(56.dp),
+            )
+            Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = request.name?.takeIf { it.isNotBlank() } ?: atlasText("Code ${request.code}", "Code ${request.code}", "الرمز ${request.code}"),
@@ -430,6 +485,7 @@ private fun ProductRequestRow(
 private fun ProductRow(
     product: ProductDto,
     currency: String,
+    serverBaseUrl: String,
     canSell: Boolean,
     onOpen: () -> Unit,
     onAdd: () -> Unit,
@@ -437,13 +493,12 @@ private fun ProductRow(
     AtlasCard(onClick = onOpen, padding = 14.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.Surface(
-                    modifier = Modifier.size(44.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                ) {
-                    Icon(Icons.Outlined.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(10.dp).size(24.dp))
-                }
+                ProductArtwork(
+                    imageUrl = product.imageUrl,
+                    serverBaseUrl = serverBaseUrl,
+                    label = product.name,
+                    modifier = Modifier.size(64.dp),
+                )
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(product.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)

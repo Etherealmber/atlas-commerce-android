@@ -413,6 +413,7 @@ fun ScanScreen(
         ProductCreateDialog(
             canCreateDirectly = isAdmin,
             initialBarcode = state.lastCode.orEmpty(),
+            imageServerBaseUrl = user.serverUrl,
             submitting = state.creating,
             onDismiss = {
                 showCreateDialog = false
@@ -421,9 +422,9 @@ fun ScanScreen(
                 showCreateDialog = false
                 viewModel.createProductFromScan(req)
             },
-            onSubmitRequest = { code, name, sku, unit, qty, cat, note ->
+            onSubmitRequest = { code, name, sku, unit, qty, cat, note, photoUrl ->
                 showCreateDialog = false
-                viewModel.submitRequestFromScan(code, name, sku, unit, qty, cat, note)
+                viewModel.submitRequestFromScan(code, name, sku, unit, qty, cat, note, photoUrl)
             },
         )
     }
