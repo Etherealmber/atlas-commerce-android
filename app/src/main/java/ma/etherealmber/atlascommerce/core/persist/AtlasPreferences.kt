@@ -13,8 +13,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.core.toMutablePreferences
-import androidx.datastore.preferences.core.toPreferences
+import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -531,21 +530,21 @@ class AtlasPreferences @Inject constructor(
     private suspend fun safeEdit(block: (MutablePreferences) -> Unit) {
         runCatching {
             store.updateData { persisted ->
-                val editable = decryptPersistedPreferences(persisted).toMutablePreferences()
+                val editable = decryptPersistedPreferences(persisted)
                 block(editable)
-                encryptPreferences(editable.toPreferences())
+                encryptPreferences(editable)
             }
         }
     }
 
     /** Older releases wrote the typed Preferences map directly; newer releases keep one AES-GCM blob. */
-    private fun decryptPersistedPreferences(source: Preferences): Preferences {
+    private fun decryptPersistedPreferences(source: Preferences): MutablePreferences {
         val cipherText = source[Keys.ENCRYPTED_PAYLOAD]
-        if (cipherText.isNullOrBlank()) return source
-        val clearJson = cryptoStore.decryptAtRest(cipherText) ?: return emptyPreferences()
+        if (cipherText.isNullOrBlank()) return source.toMutableCopy()
+        val clearJson = cryptoStore.decryptAtRest(cipherText) ?: return mutablePreferencesOf()
         return runCatching {
             val records = JSONObject(clearJson).optJSONArray("entries") ?: JSONArray()
-            val result = emptyPreferences().toMutablePreferences()
+            val result = mutablePreferencesOf()
             for (index in 0 until records.length()) {
                 val record = records.optJSONObject(index) ?: continue
                 val name = record.optString("name").takeIf(String::isNotBlank) ?: continue
@@ -566,8 +565,8 @@ class AtlasPreferences @Inject constructor(
                     }
                 }
             }
-            result.toPreferences()
-        }.getOrDefault(emptyPreferences())
+            result
+        }.getOrDefault(mutablePreferencesOf())
     }
 
     private fun encryptPreferences(source: Preferences): Preferences {
@@ -593,10 +592,29 @@ class AtlasPreferences @Inject constructor(
             records.put(record)
         }
         val encrypted = cryptoStore.encryptAtRest(JSONObject().put("entries", records).toString())
-        val result = emptyPreferences().toMutablePreferences()
+        val result = mutablePreferencesOf()
         result[Keys.ENCRYPTED_PAYLOAD] = encrypted
-        return result.toPreferences()
+        return result
     }
+}
+
+private fun Preferences.toMutableCopy(): MutablePreferences {
+    val result = mutablePreferencesOf()
+    asMap().forEach { (key, value) ->
+        when (value) {
+            is String -> result[stringPreferencesKey(key.name)] = value
+            is Boolean -> result[booleanPreferencesKey(key.name)] = value
+            is Int -> result[intPreferencesKey(key.name)] = value
+            is Long -> result[longPreferencesKey(key.name)] = value
+            is Float -> result[floatPreferencesKey(key.name)] = value
+            is Double -> result[doublePreferencesKey(key.name)] = value
+            is Set<*> -> {
+                val strings = value.filterIsInstance<String>()
+                if (strings.size == value.size) result[stringSetPreferencesKey(key.name)] = strings.toSet()
+            }
+        }
+    }
+    return result
 }
 
 private fun decodeSavedServers(raw: String?): List<SavedServerEntry> {
