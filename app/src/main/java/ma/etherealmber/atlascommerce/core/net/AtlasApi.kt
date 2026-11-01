@@ -36,6 +36,9 @@ import ma.etherealmber.atlascommerce.data.model.MobileActionStatsDto
 import ma.etherealmber.atlascommerce.data.model.OtpRequest
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.ProductImageDto
+import ma.etherealmber.atlascommerce.data.model.ProductImageUploadRequest
+import ma.etherealmber.atlascommerce.data.model.ProductMovementDto
 import ma.etherealmber.atlascommerce.data.model.ProfileUpdateRequest
 import ma.etherealmber.atlascommerce.data.model.PutAgentThreadRequest
 import ma.etherealmber.atlascommerce.data.model.QrClaimRequest
@@ -157,6 +160,20 @@ interface AtlasApi {
 
     @POST("api/products")
     suspend fun createProduct(@Body body: CreateProductRequest): ApiEnvelope<ProductDto>
+
+    @GET("api/products/{id}/movements")
+    suspend fun productMovements(
+        @Path("id") id: Long,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+        @Query("full") full: Int = 1,
+    ): ApiEnvelope<List<ProductMovementDto>>
+
+    @POST("api/catalog/products/{id}/images")
+    suspend fun addProductImage(
+        @Path("id") id: Long,
+        @Body body: ProductImageUploadRequest,
+    ): ApiEnvelope<ProductImageDto>
 
     @POST("api/products/{id}/adjust-stock")
     suspend fun adjustStock(

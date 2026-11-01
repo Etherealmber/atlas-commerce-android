@@ -51,6 +51,9 @@ import ma.etherealmber.atlascommerce.data.model.MobileActionMetaDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionStatsDto
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.ProductImageDto
+import ma.etherealmber.atlascommerce.data.model.ProductImageUploadRequest
+import ma.etherealmber.atlascommerce.data.model.ProductMovementDto
 import ma.etherealmber.atlascommerce.data.model.PutAgentThreadRequest
 import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
 import ma.etherealmber.atlascommerce.data.model.RejectMobileActionRequest
@@ -241,6 +244,25 @@ class CommerceRepository @Inject constructor(
 
     suspend fun createProduct(request: CreateProductRequest): ApiResult<ProductDto> =
         runner.envelope { apiProvider.api().createProduct(request) }
+
+    suspend fun productMovements(
+        productId: Long,
+        limit: Int = 50,
+        offset: Int = 0,
+    ): ApiResult<List<ProductMovementDto>> = runner.envelope {
+        apiProvider.api().productMovements(productId, limit = limit, offset = offset, full = 1)
+    }
+
+    suspend fun addPrimaryProductImage(
+        productId: Long,
+        dataUrl: String,
+        altText: String,
+    ): ApiResult<ProductImageDto> = runner.envelope {
+        apiProvider.api().addProductImage(
+            productId,
+            ProductImageUploadRequest(dataUrl = dataUrl, isPrimary = true, altText = altText),
+        )
+    }
 
     /**
      * Authoritative role-gated product submission:

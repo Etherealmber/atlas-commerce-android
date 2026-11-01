@@ -40,6 +40,7 @@ data class SessionUser(
     val role: String,
     val displayName: String,
     val email: String = "",
+    val phone: String = "",
     val avatarUrl: String = "",
     val serverUrl: String = "",
 ) {
@@ -162,6 +163,7 @@ class SessionManager @Inject constructor(
                         role = me.role?.takeIf { it.isNotBlank() } ?: stored.role,
                         displayName = me.displayName?.takeIf { it.isNotBlank() } ?: stored.displayName,
                         email = me.email ?: stored.email,
+                        phone = me.phone.orEmpty(),
                         avatarUrl = me.avatarUrl?.takeIf { it.isNotBlank() } ?: stored.avatarUrl,
                         rememberAccount = true,
                     )
@@ -382,6 +384,7 @@ class SessionManager @Inject constructor(
                     displayName = resolvedDisplay,
                     email = resolvedEmail,
                     avatarUrl = resolvedAvatar,
+                    phone = me.phone.orEmpty(),
                     rememberAccount = true,
                 )
                 return ApiResult.Success(Unit)
@@ -441,6 +444,7 @@ class SessionManager @Inject constructor(
         displayName: String,
         email: String,
         avatarUrl: String,
+        phone: String = "",
         rememberAccount: Boolean,
     ) {
         purgeInMemorySession()
@@ -479,6 +483,7 @@ class SessionManager @Inject constructor(
                 role = role,
                 displayName = displayName,
                 email = email,
+                phone = phone,
                 avatarUrl = avatarUrl,
                 serverUrl = serverUrl,
             ),
@@ -496,6 +501,7 @@ class SessionManager @Inject constructor(
                 role = me.role?.takeIf { it.isNotBlank() } ?: current.role,
                 displayName = me.displayName?.takeIf { it.isNotBlank() } ?: current.displayName,
                 email = me.email ?: current.email,
+                phone = me.phone ?: current.phone,
                 avatarUrl = me.avatarUrl?.takeIf { it.isNotBlank() } ?: current.avatarUrl,
             )
             _state.value = SessionState.Active(updated)
@@ -537,11 +543,13 @@ class SessionManager @Inject constructor(
     suspend fun updateProfile(
         displayName: String? = null,
         email: String? = null,
+        phone: String? = null,
         avatarUrl: String? = null,
     ): ApiResult<Unit> {
         val res = authRepository.updateProfile(
             displayName = displayName,
             email = email,
+            phone = phone,
             avatarUrl = avatarUrl,
         )
         if (res is ApiResult.Success) {
@@ -550,6 +558,7 @@ class SessionManager @Inject constructor(
                 val updated = current.copy(
                     displayName = displayName ?: current.displayName,
                     email = email ?: current.email,
+                    phone = phone ?: current.phone,
                     avatarUrl = avatarUrl ?: current.avatarUrl,
                 )
                 _state.value = SessionState.Active(updated)

@@ -115,6 +115,7 @@ fun ProductsScreen(
     val isAdmin = Roles.canCreateProductDirectly(user.role)
     val canSell = Roles.canCreateDocuments(user.role)
     val canAdjustStock = Roles.canAdjustStock(user.role)
+    val canEditProductImage = Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { message -> onToast(message) }
@@ -154,7 +155,13 @@ fun ProductsScreen(
                 serverBaseUrl = user.serverUrl,
                 sharedTransitionScope = sharedTransitionScope,
                 animatedVisibilityScope = animatedVisibilityScope,
+                canEditImage = canEditProductImage,
                 onBack = { historyTarget = null },
+                onProductImageUpdated = { url ->
+                    historyTarget = historyTarget?.takeIf { it.id == destination.id }?.copy(imageUrl = url)
+                    viewModel.refresh()
+                },
+                onToast = onToast,
             )
         } else {
         Column(modifier = Modifier.fillMaxSize()) {
