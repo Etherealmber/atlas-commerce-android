@@ -7,6 +7,7 @@ import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.net.VerifyLinkParser
+import ma.etherealmber.atlascommerce.core.security.AtRestCipher
 import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.data.model.AgentThreadDetailDto
@@ -231,13 +232,24 @@ class QrDevicesAndModelsTest {
             // Legacy global file from older builds must be purged automatically on startup
             File(dir, "products.json").writeText("""[{"id":999,"name":"Legacy Leak"}]""")
 
-            val cache = OfflineCache(dir, moshi)
+            val testCipher = object : AtRestCipher {
+                override fun encryptAtRest(plain: String): String = "test:" +
+                    java.util.Base64.getEncoder().encodeToString(plain.toByteArray(Charsets.UTF_8))
+
+                override fun decryptAtRest(stored: String?): String? = stored
+                    ?.takeIf { it.startsWith("test:") }
+                    ?.removePrefix("test:")
+                    ?.let { String(java.util.Base64.getDecoder().decode(it), Charsets.UTF_8) }
+            }
+            val cache = OfflineCache(dir, moshi, testCipher)
             assertFalse("Legacy global products.json must be deleted on init", File(dir, "products.json").exists())
             assertTrue("Unbound cache must return empty list", cache.readProducts().isEmpty())
 
             // User A on Server 1 writes secret products
             cache.bindScope("https://alpha.example.com", "alice")
             cache.saveProducts(listOf(ProductDto(id = 1, name = "Alpha Secret Marble")))
+            val persistedCatalog = dir.listFiles()!!.single { it.name.startsWith("products_") }
+            assertFalse("Offline catalog must not persist product names in plaintext", persistedCatalog.readText().contains("Alpha Secret Marble"))
             assertEquals("Alpha Secret Marble", cache.readProducts().single().name)
 
             // Switching to User B on the SAME Server 1 sees ZERO data from User A

@@ -20,14 +20,30 @@ import javax.inject.Singleton
  * device and the digest is not reversible.
  */
 @Singleton
-class DeviceIdentity @Inject constructor(@ApplicationContext private val context: Context) {
+class DeviceIdentity @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val cryptoStore: CryptoStore,
+) {
 
     private val installId: String by lazy {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.getString(KEY_INSTALL_ID, null)?.takeIf { it.isNotBlank() }
-            ?: UUID.randomUUID().toString().also { generated ->
-                prefs.edit().putString(KEY_INSTALL_ID, generated).apply()
+        val stored = prefs.getString(KEY_INSTALL_ID, null)
+        val existing = when {
+            stored.isNullOrBlank() -> null
+            stored.startsWith(AT_REST_PREFIX) -> cryptoStore.decryptAtRest(stored).also { decoded ->
+                if (decoded.isNullOrBlank()) prefs.edit().remove(KEY_INSTALL_ID).apply()
             }
+            else -> stored // Migrate the UUID stored by older versions without changing this device's fingerprint.
+        }
+        existing?.takeIf { it.isNotBlank() }?.also { value ->
+            if (stored?.startsWith(AT_REST_PREFIX) != true) {
+                val migrated = runCatching { cryptoStore.encryptAtRest(value) }.getOrNull()
+                if (migrated != null) prefs.edit().putString(KEY_INSTALL_ID, migrated).apply()
+                else prefs.edit().remove(KEY_INSTALL_ID).apply()
+            }
+        } ?: UUID.randomUUID().toString().also { generated ->
+            runCatching { prefs.edit().putString(KEY_INSTALL_ID, cryptoStore.encryptAtRest(generated)).apply() }
+        }
     }
 
     val fingerprint: String by lazy {
@@ -56,5 +72,6 @@ class DeviceIdentity @Inject constructor(@ApplicationContext private val context
     private companion object {
         const val PREFS = "atlas_device"
         const val KEY_INSTALL_ID = "install_id"
+        const val AT_REST_PREFIX = "v2:"
     }
 }

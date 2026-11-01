@@ -104,7 +104,6 @@ class AppViewModel @Inject constructor(
     private val deviceUnlockSetupPrompt: DeviceUnlockSetupPrompt,
 ) : ViewModel() {
 
-    private var appInForeground = true
     private var lastForegroundRefreshMs = 0L
     private val foregroundRefreshMinimumIntervalMs = 45_000L
 
@@ -118,9 +117,11 @@ class AppViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            sessionManager.state.collect { session ->
-                if (!appInForeground && session is SessionState.Active) {
-                    sessionManager.lockForBackground()
+            sessionEvents.expired.collect { event ->
+                // An in-flight response from a previous account must not sign out the newly
+                // selected account after the token has changed.
+                if (event.authorizationHeader == "Bearer ${sessionManager.authToken.orEmpty()}") {
+                    sessionManager.signOut(event.message)
                 }
             }
         }
@@ -400,7 +401,6 @@ class AppViewModel @Inject constructor(
     }
 
     fun onAppResumed(context: Context) {
-        appInForeground = true
         updateManager.onAppResumed(context, autoCheck = autoCheckUpdates.value)
         if (sessionManager.state.value is SessionState.Active) {
             val now = SystemClock.elapsedRealtime()
@@ -415,9 +415,9 @@ class AppViewModel @Inject constructor(
     }
 
     fun onAppStopped() {
-        appInForeground = false
         updateManager.onAppStopped()
-        sessionManager.lockForBackground()
+        // Keep the encrypted server session alive across app switches and process death.
+        // MainActivity's FLAG_SECURE prevents OS recents/screen capture from exposing it.
     }
 
     fun refreshAgentPolicy() {
@@ -803,7 +803,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun signOut() {
-        sessionManager.lockForBackground()
+        viewModelScope.launch { sessionManager.signOut() }
     }
 }
 

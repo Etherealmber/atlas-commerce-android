@@ -11,14 +11,16 @@ import javax.inject.Singleton
  * Cross-layer session signals: the HTTP layer cannot navigate, so it emits here
  * and the root composable reacts (snackbar + return to login).
  */
+data class SessionExpiredEvent(val authorizationHeader: String, val message: String)
+
 @Singleton
 class SessionEvents @Inject constructor() {
 
-    private val _expired = MutableSharedFlow<String>(
+    private val _expired = MutableSharedFlow<SessionExpiredEvent>(
         extraBufferCapacity = 8,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
-    val expired: SharedFlow<String> = _expired.asSharedFlow()
+    val expired: SharedFlow<SessionExpiredEvent> = _expired.asSharedFlow()
 
     private val _unauthorizedWrite = MutableSharedFlow<String>(
         extraBufferCapacity = 4,
@@ -26,8 +28,11 @@ class SessionEvents @Inject constructor() {
     )
     val forbidden: SharedFlow<String> = _unauthorizedWrite.asSharedFlow()
 
-    fun notifyExpired(message: String = "Session expirée — reconnectez-vous.") {
-        _expired.tryEmit(message)
+    fun notifyExpired(
+        authorizationHeader: String,
+        message: String = "Session expirée — reconnectez-vous.",
+    ) {
+        _expired.tryEmit(SessionExpiredEvent(authorizationHeader, message))
     }
 
     fun notifyForbidden(message: String) {

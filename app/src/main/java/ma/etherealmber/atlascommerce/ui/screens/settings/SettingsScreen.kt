@@ -850,6 +850,9 @@ fun SettingsScreen(
     val releaseChangelog by appViewModel.releaseChangelog.collectAsStateWithLifecycle()
     val releaseChangelogLoading by appViewModel.releaseChangelogLoading.collectAsStateWithLifecycle()
     val devices by appViewModel.devices.collectAsStateWithLifecycle()
+    val session by appViewModel.session.collectAsStateWithLifecycle()
+    val deviceScope = (session as? ma.etherealmber.atlascommerce.core.session.SessionState.Active)?.user?.scopeIdentity
+    var devicesRevealed by remember(deviceScope) { mutableStateOf(false) }
     val otherDevices = remember(devices, appViewModel) { devices.filterNot(appViewModel::isCurrentDevice) }
     val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
@@ -1041,7 +1044,7 @@ fun SettingsScreen(
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = atlasText("Autres appareils connectés & QR PC (${otherDevices.size})", "Other connected devices & PC QR (${otherDevices.size})", "الأجهزة الأخرى المتصلة وQR الكمبيوتر (${otherDevices.size})"),
+                        text = atlasText("Appareils connectés & QR PC", "Connected devices & PC QR", "الأجهزة المتصلة وQR الكمبيوتر"),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -1051,8 +1054,10 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = appViewModel::loadDevices, enabled = !devicesLoading) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les appareils", "Refresh devices", "تحديث الأجهزة"))
+                if (devicesRevealed) {
+                    IconButton(onClick = appViewModel::loadDevices, enabled = !devicesLoading) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les appareils", "Refresh devices", "تحديث الأجهزة"))
+                    }
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -1062,23 +1067,45 @@ fun SettingsScreen(
                 icon = Icons.Outlined.QrCode2,
                 modifier = Modifier.fillMaxWidth(),
             )
-            when {
-                devicesLoading && otherDevices.isEmpty() -> AtlasDeviceListSkeleton(Modifier.fillMaxWidth(), rows = 2)
-                otherDevices.isNotEmpty() -> {
-                    Spacer(Modifier.height(10.dp))
-                    otherDevices.forEachIndexed { idx, device ->
-                        if (idx > 0) AtlasDivider(Modifier.padding(vertical = 6.dp))
-                        ConnectedDeviceRow(
-                            device = device,
-                            onRevoke = { appViewModel.revokeDevice(device, onToast) },
-                        )
-                    }
-                }
-                !devicesLoading -> Text(
-                    atlasText("Aucun autre appareil connecté.", "No other devices are connected.", "لا توجد أجهزة أخرى متصلة."),
-                    style = MaterialTheme.typography.bodySmall,
+            TextButton(
+                onClick = { devicesRevealed = !devicesRevealed },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    if (devicesRevealed) {
+                        atlasText("Masquer les appareils", "Hide devices", "إخفاء الأجهزة")
+                    } else {
+                        atlasText("Afficher les appareils", "Show devices", "إظهار الأجهزة")
+                    },
+                )
+            }
+            if (devicesRevealed) {
+                Text(
+                    atlasText(
+                        "Autres appareils connectés (${otherDevices.size})",
+                        "Other connected devices (${otherDevices.size})",
+                        "أجهزة أخرى متصلة (${otherDevices.size})",
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                when {
+                    devicesLoading && otherDevices.isEmpty() -> AtlasDeviceListSkeleton(Modifier.fillMaxWidth(), rows = 2)
+                    otherDevices.isNotEmpty() -> {
+                        otherDevices.forEachIndexed { idx, device ->
+                            if (idx > 0) AtlasDivider(Modifier.padding(vertical = 6.dp))
+                            ConnectedDeviceRow(
+                                device = device,
+                                onRevoke = { appViewModel.revokeDevice(device, onToast) },
+                            )
+                        }
+                    }
+                    !devicesLoading -> Text(
+                        atlasText("Aucun autre appareil connecté.", "No other devices are connected.", "لا توجد أجهزة أخرى متصلة."),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 

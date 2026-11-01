@@ -64,7 +64,7 @@ sealed interface LoginOutcome {
 /**
  * Owns the authenticated session with strict per-server & per-account isolation:
  * password + OTP + QR pairing, explicit device-authenticated saved-account
- * switching, profile refresh, and full state purge on sign-out/background.
+ * switching, profile refresh, and full state purge on account switch/sign-out.
  */
 @Singleton
 class SessionManager @Inject constructor(
@@ -111,24 +111,97 @@ class SessionManager @Inject constructor(
 
     private suspend fun restore() {
         try {
-            // A process can be killed without delivering ON_STOP. Treat every
-            // cold process start as a locked session: clear the active token and
-            // require the user to authenticate again. Device unlock remains an
-            // explicit action on the login screen, never an automatic restore.
             serverConfig.loaded.filter { it }.first()
-            val hadActiveSession = preferences.readSession() != null
-            if (hadActiveSession) {
+            preferences.migrateLegacyPreferencesAtRest()
+            val stored = preferences.readSession()
+            if (preferences.isSessionRestoreDisabled()) {
+                preferences.clearSession()
+                purgeInMemorySession()
+                _state.value = SessionState.SignedOut
+                return
+            }
+            if (stored == null) {
+                purgeInMemorySession()
+                _state.value = SessionState.SignedOut
+                return
+            }
+            if (!serverConfig.baseUrl().equals(stored.serverUrl, ignoreCase = true)) {
                 preferences.disableSessionRestore(disabled = true)
                 preferences.clearSession()
+                purgeInMemorySession()
+                _state.value = SessionState.SignedOut
+                return
             }
-            purgeInMemorySession()
-            _state.value = SessionState.SignedOut
+            val token = cryptoStore.decrypt(stored.tokenCipher)
+            if (token.isNullOrBlank()) {
+                preferences.disableSessionRestore(disabled = true)
+                preferences.clearSession()
+                purgeInMemorySession()
+                _state.value = SessionState.SignedOut
+                return
+            }
+
+            tokenHolder.set(token)
+            preferences.bindActiveScope(stored.serverUrl, stored.username)
+            offlineCache.bindScope(stored.serverUrl, stored.username)
+            when (val verified = authRepository.me()) {
+                is ApiResult.Success -> {
+                    val me = verified.data
+                    val username = me.username?.takeIf { it.isNotBlank() } ?: stored.username
+                    if (!username.equals(stored.username, ignoreCase = true)) {
+                        preferences.disableSessionRestore(disabled = true)
+                        preferences.clearSession()
+                        purgeInMemorySession()
+                        _state.value = SessionState.SignedOut
+                        return
+                    }
+                    activateIsolatedSession(
+                        serverUrl = stored.serverUrl,
+                        token = token,
+                        username = username,
+                        role = me.role?.takeIf { it.isNotBlank() } ?: stored.role,
+                        displayName = me.displayName?.takeIf { it.isNotBlank() } ?: stored.displayName,
+                        email = me.email ?: stored.email,
+                        avatarUrl = me.avatarUrl?.takeIf { it.isNotBlank() } ?: stored.avatarUrl,
+                        rememberAccount = true,
+                    )
+                }
+                is ApiResult.Failure -> {
+                    val transient = verified.code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK ||
+                        verified.httpStatus?.let { it in 500..599 } == true
+                    val revoked = verified.httpStatus == 401 ||
+                        verified.code == "SESSION_EXPIRED" ||
+                        verified.code.contains("REVOK", ignoreCase = true)
+                    if (transient) {
+                        // Keep the encrypted session available for offline use; a later authenticated
+                        // 401 is handled by SessionGuard and returns the user to sign-in.
+                        activateIsolatedSession(
+                            serverUrl = stored.serverUrl,
+                            token = token,
+                            username = stored.username,
+                            role = stored.role,
+                            displayName = stored.displayName,
+                            email = stored.email,
+                            avatarUrl = stored.avatarUrl,
+                            rememberAccount = true,
+                        )
+                    } else {
+                        if (revoked) {
+                            _notices.tryEmit("Cet appareil ou cette session a été révoqué. Reconnectez-vous.")
+                        }
+                        preferences.disableSessionRestore(disabled = true)
+                        preferences.clearSession()
+                        purgeInMemorySession()
+                        _state.value = SessionState.SignedOut
+                    }
+                }
+            }
         } catch (error: kotlinx.coroutines.CancellationException) {
             throw error
         } catch (error: Throwable) {
             ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
                 tag = "AUTH",
-                message = "Could not initialize a locked session (${error.javaClass.simpleName})",
+                message = "Could not restore encrypted session (${error.javaClass.simpleName})",
                 level = "WARN",
             )
             purgeInMemorySession()
@@ -499,17 +572,6 @@ class SessionManager @Inject constructor(
             runCatching { refreshProfile() }
         }
         return res
-    }
-
-    /** Lock the local UI and disable automatic restoration until the next successful sign-in. */
-    fun lockForBackground() {
-        if (_state.value !is SessionState.Active) return
-        purgeInMemorySession()
-        _state.value = SessionState.SignedOut
-        scope.launch {
-            runCatching { preferences.disableSessionRestore(disabled = true) }
-            runCatching { preferences.clearSession() }
-        }
     }
 
     suspend fun signOut(reason: String? = null) {

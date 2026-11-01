@@ -49,6 +49,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -112,6 +113,7 @@ fun QrDeviceScreen(
     val language = LocalAtlasLanguage.current
     val statusMessage = state.statusMessage?.let { atlasNotice(it, language) }
     val errorMessage = state.error?.let { atlasNotice(it, language) }
+    var deviceDetailsRevealed by remember(currentUser?.scopeIdentity) { mutableStateOf(false) }
     val cameraPermissionDeniedMessage = if (mode == QrDeviceMode.SIGN_IN_PHONE) {
         atlasText(
             "Caméra refusée — collez le lien ou code QR ci-dessous.",
@@ -503,7 +505,7 @@ fun QrDeviceScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = atlasText("Autres appareils (${otherDevices.size})", "Other devices (${otherDevices.size})", "أجهزة أخرى (${otherDevices.size})"),
+                            text = atlasText("Autres appareils", "Other devices", "أجهزة أخرى"),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -519,25 +521,53 @@ fun QrDeviceScreen(
                     }
                 }
 
-                if (state.devicesLoading && otherDevices.isEmpty()) {
-                    item { AtlasDeviceListSkeleton(Modifier.fillMaxWidth(), rows = 2) }
-                } else if (otherDevices.isEmpty()) {
+                item {
+                    TextButton(
+                        onClick = { deviceDetailsRevealed = !deviceDetailsRevealed },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            if (deviceDetailsRevealed) {
+                                atlasText("Masquer les appareils", "Hide devices", "إخفاء الأجهزة")
+                            } else {
+                                atlasText("Afficher les appareils", "Show devices", "إظهار الأجهزة")
+                            },
+                        )
+                    }
+                }
+
+                if (deviceDetailsRevealed) {
                     item {
-                        SecurityCard {
-                            Text(
-                                text = atlasText("Aucun autre appareil enregistré sur ce compte.", "No other devices are registered to this account.", "لا توجد أجهزة أخرى مسجّلة لهذا الحساب."),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Text(
+                            atlasText(
+                                "Autres appareils (${otherDevices.size})",
+                                "Other devices (${otherDevices.size})",
+                                "أجهزة أخرى (${otherDevices.size})",
+                            ),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (state.devicesLoading && otherDevices.isEmpty()) {
+                        item { AtlasDeviceListSkeleton(Modifier.fillMaxWidth(), rows = 2) }
+                    } else if (otherDevices.isEmpty()) {
+                        item {
+                            SecurityCard {
+                                Text(
+                                    text = atlasText("Aucun autre appareil enregistré sur ce compte.", "No other devices are registered to this account.", "لا توجد أجهزة أخرى مسجّلة لهذا الحساب."),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    } else {
+                        items(otherDevices, key = { it.revokeId.ifBlank { it.hashCode().toString() } }) { device ->
+                            SecurityDeviceRow(
+                                device = device,
+                                revoking = state.revokingId == device.revokeId,
+                                onRevoke = { viewModel.revokeDevice(device) },
                             )
                         }
-                    }
-                } else {
-                    items(otherDevices, key = { it.revokeId.ifBlank { it.hashCode().toString() } }) { device ->
-                        SecurityDeviceRow(
-                            device = device,
-                            revoking = state.revokingId == device.revokeId,
-                            onRevoke = { viewModel.revokeDevice(device) },
-                        )
                     }
                 }
             }

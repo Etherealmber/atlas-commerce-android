@@ -80,6 +80,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.util.openExternal
@@ -112,6 +114,7 @@ fun ProblemReportDialog(
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val language = LocalAtlasLanguage.current
     val scope = rememberCoroutineScope()
     val session by appViewModel.session.collectAsStateWithLifecycle()
     val activeRole = (session as? SessionState.Active)?.user?.role
@@ -122,7 +125,7 @@ fun ProblemReportDialog(
     var steps by remember { mutableStateOf("") }
     var compressing by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
-    var submitError by remember { mutableStateOf<String?>(null) }
+    var submitError by remember { mutableStateOf<ApiResult.Failure?>(null) }
     val attachments = remember { mutableStateListOf<CompressedReportAttachment>() }
 
     val snapshot = remember(screenOrigin, activeRole) {
@@ -363,18 +366,22 @@ fun ProblemReportDialog(
                     }
                 }
 
-                submitError?.let { error ->
+                submitError?.let { failure ->
                     Surface(
                         color = MaterialTheme.colorScheme.errorContainer,
                         shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            text = atlasText(
-                                "Envoi impossible. Vérifiez votre connexion et réessayez.",
-                                "Could not send the report. Check your connection and try again.",
-                                "تعذّر إرسال البلاغ. تحقق من اتصالك وحاول مجدداً.",
-                            ),
+                            text = if (failure.message.isBlank()) {
+                                atlasText(
+                                    "Envoi impossible. Vérifiez votre connexion et réessayez.",
+                                    "Could not send the report. Check your connection and try again.",
+                                    "تعذّر إرسال البلاغ. تحقق من اتصالك وحاول مجدداً.",
+                                )
+                            } else {
+                                atlasNotice(failure.message, language)
+                            },
                             modifier = Modifier.padding(12.dp),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer,
@@ -488,7 +495,7 @@ fun ProblemReportDialog(
                                     "User report submission failed: code=${result.code}; http=${result.httpStatus ?: "none"}; message=${AtlasLogBuffer.sanitize(result.message).take(180)}",
                                     "ERROR",
                                 )
-                                submitError = "report_send_failed"
+                                submitError = result
                             }
                         }
                     }
