@@ -247,9 +247,11 @@ class AppViewModel @Inject constructor(
 
     private val _agentPolicy = MutableStateFlow<AgentPolicyDto?>(null)
     val agentPolicy: StateFlow<AgentPolicyDto?> = _agentPolicy.asStateFlow()
+    private var agentPolicyLoadGeneration = 0L
 
     private val _devices = MutableStateFlow<List<TrustedDeviceDto>>(emptyList())
     val devices: StateFlow<List<TrustedDeviceDto>> = _devices.asStateFlow()
+    private var devicesLoadGeneration = 0L
 
     private val _devicesLoading = MutableStateFlow(false)
     val devicesLoading: StateFlow<Boolean> = _devicesLoading.asStateFlow()
@@ -302,7 +304,10 @@ class AppViewModel @Inject constructor(
                 .map { st -> (st as? SessionState.Active)?.user?.scopeIdentity }
                 .distinctUntilChanged()
                 .collect { identity ->
+                    devicesLoadGeneration += 1
                     _devices.value = emptyList()
+                    _devicesLoading.value = false
+                    agentPolicyLoadGeneration += 1
                     _agentPolicy.value = null
                     _cachedProductCount.value = 0
                     if (identity != null) {
@@ -416,12 +421,13 @@ class AppViewModel @Inject constructor(
     }
 
     fun refreshAgentPolicy() {
-        if (sessionManager.state.value !is SessionState.Active) return
+        val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity ?: return
+        val generation = ++agentPolicyLoadGeneration
         viewModelScope.launch {
-            when (val res = commerceRepository.agentPolicy()) {
-                is ApiResult.Success -> _agentPolicy.value = res.data
-                is ApiResult.Failure -> Unit
-            }
+            val result = commerceRepository.agentPolicy()
+            val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (generation != agentPolicyLoadGeneration || currentScope != requestedScope) return@launch
+            if (result is ApiResult.Success) _agentPolicy.value = result.data
         }
     }
 
@@ -465,13 +471,34 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun isCurrentDevice(device: TrustedDeviceDto): Boolean {
+        val fingerprint = sessionManager.fingerprint
+        val shortFingerprint = device.fingerprint.removeSuffix("…").removeSuffix("...")
+        return device.current || device.full.equals(fingerprint, ignoreCase = true) ||
+            (shortFingerprint.isNotBlank() && fingerprint.startsWith(shortFingerprint, ignoreCase = true))
+    }
+
     fun loadDevices() {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+        val requestedScope = activeUser?.scopeIdentity
+        if (requestedScope == null) {
+            devicesLoadGeneration += 1
+            _devices.value = emptyList()
+            _devicesLoading.value = false
+            return
+        }
+        val requestGeneration = ++devicesLoadGeneration
         viewModelScope.launch {
+            val startingScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (requestGeneration != devicesLoadGeneration || startingScope != requestedScope) return@launch
             _devicesLoading.value = true
-            when (val res = authRepository.devices()) {
+            val result = authRepository.devices()
+            val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (requestGeneration != devicesLoadGeneration || currentScope != requestedScope) return@launch
+            when (result) {
                 is ApiResult.Failure -> _devicesLoading.value = false
                 is ApiResult.Success -> {
-                    _devices.value = res.data
+                    _devices.value = result.data
                     _devicesLoading.value = false
                 }
             }
@@ -495,11 +522,19 @@ class AppViewModel @Inject constructor(
 
     fun revokeDevice(device: TrustedDeviceDto, onDone: (String) -> Unit) {
         val targetId = device.revokeId
-        if (targetId.isBlank()) return
+        val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+        if (targetId.isBlank() || requestedScope == null) return
         viewModelScope.launch {
+            val startingScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (startingScope != requestedScope) return@launch
             when (val res = authRepository.revokeDevice(targetId)) {
-                is ApiResult.Failure -> onDone(res.message)
+                is ApiResult.Failure -> {
+                    if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope) {
+                        onDone(res.message)
+                    }
+                }
                 is ApiResult.Success -> {
+                    if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
                     onDone("${device.friendlyLabel} révoqué.")
                     if (device.current) {
                         sessionManager.signOut("Session révoquée sur cet appareil.")

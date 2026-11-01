@@ -73,6 +73,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
+import ma.etherealmber.atlascommerce.ui.components.AtlasDeviceListSkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.BarcodeCameraView
 import ma.etherealmber.atlascommerce.ui.components.CameraVisualStyle
@@ -102,6 +103,7 @@ fun QrDeviceScreen(
     viewModel: QrDeviceViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val otherDevices = remember(state.devices, viewModel) { state.devices.filterNot(viewModel::isCurrentDevice) }
     val autoOpenCamera by viewModel.autoOpenCamera.collectAsStateWithLifecycle()
     val scanHaptic by viewModel.scanHapticEnabled.collectAsStateWithLifecycle()
     val scanSound by viewModel.scanSoundEnabled.collectAsStateWithLifecycle()
@@ -501,13 +503,13 @@ fun QrDeviceScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = atlasText("Appareils connectés (${state.devices.size})", "Connected devices (${state.devices.size})", "الأجهزة المتصلة (${state.devices.size})"),
+                            text = atlasText("Autres appareils (${otherDevices.size})", "Other devices (${otherDevices.size})", "أجهزة أخرى (${otherDevices.size})"),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f),
                         )
-                        IconButton(onClick = viewModel::loadDevices) {
+                        IconButton(onClick = viewModel::loadDevices, enabled = !state.devicesLoading) {
                             Icon(
                                 imageVector = Icons.Outlined.Refresh,
                                 contentDescription = atlasText("Actualiser les appareils", "Refresh devices", "تحديث الأجهزة"),
@@ -517,13 +519,9 @@ fun QrDeviceScreen(
                     }
                 }
 
-                if (state.devicesLoading && state.devices.isEmpty()) {
-                    item {
-                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-                        }
-                    }
-                } else if (state.devices.isEmpty()) {
+                if (state.devicesLoading && otherDevices.isEmpty()) {
+                    item { AtlasDeviceListSkeleton(Modifier.fillMaxWidth(), rows = 2) }
+                } else if (otherDevices.isEmpty()) {
                     item {
                         SecurityCard {
                             Text(
@@ -534,7 +532,7 @@ fun QrDeviceScreen(
                         }
                     }
                 } else {
-                    items(state.devices, key = { it.revokeId.ifBlank { it.hashCode().toString() } }) { device ->
+                    items(otherDevices, key = { it.revokeId.ifBlank { it.hashCode().toString() } }) { device ->
                         SecurityDeviceRow(
                             device = device,
                             revoking = state.revokingId == device.revokeId,

@@ -146,7 +146,7 @@ fun AtlasWelcomeOnboardingScreen(
     }
 
     val escapeLabel = if (isLoggedIn) {
-        atlasText("Aller au tableau de bord", "Go to dashboard", "الذهاب إلى لوحة التحكم")
+        atlasText("Passer", "Skip", "تخطي")
     } else {
         atlasText("Se connecter", "Log in", "تسجيل الدخول")
     }
@@ -161,11 +161,15 @@ fun AtlasWelcomeOnboardingScreen(
                 .navigationBarsPadding()
                 .padding(horizontal = 22.dp),
         ) {
-            Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
-                AtlasMark(Modifier.align(Alignment.CenterStart), size = 28.dp)
+            Row(
+                Modifier.fillMaxWidth().height(60.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AtlasMark(size = 28.dp)
+                Spacer(Modifier.width(8.dp))
                 Row(
-                    Modifier.align(Alignment.Center),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     repeat(indicatorCount) { page ->
@@ -186,6 +190,7 @@ fun AtlasWelcomeOnboardingScreen(
                         )
                         Box(
                             Modifier
+                                .padding(horizontal = 3.dp)
                                 .width(dotWidth)
                                 .height(7.dp)
                                 .clip(CircleShape)
@@ -198,8 +203,9 @@ fun AtlasWelcomeOnboardingScreen(
                         )
                     }
                 }
+                Spacer(Modifier.width(8.dp))
                 Surface(
-                    modifier = Modifier.align(Alignment.CenterEnd).clickable(onClick = onComplete),
+                    modifier = Modifier.heightIn(min = 44.dp).clickable(onClick = onComplete),
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -207,7 +213,7 @@ fun AtlasWelcomeOnboardingScreen(
                 ) {
                     Text(
                         escapeLabel,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,

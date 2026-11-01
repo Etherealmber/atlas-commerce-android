@@ -80,7 +80,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
-import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
+import ma.etherealmber.atlascommerce.ui.components.AtlasDashboardSkeleton
+import ma.etherealmber.atlascommerce.ui.components.AtlasFinanceSkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasOfflineBanner
 import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
@@ -242,7 +243,7 @@ fun HomeScreen(
     }
 
     when {
-        state.loading && dashboard == null -> AtlasLoading(message = "Chargement du tableau de bord…")
+        state.loading && dashboard == null -> AtlasDashboardSkeleton(Modifier.fillMaxSize())
         dashboard == null -> HomeErrorContent(
             user = user,
             message = atlasNotice(state.error ?: "Vérifiez l'adresse du serveur et votre connexion.", LocalAtlasLanguage.current),
@@ -258,6 +259,7 @@ fun HomeScreen(
             state = state,
             dashboard = dashboard,
             onRefresh = viewModel::refresh,
+            onRefreshFinance = viewModel::refreshFinance,
             onOpenProducts = onOpenProducts,
             onOpenSale = onOpenSale,
             onOpenScan = onOpenScan,
@@ -357,6 +359,7 @@ private fun HomeContent(
     state: HomeViewModel.UiState,
     dashboard: DashboardDto,
     onRefresh: () -> Unit,
+    onRefreshFinance: () -> Unit,
     onOpenProducts: () -> Unit,
     onOpenSale: () -> Unit,
     onOpenScan: () -> Unit,
@@ -596,21 +599,25 @@ private fun HomeContent(
         }
 
         if (isAdmin) {
-            item {
-                FinanceAdminCard(
-                    summary = state.finance,
-                    payroll = state.payroll,
-                    loading = state.financeLoading,
-                    error = state.financeError,
-                    reportGenerating = state.reportGenerating,
-                    payrollLoadingMore = state.payrollLoadingMore,
-                    selectedPeriod = state.selectedFinancePeriod,
-                    onRefresh = onRefresh,
-                    onSelectPeriod = onSelectFinancePeriod,
-                    onLoadMorePayroll = onLoadMorePayroll,
-                    onExportReport = onExportFinanceReport,
-                    onOpenCombinedReport = onOpenCombinedReport,
-                )
+            item(key = "home_finance") {
+                if (state.financeLoading && state.finance == null) {
+                    AtlasFinanceSkeleton(Modifier.fillMaxWidth())
+                } else {
+                    FinanceAdminCard(
+                        summary = state.finance,
+                        payroll = state.payroll,
+                        loading = state.financeLoading,
+                        error = state.financeError,
+                        reportGenerating = state.reportGenerating,
+                        payrollLoadingMore = state.payrollLoadingMore,
+                        selectedPeriod = state.selectedFinancePeriod,
+                        onRefresh = onRefreshFinance,
+                        onSelectPeriod = onSelectFinancePeriod,
+                        onLoadMorePayroll = onLoadMorePayroll,
+                        onExportReport = onExportFinanceReport,
+                        onOpenCombinedReport = onOpenCombinedReport,
+                    )
+                }
             }
         }
 
@@ -838,7 +845,7 @@ private fun FinanceAdminCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (loading && summary == null) {
+            if (loading) {
                 androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             } else {
                 IconButton(onClick = onRefresh) {

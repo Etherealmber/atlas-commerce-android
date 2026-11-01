@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce.ui.screens.notifications
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,6 +61,8 @@ class NotificationsViewModel @Inject constructor(
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
+    private var refreshJob: Job? = null
+
     private val _messages = MutableSharedFlow<String>(
         extraBufferCapacity = 4,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
@@ -72,6 +75,7 @@ class NotificationsViewModel @Inject constructor(
                 .map { st -> (st as? SessionState.Active)?.user?.scopeIdentity }
                 .distinctUntilChanged()
                 .collect { key ->
+                    refreshJob?.cancel()
                     _state.value = UiState()
                     if (key != null) {
                         refresh()
@@ -85,11 +89,12 @@ class NotificationsViewModel @Inject constructor(
     }
 
     fun refresh() {
-        viewModelScope.launch {
-            val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
-            val role = activeUser?.role ?: Roles.USER
-            val username = activeUser?.username.orEmpty()
-
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return
+        val requestedScope = activeUser.scopeIdentity
+        val role = activeUser.role
+        val username = activeUser.username
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
             _state.update {
                 it.copy(
                     loading = true,
@@ -100,20 +105,16 @@ class NotificationsViewModel @Inject constructor(
             }
             val alertsRes = commerceRepository.alerts()
             val actionsRes = commerceRepository.mobileActions("all")
+            val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (currentScope != requestedScope) return@launch
 
             val rawAlerts = (alertsRes as? ApiResult.Success)?.data.orEmpty()
             val rawActions = (actionsRes as? ApiResult.Success)?.data.orEmpty()
-
             val filteredAlerts = Roles.filterAlertsForRole(role, rawAlerts)
             val filteredActions = rawActions.filter {
                 Roles.isActionVisibleForUser(role = role, username = username, action = it)
             }
-
-            val err = if (alertsRes is ApiResult.Failure && actionsRes is ApiResult.Failure) {
-                alertsRes.message
-            } else {
-                null
-            }
+            val err = if (alertsRes is ApiResult.Failure && actionsRes is ApiResult.Failure) alertsRes.message else null
             _state.update {
                 it.copy(
                     loading = false,

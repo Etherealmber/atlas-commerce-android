@@ -50,7 +50,7 @@ internal fun SnakeState.step(random: Random = Random.Default): SnakeState {
     val occupied = if (growing) body else body.dropLast(1)
     if (next in occupied) return copy(over = true)
 
-    // Apples add one link; the rare crown bonus adds two. The old tail is allowed
+    // Atlas logos add one link; the rare Etherealmber bonus logo adds two. The old tail is allowed
     // to vacate its cell on an ordinary move, matching familiar Snake rules.
     val newBody = when {
         eatingCrown -> listOf(next) + body + body.last()

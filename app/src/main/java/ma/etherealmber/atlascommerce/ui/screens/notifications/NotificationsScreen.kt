@@ -66,7 +66,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
-import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
+import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonList
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
@@ -212,7 +212,7 @@ fun NotificationsScreen(
             when {
                 state.loading && state.alerts.isEmpty() && state.actions.isEmpty() -> {
                     item {
-                        AtlasLoading(message = atlasText("Chargement de l'Info Box…", "Loading Info Box…", "جارٍ تحميل صندوق المعلومات…"))
+                        AtlasSkeletonList(Modifier.fillMaxWidth(), rows = 4, avatarSize = 38.dp)
                     }
                 }
 

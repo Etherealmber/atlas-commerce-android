@@ -28,7 +28,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -40,6 +39,7 @@ import androidx.compose.ui.res.painterResource
 import ma.etherealmber.atlascommerce.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -229,7 +229,7 @@ private fun MenuPage(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            atlasText("Ramassez les logos Atlas et attrapez les couronnes !", "Collect Atlas logos and catch the crowns!", "اجمع شعارات Atlas والتقط التيجان!" ),
+            atlasText("Ramassez les logos Atlas et le logo Etherealmber !", "Collect Atlas logos and the Etherealmber logo!", "اجمع شعارات Atlas وشعار Etherealmber!" ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -243,13 +243,13 @@ private fun MenuPage(
             Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                     StatBadge(
-                        icon = { CrownGlyph(Modifier.size(24.dp)) },
+                        icon = { EtherealmberLogoGlyph(Modifier.size(24.dp), size = 24.dp) },
                         label = atlasText("Record perso", "Personal best", "أفضل نتيجة شخصية"),
                         value = bestScore,
                     )
                     StatBadge(
-                        icon = { AtlasAvatar(AppDetails.GITHUB_AVATAR_URL, AppDetails.GITHUB_HANDLE, size = 22.dp) },
-                        label = atlasText("Couronnes", "Crowns", "التيجان"),
+                        icon = { EtherealmberLogoGlyph(Modifier.size(22.dp), size = 22.dp) },
+                        label = atlasText("Etherealmber", "Etherealmber", "Etherealmber"),
                         value = bestCrowns,
                     )
                 }
@@ -304,12 +304,12 @@ private fun GameplayPage(
         Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
             StatBadge(icon = { AtlasLogoGlyph(Modifier.size(22.dp)) }, label = atlasText("Atlas", "Atlas", "Atlas"), value = game.score)
             StatBadge(
-                icon = { AtlasAvatar(AppDetails.GITHUB_AVATAR_URL, AppDetails.GITHUB_HANDLE, size = 22.dp) },
-                label = atlasText("Couronnes", "Crowns", "التيجان"),
+                icon = { EtherealmberLogoGlyph(Modifier.size(22.dp), size = 22.dp) },
+                label = atlasText("Etherealmber", "Etherealmber", "Etherealmber"),
                 value = game.crowns,
             )
             StatBadge(
-                icon = { CrownGlyph(Modifier.size(22.dp)) },
+                icon = { EtherealmberLogoGlyph(Modifier.size(22.dp), size = 22.dp) },
                 label = atlasText("Record perso", "Personal best", "أفضل نتيجة شخصية"),
                 value = bestScore,
             )
@@ -404,14 +404,14 @@ private fun CrownCollectedToast(visible: Boolean, modifier: Modifier = Modifier)
         Surface(
             shape = RoundedCornerShape(50),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC928).copy(alpha = 0.58f)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.58f)),
             shadowElevation = 6.dp,
         ) {
             Row(Modifier.padding(horizontal = 13.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                CrownGlyph(Modifier.size(19.dp))
+                EtherealmberLogoGlyph(Modifier.size(19.dp), size = 19.dp)
                 Spacer(Modifier.width(7.dp))
                 Text(
-                    atlasText("Couronne +2", "Crown +2", "تاج +٢"),
+                    atlasText("Etherealmber +2", "Etherealmber +2", "Etherealmber +٢"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -470,7 +470,7 @@ private fun SettingsPage(
             Switch(checked = wrapWalls, onCheckedChange = onWrapWalls)
         }
         Text(
-            atlasText("Les logos Atlas allongent le serpent. Une couronne apparaît après cinq logos et donne deux segments bonus.", "Atlas logos grow the snake. A crown appears after five logos and awards two bonus segments.", "شعارات Atlas تطيل الثعبان. يظهر التاج بعد خمسة شعارات ويمنح قطعتين إضافيتين."),
+            atlasText("Les logos Atlas allongent le serpent. Le logo Etherealmber apparaît après cinq logos et donne deux segments bonus.", "Atlas logos grow the snake. The Etherealmber logo appears after five logos and awards two bonus segments.", "شعارات Atlas تطيل الثعبان. يظهر شعار Etherealmber بعد خمسة شعارات ويمنح قطعتين إضافيتين."),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -484,7 +484,7 @@ private fun DailyPage(modifier: Modifier, target: Int, dailyBest: Int, onStart: 
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        CrownGlyph(Modifier.size(64.dp))
+        EtherealmberLogoGlyph(Modifier.size(64.dp), size = 64.dp)
         Text(atlasText("Défi du jour", "Daily challenge", "تحدي اليوم"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
             atlasText("Ramassez $target logos Atlas en une seule partie. Évitez les murs et votre propre queue.", "Collect $target Atlas logos in one run. Avoid walls and your own tail.", "اجمع $target من شعارات Atlas في جولة واحدة. تجنب الجدران وذيلك."),
@@ -529,7 +529,6 @@ private fun SnakeBoard(game: SnakeState, modifier: Modifier = Modifier, showEyes
             for (y in 0 until BOARD_SIZE) for (x in 0 until BOARD_SIZE) {
                 drawRect(if ((x + y) % 2 == 0) light else dark, Offset(x * cell, y * cell), Size(cell, cell))
             }
-            game.crown?.let { drawCrownAt(it, cell) }
             game.body.forEachIndexed { index, point ->
                 val inset = cell * 0.075f
                 val topLeft = Offset(point.x * cell + inset, point.y * cell + inset)
@@ -566,6 +565,21 @@ private fun SnakeBoard(game: SnakeState, modifier: Modifier = Modifier, showEyes
                 )
             }
         }
+        game.crown?.takeIf { it.x in 0 until BOARD_SIZE && it.y in 0 until BOARD_SIZE }?.let { point ->
+            val tokenSize = cellSize * 0.84f
+            EtherealmberLogoGlyph(
+                modifier = Modifier.offset(
+                    x = cellSize * point.x + (cellSize - tokenSize) / 2,
+                    y = cellSize * point.y + (cellSize - tokenSize) / 2,
+                ).size(tokenSize),
+                size = tokenSize,
+                contentDescription = atlasText(
+                    "Logo Etherealmber à collecter",
+                    "Etherealmber logo to collect",
+                    "شعار Etherealmber للجمع",
+                ),
+            )
+        }
         if (game.over) {
             Surface(
                 modifier = Modifier.align(Alignment.Center).padding(24.dp),
@@ -585,26 +599,6 @@ private fun SnakeBoard(game: SnakeState, modifier: Modifier = Modifier, showEyes
             }
         }
     }
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCrownAt(point: Cell, cell: Float) {
-    val left = (point.x + 0.17f) * cell
-    val top = (point.y + 0.22f) * cell
-    val right = (point.x + 0.83f) * cell
-    val bottom = (point.y + 0.77f) * cell
-    val crown = Path().apply {
-        moveTo(left, top + cell * 0.13f)
-        lineTo(left + cell * 0.06f, bottom - cell * 0.12f)
-        lineTo(right - cell * 0.06f, bottom - cell * 0.12f)
-        lineTo(right, top + cell * 0.13f)
-        lineTo((point.x + 0.66f) * cell, top + cell * 0.31f)
-        lineTo((point.x + 0.5f) * cell, top)
-        lineTo((point.x + 0.34f) * cell, top + cell * 0.31f)
-        close()
-    }
-    drawPath(crown, Color(0xFFFFC928))
-    drawRoundRect(Color(0xFFE7A914), Offset(left + cell * 0.04f, bottom - cell * 0.13f), Size(right - left - cell * 0.08f, cell * 0.13f), CornerRadius(cell * 0.05f))
-    drawCircle(Color.White.copy(alpha = 0.8f), cell * 0.045f, Offset((point.x + 0.5f) * cell, (point.y + 0.38f) * cell))
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSnakeEyes(head: Cell, cell: Float, direction: Direction) {
@@ -640,28 +634,21 @@ private fun AtlasLogoGlyph(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun CrownGlyph(modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val left = size.width * 0.12f
-        val right = size.width * 0.88f
-        val top = size.height * 0.18f
-        val bottom = size.height * 0.82f
-        val crown = Path().apply {
-            moveTo(left, top + size.height * 0.24f)
-            quadraticTo(left + size.width * 0.02f, top + size.height * 0.13f, left + size.width * 0.12f, top + size.height * 0.22f)
-            lineTo(size.width * 0.33f, top + size.height * 0.36f)
-            quadraticTo(size.width * 0.39f, top + size.height * 0.40f, size.width * 0.43f, top + size.height * 0.30f)
-            lineTo(size.width * 0.48f, top + size.height * 0.10f)
-            quadraticTo(size.width * 0.5f, top - size.height * 0.01f, size.width * 0.52f, top + size.height * 0.10f)
-            lineTo(size.width * 0.57f, top + size.height * 0.30f)
-            quadraticTo(size.width * 0.61f, top + size.height * 0.40f, size.width * 0.67f, top + size.height * 0.36f)
-            lineTo(right - size.width * 0.12f, top + size.height * 0.22f)
-            quadraticTo(right - size.width * 0.02f, top + size.height * 0.13f, right, top + size.height * 0.24f)
-            lineTo(right - size.width * 0.08f, bottom - size.height * 0.12f)
-            quadraticTo(size.width * 0.5f, bottom, left + size.width * 0.08f, bottom - size.height * 0.12f)
-            close()
-        }
-        drawPath(crown, Color(0xFFFFC928))
-        drawRoundRect(Color(0xFFE7A914), Offset(left + size.width * 0.05f, bottom - size.height * 0.12f), Size(right - left - size.width * 0.1f, size.height * 0.14f), CornerRadius(size.minDimension * 0.08f))
-    }
+private fun EtherealmberLogoGlyph(
+    modifier: Modifier = Modifier,
+    size: Dp = 36.dp,
+    contentDescription: String? = null,
+) {
+    AtlasAvatar(
+        avatarUrl = AppDetails.GITHUB_AVATAR_URL,
+        label = AppDetails.GITHUB_HANDLE,
+        modifier = modifier,
+        size = size,
+        borderColor = MaterialTheme.colorScheme.tertiary,
+        clickContentDescription = contentDescription ?: atlasText(
+            "Logo Etherealmber",
+            "Etherealmber logo",
+            "شعار Etherealmber",
+        ),
+    )
 }

@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -73,6 +74,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -138,6 +140,19 @@ private fun LoginScreenContent(
     viewModel: LoginViewModel,
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val loginPanelProgress = remember(motionEnabled) { Animatable(if (motionEnabled) 0f else 1f) }
+    LaunchedEffect(motionEnabled) {
+        if (motionEnabled) {
+            delay(70)
+            loginPanelProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 460, easing = FastOutSlowInEasing),
+            )
+        } else {
+            loginPanelProgress.snapTo(1f)
+        }
+    }
+    val loginPanelOffsetPx = with(LocalDensity.current) { 16.dp.toPx() }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val server by viewModel.server.collectAsStateWithLifecycle()
     val savedAccounts by viewModel.savedAccounts.collectAsStateWithLifecycle()
@@ -232,6 +247,13 @@ private fun LoginScreenContent(
                     .clip(RoundedCornerShape(28.dp))
                     .background(MaterialTheme.colorScheme.surface)
                     .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)), RoundedCornerShape(28.dp))
+                    .graphicsLayer {
+                        val progress = loginPanelProgress.value
+                        alpha = progress
+                        translationY = (1f - progress) * loginPanelOffsetPx
+                        scaleX = 0.985f + 0.015f * progress
+                        scaleY = 0.985f + 0.015f * progress
+                    }
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = if (compact) 20.dp else 28.dp, vertical = 18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,

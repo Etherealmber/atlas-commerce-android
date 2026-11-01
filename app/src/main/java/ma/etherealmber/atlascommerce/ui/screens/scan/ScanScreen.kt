@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CameraAlt
@@ -75,6 +76,8 @@ import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasShimmer
+import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonBlock
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
@@ -325,7 +328,19 @@ fun ScanScreen(
                     .padding(horizontal = Atlas.density.screenPadding, vertical = 12.dp),
             ) {
                 // Needed items & open scan requests quick strip
-                if (state.neededItems.isNotEmpty() || state.openRequests.isNotEmpty()) {
+                if (state.neededContextLoading && state.neededItems.isEmpty() && state.openRequests.isEmpty()) {
+                    Text(
+                        text = atlasText("Articles nécessaires & demandes ouvertes", "Needed items & open requests", "الأصناف المطلوبة والطلبات المفتوحة"),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    AtlasShimmer {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            repeat(3) { AtlasSkeletonBlock(Modifier.size(width = 120.dp, height = 32.dp), RoundedCornerShape(99.dp)) }
+                        }
+                    }
+                } else if (state.neededItems.isNotEmpty() || state.openRequests.isNotEmpty()) {
                     Text(
                         text = atlasText("Articles nécessaires & demandes ouvertes", "Needed items & open requests", "الأصناف المطلوبة والطلبات المفتوحة"),
                         style = MaterialTheme.typography.labelMedium,
@@ -492,22 +507,24 @@ private fun ScanResultPanel(
                 }
 
                 state.lookingUp -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = atlasText("Recherche de ${state.lastCode}…", "Searching for ${state.lastCode}…", "جارٍ البحث عن ${state.lastCode}…"),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                        )
-                        OutlinedButton(onClick = onCancelScan) {
-                            Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(atlasText("Annuler", "Cancel", "إلغاء"))
+                    AtlasCard(padding = 12.dp) {
+                        AtlasShimmer {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                AtlasSkeletonBlock(Modifier.size(42.dp), RoundedCornerShape(14.dp))
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    AtlasSkeletonBlock(Modifier.fillMaxWidth(0.8f).height(14.dp))
+                                    AtlasSkeletonBlock(Modifier.fillMaxWidth(0.56f).height(11.dp))
+                                }
+                                OutlinedButton(onClick = onCancelScan) {
+                                    Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(atlasText("Annuler", "Cancel", "إلغاء"))
+                                }
+                            }
                         }
                     }
                 }

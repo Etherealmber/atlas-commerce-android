@@ -58,6 +58,7 @@ class ScanViewModel @Inject constructor(
         val error: String? = null,
         val neededItems: List<ProductDto> = emptyList(),
         val openRequests: List<ProductCreationRequestDto> = emptyList(),
+        val neededContextLoading: Boolean = false,
     ) {
         val hasActiveScan: Boolean
             get() = lookingUp ||
@@ -118,16 +119,20 @@ class ScanViewModel @Inject constructor(
     }
 
     fun loadNeededContext() {
+        val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity ?: return
         viewModelScope.launch {
+            _state.update { it.copy(neededContextLoading = true) }
             val prods = commerceRepository.products(limit = 200)
             val reqs = commerceRepository.productRequests("open")
+            val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (currentScope != requestedScope) return@launch
             val needed = (prods as? ApiResult.Success)?.data
                 ?.filter { it.isLowStock || it.isOutOfStock }
                 ?.sortedBy { it.stock }
                 ?.take(6)
                 .orEmpty()
             val openReqs = (reqs as? ApiResult.Success)?.data?.take(6).orEmpty()
-            _state.update { it.copy(neededItems = needed, openRequests = openReqs) }
+            _state.update { it.copy(neededItems = needed, openRequests = openReqs, neededContextLoading = false) }
         }
     }
 

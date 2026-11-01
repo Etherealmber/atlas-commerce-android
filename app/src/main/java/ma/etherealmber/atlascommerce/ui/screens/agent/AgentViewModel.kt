@@ -246,6 +246,7 @@ class AgentViewModel @Inject constructor(
     }
 
     fun refreshContext(loadLatestRemoteThread: Boolean = false) {
+        val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity ?: return
         viewModelScope.launch {
             val statusDef = async { commerceRepository.assistStatus() }
             val policyDef = async { commerceRepository.agentPolicy() }
@@ -257,6 +258,8 @@ class AgentViewModel @Inject constructor(
             val nextRes = nextDef.await()
             val threadsRes = threadsDef.await()
 
+            val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (currentScope != requestedScope) return@launch
             val remoteThreads = newestAgentThreadsFirst((threadsRes as? ApiResult.Success)?.data.orEmpty())
             _state.update {
                 it.copy(

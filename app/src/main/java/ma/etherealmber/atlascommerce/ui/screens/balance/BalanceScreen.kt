@@ -75,7 +75,7 @@ import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
-import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
+import ma.etherealmber.atlascommerce.ui.components.AtlasFinanceSkeleton
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
 import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
@@ -244,7 +244,7 @@ fun BalanceScreen(
         return
     }
     if (state.loading && state.finance == null) {
-        AtlasLoading(message = atlasText("Chargement des soldes et mouvements…", "Loading balances and transactions…", "جارٍ تحميل الأرصدة والحركات…"))
+        AtlasFinanceSkeleton(Modifier.fillMaxSize(), scrollable = true)
         return
     }
 
