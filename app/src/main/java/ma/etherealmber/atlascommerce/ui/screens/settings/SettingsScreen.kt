@@ -110,6 +110,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
 import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
+import ma.etherealmber.atlascommerce.ui.components.AtlasDeviceListSkeleton
+import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonList
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
 import ma.etherealmber.atlascommerce.ui.i18n.localizeReleaseNotes
@@ -848,6 +850,7 @@ fun SettingsScreen(
     val releaseChangelog by appViewModel.releaseChangelog.collectAsStateWithLifecycle()
     val releaseChangelogLoading by appViewModel.releaseChangelogLoading.collectAsStateWithLifecycle()
     val devices by appViewModel.devices.collectAsStateWithLifecycle()
+    val otherDevices = remember(devices, appViewModel) { devices.filterNot(appViewModel::isCurrentDevice) }
     val devicesLoading by appViewModel.devicesLoading.collectAsStateWithLifecycle()
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
@@ -919,7 +922,7 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (releaseChangelog.isEmpty() && releaseChangelogLoading) {
-                        CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                        AtlasSkeletonList(Modifier.fillMaxWidth(), rows = 3, avatarSize = 32.dp)
                     } else if (releaseChangelog.isEmpty()) {
                         Text(
                             atlasText("Aucune version publiée n'est disponible pour le moment."),
@@ -1038,7 +1041,7 @@ fun SettingsScreen(
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = atlasText("Appareils connectés & QR PC (${devices.size})", "Connected devices & PC QR (${devices.size})", "الأجهزة المتصلة وQR الكمبيوتر (${devices.size})"),
+                        text = atlasText("Autres appareils connectés & QR PC (${otherDevices.size})", "Other connected devices & PC QR (${otherDevices.size})", "الأجهزة الأخرى المتصلة وQR الكمبيوتر (${otherDevices.size})"),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -1059,15 +1062,23 @@ fun SettingsScreen(
                 icon = Icons.Outlined.QrCode2,
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (devices.isNotEmpty()) {
-                Spacer(Modifier.height(10.dp))
-                devices.forEachIndexed { idx, device ->
-                    if (idx > 0) AtlasDivider(Modifier.padding(vertical = 6.dp))
-                    ConnectedDeviceRow(
-                        device = device,
-                        onRevoke = { appViewModel.revokeDevice(device, onToast) },
-                    )
+            when {
+                devicesLoading && otherDevices.isEmpty() -> AtlasDeviceListSkeleton(Modifier.fillMaxWidth(), rows = 2)
+                otherDevices.isNotEmpty() -> {
+                    Spacer(Modifier.height(10.dp))
+                    otherDevices.forEachIndexed { idx, device ->
+                        if (idx > 0) AtlasDivider(Modifier.padding(vertical = 6.dp))
+                        ConnectedDeviceRow(
+                            device = device,
+                            onRevoke = { appViewModel.revokeDevice(device, onToast) },
+                        )
+                    }
                 }
+                !devicesLoading -> Text(
+                    atlasText("Aucun autre appareil connecté.", "No other devices are connected.", "لا توجد أجهزة أخرى متصلة."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 

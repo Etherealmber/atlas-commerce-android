@@ -7,6 +7,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -88,10 +90,18 @@ class QrDeviceViewModel @Inject constructor(
     val serverUrl: String? get() = serverConfig.selection.value?.baseUrl
 
     private var pollJob: Job? = null
+    private var devicesLoadGeneration = 0L
 
     init {
-        if (sessionManager.state.value is SessionState.Active) {
-            loadDevices()
+        viewModelScope.launch {
+            sessionManager.state
+                .map { (it as? SessionState.Active)?.user?.scopeIdentity }
+                .distinctUntilChanged()
+                .collect { scopeIdentity ->
+                    devicesLoadGeneration += 1
+                    _state.update { it.copy(devices = emptyList(), devicesLoading = false, revokingId = null) }
+                    if (scopeIdentity != null) loadDevices()
+                }
         }
     }
 
@@ -394,30 +404,50 @@ class QrDeviceViewModel @Inject constructor(
         }
     }
 
+    fun isCurrentDevice(device: TrustedDeviceDto): Boolean {
+        val fingerprint = sessionManager.fingerprint
+        val shortFingerprint = device.fingerprint.removeSuffix("…").removeSuffix("...")
+        return device.current || device.full.equals(fingerprint, ignoreCase = true) ||
+            (shortFingerprint.isNotBlank() && fingerprint.startsWith(shortFingerprint, ignoreCase = true))
+    }
+
     fun loadDevices() {
+        val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+        if (requestedScope == null) {
+            devicesLoadGeneration += 1
+            _state.update { it.copy(devices = emptyList(), devicesLoading = false) }
+            return
+        }
+        val generation = ++devicesLoadGeneration
         viewModelScope.launch {
+            if (generation != devicesLoadGeneration || (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
             _state.update { it.copy(devicesLoading = true) }
-            when (val res = authRepository.devices()) {
+            val result = authRepository.devices()
+            if (generation != devicesLoadGeneration || (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+            when (result) {
                 is ApiResult.Failure -> _state.update { it.copy(devicesLoading = false) }
-                is ApiResult.Success -> _state.update {
-                    it.copy(devicesLoading = false, devices = res.data)
-                }
+                is ApiResult.Success -> _state.update { it.copy(devicesLoading = false, devices = result.data) }
             }
         }
     }
 
     fun revokeDevice(device: TrustedDeviceDto) {
         val targetId = device.revokeId
-        if (targetId.isBlank()) return
+        val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+        if (targetId.isBlank() || requestedScope == null) return
         viewModelScope.launch {
+            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
             _state.update { it.copy(revokingId = targetId) }
             when (val res = authRepository.revokeDevice(targetId)) {
                 is ApiResult.Failure -> {
-                    _state.update { it.copy(revokingId = null) }
-                    _messages.tryEmit(res.message)
+                    if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope) {
+                        _state.update { it.copy(revokingId = null) }
+                        _messages.tryEmit(res.message)
+                    }
                 }
 
                 is ApiResult.Success -> {
+                    if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
                     _state.update { it.copy(revokingId = null) }
                     _messages.tryEmit("${device.friendlyLabel} révoqué.")
                     if (device.current) {

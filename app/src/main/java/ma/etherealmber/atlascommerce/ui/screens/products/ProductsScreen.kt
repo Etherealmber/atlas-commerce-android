@@ -71,7 +71,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
-import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
+import ma.etherealmber.atlascommerce.ui.components.AtlasCatalogSkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasOfflineBanner
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
@@ -197,7 +197,7 @@ fun ProductsScreen(
         }
 
         when {
-            state.loading -> AtlasLoading(message = "Chargement du catalogue…")
+            state.loading -> AtlasCatalogSkeleton(Modifier.fillMaxSize(), rows = 6)
 
             !state.error.isNullOrBlank() -> {
                 Column(Modifier.padding(horizontal = density.screenPadding)) {

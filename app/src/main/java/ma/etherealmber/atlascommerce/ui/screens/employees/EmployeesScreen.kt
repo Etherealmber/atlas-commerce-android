@@ -7,7 +7,6 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
 import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -62,7 +61,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
-import ma.etherealmber.atlascommerce.ui.components.AtlasLoading
+import ma.etherealmber.atlascommerce.ui.components.AtlasPayrollRowsSkeleton
+import ma.etherealmber.atlascommerce.ui.components.AtlasPayrollSkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.screens.home.HomeViewModel
@@ -120,7 +120,7 @@ fun EmployeesScreen(
     }
 
     if (state.loading && state.finance == null && state.payroll == null) {
-        AtlasLoading(message = atlasText("Chargement des données employés…", "Loading employee data…", "جارٍ تحميل بيانات الموظفين…"))
+        AtlasPayrollSkeleton(Modifier.fillMaxSize())
         return
     }
 
@@ -184,14 +184,35 @@ fun EmployeesScreen(
                     }
                     Spacer(Modifier.size(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(atlasText("Suivi de la paie"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                atlasText("Suivi de la paie"),
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            IconButton(
+                                onClick = { payrollInfoOpen = true },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Info,
+                                    contentDescription = atlasText("À propos des chiffres de paie", "About payroll figures", "حول أرقام الرواتب"),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
                         Text(
                             atlasText("Consultation seule · échéances et versements du serveur Atlas"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    IconButton(onClick = viewModel::refresh, enabled = !state.refreshing && !state.financeLoading) {
+                    IconButton(onClick = viewModel::refreshFinance, enabled = !state.financeLoading) {
                         if (state.refreshing || state.financeLoading) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         } else {
@@ -207,45 +228,34 @@ fun EmployeesScreen(
                     ) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Mois précédent"))
                     }
-                    Box(Modifier.weight(1f)) {
-                        Column(
-                            modifier = Modifier.align(Alignment.Center).fillMaxWidth().padding(horizontal = 28.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                monthLabel,
-                                modifier = Modifier.fillMaxWidth(),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                textAlign = TextAlign.Center,
-                                maxLines = 2,
-                                softWrap = true,
-                                overflow = TextOverflow.Clip,
-                            )
-                            Text(
-                                when {
-                                    selectedMonth == null || currentMonth == null -> atlasText("Synchronisation du mois serveur…", "Syncing server month…", "جارٍ مزامنة شهر الخادم…")
-                                    selectedMonth == currentMonth -> atlasText("Mois en cours · données provisoires", "Current month · provisional data", "الشهر الحالي · بيانات أولية")
-                                    else -> atlasText("Période de paie sélectionnée", "Selected payroll period", "فترة الرواتب المحددة")
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                maxLines = 3,
-                                softWrap = true,
-                                overflow = TextOverflow.Clip,
-                            )
-                        }
-                        IconButton(
-                            onClick = { payrollInfoOpen = true },
-                            modifier = Modifier.align(Alignment.CenterEnd),
-                        ) {
-                            Icon(
-                                Icons.Outlined.Info,
-                                contentDescription = atlasText("À propos des chiffres de paie", "About payroll figures", "حول أرقام الرواتب"),
-                            )
-                        }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            monthLabel,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            when {
+                                selectedMonth == null || currentMonth == null -> atlasText("Synchronisation…", "Syncing…", "جارٍ المزامنة…")
+                                selectedMonth == currentMonth -> atlasText("Mois actuel · provisoire", "Current month · provisional", "الشهر الحالي · مؤقت")
+                                else -> atlasText("Période de paie sélectionnée", "Selected payroll period", "فترة الرواتب المحددة")
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                     IconButton(
                         onClick = { selectedMonth?.plusMonths(1)?.toString()?.let(viewModel::selectFinancePeriod) },
@@ -269,7 +279,7 @@ fun EmployeesScreen(
 
         state.financeError?.let { error ->
             item(key = "employees_error") {
-                AtlasErrorCard(title = atlasText("Données indisponibles"), message = atlasNotice(error, language), onRetry = viewModel::refresh)
+                AtlasErrorCard(title = atlasText("Données indisponibles"), message = atlasNotice(error, language), onRetry = viewModel::refreshFinance)
             }
         }
 
@@ -320,7 +330,7 @@ fun EmployeesScreen(
 
         if (state.financeLoading && payroll == null) {
             item(key = "employee_loading") {
-                AtlasCard { AtlasLoading(message = atlasText("Chargement de la paie…", "Loading payroll…", "جارٍ تحميل الرواتب…")) }
+                AtlasPayrollRowsSkeleton(Modifier.padding(horizontal = 8.dp), rows = 4)
             }
         } else if (visibleRows.isEmpty()) {
             item(key = "employee_empty") {

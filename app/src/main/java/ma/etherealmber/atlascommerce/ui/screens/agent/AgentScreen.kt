@@ -96,6 +96,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasChatSkeleton
+import ma.etherealmber.atlascommerce.ui.components.AtlasShimmer
+import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonBlock
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdown
@@ -414,11 +417,7 @@ fun AgentScreen(
                 ) {
                     if (state.loadingThread) {
                         item(key = "agent_loading") {
-                            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                                androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                Spacer(Modifier.width(10.dp))
-                                Text(atlasText("Chargement de la discussion…", "Loading conversation…", "جارٍ تحميل المحادثة…"), style = MaterialTheme.typography.bodySmall)
-                            }
+                            AtlasChatSkeleton(Modifier.fillMaxWidth())
                         }
                     }
                     if (state.messages.isEmpty() && !state.loadingThread && !quotaLocked) {
@@ -769,11 +768,14 @@ fun AgentQuotaCard(
         }
         Spacer(Modifier.height(6.dp))
         if (policy == null) {
-            Text(
-                text = atlasText("Chargement des compteurs de jetons depuis le serveur…", "Loading token counters from server…", "جارٍ تحميل عدّادات الرموز من الخادم…"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            AtlasShimmer {
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    AtlasSkeletonBlock(Modifier.fillMaxWidth(0.7f).height(12.dp))
+                    repeat(2) {
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth().height(9.dp), RoundedCornerShape(99.dp))
+                    }
+                }
+            }
         } else {
             AgentQuotaBarsContent(policy = policy, compact = false)
         }

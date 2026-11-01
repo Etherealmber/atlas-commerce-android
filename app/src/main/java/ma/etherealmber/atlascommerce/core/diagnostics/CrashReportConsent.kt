@@ -9,6 +9,11 @@ object CrashReportConsent {
     private const val PREFS = "atlas_crash_reporting"
     private const val KEY_ENABLED = "automatic_crash_reports_enabled"
 
+    /** True when Firebase Core has initialized the app used by FCM and other Firebase products. */
+    fun hasDefaultFirebaseApp(context: Context): Boolean = runCatching {
+        FirebaseApp.getApps(context).any { it.name == FirebaseApp.DEFAULT_APP_NAME }
+    }.getOrDefault(false)
+
     /** Only expose the opt-in when the default Firebase app and Crashlytics SDK are usable. */
     fun isConfigured(context: Context): Boolean = crashlyticsOrNull(context) != null
 

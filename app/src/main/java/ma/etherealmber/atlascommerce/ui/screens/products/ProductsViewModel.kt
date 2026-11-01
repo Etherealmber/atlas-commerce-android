@@ -99,8 +99,11 @@ class ProductsViewModel @Inject constructor(
     }
 
     private fun loadCurrency() {
+        val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity ?: return
         viewModelScope.launch {
             val result = commerceRepository.settings()
+            val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (currentScope != requestedScope) return@launch
             if (result is ApiResult.Success) {
                 val currency = result.data.currency?.takeIf { it.isNotBlank() }
                 if (currency != null) _state.update { it.copy(currency = currency) }
@@ -280,6 +283,8 @@ class ProductsViewModel @Inject constructor(
     }
 
     private fun fetchState(query: String, initial: Boolean) {
+        val requestedUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return
+        val requestedScope = requestedUser.scopeIdentity
         fetchJob?.cancel()
         fetchJob = viewModelScope.launch {
             _state.update {
@@ -292,13 +297,13 @@ class ProductsViewModel @Inject constructor(
             val result = commerceRepository.products(query = query, limit = 300)
             val reqResult = commerceRepository.productRequests("open")
             val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+            if (activeUser?.scopeIdentity != requestedScope) return@launch
             val allOpenReqs = (reqResult as? ApiResult.Success)?.data ?: _state.value.openRequests
             val visibleReqs = if (Roles.isAdmin(activeUser?.role)) {
                 allOpenReqs
             } else {
-                val uname = activeUser?.username
                 allOpenReqs.filter { req ->
-                    req.createdBy == null || req.createdBy.equals(uname, ignoreCase = true)
+                    req.createdBy?.equals(requestedUser.username, ignoreCase = true) == true
                 }
             }
 

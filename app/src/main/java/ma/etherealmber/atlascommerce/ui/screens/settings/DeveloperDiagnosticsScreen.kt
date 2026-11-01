@@ -50,6 +50,9 @@ fun DeveloperDiagnosticsScreen(
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val crashReportsConfigured = CrashReportConsent.isConfigured(context)
+    val firebaseAppConfigured = CrashReportConsent.hasDefaultFirebaseApp(context)
+    val crashReportsEnabled = CrashReportConsent.isEnabled(context)
     val developerMode by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
     val session by appViewModel.session.collectAsStateWithLifecycle()
@@ -219,18 +222,27 @@ fun DeveloperDiagnosticsScreen(
                     ),
                 )
                 AtlasInfoRow(
-                    atlasText("Rapports Firebase", "Firebase reports", "تقارير Firebase"),
+                    atlasText("Rapports Crashlytics", "Crashlytics reports", "تقارير Crashlytics"),
                     when {
-                        !CrashReportConsent.isConfigured(context) -> atlasText("Non configurés", "Not configured", "غير مهيأة")
-                        CrashReportConsent.isEnabled(context) -> atlasText("Activés avec consentement", "Enabled with consent", "مفعّلة بموافقة المستخدم")
-                        else -> atlasText("Désactivés", "Disabled", "معطّلة")
+                        crashReportsConfigured && crashReportsEnabled -> atlasText("Activés avec consentement", "Enabled with consent", "مفعّلة بموافقة المستخدم")
+                        crashReportsConfigured -> atlasText("Désactivés · consentement requis", "Disabled · consent required", "معطّلة · تتطلب الموافقة")
+                        firebaseAppConfigured -> atlasText(
+                            "Firebase est initialisé, mais Crashlytics est indisponible dans cette version",
+                            "Firebase is initialized, but Crashlytics is unavailable in this build",
+                            "تم تهيئة Firebase لكن Crashlytics غير متاح في هذا الإصدار",
+                        )
+                        else -> atlasText(
+                            "Configuration Firebase absente de cette version",
+                            "Firebase configuration is not bundled in this build",
+                            "إعداد Firebase غير مضمّن في هذا الإصدار",
+                        )
                     },
                 )
                 Text(
                     atlasText(
-                        "Les journaux techniques restent locaux et ne sont jamais affichés ici. Ils ne sont partagés qu'après l'envoi volontaire d'un rapport.",
-                        "Technical logs stay local and are never displayed here. They are shared only when you choose to submit a report.",
-                        "تبقى السجلات التقنية محلية ولا تُعرض هنا. لا تُشارك إلا عند اختيارك إرسال بلاغ.",
+                        "Les notifications Firebase Cloud Messaging et les rapports Crashlytics sont deux services distincts. Cette ligne indique uniquement si Crashlytics est disponible dans l'application installée. Les journaux techniques restent locaux et ne sont partagés qu'après votre accord.",
+                        "Firebase Cloud Messaging notifications and Crashlytics reports are separate services. This row only reports whether Crashlytics is available in the installed app. Technical logs stay local and are shared only with your consent.",
+                        "إشعارات Firebase Cloud Messaging وتقارير Crashlytics خدمتان منفصلتان. يوضح هذا السطر توفر Crashlytics فقط في التطبيق المثبت. تبقى السجلات التقنية محلية ولا تُشارك إلا بموافقتك.",
                     ),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     style = MaterialTheme.typography.bodySmall,
