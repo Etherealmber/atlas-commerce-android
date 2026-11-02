@@ -137,6 +137,10 @@ class HomeViewModel @Inject constructor(
                     scope = cacheScope,
                 )
             }
+            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope ||
+                _state.value.selectedFinancePeriod != requestedPeriod
+            ) return@launch
+
             val failure = financeResult.failureOrNull() ?: payrollResult?.failureOrNull()
             val hasFallback = previous.finance != null || previous.payroll != null
             val deviceOffline = !hasDeviceInternetCapability(applicationContext)
@@ -211,6 +215,10 @@ class HomeViewModel @Inject constructor(
             if (finance != null && payroll != null) {
                 offlineCache.saveFinanceBundle(finance, payroll, isLatest = false, scope = cacheScope)
             }
+            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope ||
+                _state.value.selectedFinancePeriod != period
+            ) return@launch
+
             val failure = financeResult.failureOrNull() ?: payrollResult?.failureOrNull()
             val fallbackFinance = finance ?: cached?.finance
             val fallbackPayroll = payroll ?: cached?.payroll
@@ -351,6 +359,7 @@ class HomeViewModel @Inject constructor(
                     scope = cacheScope,
                 )
             }
+            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
 
             val failure = dashboardResult.failureOrNull()
             val financeFailure = financeResult?.failureOrNull() ?: payrollResult?.failureOrNull()
@@ -369,8 +378,8 @@ class HomeViewModel @Inject constructor(
                 }
                 val displayedPayroll = when {
                     !isAdmin -> null
-                    financeIsCurrent -> payrollFallback ?: current.payroll
-                    else -> current.payroll
+                    financeIsCurrent -> payrollFallback ?: current.payroll?.takeIf { it.period == displayedFinance?.period }
+                    else -> current.payroll?.takeIf { it.period == current.finance?.period }
                 }
                 val financeStillCached = financeIsCurrent && (finance == null || payroll == null) &&
                     (cachedForFinancePeriod != null || current.financeFromCache)
