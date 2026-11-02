@@ -51,10 +51,15 @@ import okhttp3.Request
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.io.StringReader
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
+import java.security.MessageDigest
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Shared profile picture & image loader supporting every Atlas Commerce avatar representation:
@@ -67,6 +72,12 @@ import java.util.concurrent.TimeUnit
  */
 object AvatarBitmapCache {
     private val memory = LruCache<String, ImageBitmap>(48)
+    private val refreshLocks = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
+    private val lastRefreshAttemptMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private const val AVATAR_CACHE_TTL_MS = 6 * 60 * 60 * 1000L
+    private const val REFRESH_RETRY_BACKOFF_MS = 5 * 60 * 1000L
+    private const val MAX_DISK_CACHE_BYTES = 24L * 1024L * 1024L
+    private const val MAX_BITMAP_EDGE = 256
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -79,26 +90,116 @@ object AvatarBitmapCache {
     fun get(key: String): ImageBitmap? = memory.get(key)
 
     fun clear() {
+        // Disk avatar files intentionally remain: they're private to this app and allow the
+        // next authenticated account/session to render its PFP immediately while revalidating.
         memory.evictAll()
     }
 
     suspend fun load(
+        context: Context,
         rawUrl: String?,
         serverBaseUrl: String?,
     ): ImageBitmap? {
         val clean = rawUrl?.trim().orEmpty()
         if (clean.isEmpty()) return null
-        val cacheKey = "${serverBaseUrl.orEmpty()}|$clean"
+        val cacheKey = cacheKey(clean, serverBaseUrl)
         memory.get(cacheKey)?.let { return it }
 
-        val decoded = withContext(Dispatchers.IO) {
-            runCatching { decodeAvatarBitmap(clean, serverBaseUrl) }.getOrNull()
+        val cached = withContext(Dispatchers.IO) {
+            val file = cacheFile(context, cacheKey)
+            runCatching { if (file.isFile) BitmapFactory.decodeFile(file.absolutePath) else null }.getOrNull()
         }
-        val imageBitmap = decoded?.asImageBitmap()
-        if (imageBitmap != null) {
-            memory.put(cacheKey, imageBitmap)
+        if (cached != null) {
+            val image = cached.asImageBitmap()
+            memory.put(cacheKey, image)
+            return image
         }
-        return imageBitmap
+        return refresh(context, clean, serverBaseUrl)
+    }
+
+    suspend fun shouldRefresh(context: Context, rawUrl: String?, serverBaseUrl: String?): Boolean =
+        withContext(Dispatchers.IO) {
+            val clean = rawUrl?.trim().orEmpty()
+            if (!isRemoteAvatar(clean, serverBaseUrl)) return@withContext false
+            val key = cacheKey(clean, serverBaseUrl)
+            val now = System.currentTimeMillis()
+            val lastAttempt = lastRefreshAttemptMs[key]
+            if (lastAttempt != null && now - lastAttempt < REFRESH_RETRY_BACKOFF_MS) return@withContext false
+            val file = cacheFile(context, key)
+            !file.isFile || now - file.lastModified() >= AVATAR_CACHE_TTL_MS
+        }
+
+    /** Refreshes a stale avatar in the background; callers keep displaying the cached bitmap on failure. */
+    suspend fun refresh(
+        context: Context,
+        rawUrl: String?,
+        serverBaseUrl: String?,
+    ): ImageBitmap? {
+        val clean = rawUrl?.trim().orEmpty()
+        if (clean.isEmpty()) return null
+        val key = cacheKey(clean, serverBaseUrl)
+        val lock = refreshLocks.getOrPut(key) { Mutex() }
+        return lock.withLock {
+            val now = System.currentTimeMillis()
+            val lastAttempt = lastRefreshAttemptMs[key]
+            if (lastAttempt != null && now - lastAttempt < REFRESH_RETRY_BACKOFF_MS) return@withLock null
+            lastRefreshAttemptMs[key] = now
+            withContext(Dispatchers.IO) {
+                val decoded = runCatching { decodeAvatarBitmap(clean, serverBaseUrl) }.getOrNull() ?: return@withContext null
+                persistBitmap(context, key, decoded)
+                decoded.asImageBitmap().also { memory.put(key, it) }
+            }
+        }
+    }
+
+    private fun cacheKey(rawUrl: String, serverBaseUrl: String?): String = "${serverBaseUrl.orEmpty()}|$rawUrl"
+
+    private fun cacheFile(context: Context, key: String): File {
+        val digest = MessageDigest.getInstance("SHA-256").digest(key.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte) }
+        return File(File(context.filesDir, "atlas-avatar-cache"), "$digest.png")
+    }
+
+    private fun isRemoteAvatar(rawUrl: String, serverBaseUrl: String?): Boolean =
+        rawUrl.startsWith("https://", ignoreCase = true) ||
+            rawUrl.startsWith("http://", ignoreCase = true) ||
+            (rawUrl.startsWith("/") && !serverBaseUrl.isNullOrBlank())
+
+    private fun persistBitmap(context: Context, key: String, source: Bitmap) {
+        runCatching {
+            val file = cacheFile(context, key)
+            val directory = file.parentFile ?: return
+            if (!directory.exists() && !directory.mkdirs()) return
+            val temporary = File(directory, "${file.name}.tmp")
+            val ratio = minOf(1f, MAX_BITMAP_EDGE.toFloat() / maxOf(source.width, source.height).coerceAtLeast(1))
+            val scaled = if (ratio < 1f) {
+                Bitmap.createScaledBitmap(source, (source.width * ratio).toInt().coerceAtLeast(1), (source.height * ratio).toInt().coerceAtLeast(1), true)
+            } else source
+            try {
+                FileOutputStream(temporary).use { output ->
+                    scaled.compress(Bitmap.CompressFormat.PNG, 100, output)
+                    output.fd.sync()
+                }
+                if (file.exists()) file.delete()
+                if (!temporary.renameTo(file)) {
+                    temporary.copyTo(file, overwrite = true)
+                    temporary.delete()
+                }
+                pruneDiskCache(directory)
+            } finally {
+                if (scaled !== source) scaled.recycle()
+            }
+        }
+    }
+
+    private fun pruneDiskCache(directory: File) {
+        val files = directory.listFiles()?.filter { it.isFile && it.extension == "png" } ?: return
+        var bytes = files.sumOf { it.length() }
+        if (bytes <= MAX_DISK_CACHE_BYTES) return
+        files.sortedBy { it.lastModified() }.forEach { file ->
+            val fileBytes = file.length()
+            if (bytes > MAX_DISK_CACHE_BYTES && file.delete()) bytes -= fileBytes
+        }
     }
 
     internal fun decodeAvatarBitmap(clean: String, serverBaseUrl: String?): Bitmap? {
@@ -278,13 +379,18 @@ fun AtlasAvatar(
     onLongClick: (() -> Unit)? = null,
     longClickLabel: String? = null,
 ) {
+    val context = LocalContext.current
     val cleanUrl = avatarUrl?.trim().orEmpty()
     val cacheKey = remember(cleanUrl, serverBaseUrl) { "${serverBaseUrl.orEmpty()}|$cleanUrl" }
     var bitmap by remember(cacheKey) { mutableStateOf(AvatarBitmapCache.get(cacheKey)) }
 
-    LaunchedEffect(cleanUrl, serverBaseUrl) {
-        if (cleanUrl.isNotEmpty() && bitmap == null) {
-            bitmap = AvatarBitmapCache.load(cleanUrl, serverBaseUrl)
+    LaunchedEffect(context, cleanUrl, serverBaseUrl) {
+        if (cleanUrl.isNotEmpty()) {
+            val cached = AvatarBitmapCache.load(context, cleanUrl, serverBaseUrl)
+            bitmap = cached
+            if (cached != null && AvatarBitmapCache.shouldRefresh(context, cleanUrl, serverBaseUrl)) {
+                AvatarBitmapCache.refresh(context, cleanUrl, serverBaseUrl)?.let { updated -> bitmap = updated }
+            }
         }
     }
 

@@ -45,6 +45,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.AddShoppingCart
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -60,6 +61,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -246,11 +248,18 @@ fun ProductsScreen(
             }
             if (state.filter != ProductsViewModel.FilterMode.REQUESTS && !state.loading) {
                 Text(
-                    atlasText(
-                        "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue en direct",
-                        "${state.visibleProducts.size} results · live catalog",
-                        "${state.visibleProducts.size} نتيجة · الكتالوج المباشر",
-                    ),
+                    when {
+                        state.cachedFallback -> atlasText(
+                            "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue enregistré",
+                            "${state.visibleProducts.size} results · saved catalog",
+                            "${state.visibleProducts.size} نتيجة · كتالوج محفوظ",
+                        )
+                        else -> atlasText(
+                            "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue en direct",
+                            "${state.visibleProducts.size} results · live catalog",
+                            "${state.visibleProducts.size} نتيجة · الكتالوج المباشر",
+                        )
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -259,6 +268,27 @@ fun ProductsScreen(
 
         if (state.offline) {
             AtlasOfflineBanner(modifier = Modifier.padding(horizontal = density.screenPadding))
+            Spacer(Modifier.height(8.dp))
+        } else if (state.cachedFallback) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = density.screenPadding),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(Icons.Outlined.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Text(
+                        if (state.refreshing) atlasText("Catalogue enregistré affiché pendant l'actualisation.", "Showing the saved catalog while refreshing.", "يتم عرض الكتالوج المحفوظ أثناء التحديث.")
+                        else atlasText("Serveur indisponible — catalogue enregistré affiché.", "Server unavailable — showing the saved catalog.", "الخادم غير متاح — يتم عرض الكتالوج المحفوظ."),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+            }
             Spacer(Modifier.height(8.dp))
         }
 

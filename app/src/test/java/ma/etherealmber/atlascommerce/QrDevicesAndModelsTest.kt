@@ -9,6 +9,9 @@ import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.net.VerifyLinkParser
 import ma.etherealmber.atlascommerce.core.security.AtRestCipher
 import ma.etherealmber.atlascommerce.data.OfflineCache
+import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
+import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
+import ma.etherealmber.atlascommerce.data.model.PayrollRowDto
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.data.model.AgentThreadDetailDto
 import ma.etherealmber.atlascommerce.data.model.AssistChatResponseDto
@@ -242,6 +245,48 @@ class QrDevicesAndModelsTest {
 
         // Never pre-populate stock.afmarbre.com in UI server presets
         assertTrue(ServerUrl.presets().none { it.url.contains("afmarbre", ignoreCase = true) })
+    }
+
+    @Test
+    fun offlinePayrollSnapshotIsEncryptedAndAccountScoped() = runBlocking {
+        val dir = Files.createTempDirectory("atlas-finance-cache-test").toFile()
+        try {
+            val cipher = object : AtRestCipher {
+                override fun encryptAtRest(plain: String): String = "test:" +
+                    java.util.Base64.getEncoder().encodeToString(plain.toByteArray(Charsets.UTF_8))
+
+                override fun decryptAtRest(stored: String?): String? = stored
+                    ?.takeIf { it.startsWith("test:") }
+                    ?.removePrefix("test:")
+                    ?.let { String(java.util.Base64.getDecoder().decode(it), Charsets.UTF_8) }
+            }
+            val cache = OfflineCache(dir, moshi, cipher)
+            cache.bindScope("https://alpha.example.com", "administrator")
+            val administratorScope = cache.scopeFor("https://alpha.example.com", "administrator")!!
+            val finance = FinanceMonthlyDto(period = "2026-11", currency = "MAD", closingBalance = 4321.0)
+            val payroll = PayrollPageDto(
+                period = "2026-11",
+                rows = listOf(PayrollRowDto(employeeId = 7, displayName = "Private payroll name", amountDue = 125.0)),
+            )
+            cache.saveFinanceBundle(finance, payroll, isLatest = true, scope = administratorScope)
+
+            val persisted = dir.listFiles()!!.filter { it.name.startsWith("finance_") }
+            assertTrue(persisted.isNotEmpty())
+            assertTrue(persisted.none { it.readText().contains("Private payroll name") })
+            assertEquals("Private payroll name", cache.readFinanceBundle("2026-11")?.payroll?.rows?.single()?.displayName)
+            assertEquals("2026-11", cache.readFinanceBundle()?.finance?.period)
+
+            cache.bindScope("https://alpha.example.com", "another-admin")
+            assertNull(cache.readFinanceBundle("2026-11"))
+            cache.bindScope("https://beta.example.com", "administrator")
+            assertNull(cache.readFinanceBundle())
+            assertEquals(
+                "Private payroll name",
+                cache.readFinanceBundle("2026-11", scope = administratorScope)?.payroll?.rows?.single()?.displayName,
+            )
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
     @Test

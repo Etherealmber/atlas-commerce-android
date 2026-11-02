@@ -105,6 +105,10 @@ interface AtlasApi {
     @PATCH("api/auth/me")
     suspend fun updateMe(@Body body: ProfileUpdateRequest): ActionAckDto
 
+    /** v0.7.5 — voluntary logout marks this device resumable for password-only return. */
+    @POST("api/auth/logout")
+    suspend fun logout(): ActionAckDto
+
     @POST("api/auth/login")
     suspend fun login(@Body body: LoginRequest): LoginResponse
 

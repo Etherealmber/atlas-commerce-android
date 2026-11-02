@@ -31,6 +31,7 @@ import kotlin.coroutines.resumeWithException
 import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
+import ma.etherealmber.atlascommerce.core.net.hasDeviceInternetCapability
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
@@ -57,6 +58,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 internal enum class DownloadNetworkTransport { WIFI, CELLULAR, OTHER }
+
+internal fun shouldClearOptionalUpdateErrorOnResume(state: UpdateState, internetAvailable: Boolean): Boolean {
+    val error = state as? UpdateState.Error ?: return false
+    return internetAvailable && error.info?.mandatory == false && error.recoverableNetwork
+}
 
 private fun detectDownloadNetworkTransport(context: Context): DownloadNetworkTransport = runCatching {
     val connectivity = context.getSystemService(ConnectivityManager::class.java)
@@ -98,6 +104,7 @@ class AppUpdateManager internal constructor(
     private val githubLatestJsonUrl: String? = null,
     private val releasesApiUrl: String? = null,
     private val networkTransportProvider: () -> DownloadNetworkTransport = { DownloadNetworkTransport.OTHER },
+    private val internetAvailableProvider: () -> Boolean = { false },
 ) {
 
     @Inject
@@ -146,6 +153,7 @@ class AppUpdateManager internal constructor(
         githubLatestJsonUrl = UpdateDefaults.GITHUB_LATEST_JSON_URL,
         releasesApiUrl = UpdateDefaults.GITHUB_RELEASES_API_URL,
         networkTransportProvider = { detectDownloadNetworkTransport(context) },
+        internetAvailableProvider = { hasDeviceInternetCapability(context) },
     )
 
     private val lock = Any()
@@ -628,6 +636,7 @@ class AppUpdateManager internal constructor(
             .ifEmpty { listOf(info.apkUrl) }
 
         var lastError: Throwable? = null
+        var lastErrorRecoverable = false
 
         for (candidateUrl in candidateUrls) {
             runCatching { partFile.delete() }
@@ -638,6 +647,7 @@ class AppUpdateManager internal constructor(
                 else -> null
             }
 
+            var transferCompleted = false
             try {
                 downloadFromUrl(
                     info = info,
@@ -646,6 +656,7 @@ class AppUpdateManager internal constructor(
                     partFile = partFile,
                     allowParallel = useParallel,
                 )
+                transferCompleted = true
 
                 // Verify SHA-256 checksum when supplied by manifest
                 val expectedSha = info.sha256
@@ -685,6 +696,7 @@ class AppUpdateManager internal constructor(
             } catch (t: Throwable) {
                 runCatching { partFile.delete() }
                 lastError = t
+                lastErrorRecoverable = !transferCompleted && t is IOException
             }
         }
 
@@ -695,7 +707,11 @@ class AppUpdateManager internal constructor(
                 ?: "Échec du téléchargement de la mise à jour."
         }
         synchronized(lock) {
-            _state.value = UpdateState.Error(message = message, info = info)
+            _state.value = UpdateState.Error(
+                message = message,
+                info = info,
+                recoverableNetwork = lastErrorRecoverable,
+            )
         }
         notifyError(info, message)
     }
@@ -1263,6 +1279,19 @@ class AppUpdateManager internal constructor(
         if (settingsStartedDownload) {
             notifier.cancel()
             deferredSettingsResultNotification = false
+        }
+        val internetAvailable = runCatching { internetAvailableProvider() }.getOrDefault(false)
+        synchronized(lock) {
+            val current = _state.value
+            if (shouldClearOptionalUpdateErrorOnResume(current, internetAvailable)) {
+                // Clear only a transport failure, retaining the optional release metadata so
+                // Settings can retry. The state read/write and notification cancellation are
+                // atomic with respect to checks and download completions.
+                val error = current as UpdateState.Error
+                val info = error.info ?: return@synchronized
+                _state.value = UpdateState.Available(info = info, dismissedBanner = true)
+                notifier.cancel()
+            }
         }
         val current = _state.value
         if (current is UpdateState.ReadyToInstall &&

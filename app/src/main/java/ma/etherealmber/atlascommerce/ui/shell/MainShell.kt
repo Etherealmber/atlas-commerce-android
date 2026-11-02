@@ -101,6 +101,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
@@ -163,14 +164,15 @@ enum class MainTab(val label: String, val icon: ImageVector) {
                 else -> listOf(HOME, PRODUCTS, SCAN, BALANCE)
             }
 
-        /** Put a permitted launch tab first; invalid/stale preferences safely fall back to Home. */
-        fun orderedBottomTabsForRole(role: String?, preferredTabName: String?): List<MainTab> {
+        /** Resolve the selected launch tab without changing the dock's stable visual order. */
+        fun initialTabForRole(role: String?, preferredTabName: String?): MainTab {
             val allowedTabs = bottomTabsForRole(role)
-            val first = allowedTabs.firstOrNull { it.name == preferredTabName }
+            return allowedTabs.firstOrNull { it.name == preferredTabName }
                 ?: allowedTabs.firstOrNull { it == HOME }
                 ?: allowedTabs.first()
-            return listOf(first) + allowedTabs.filterNot { it == first }
         }
+
+
     }
 }
 
@@ -225,8 +227,10 @@ fun MainShell(
     val agentPolicy by appViewModel.agentPolicy.collectAsStateWithLifecycle()
 
     val roleTabs = MainTab.bottomTabsForRole(user.role)
-    val orderedRoleTabs = MainTab.orderedBottomTabsForRole(user.role, defaultStartTab)
-    val resolvedInitial = orderedRoleTabs.first().name
+    // The launch preference selects the initial screen; it must not reorder the dock.
+    // The scan action occupies a fixed center slot, so reordering it to the edge squeezed
+    // all remaining tabs into one half of the dock on compact Android screens.
+    val resolvedInitial = MainTab.initialTabForRole(user.role, defaultStartTab).name
 
     var internalTabName by rememberSaveable(user.scopeIdentity) { mutableStateOf(resolvedInitial) }
     var internalLastBottomTabName by rememberSaveable(user.scopeIdentity) { mutableStateOf(resolvedInitial) }
@@ -741,7 +745,7 @@ fun MainShell(
         },
     ) {
         AtlasFloatingBottomBar(
-            tabs = orderedRoleTabs,
+            tabs = roleTabs,
             selected = tab,
             onSelect = switchTab,
         )
@@ -919,7 +923,7 @@ private fun FloatingBottomBarItem(
             Spacer(Modifier.height(2.dp))
             Text(
                 text = item.localizedLabel(),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactWidth) 10.sp else MaterialTheme.typography.labelSmall.fontSize),
                 color = tint,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,

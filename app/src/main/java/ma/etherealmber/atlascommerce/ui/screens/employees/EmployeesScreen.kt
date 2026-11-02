@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
@@ -285,6 +286,33 @@ fun EmployeesScreen(
                     }
                 }
 
+            }
+        }
+
+        if (state.financeFromCache) {
+            item(key = "employees_cached_notice") {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(Icons.Outlined.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                        Text(
+                            when {
+                                state.financeOffline -> atlasText("Pas de réseau — données de paie enregistrées affichées.", "No internet connection — showing saved payroll data.", "لا يوجد اتصال بالإنترنت — يتم عرض بيانات الرواتب المحفوظة.")
+                                state.financeLoading -> atlasText("Données enregistrées affichées pendant l'actualisation.", "Showing saved payroll while refreshing.", "يتم عرض بيانات الرواتب المحفوظة أثناء التحديث.")
+                                else -> atlasText("Serveur indisponible — dernières données de paie enregistrées affichées.", "Server unavailable — showing the latest saved payroll data.", "الخادم غير متاح — يتم عرض أحدث بيانات الرواتب المحفوظة.")
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                }
             }
         }
 

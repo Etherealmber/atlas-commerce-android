@@ -347,6 +347,22 @@ class AtlasPreferences @Inject constructor(
         }
     }
 
+    /** An expired saved token disables unlock but lets the next password login offer it again. */
+    suspend fun resetSavedAccountDeviceUnlockChoice(serverUrl: String, username: String) {
+        val srv = serverUrl.trim()
+        val usr = username.trim().lowercase(Locale.ROOT)
+        if (srv.isEmpty() || usr.isEmpty()) return
+        safeEdit { prefs ->
+            val accounts = decodeSavedAccounts(prefs.safeString(Keys.SAVED_ACCOUNTS.name))
+            val updated = accounts.map { account ->
+                if (account.serverUrl.equals(srv, ignoreCase = true) && account.username.equals(usr, ignoreCase = true)) {
+                    account.copy(deviceUnlockEnabled = false, deviceUnlockChoiceMade = false)
+                } else account
+            }
+            prefs.putClean(Keys.SAVED_ACCOUNTS, encodeSavedAccounts(updated))
+        }
+    }
+
     suspend fun removeSavedAccount(serverUrl: String, username: String) {
         val srv = serverUrl.trim()
         val usr = username.trim().lowercase()

@@ -121,7 +121,8 @@ class AppViewModel @Inject constructor(
                 // An in-flight response from a previous account must not sign out the newly
                 // selected account after the token has changed.
                 if (event.authorizationHeader == "Bearer ${sessionManager.authToken.orEmpty()}") {
-                    sessionManager.signOut(event.message)
+                    val wasActive = sessionManager.state.value is SessionState.Active
+                    sessionManager.signOut(if (wasActive) event.message else null)
                 }
             }
         }
@@ -441,7 +442,15 @@ class AppViewModel @Inject constructor(
                 is ApiResult.Success -> onDone(
                     "Connecté en tant que ${entry.displayName.ifBlank { entry.username }}.",
                 )
-                is ApiResult.Failure -> onDone(res.message)
+                is ApiResult.Failure -> {
+                    if (res.code == "SAVED_SESSION_EXPIRED") {
+                        // The stored token is dead: keep its account tile, clear the active
+                        // identity, and return to login without an alarming snackbar.
+                        sessionManager.signOut()
+                    } else {
+                        onDone(res.message)
+                    }
+                }
             }
         }
     }
@@ -805,7 +814,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun signOut() {
-        viewModelScope.launch { sessionManager.signOut() }
+        viewModelScope.launch { sessionManager.signOut(notifyServer = true) }
     }
 }
 

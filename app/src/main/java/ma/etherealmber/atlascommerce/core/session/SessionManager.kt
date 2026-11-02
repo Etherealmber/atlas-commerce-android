@@ -1,7 +1,9 @@
 package ma.etherealmber.atlascommerce.core.session
 
 import android.os.Build
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,6 +86,7 @@ class SessionManager @Inject constructor(
 
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
+    private val startupCleanup = CompletableDeferred<Unit>()
 
     private val _notices = MutableSharedFlow<String>(
         extraBufferCapacity = 8,
@@ -99,9 +102,9 @@ class SessionManager @Inject constructor(
         "Atlas-Android/${AppDetails.VERSION_NAME} (Android ${Build.VERSION.RELEASE}; ${Build.MODEL})"
 
     init {
-        scope.launch { restore() }
+        scope.launch { initializeFreshSession() }
         // v1.2 FCM bridge — (re)register the device push token with the worker
-        // whenever a session becomes active (restore, password login, QR pairing).
+        // whenever a session becomes active (password login, saved-account unlock, QR pairing).
         scope.launch {
             state
                 .map { (it as? SessionState.Active)?.user?.scopeIdentity }
@@ -110,107 +113,31 @@ class SessionManager @Inject constructor(
         }
     }
 
-    private suspend fun restore() {
+    /**
+     * Native Android requires a fresh authentication after every new app process. Activity
+     * recreation/background resume does not recreate this singleton, so it keeps the in-memory
+     * session. Only active-session fields are cleared; saved accounts remain available for an
+     * explicit password or device-authenticated sign-in. The PWA has its own session lifecycle.
+     */
+    private suspend fun initializeFreshSession() {
         try {
-            serverConfig.loaded.filter { it }.first()
             preferences.migrateLegacyPreferencesAtRest()
-            val stored = preferences.readSession()
-            if (preferences.isSessionRestoreDisabled()) {
-                preferences.clearSession()
-                purgeInMemorySession()
-                _state.value = SessionState.SignedOut
-                return
-            }
-            if (stored == null) {
-                purgeInMemorySession()
-                _state.value = SessionState.SignedOut
-                return
-            }
-            if (!serverConfig.baseUrl().equals(stored.serverUrl, ignoreCase = true)) {
-                preferences.disableSessionRestore(disabled = true)
-                preferences.clearSession()
-                purgeInMemorySession()
-                _state.value = SessionState.SignedOut
-                return
-            }
-            val token = cryptoStore.decrypt(stored.tokenCipher)
-            if (token.isNullOrBlank()) {
-                preferences.disableSessionRestore(disabled = true)
-                preferences.clearSession()
-                purgeInMemorySession()
-                _state.value = SessionState.SignedOut
-                return
-            }
-
-            tokenHolder.set(token)
-            preferences.bindActiveScope(stored.serverUrl, stored.username)
-            offlineCache.bindScope(stored.serverUrl, stored.username)
-            when (val verified = authRepository.me()) {
-                is ApiResult.Success -> {
-                    val me = verified.data
-                    val username = me.username?.takeIf { it.isNotBlank() } ?: stored.username
-                    if (!username.equals(stored.username, ignoreCase = true)) {
-                        preferences.disableSessionRestore(disabled = true)
-                        preferences.clearSession()
-                        purgeInMemorySession()
-                        _state.value = SessionState.SignedOut
-                        return
-                    }
-                    activateIsolatedSession(
-                        serverUrl = stored.serverUrl,
-                        token = token,
-                        username = username,
-                        role = me.role?.takeIf { it.isNotBlank() } ?: stored.role,
-                        displayName = me.displayName?.takeIf { it.isNotBlank() } ?: stored.displayName,
-                        email = me.email ?: stored.email,
-                        phone = me.phone.orEmpty(),
-                        avatarUrl = me.avatarUrl?.takeIf { it.isNotBlank() } ?: stored.avatarUrl,
-                        rememberAccount = true,
-                    )
-                }
-                is ApiResult.Failure -> {
-                    val transient = verified.code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK ||
-                        verified.httpStatus?.let { it in 500..599 } == true
-                    val revoked = verified.httpStatus == 401 ||
-                        verified.code == "SESSION_EXPIRED" ||
-                        verified.code.contains("REVOK", ignoreCase = true)
-                    if (transient) {
-                        // Keep the encrypted session available for offline use; a later authenticated
-                        // 401 is handled by SessionGuard and returns the user to sign-in.
-                        activateIsolatedSession(
-                            serverUrl = stored.serverUrl,
-                            token = token,
-                            username = stored.username,
-                            role = stored.role,
-                            displayName = stored.displayName,
-                            email = stored.email,
-                            avatarUrl = stored.avatarUrl,
-                            rememberAccount = true,
-                        )
-                    } else {
-                        if (revoked) {
-                            _notices.tryEmit("Cet appareil ou cette session a été révoqué. Reconnectez-vous.")
-                        }
-                        preferences.disableSessionRestore(disabled = true)
-                        preferences.clearSession()
-                        purgeInMemorySession()
-                        _state.value = SessionState.SignedOut
-                    }
-                }
-            }
+            preferences.clearSession()
+            serverConfig.loaded.filter { it }.first()
         } catch (error: kotlinx.coroutines.CancellationException) {
             throw error
         } catch (error: Throwable) {
             ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
                 tag = "AUTH",
-                message = "Could not restore encrypted session (${error.javaClass.simpleName})",
+                message = "Could not clear active session on native startup (${error.javaClass.simpleName})",
                 level = "WARN",
             )
-            purgeInMemorySession()
-            _state.value = SessionState.SignedOut
         } finally {
-            if (_state.value is SessionState.Loading) {
+            try {
+                purgeInMemorySession()
                 _state.value = SessionState.SignedOut
+            } finally {
+                startupCleanup.complete(Unit)
             }
         }
     }
@@ -345,8 +272,11 @@ class SessionManager @Inject constructor(
         }
         val token = runCatching { cryptoStore.decrypt(entry.tokenCipher) }.getOrNull()
         if (token.isNullOrBlank()) {
-            preferences.removeSavedAccount(entry.serverUrl, entry.username)
-            return ApiResult.Failure("EXPIRED", "Session expirée — reconnectez-vous avec votre mot de passe.")
+            preferences.resetSavedAccountDeviceUnlockChoice(entry.serverUrl, entry.username)
+            return ApiResult.Failure(
+                "SAVED_SESSION_EXPIRED",
+                "Session expirée — reconnectez-vous avec votre mot de passe.",
+            )
         }
         purgeInMemorySession()
         if (!serverConfig.baseUrl().equals(entry.serverUrl, ignoreCase = true)) {
@@ -360,10 +290,11 @@ class SessionManager @Inject constructor(
                 // transient network/server failures. Only a definitive 401
                 // means the saved token can no longer authenticate.
                 if (verify.httpStatus == 401 || verify.code == "SESSION_EXPIRED") {
-                    preferences.removeSavedAccount(entry.serverUrl, entry.username)
+                    // Preserve the account tile so the user can reauthenticate with its password.
+                    preferences.resetSavedAccountDeviceUnlockChoice(entry.serverUrl, entry.username)
                     return ApiResult.Failure(
-                        "EXPIRED",
-                        "La session mémorisée a expiré sur le serveur. Saisissez votre mot de passe.",
+                        "SAVED_SESSION_EXPIRED",
+                        "Session expirée — reconnectez-vous avec votre mot de passe.",
                         httpStatus = verify.httpStatus,
                     )
                 }
@@ -447,6 +378,9 @@ class SessionManager @Inject constructor(
         phone: String = "",
         rememberAccount: Boolean,
     ) {
+        // A cold deep link can authenticate before startup cleanup finishes. Await cleanup
+        // before writing the new active session so its final purge cannot erase this login.
+        startupCleanup.await()
         purgeInMemorySession()
         val cipher = cryptoStore.encrypt(token)
         preferences.bindActiveScope(serverUrl, username)
@@ -583,7 +517,10 @@ class SessionManager @Inject constructor(
         return res
     }
 
-    suspend fun signOut(reason: String? = null) {
+    suspend fun signOut(reason: String? = null, notifyServer: Boolean = false) {
+        if (notifyServer && !authToken.isNullOrBlank()) {
+            runCatching { withTimeoutOrNull(1_500) { authRepository.logout() } }
+        }
         purgeInMemorySession()
         runCatching { preferences.disableSessionRestore(disabled = true) }
         runCatching { preferences.clearSession() }

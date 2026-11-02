@@ -242,6 +242,7 @@ internal fun authFailureMessage(code: String, httpStatus: Int?, isOtp: Boolean):
         "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
     code == "APP_UPDATE_REQUIRED" -> "Une mise à jour est nécessaire pour continuer."
     code == "PASSWORD_REHASH_REQUIRED" -> "Un administrateur doit réinitialiser votre mot de passe."
+    code == "SAVED_SESSION_EXPIRED" -> "Session expirée — reconnectez-vous avec votre mot de passe."
     isOtp && (httpStatus == 401 || code == "BAD_OTP" || code == "OTP_EXPIRED") ->
         "Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau."
     !isOtp && (httpStatus == 401 || code == "BAD_PASSWORD") ->
