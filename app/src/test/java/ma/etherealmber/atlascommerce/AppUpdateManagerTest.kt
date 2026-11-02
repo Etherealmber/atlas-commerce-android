@@ -28,6 +28,7 @@ import ma.etherealmber.atlascommerce.core.update.UpdateInfo
 import ma.etherealmber.atlascommerce.core.update.UpdateNotifier
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.core.update.minimumVersionRequiresUpdate
+import ma.etherealmber.atlascommerce.core.update.shouldClearOptionalUpdateErrorOnResume
 import ma.etherealmber.atlascommerce.push.DeviceTokenAckDto
 import ma.etherealmber.atlascommerce.push.DeviceTokenRequest
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
@@ -94,6 +95,17 @@ class AppUpdateManagerTest {
         assertFalse(minimumVersionRequiresUpdate(installedVersionCode = 12, minimumSupportedVersionCode = 12, availableVersionCode = 14))
         assertFalse(minimumVersionRequiresUpdate(installedVersionCode = 10, minimumSupportedVersionCode = 12, availableVersionCode = 11))
         assertFalse(minimumVersionRequiresUpdate(installedVersionCode = 10, minimumSupportedVersionCode = 0, availableVersionCode = 14))
+    }
+
+    @Test
+    fun foregroundResumeClearsOnlyStaleOptionalUpdateErrorsWhenInternetIsAvailable() {
+        val optional = UpdateInfo(versionCode = 2, versionName = "2.0", apkUrl = "https://example.invalid/app.apk", mandatory = false)
+        val mandatory = optional.copy(mandatory = true)
+
+        assertTrue(shouldClearOptionalUpdateErrorOnResume(UpdateState.Error("download failed", optional), internetAvailable = true))
+        assertFalse(shouldClearOptionalUpdateErrorOnResume(UpdateState.Error("download failed", optional), internetAvailable = false))
+        assertFalse(shouldClearOptionalUpdateErrorOnResume(UpdateState.Error("required update", mandatory), internetAvailable = true))
+        assertFalse(shouldClearOptionalUpdateErrorOnResume(UpdateState.Error("check failed"), internetAvailable = true))
     }
 
     @Test

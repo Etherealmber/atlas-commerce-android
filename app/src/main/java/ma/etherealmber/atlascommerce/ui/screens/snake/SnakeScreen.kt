@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,6 +36,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import ma.etherealmber.atlascommerce.R
 import androidx.compose.ui.text.font.FontWeight
@@ -243,7 +246,7 @@ private fun MenuPage(
             Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                     StatBadge(
-                        icon = { EtherealmberLogoGlyph(Modifier.size(24.dp), size = 24.dp) },
+                        icon = { PersonalBestCrown(Modifier.size(24.dp)) },
                         label = atlasText("Record perso", "Personal best", "أفضل نتيجة شخصية"),
                         value = bestScore,
                     )
@@ -301,6 +304,46 @@ private fun GameplayPage(
     onSettings: () -> Unit,
 ) {
     Column(modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(
+                onClick = onToggleRun,
+                enabled = !pausedByPrompt,
+                modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    when {
+                        game.over -> atlasText("Rejouer", "Play again", "العب مجدداً")
+                        running -> atlasText("Pause", "Pause", "إيقاف مؤقت")
+                        else -> atlasText("Continuer", "Resume", "متابعة")
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                )
+            }
+            OutlinedButton(
+                onClick = onRestart,
+                enabled = !pausedByPrompt,
+                modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+            ) {
+                Text(atlasText("Recommencer", "Restart", "إعادة البدء"), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            }
+            TextButton(
+                onClick = onSettings,
+                enabled = !running,
+                modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+            ) {
+                Icon(Icons.Outlined.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(3.dp))
+                Text(atlasText("Paramètres", "Settings", "الإعدادات"), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            }
+        }
         Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
             StatBadge(icon = { AtlasLogoGlyph(Modifier.size(22.dp)) }, label = atlasText("Atlas", "Atlas", "Atlas"), value = game.score)
             StatBadge(
@@ -309,7 +352,7 @@ private fun GameplayPage(
                 value = game.crowns,
             )
             StatBadge(
-                icon = { EtherealmberLogoGlyph(Modifier.size(22.dp), size = 22.dp) },
+                icon = { PersonalBestCrown(Modifier.size(22.dp)) },
                 label = atlasText("Record perso", "Personal best", "أفضل نتيجة شخصية"),
                 value = bestScore,
             )
@@ -363,31 +406,13 @@ private fun GameplayPage(
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            DirectionPad(onDirection = onDirection, enabled = running && !pausedByPrompt && !game.over)
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(onClick = onToggleRun, enabled = !pausedByPrompt, modifier = Modifier.widthIn(min = 112.dp)) {
-                    Text(when {
-                        game.over -> atlasText("Rejouer", "Play again", "العب مجدداً")
-                        running -> atlasText("Pause", "Pause", "إيقاف مؤقت")
-                        else -> atlasText("Continuer", "Resume", "متابعة")
-                    })
-                }
-                OutlinedButton(onClick = onRestart, enabled = !pausedByPrompt, modifier = Modifier.widthIn(min = 112.dp)) {
-                    Text(atlasText("Recommencer", "Restart", "إعادة البدء"))
-                }
-                TextButton(onClick = onSettings, enabled = !running) {
-                    Text(atlasText("Paramètres", "Settings", "الإعدادات"))
-                }
-            }
-        }
         val message = when {
             game.over && game.won && dailyMode -> atlasText("Défi relevé !", "Challenge complete!", "اكتمل التحدي!")
             game.over && game.won -> atlasText("Plateau rempli !", "Board filled!", "امتلأت اللوحة!")
             game.over -> atlasText("Partie terminée", "Game over", "انتهت اللعبة")
             pausedByPrompt -> atlasText("Partie en pause", "Game paused", "اللعبة متوقفة مؤقتاً")
-            !running -> atlasText("Balayez le plateau ou utilisez les flèches", "Swipe the board or use the arrows", "اسحب على اللوحة أو استخدم الأسهم")
-            else -> atlasText("Touchez une direction pour tourner", "Tap a direction to turn", "اضغط اتجاهاً للانعطاف")
+            !running -> atlasText("Balayez le plateau ou utilisez les flèches du clavier", "Swipe the board or use the keyboard arrows", "اسحب على اللوحة أو استخدم أسهم لوحة المفاتيح")
+            else -> atlasText("Balayez pour tourner", "Swipe to turn", "اسحب للانعطاف")
         }
         Text(message, Modifier.padding(top = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -417,26 +442,6 @@ private fun CrownCollectedToast(visible: Boolean, modifier: Modifier = Modifier)
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun DirectionPad(onDirection: (Direction) -> Unit, enabled: Boolean) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        DirectionButton("↑", enabled) { onDirection(Direction.UP) }
-        Row {
-            DirectionButton("←", enabled) { onDirection(Direction.LEFT) }
-            Spacer(Modifier.size(38.dp))
-            DirectionButton("→", enabled) { onDirection(Direction.RIGHT) }
-        }
-        DirectionButton("↓", enabled) { onDirection(Direction.DOWN) }
-    }
-}
-
-@Composable
-private fun DirectionButton(label: String, enabled: Boolean, onClick: () -> Unit) {
-    FilledTonalButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(38.dp), contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(12.dp)) {
-        Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -499,6 +504,22 @@ private fun DailyPage(modifier: Modifier, target: Int, dailyBest: Int, onStart: 
             Text(atlasText("Commencer le défi", "Start challenge", "ابدأ التحدي"))
         }
     }
+}
+
+@Composable
+private fun PersonalBestCrown(modifier: Modifier = Modifier) {
+    Text(
+        text = "👑",
+        modifier = modifier.semantics {
+            contentDescription = atlasText(
+                "Couronne du record personnel",
+                "Personal-best crown",
+                "تاج أفضل نتيجة شخصية",
+            )
+        },
+        style = MaterialTheme.typography.titleMedium,
+        textAlign = TextAlign.Center,
+    )
 }
 
 @Composable

@@ -58,6 +58,17 @@ import javax.inject.Singleton
 
 internal enum class DownloadNetworkTransport { WIFI, CELLULAR, OTHER }
 
+private fun hasInternetCapability(context: Context): Boolean = runCatching {
+    val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        ?: return@runCatching false
+    val network = connectivity.activeNetwork ?: return@runCatching false
+    connectivity.getNetworkCapabilities(network)
+        ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+}.getOrDefault(false)
+
+internal fun shouldClearOptionalUpdateErrorOnResume(state: UpdateState, internetAvailable: Boolean): Boolean =
+    internetAvailable && (state as? UpdateState.Error)?.info?.mandatory == false
+
 private fun detectDownloadNetworkTransport(context: Context): DownloadNetworkTransport = runCatching {
     val connectivity = context.getSystemService(ConnectivityManager::class.java)
         ?: return@runCatching DownloadNetworkTransport.OTHER
@@ -98,6 +109,7 @@ class AppUpdateManager internal constructor(
     private val githubLatestJsonUrl: String? = null,
     private val releasesApiUrl: String? = null,
     private val networkTransportProvider: () -> DownloadNetworkTransport = { DownloadNetworkTransport.OTHER },
+    private val internetAvailableProvider: () -> Boolean = { false },
 ) {
 
     @Inject
@@ -146,6 +158,7 @@ class AppUpdateManager internal constructor(
         githubLatestJsonUrl = UpdateDefaults.GITHUB_LATEST_JSON_URL,
         releasesApiUrl = UpdateDefaults.GITHUB_RELEASES_API_URL,
         networkTransportProvider = { detectDownloadNetworkTransport(context) },
+        internetAvailableProvider = { hasInternetCapability(context) },
     )
 
     private val lock = Any()
@@ -1265,6 +1278,13 @@ class AppUpdateManager internal constructor(
             deferredSettingsResultNotification = false
         }
         val current = _state.value
+        val internetAvailable = runCatching { internetAvailableProvider() }.getOrDefault(false)
+        if (shouldClearOptionalUpdateErrorOnResume(current, internetAvailable)) {
+            // A background transfer can fail during a brief network handoff. Do not surface its
+            // stale optional-update error after Android reports an internet-capable network.
+            _state.value = UpdateState.Idle
+            notifier.cancel()
+        }
         if (current is UpdateState.ReadyToInstall &&
             current.awaitingInstallPermission &&
             (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.packageManager.canRequestPackageInstalls())

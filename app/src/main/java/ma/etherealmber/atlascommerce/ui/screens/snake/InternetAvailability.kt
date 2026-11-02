@@ -13,20 +13,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /** Device connectivity only: this does not claim the Atlas server is down. */
 @Composable
 fun rememberInternetAvailable(): Boolean? {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var available by remember { mutableStateOf<Boolean?>(null) }
-    DisposableEffect(context) {
+    DisposableEffect(context, lifecycleOwner) {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         val handler = Handler(Looper.getMainLooper())
         fun update() {
             available = manager?.let { cm ->
-                val caps = cm.getNetworkCapabilities(cm.activeNetwork)
-                caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
-                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                val network = cm.activeNetwork ?: return@let false
+                val capabilities = cm.getNetworkCapabilities(network) ?: return@let false
+                // VALIDATED is Android's best-effort probe, not a guarantee that this app's
+                // server is unreachable. VPNs and networks during validation can still work.
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             }
         }
         val callback = object : ConnectivityManager.NetworkCallback() {
@@ -36,7 +42,14 @@ fun rememberInternetAvailable(): Boolean? {
         }
         update()
         val registered = manager != null && runCatching { manager.registerDefaultNetworkCallback(callback) }.isSuccess
-        onDispose { if (registered) runCatching { manager?.unregisterNetworkCallback(callback) } }
+        val lifecycleObserver = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) update()
+        }
+        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
+            if (registered) runCatching { manager?.unregisterNetworkCallback(callback) }
+        }
     }
     return available
 }
