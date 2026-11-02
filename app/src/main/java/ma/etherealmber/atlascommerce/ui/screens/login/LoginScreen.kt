@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -99,7 +100,6 @@ import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.update.UpdateState
-import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
@@ -154,7 +154,6 @@ private fun LoginScreenContent(
     }
     val loginPanelOffsetPx = with(LocalDensity.current) { 16.dp.toPx() }
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val server by viewModel.server.collectAsStateWithLifecycle()
     val savedAccounts by viewModel.savedAccounts.collectAsStateWithLifecycle()
     val language = LocalAtlasLanguage.current
     val setLanguage = LocalSetAtlasLanguage.current
@@ -189,9 +188,6 @@ private fun LoginScreenContent(
     val selectedUnlockAccount = savedAccounts.firstOrNull {
         it.canUseDeviceUnlock && it.username.equals(state.username, ignoreCase = true)
     }
-    val host = server?.let { ServerUrl.display(it.baseUrl) }
-        ?: atlasText("Serveur non sélectionné", "No server selected", "لم يتم اختيار خادم")
-
     fun useDifferentAccount() {
         accountPickerOpen = false
         accountPromptHandled = true
@@ -363,8 +359,6 @@ private fun LoginScreenContent(
 
         if (helpServicesOpen) {
             LoginHelpServicesSheet(
-                host = host,
-                languageName = language.nativeLabel,
                 onDismiss = { helpServicesOpen = false },
                 onHelp = { helpServicesOpen = false; helpTopic = LoginHelpTopic.HELP },
                 onContacts = { helpServicesOpen = false; helpTopic = LoginHelpTopic.CONTACTS },
@@ -446,8 +440,6 @@ private enum class LoginHelpTopic { HELP, CONTACTS, RECOVERY }
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun LoginHelpServicesSheet(
-    host: String,
-    languageName: String,
     onDismiss: () -> Unit,
     onHelp: () -> Unit,
     onContacts: () -> Unit,
@@ -469,7 +461,13 @@ private fun LoginHelpServicesSheet(
         },
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp).padding(bottom = 26.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 520.dp)
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(horizontal = 22.dp)
+                .padding(bottom = 16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -488,19 +486,18 @@ private fun LoginHelpServicesSheet(
                     Icon(Icons.Outlined.Close, contentDescription = atlasText("Fermer", "Close", "إغلاق"))
                 }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 LoginServiceItem(Icons.Outlined.HelpOutline, atlasText("Aide / FAQ", "Help / FAQ", "المساعدة / الأسئلة الشائعة"), onHelp, Modifier.weight(1f))
                 LoginServiceItem(Icons.Outlined.AlternateEmail, atlasText("Contacts", "Contacts", "جهات الاتصال"), onContacts, Modifier.weight(1f))
                 LoginServiceItem(Icons.Outlined.Info, atlasText("À propos", "About", "حول التطبيق"), onAbout, Modifier.weight(1f))
             }
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                LoginServiceItem(Icons.Outlined.Language, atlasText("Langues", "Languages", "اللغات"), onLanguages, Modifier.weight(1f), subtitle = languageName)
-                LoginServiceItem(Icons.Outlined.Dns, atlasText("Serveurs", "Servers", "الخوادم"), onServers, Modifier.weight(1f), subtitle = host)
+                LoginServiceItem(Icons.Outlined.Language, atlasText("Langues", "Languages", "اللغات"), onLanguages, Modifier.weight(1f))
+                LoginServiceItem(Icons.Outlined.Dns, atlasText("Serveurs", "Servers", "الخوادم"), onServers, Modifier.weight(1f))
                 LoginServiceItem(Icons.Outlined.QrCode2, atlasText("Connexion QR", "QR sign-in", "تسجيل الدخول عبر QR"), onQr, Modifier.weight(1f))
             }
-
         }
     }
 }
@@ -511,7 +508,6 @@ private fun LoginServiceItem(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    subtitle: String? = null,
 ) {
     Column(
         modifier = modifier.clickable(onClick = onClick).padding(horizontal = 3.dp),
@@ -536,16 +532,6 @@ private fun LoginServiceItem(
             minLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        if (subtitle != null) {
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
     }
 }
 

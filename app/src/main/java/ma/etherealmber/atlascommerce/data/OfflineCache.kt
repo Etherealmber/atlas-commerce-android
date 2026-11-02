@@ -2,11 +2,14 @@ package ma.etherealmber.atlascommerce.data
 
 import android.content.Context
 import com.squareup.moshi.Moshi
+import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Types
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
+import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.core.security.AtRestCipher
 import ma.etherealmber.atlascommerce.core.security.CryptoStore
 import java.io.File
@@ -14,6 +17,13 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
+
+
+@JsonClass(generateAdapter = true)
+data class OfflineFinanceBundle(
+    val finance: FinanceMonthlyDto,
+    val payroll: PayrollPageDto,
+)
 
 /**
  * Isolated offline product cache strictly partitioned by `(serverUrl, username)`.
@@ -51,6 +61,7 @@ class OfflineCache internal constructor(
             Types.newParameterizedType(List::class.java, ProductDto::class.java),
         )
     }
+    private val financeBundleAdapter by lazy { moshi.adapter(OfflineFinanceBundle::class.java) }
 
     /** Updates active `(serverUrl, username)` partition; passes `null` on sign-out. */
     fun bindScope(serverUrl: String?, username: String?) {
@@ -79,11 +90,46 @@ class OfflineCache internal constructor(
         runCatching { productAdapter.fromJson(clearText) }.getOrNull().orEmpty()
     }
 
+    /** Persist role-gated payroll data encrypted and isolated to the active account. */
+    suspend fun saveFinanceBundle(
+        finance: FinanceMonthlyDto,
+        payroll: PayrollPageDto,
+        isLatest: Boolean,
+    ) = withContext(Dispatchers.IO) {
+        val key = activeScopeKey ?: return@withContext
+        val period = finance.period.takeIf { it.matches(Regex("\\d{4}-(0[1-9]|1[0-2])")) } ?: return@withContext
+        if (payroll.period.isNotBlank() && payroll.period != period) return@withContext
+        val encrypted = runCatching {
+            cryptoStore.encryptAtRest(financeBundleAdapter.toJson(OfflineFinanceBundle(finance, payroll)))
+        }.getOrNull() ?: return@withContext
+        write("finance_${key}_$period.json") { encrypted }
+        if (isLatest) write("finance_${key}_latest.json") { encrypted }
+    }
+
+    /** A null period reads the last successful current-period snapshot only. */
+    suspend fun readFinanceBundle(period: String? = null): OfflineFinanceBundle? = withContext(Dispatchers.IO) {
+        val key = activeScopeKey ?: return@withContext null
+        val cleanPeriod = period?.trim()
+        val fileName = if (cleanPeriod.isNullOrBlank()) {
+            "finance_${key}_latest.json"
+        } else {
+            if (!cleanPeriod.matches(Regex("\\d{4}-(0[1-9]|1[0-2])"))) return@withContext null
+            "finance_${key}_$cleanPeriod.json"
+        }
+        val encrypted = read(fileName) ?: return@withContext null
+        val clearText = cryptoStore.decryptAtRest(encrypted) ?: return@withContext null
+        runCatching { financeBundleAdapter.fromJson(clearText) }.getOrNull()
+    }
+
     /** Clears only the active `(serverUrl, username)` cache file. */
     suspend fun clear() = withContext(Dispatchers.IO) {
         val key = activeScopeKey
         if (key != null) {
-            runCatching { File(directory, "products_$key.json").delete() }
+            runCatching {
+                directory.listFiles()?.forEach { file ->
+                    if (file.name == "products_$key.json" || file.name.startsWith("finance_${key}_")) file.delete()
+                }
+            }
         }
         runCatching { File(directory, LEGACY_PRODUCTS_FILE).delete() }
     }
@@ -93,7 +139,12 @@ class OfflineCache internal constructor(
         val srv = serverUrl.trim().lowercase()
         val usr = username.trim().lowercase()
         if (srv.isNotEmpty() && usr.isNotEmpty()) {
-            runCatching { File(directory, "products_${scopeKey(srv, usr)}.json").delete() }
+            val key = scopeKey(srv, usr)
+            runCatching {
+                directory.listFiles()?.forEach { file ->
+                    if (file.name == "products_$key.json" || file.name.startsWith("finance_${key}_")) file.delete()
+                }
+            }
         }
     }
 
@@ -101,10 +152,11 @@ class OfflineCache internal constructor(
     suspend fun clearServerScope(serverUrl: String) = withContext(Dispatchers.IO) {
         val srv = serverUrl.trim().lowercase()
         if (srv.isEmpty()) return@withContext
-        val prefix = "products_${shortSha(srv)}_"
+        val productPrefix = "products_${shortSha(srv)}_"
+        val financePrefix = "finance_${shortSha(srv)}_"
         runCatching {
             directory.listFiles()?.forEach { f ->
-                if (f.name.startsWith(prefix)) f.delete()
+                if (f.name.startsWith(productPrefix) || f.name.startsWith(financePrefix)) f.delete()
             }
         }
     }

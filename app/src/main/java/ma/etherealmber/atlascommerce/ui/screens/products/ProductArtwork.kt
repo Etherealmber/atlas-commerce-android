@@ -19,13 +19,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import ma.etherealmber.atlascommerce.ui.components.AvatarBitmapCache
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
 /**
  * Product artwork is loaded only while a lazy card/detail page is composed and reuses Atlas's
- * bounded in-memory bitmap cache. Products without a photo retain the familiar inventory glyph.
+ * persistent stale-while-revalidate bitmap cache. Products without a photo retain the inventory glyph.
  */
 @Composable
 internal fun ProductArtwork(
@@ -34,13 +35,18 @@ internal fun ProductArtwork(
     label: String,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val cleanUrl = imageUrl?.trim().orEmpty()
     val cacheKey = remember(cleanUrl, serverBaseUrl) { "${serverBaseUrl.orEmpty()}|$cleanUrl" }
     var bitmap by remember(cacheKey) { mutableStateOf(AvatarBitmapCache.get(cacheKey)) }
 
-    LaunchedEffect(cleanUrl, serverBaseUrl) {
-        if (cleanUrl.isNotEmpty() && bitmap == null) {
-            bitmap = AvatarBitmapCache.load(cleanUrl, serverBaseUrl)
+    LaunchedEffect(context, cleanUrl, serverBaseUrl) {
+        if (cleanUrl.isNotEmpty()) {
+            val cached = AvatarBitmapCache.load(context, cleanUrl, serverBaseUrl)
+            bitmap = cached
+            if (cached != null && AvatarBitmapCache.shouldRefresh(context, cleanUrl, serverBaseUrl)) {
+                AvatarBitmapCache.refresh(context, cleanUrl, serverBaseUrl)?.let { updated -> bitmap = updated }
+            }
         }
     }
 

@@ -3,7 +3,6 @@ package ma.etherealmber.atlascommerce
 import ma.etherealmber.atlascommerce.ui.root.roundUpTo50MiB
 import ma.etherealmber.atlascommerce.ui.shell.MainTab
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LocalStorageRecommendationTest {
@@ -18,13 +17,15 @@ class LocalStorageRecommendationTest {
     }
 
     @Test
-    fun launchTabMovesToFrontOnlyWhenAllowedForRole() {
-        val adminTabs = MainTab.orderedBottomTabsForRole("admin", MainTab.EMPLOYEES.name)
-        assertEquals(MainTab.EMPLOYEES, adminTabs.first())
-        assertTrue(MainTab.bottomTabsForRole("admin").containsAll(adminTabs))
+    fun launchTabSelectsTheScreenWithoutReorderingTheDock() {
+        val adminDock = listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.EMPLOYEES)
+        assertEquals(adminDock, MainTab.bottomTabsForRole("admin"))
+        assertEquals(MainTab.SCAN, MainTab.initialTabForRole("admin", MainTab.SCAN.name))
+        assertEquals(MainTab.BALANCE, MainTab.initialTabForRole("admin", MainTab.BALANCE.name))
+        assertEquals(MainTab.EMPLOYEES, MainTab.initialTabForRole("admin", MainTab.EMPLOYEES.name))
 
-        val stockTabs = MainTab.orderedBottomTabsForRole("stock", MainTab.BALANCE.name)
-        assertEquals(MainTab.HOME, stockTabs.first())
-        assertEquals(setOf(MainTab.HOME, MainTab.SCAN, MainTab.PRODUCTS), stockTabs.toSet())
+        val stockDock = listOf(MainTab.HOME, MainTab.SCAN, MainTab.PRODUCTS)
+        assertEquals(stockDock, MainTab.bottomTabsForRole("stock"))
+        assertEquals(MainTab.HOME, MainTab.initialTabForRole("stock", MainTab.BALANCE.name))
     }
 }

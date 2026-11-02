@@ -265,8 +265,11 @@ class SessionManager @Inject constructor(
         }
         val token = runCatching { cryptoStore.decrypt(entry.tokenCipher) }.getOrNull()
         if (token.isNullOrBlank()) {
-            preferences.removeSavedAccount(entry.serverUrl, entry.username)
-            return ApiResult.Failure("EXPIRED", "Session expirée — reconnectez-vous avec votre mot de passe.")
+            preferences.setSavedAccountDeviceUnlock(entry.serverUrl, entry.username, enabled = false)
+            return ApiResult.Failure(
+                "SAVED_SESSION_EXPIRED",
+                "Session expirée — reconnectez-vous avec votre mot de passe.",
+            )
         }
         purgeInMemorySession()
         if (!serverConfig.baseUrl().equals(entry.serverUrl, ignoreCase = true)) {
@@ -280,10 +283,11 @@ class SessionManager @Inject constructor(
                 // transient network/server failures. Only a definitive 401
                 // means the saved token can no longer authenticate.
                 if (verify.httpStatus == 401 || verify.code == "SESSION_EXPIRED") {
-                    preferences.removeSavedAccount(entry.serverUrl, entry.username)
+                    // Preserve the account tile so the user can reauthenticate with its password.
+                    preferences.setSavedAccountDeviceUnlock(entry.serverUrl, entry.username, enabled = false)
                     return ApiResult.Failure(
-                        "EXPIRED",
-                        "La session mémorisée a expiré sur le serveur. Saisissez votre mot de passe.",
+                        "SAVED_SESSION_EXPIRED",
+                        "Session expirée — reconnectez-vous avec votre mot de passe.",
                         httpStatus = verify.httpStatus,
                     )
                 }

@@ -1,8 +1,10 @@
 package ma.etherealmber.atlascommerce.ui.screens.products
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
@@ -20,6 +22,7 @@ import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
+import ma.etherealmber.atlascommerce.core.net.hasDeviceInternetCapability
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.CartStore
@@ -37,6 +40,7 @@ class ProductsViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
     private val cartStore: CartStore,
     private val sessionManager: SessionManager,
+    @ApplicationContext private val applicationContext: Context,
 ) : ViewModel() {
 
     enum class FilterMode {
@@ -62,6 +66,7 @@ class ProductsViewModel @Inject constructor(
         val refreshing: Boolean = false,
         val submitting: Boolean = false,
         val offline: Boolean = false,
+        val cachedFallback: Boolean = false,
         val error: String? = null,
         val currency: String = "MAD",
     ) {
@@ -363,6 +368,14 @@ class ProductsViewModel @Inject constructor(
                     error = null,
                 )
             }
+            if (query.isBlank() && _state.value.products.isEmpty()) {
+                val savedCatalog = runCatching { commerceRepository.cachedProducts() }.getOrDefault(emptyList())
+                if (savedCatalog.isNotEmpty() &&
+                    (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope
+                ) {
+                    _state.update { it.copy(products = savedCatalog, loading = false, cachedFallback = true) }
+                }
+            }
             val result = commerceRepository.products(query = query, limit = 300)
             val reqResult = commerceRepository.productRequests("open")
             val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
@@ -378,20 +391,23 @@ class ProductsViewModel @Inject constructor(
 
             when (result) {
                 is ApiResult.Failure -> {
-                    val offline = result.code == ApiRunner.CODE_NETWORK
-                    val cached = if (offline) {
+                    val networkFailure = result.code == ApiRunner.CODE_NETWORK
+                    val serverUnavailable = result.httpStatus?.let { it in 500..599 } == true
+                    val canUseCache = networkFailure || serverUnavailable
+                    val offline = networkFailure && !hasDeviceInternetCapability(applicationContext)
+                    val cached = if (canUseCache) {
                         commerceRepository.cachedProducts().filter { matches(it, query) }
-                    } else {
-                        emptyList()
-                    }
+                    } else emptyList()
+                    val hasSavedCatalog = cached.isNotEmpty() || (query.isBlank() && _state.value.products.isNotEmpty())
                     _state.update {
                         it.copy(
                             loading = false,
                             refreshing = false,
                             offline = offline,
+                            cachedFallback = canUseCache && hasSavedCatalog,
                             openRequests = visibleReqs,
-                            products = if (offline) cached else it.products,
-                            error = if (offline) null else result.message,
+                            products = if (cached.isNotEmpty()) cached else it.products,
+                            error = if (canUseCache && hasSavedCatalog) null else result.message,
                         )
                     }
                     if (offline) _messages.tryEmit("Hors ligne — catalogue enregistré sur l'appareil.")
@@ -402,6 +418,7 @@ class ProductsViewModel @Inject constructor(
                         loading = false,
                         refreshing = false,
                         offline = false,
+                        cachedFallback = false,
                         error = null,
                         openRequests = visibleReqs,
                         products = result.data,

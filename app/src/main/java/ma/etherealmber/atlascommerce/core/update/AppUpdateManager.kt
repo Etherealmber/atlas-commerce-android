@@ -31,6 +31,7 @@ import kotlin.coroutines.resumeWithException
 import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
+import ma.etherealmber.atlascommerce.core.net.hasDeviceInternetCapability
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
@@ -57,14 +58,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 internal enum class DownloadNetworkTransport { WIFI, CELLULAR, OTHER }
-
-private fun hasInternetCapability(context: Context): Boolean = runCatching {
-    val connectivity = context.getSystemService(ConnectivityManager::class.java)
-        ?: return@runCatching false
-    val network = connectivity.activeNetwork ?: return@runCatching false
-    connectivity.getNetworkCapabilities(network)
-        ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-}.getOrDefault(false)
 
 internal fun shouldClearOptionalUpdateErrorOnResume(state: UpdateState, internetAvailable: Boolean): Boolean =
     internetAvailable && (state as? UpdateState.Error)?.info?.mandatory == false
@@ -158,7 +151,7 @@ class AppUpdateManager internal constructor(
         githubLatestJsonUrl = UpdateDefaults.GITHUB_LATEST_JSON_URL,
         releasesApiUrl = UpdateDefaults.GITHUB_RELEASES_API_URL,
         networkTransportProvider = { detectDownloadNetworkTransport(context) },
-        internetAvailableProvider = { hasInternetCapability(context) },
+        internetAvailableProvider = { hasDeviceInternetCapability(context) },
     )
 
     private val lock = Any()
