@@ -36,7 +36,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import ma.etherealmber.atlascommerce.R
@@ -303,6 +305,15 @@ private fun GameplayPage(
     onRestart: () -> Unit,
     onSettings: () -> Unit,
 ) {
+    val boardDescription = atlasText(
+        "Plateau du jeu Snake. Utilisez les actions TalkBack pour diriger le serpent.",
+        "Snake game board. Use TalkBack actions to steer the snake.",
+        "لوحة لعبة الثعبان. استخدم إجراءات TalkBack لتوجيه الثعبان.",
+    )
+    val moveUpLabel = atlasText("Monter", "Move up", "تحرك للأعلى")
+    val moveDownLabel = atlasText("Descendre", "Move down", "تحرك للأسفل")
+    val moveLeftLabel = atlasText("Aller à gauche", "Move left", "تحرك إلى اليسار")
+    val moveRightLabel = atlasText("Aller à droite", "Move right", "تحرك إلى اليمين")
     Column(modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
             Modifier.fillMaxWidth(),
@@ -331,7 +342,7 @@ private fun GameplayPage(
                 modifier = Modifier.weight(1f).heightIn(min = 40.dp),
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
             ) {
-                Text(atlasText("Recommencer", "Restart", "إعادة البدء"), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                Text(atlasText("Recommencer", "Restart", "إعادة البدء"), style = MaterialTheme.typography.labelMedium, maxLines = 2)
             }
             TextButton(
                 onClick = onSettings,
@@ -398,6 +409,15 @@ private fun GameplayPage(
                                 onDirection(direction)
                             }
                         }) { change, amount -> change.consume(); drag += amount }
+                    }
+                    .semantics {
+                        contentDescription = boardDescription
+                        customActions = listOf(
+                            CustomAccessibilityAction(moveUpLabel) { onDirection(Direction.UP); true },
+                            CustomAccessibilityAction(moveDownLabel) { onDirection(Direction.DOWN); true },
+                            CustomAccessibilityAction(moveLeftLabel) { onDirection(Direction.LEFT); true },
+                            CustomAccessibilityAction(moveRightLabel) { onDirection(Direction.RIGHT); true },
+                        )
                     },
                 showEyes = true,
             )
@@ -411,8 +431,8 @@ private fun GameplayPage(
             game.over && game.won -> atlasText("Plateau rempli !", "Board filled!", "امتلأت اللوحة!")
             game.over -> atlasText("Partie terminée", "Game over", "انتهت اللعبة")
             pausedByPrompt -> atlasText("Partie en pause", "Game paused", "اللعبة متوقفة مؤقتاً")
-            !running -> atlasText("Balayez le plateau ou utilisez les flèches du clavier", "Swipe the board or use the keyboard arrows", "اسحب على اللوحة أو استخدم أسهم لوحة المفاتيح")
-            else -> atlasText("Balayez pour tourner", "Swipe to turn", "اسحب للانعطاف")
+            !running -> atlasText("Balayez, utilisez le clavier ou les actions TalkBack", "Swipe, use the keyboard, or TalkBack actions", "اسحب أو استخدم لوحة المفاتيح أو إجراءات TalkBack")
+            else -> atlasText("Balayez pour tourner · actions TalkBack disponibles", "Swipe to turn · TalkBack actions available", "اسحب للانعطاف · إجراءات TalkBack متاحة")
         }
         Text(message, Modifier.padding(top = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

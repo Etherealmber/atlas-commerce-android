@@ -32,7 +32,9 @@ fun rememberInternetAvailable(): Boolean? {
                 val capabilities = cm.getNetworkCapabilities(network) ?: return@let false
                 // VALIDATED is Android's best-effort probe, not a guarantee that this app's
                 // server is unreachable. VPNs and networks during validation can still work.
-                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                // A captive portal is not usable internet until its sign-in flow completes.
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
             }
         }
         val callback = object : ConnectivityManager.NetworkCallback() {

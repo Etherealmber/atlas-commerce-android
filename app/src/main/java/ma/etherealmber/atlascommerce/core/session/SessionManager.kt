@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce.core.session
 
 import android.os.Build
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -84,6 +85,7 @@ class SessionManager @Inject constructor(
 
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
+    private val startupCleanup = CompletableDeferred<Unit>()
 
     private val _notices = MutableSharedFlow<String>(
         extraBufferCapacity = 8,
@@ -130,8 +132,12 @@ class SessionManager @Inject constructor(
                 level = "WARN",
             )
         } finally {
-            purgeInMemorySession()
-            _state.value = SessionState.SignedOut
+            try {
+                purgeInMemorySession()
+                _state.value = SessionState.SignedOut
+            } finally {
+                startupCleanup.complete(Unit)
+            }
         }
     }
 
@@ -371,6 +377,9 @@ class SessionManager @Inject constructor(
         phone: String = "",
         rememberAccount: Boolean,
     ) {
+        // A cold deep link can authenticate before startup cleanup finishes. Await cleanup
+        // before writing the new active session so its final purge cannot erase this login.
+        startupCleanup.await()
         purgeInMemorySession()
         val cipher = cryptoStore.encrypt(token)
         preferences.bindActiveScope(serverUrl, username)

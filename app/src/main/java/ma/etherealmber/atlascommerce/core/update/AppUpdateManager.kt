@@ -59,8 +59,10 @@ import javax.inject.Singleton
 
 internal enum class DownloadNetworkTransport { WIFI, CELLULAR, OTHER }
 
-internal fun shouldClearOptionalUpdateErrorOnResume(state: UpdateState, internetAvailable: Boolean): Boolean =
-    internetAvailable && (state as? UpdateState.Error)?.info?.mandatory == false
+internal fun shouldClearOptionalUpdateErrorOnResume(state: UpdateState, internetAvailable: Boolean): Boolean {
+    val error = state as? UpdateState.Error ?: return false
+    return internetAvailable && error.info?.mandatory == false && error.recoverableNetwork
+}
 
 private fun detectDownloadNetworkTransport(context: Context): DownloadNetworkTransport = runCatching {
     val connectivity = context.getSystemService(ConnectivityManager::class.java)
@@ -634,6 +636,7 @@ class AppUpdateManager internal constructor(
             .ifEmpty { listOf(info.apkUrl) }
 
         var lastError: Throwable? = null
+        var lastErrorRecoverable = false
 
         for (candidateUrl in candidateUrls) {
             runCatching { partFile.delete() }
@@ -644,6 +647,7 @@ class AppUpdateManager internal constructor(
                 else -> null
             }
 
+            var transferCompleted = false
             try {
                 downloadFromUrl(
                     info = info,
@@ -652,6 +656,7 @@ class AppUpdateManager internal constructor(
                     partFile = partFile,
                     allowParallel = useParallel,
                 )
+                transferCompleted = true
 
                 // Verify SHA-256 checksum when supplied by manifest
                 val expectedSha = info.sha256
@@ -691,6 +696,7 @@ class AppUpdateManager internal constructor(
             } catch (t: Throwable) {
                 runCatching { partFile.delete() }
                 lastError = t
+                lastErrorRecoverable = !transferCompleted && t is IOException
             }
         }
 
@@ -701,7 +707,11 @@ class AppUpdateManager internal constructor(
                 ?: "Échec du téléchargement de la mise à jour."
         }
         synchronized(lock) {
-            _state.value = UpdateState.Error(message = message, info = info)
+            _state.value = UpdateState.Error(
+                message = message,
+                info = info,
+                recoverableNetwork = lastErrorRecoverable,
+            )
         }
         notifyError(info, message)
     }
@@ -1270,14 +1280,20 @@ class AppUpdateManager internal constructor(
             notifier.cancel()
             deferredSettingsResultNotification = false
         }
-        val current = _state.value
         val internetAvailable = runCatching { internetAvailableProvider() }.getOrDefault(false)
-        if (shouldClearOptionalUpdateErrorOnResume(current, internetAvailable)) {
-            // A background transfer can fail during a brief network handoff. Do not surface its
-            // stale optional-update error after Android reports an internet-capable network.
-            _state.value = UpdateState.Idle
-            notifier.cancel()
+        synchronized(lock) {
+            val current = _state.value
+            if (shouldClearOptionalUpdateErrorOnResume(current, internetAvailable)) {
+                // Clear only a transport failure, retaining the optional release metadata so
+                // Settings can retry. The state read/write and notification cancellation are
+                // atomic with respect to checks and download completions.
+                val error = current as UpdateState.Error
+                val info = error.info ?: return@synchronized
+                _state.value = UpdateState.Available(info = info, dismissedBanner = true)
+                notifier.cancel()
+            }
         }
+        val current = _state.value
         if (current is UpdateState.ReadyToInstall &&
             current.awaitingInstallPermission &&
             (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.packageManager.canRequestPackageInstalls())

@@ -102,9 +102,10 @@ class AppUpdateManagerTest {
         val optional = UpdateInfo(versionCode = 2, versionName = "2.0", apkUrl = "https://example.invalid/app.apk", mandatory = false)
         val mandatory = optional.copy(mandatory = true)
 
-        assertTrue(shouldClearOptionalUpdateErrorOnResume(UpdateState.Error("download failed", optional), internetAvailable = true))
-        assertFalse(shouldClearOptionalUpdateErrorOnResume(UpdateState.Error("download failed", optional), internetAvailable = false))
-        assertFalse(shouldClearOptionalUpdateErrorOnResume(UpdateState.Error("required update", mandatory), internetAvailable = true))
+        assertTrue(shouldClearOptionalUpdateErrorOnResume(UpdateState.Error("download failed", optional, recoverableNetwork = true), internetAvailable = true))
+        assertFalse(shouldClearOptionalUpdateErrorOnResume(UpdateState.Error("download failed", optional, recoverableNetwork = true), internetAvailable = false))
+        assertFalse(shouldClearOptionalUpdateErrorOnResume(UpdateState.Error("checksum failed", optional), internetAvailable = true))
+        assertFalse(shouldClearOptionalUpdateErrorOnResume(UpdateState.Error("required update", mandatory, recoverableNetwork = true), internetAvailable = true))
         assertFalse(shouldClearOptionalUpdateErrorOnResume(UpdateState.Error("check failed"), internetAvailable = true))
     }
 

@@ -216,6 +216,8 @@ sealed interface UpdateState {
     data class Error(
         val message: String,
         val info: UpdateInfo? = null,
+        /** True only for a transport failure during the APK download itself. */
+        val recoverableNetwork: Boolean = false,
     ) : UpdateState
 }
 

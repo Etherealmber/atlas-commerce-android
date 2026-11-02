@@ -12,6 +12,8 @@ import android.net.NetworkCapabilities
 fun hasDeviceInternetCapability(context: Context): Boolean = runCatching {
     val manager = context.getSystemService(ConnectivityManager::class.java) ?: return@runCatching false
     val network = manager.activeNetwork ?: return@runCatching false
-    manager.getNetworkCapabilities(network)
-        ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    manager.getNetworkCapabilities(network)?.let { capabilities ->
+        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
+    } == true
 }.getOrDefault(false)
