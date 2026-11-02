@@ -262,12 +262,13 @@ class QrDevicesAndModelsTest {
             }
             val cache = OfflineCache(dir, moshi, cipher)
             cache.bindScope("https://alpha.example.com", "administrator")
+            val administratorScope = cache.scopeFor("https://alpha.example.com", "administrator")!!
             val finance = FinanceMonthlyDto(period = "2026-11", currency = "MAD", closingBalance = 4321.0)
             val payroll = PayrollPageDto(
                 period = "2026-11",
                 rows = listOf(PayrollRowDto(employeeId = 7, displayName = "Private payroll name", amountDue = 125.0)),
             )
-            cache.saveFinanceBundle(finance, payroll, isLatest = true)
+            cache.saveFinanceBundle(finance, payroll, isLatest = true, scope = administratorScope)
 
             val persisted = dir.listFiles()!!.filter { it.name.startsWith("finance_") }
             assertTrue(persisted.isNotEmpty())
@@ -279,6 +280,10 @@ class QrDevicesAndModelsTest {
             assertNull(cache.readFinanceBundle("2026-11"))
             cache.bindScope("https://beta.example.com", "administrator")
             assertNull(cache.readFinanceBundle())
+            assertEquals(
+                "Private payroll name",
+                cache.readFinanceBundle("2026-11", scope = administratorScope)?.payroll?.rows?.single()?.displayName,
+            )
         } finally {
             dir.deleteRecursively()
         }
