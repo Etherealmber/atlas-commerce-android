@@ -19,6 +19,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 
+data class OfflineCacheScope internal constructor(internal val key: String)
+
 @JsonClass(generateAdapter = true)
 data class OfflineFinanceBundle(
     val finance: FinanceMonthlyDto,
@@ -78,6 +80,15 @@ class OfflineCache internal constructor(
         activeScopeKey = null
     }
 
+    /** Capture an immutable cache partition before starting asynchronous account work. */
+    fun scopeFor(serverUrl: String?, username: String?): OfflineCacheScope? {
+        val srv = serverUrl?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+        val usr = username?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+        return OfflineCacheScope(scopeKey(srv, usr))
+    }
+
+    private fun currentScope(): OfflineCacheScope? = activeScopeKey?.let(::OfflineCacheScope)
+
     suspend fun saveProducts(products: List<ProductDto>) = withContext(Dispatchers.IO) {
         val key = activeScopeKey ?: return@withContext
         write("products_$key.json") { cryptoStore.encryptAtRest(productAdapter.toJson(products)) }
@@ -95,8 +106,9 @@ class OfflineCache internal constructor(
         finance: FinanceMonthlyDto,
         payroll: PayrollPageDto,
         isLatest: Boolean,
+        scope: OfflineCacheScope? = currentScope(),
     ) = withContext(Dispatchers.IO) {
-        val key = activeScopeKey ?: return@withContext
+        val key = scope?.key ?: return@withContext
         val period = finance.period.takeIf { it.matches(Regex("\\d{4}-(0[1-9]|1[0-2])")) } ?: return@withContext
         if (payroll.period.isNotBlank() && payroll.period != period) return@withContext
         val encrypted = runCatching {
@@ -107,8 +119,11 @@ class OfflineCache internal constructor(
     }
 
     /** A null period reads the last successful current-period snapshot only. */
-    suspend fun readFinanceBundle(period: String? = null): OfflineFinanceBundle? = withContext(Dispatchers.IO) {
-        val key = activeScopeKey ?: return@withContext null
+    suspend fun readFinanceBundle(
+        period: String? = null,
+        scope: OfflineCacheScope? = currentScope(),
+    ): OfflineFinanceBundle? = withContext(Dispatchers.IO) {
+        val key = scope?.key ?: return@withContext null
         val cleanPeriod = period?.trim()
         val fileName = if (cleanPeriod.isNullOrBlank()) {
             "finance_${key}_latest.json"

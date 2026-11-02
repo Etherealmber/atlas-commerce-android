@@ -106,6 +106,7 @@ class HomeViewModel @Inject constructor(
         val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return
         if (!Roles.isAdmin(activeUser.role)) return
         val requestedScope = activeUser.scopeIdentity
+        val cacheScope = offlineCache.scopeFor(activeUser.serverUrl, activeUser.username)
         val previous = _state.value
         val requestedPeriod = previous.selectedFinancePeriod
         _state.update { it.copy(financeLoading = true, financeError = null) }
@@ -129,7 +130,12 @@ class HomeViewModel @Inject constructor(
             if (!stillSameScope || !selectionStillCurrent) return@launch
 
             if (finance != null && payroll != null) {
-                offlineCache.saveFinanceBundle(finance, payroll, isLatest = serverPeriod == finance.period)
+                offlineCache.saveFinanceBundle(
+                    finance,
+                    payroll,
+                    isLatest = serverPeriod == finance.period,
+                    scope = cacheScope,
+                )
             }
             val failure = financeResult.failureOrNull() ?: payrollResult?.failureOrNull()
             val hasFallback = previous.finance != null || previous.payroll != null
@@ -163,6 +169,7 @@ class HomeViewModel @Inject constructor(
         if (current.selectedFinancePeriod == period && current.finance?.period == period) return
 
         val requestedScope = activeUser.scopeIdentity
+        val cacheScope = offlineCache.scopeFor(activeUser.serverUrl, activeUser.username)
         _state.update {
             it.copy(
                 selectedFinancePeriod = period,
@@ -176,7 +183,7 @@ class HomeViewModel @Inject constructor(
             )
         }
         viewModelScope.launch {
-            val cached = offlineCache.readFinanceBundle(period)
+            val cached = offlineCache.readFinanceBundle(period, scope = cacheScope)
             val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope
             if (!stillSameScope || _state.value.selectedFinancePeriod != period) return@launch
             if (cached != null) {
@@ -202,7 +209,7 @@ class HomeViewModel @Inject constructor(
             if (!sameRequest) return@launch
 
             if (finance != null && payroll != null) {
-                offlineCache.saveFinanceBundle(finance, payroll, isLatest = false)
+                offlineCache.saveFinanceBundle(finance, payroll, isLatest = false, scope = cacheScope)
             }
             val failure = financeResult.failureOrNull() ?: payrollResult?.failureOrNull()
             val fallbackFinance = finance ?: cached?.finance
@@ -234,6 +241,7 @@ class HomeViewModel @Inject constructor(
         val current = _state.value.payroll ?: return
         if (!current.hasMore || _state.value.payrollLoadingMore) return
         val scopeIdentity = activeUser.scopeIdentity
+        val cacheScope = offlineCache.scopeFor(activeUser.serverUrl, activeUser.username)
         viewModelScope.launch {
             _state.update { it.copy(payrollLoadingMore = true, financeError = null) }
             val result = commerceRepository.employeePayroll(
@@ -243,8 +251,10 @@ class HomeViewModel @Inject constructor(
             )
             val stillSameUser = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
             if (!stillSameUser) return@launch
+            val displayedPayroll = _state.value.payroll
+            if (displayedPayroll == null || displayedPayroll.period != current.period) return@launch
             val nextPage = result.successOrNull()
-            val mergedPayroll = nextPage?.copy(rows = _state.value.payroll?.rows.orEmpty() + nextPage.rows)
+            val mergedPayroll = nextPage?.copy(rows = displayedPayroll.rows + nextPage.rows)
             val failure = result.failureOrNull()
             val hasFallback = _state.value.payroll != null
             val deviceOnline = hasDeviceInternetCapability(applicationContext)
@@ -268,6 +278,7 @@ class HomeViewModel @Inject constructor(
                     finance,
                     mergedPayroll,
                     isLatest = _state.value.serverCurrentFinancePeriod == finance.period,
+                    scope = cacheScope,
                 )
             }
         }
@@ -277,6 +288,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return@launch
             val requestedScope = activeUser.scopeIdentity
+            val cacheScope = offlineCache.scopeFor(activeUser.serverUrl, activeUser.username)
             val isAdmin = Roles.isAdmin(activeUser.role)
             val requestedFinancePeriod = _state.value.selectedFinancePeriod
             val knownServerCurrentPeriod = _state.value.serverCurrentFinancePeriod
@@ -292,7 +304,7 @@ class HomeViewModel @Inject constructor(
 
             // Render the encrypted, account-scoped snapshot first. Network requests continue
             // afterwards and replace it when newer server data arrives.
-            val cachedBundle = if (isAdmin) offlineCache.readFinanceBundle(requestedFinancePeriod) else null
+            val cachedBundle = if (isAdmin) offlineCache.readFinanceBundle(requestedFinancePeriod, scope = cacheScope) else null
             if (cachedBundle != null &&
                 (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope
             ) {
@@ -336,6 +348,7 @@ class HomeViewModel @Inject constructor(
                     finance,
                     payroll,
                     isLatest = serverCurrentFinance?.period == finance.period,
+                    scope = cacheScope,
                 )
             }
 

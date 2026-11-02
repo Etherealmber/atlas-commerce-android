@@ -997,6 +997,8 @@ private fun localizedLoginMessage(message: String): String = when (message) {
         atlasText("Identifiant ou mot de passe incorrect. Vérifiez votre saisie.", "Incorrect username or password. Check your entry.", "اسم المستخدم أو كلمة المرور غير صحيحة. تحقق من البيانات.")
     "Un administrateur doit réinitialiser votre mot de passe." ->
         atlasText("Un administrateur doit réinitialiser votre mot de passe.", "An administrator must reset your password.", "يجب على المسؤول إعادة تعيين كلمة المرور.")
+    "Session expirée — reconnectez-vous avec votre mot de passe." ->
+        atlasText("Session expirée — reconnectez-vous avec votre mot de passe.", "Saved session expired — sign in again with your password.", "انتهت الجلسة المحفوظة — سجّل الدخول مجدداً باستخدام كلمة المرور.")
     "Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau." ->
         atlasText("Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau.", "The code is invalid or expired. Check it or request a new one.", "الرمز غير صالح أو منتهي الصلاحية. تحقق منه أو اطلب رمزاً جديداً.")
     "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez." ->

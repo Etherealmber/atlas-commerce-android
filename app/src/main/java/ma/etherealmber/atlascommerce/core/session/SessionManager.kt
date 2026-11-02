@@ -271,7 +271,7 @@ class SessionManager @Inject constructor(
         }
         val token = runCatching { cryptoStore.decrypt(entry.tokenCipher) }.getOrNull()
         if (token.isNullOrBlank()) {
-            preferences.setSavedAccountDeviceUnlock(entry.serverUrl, entry.username, enabled = false)
+            preferences.resetSavedAccountDeviceUnlockChoice(entry.serverUrl, entry.username)
             return ApiResult.Failure(
                 "SAVED_SESSION_EXPIRED",
                 "Session expirée — reconnectez-vous avec votre mot de passe.",
@@ -290,7 +290,7 @@ class SessionManager @Inject constructor(
                 // means the saved token can no longer authenticate.
                 if (verify.httpStatus == 401 || verify.code == "SESSION_EXPIRED") {
                     // Preserve the account tile so the user can reauthenticate with its password.
-                    preferences.setSavedAccountDeviceUnlock(entry.serverUrl, entry.username, enabled = false)
+                    preferences.resetSavedAccountDeviceUnlockChoice(entry.serverUrl, entry.username)
                     return ApiResult.Failure(
                         "SAVED_SESSION_EXPIRED",
                         "Session expirée — reconnectez-vous avec votre mot de passe.",

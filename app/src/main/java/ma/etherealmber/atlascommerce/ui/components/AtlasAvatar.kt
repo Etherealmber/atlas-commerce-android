@@ -73,7 +73,9 @@ import kotlinx.coroutines.sync.withLock
 object AvatarBitmapCache {
     private val memory = LruCache<String, ImageBitmap>(48)
     private val refreshLocks = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
+    private val lastRefreshAttemptMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private const val AVATAR_CACHE_TTL_MS = 6 * 60 * 60 * 1000L
+    private const val REFRESH_RETRY_BACKOFF_MS = 5 * 60 * 1000L
     private const val MAX_DISK_CACHE_BYTES = 24L * 1024L * 1024L
     private const val MAX_BITMAP_EDGE = 256
 
@@ -103,8 +105,8 @@ object AvatarBitmapCache {
         val cacheKey = cacheKey(clean, serverBaseUrl)
         memory.get(cacheKey)?.let { return it }
 
-        val file = cacheFile(context, cacheKey)
         val cached = withContext(Dispatchers.IO) {
+            val file = cacheFile(context, cacheKey)
             runCatching { if (file.isFile) BitmapFactory.decodeFile(file.absolutePath) else null }.getOrNull()
         }
         if (cached != null) {
@@ -115,12 +117,17 @@ object AvatarBitmapCache {
         return refresh(context, clean, serverBaseUrl)
     }
 
-    fun shouldRefresh(context: Context, rawUrl: String?, serverBaseUrl: String?): Boolean {
-        val clean = rawUrl?.trim().orEmpty()
-        if (!isRemoteAvatar(clean, serverBaseUrl)) return false
-        val file = cacheFile(context, cacheKey(clean, serverBaseUrl))
-        return !file.isFile || System.currentTimeMillis() - file.lastModified() >= AVATAR_CACHE_TTL_MS
-    }
+    suspend fun shouldRefresh(context: Context, rawUrl: String?, serverBaseUrl: String?): Boolean =
+        withContext(Dispatchers.IO) {
+            val clean = rawUrl?.trim().orEmpty()
+            if (!isRemoteAvatar(clean, serverBaseUrl)) return@withContext false
+            val key = cacheKey(clean, serverBaseUrl)
+            val now = System.currentTimeMillis()
+            val lastAttempt = lastRefreshAttemptMs[key]
+            if (lastAttempt != null && now - lastAttempt < REFRESH_RETRY_BACKOFF_MS) return@withContext false
+            val file = cacheFile(context, key)
+            !file.isFile || now - file.lastModified() >= AVATAR_CACHE_TTL_MS
+        }
 
     /** Refreshes a stale avatar in the background; callers keep displaying the cached bitmap on failure. */
     suspend fun refresh(
@@ -133,6 +140,10 @@ object AvatarBitmapCache {
         val key = cacheKey(clean, serverBaseUrl)
         val lock = refreshLocks.getOrPut(key) { Mutex() }
         return lock.withLock {
+            val now = System.currentTimeMillis()
+            val lastAttempt = lastRefreshAttemptMs[key]
+            if (lastAttempt != null && now - lastAttempt < REFRESH_RETRY_BACKOFF_MS) return@withLock null
+            lastRefreshAttemptMs[key] = now
             withContext(Dispatchers.IO) {
                 val decoded = runCatching { decodeAvatarBitmap(clean, serverBaseUrl) }.getOrNull() ?: return@withContext null
                 persistBitmap(context, key, decoded)
