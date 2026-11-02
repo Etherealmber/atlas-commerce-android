@@ -37,6 +37,14 @@ class AuthRepository @Inject constructor(
             )
         }
 
+    suspend fun logout(): ApiResult<Unit> {
+        val result = runner.status { apiProvider.api().logout() }
+        return when (result) {
+            is ApiResult.Failure -> result
+            is ApiResult.Success -> ApiResult.Success(Unit)
+        }
+    }
+
     suspend fun verifyOtp(
         username: String,
         password: String,

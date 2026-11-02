@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce.core.session
 import android.os.Build
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -516,7 +517,10 @@ class SessionManager @Inject constructor(
         return res
     }
 
-    suspend fun signOut(reason: String? = null) {
+    suspend fun signOut(reason: String? = null, notifyServer: Boolean = false) {
+        if (notifyServer && !authToken.isNullOrBlank()) {
+            runCatching { withTimeoutOrNull(1_500) { authRepository.logout() } }
+        }
         purgeInMemorySession()
         runCatching { preferences.disableSessionRestore(disabled = true) }
         runCatching { preferences.clearSession() }
