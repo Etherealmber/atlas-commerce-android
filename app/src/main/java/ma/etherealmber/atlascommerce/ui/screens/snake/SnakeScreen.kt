@@ -508,14 +508,15 @@ private fun DailyPage(modifier: Modifier, target: Int, dailyBest: Int, onStart: 
 
 @Composable
 private fun PersonalBestCrown(modifier: Modifier = Modifier) {
+    val description = atlasText(
+        "Couronne du record personnel",
+        "Personal-best crown",
+        "تاج أفضل نتيجة شخصية",
+    )
     Text(
         text = "👑",
         modifier = modifier.semantics {
-            contentDescription = atlasText(
-                "Couronne du record personnel",
-                "Personal-best crown",
-                "تاج أفضل نتيجة شخصية",
-            )
+            contentDescription = description
         },
         style = MaterialTheme.typography.titleMedium,
         textAlign = TextAlign.Center,
