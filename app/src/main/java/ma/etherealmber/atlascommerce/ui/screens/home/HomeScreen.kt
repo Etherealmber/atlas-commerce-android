@@ -117,6 +117,7 @@ fun HomeScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val dashboard = state.dashboard
+    val isAdmin = Roles.isAdmin(user.role)
     val context = LocalContext.current
     val shareReportChooserTitle = atlasText("Partager le rapport PDF", "Share PDF report", "مشاركة تقرير PDF")
     var pendingReportFile by remember { mutableStateOf<java.io.File?>(null) }
