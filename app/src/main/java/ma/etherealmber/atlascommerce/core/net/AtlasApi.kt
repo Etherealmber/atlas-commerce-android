@@ -193,6 +193,17 @@ interface AtlasApi {
         @Body body: StockAdjustmentRequestBody,
     ): ApiEnvelope<StockAdjustmentRequestDto>
 
+    @GET("api/stock-adjustment-requests")
+    suspend fun stockAdjustmentRequests(
+        @Query("status") status: String? = null,
+    ): ApiEnvelope<List<StockAdjustmentRequestDto>>
+
+    @POST("api/stock-adjustment-requests/{id}/approve")
+    suspend fun approveStockAdjustmentRequest(@Path("id") id: Long): ApiEnvelope<StockAdjustmentRequestDto>
+
+    @POST("api/stock-adjustment-requests/{id}/reject")
+    suspend fun rejectStockAdjustmentRequest(@Path("id") id: Long): ApiEnvelope<StockAdjustmentRequestDto>
+
     @GET("api/scan/barcode/{code}")
     suspend fun scanBarcode(@Path("code") code: String): ApiEnvelope<ProductDto>
 

@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,11 +18,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
@@ -36,7 +45,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
 private data class AtlasSkeletonStyle(
     val base: Color,
@@ -140,113 +151,277 @@ fun AtlasSkeletonList(
 }
 
 @Composable
-fun AtlasDashboardSkeleton(modifier: Modifier = Modifier) {
+fun AtlasDashboardSkeleton(
+    modifier: Modifier = Modifier,
+    isAdmin: Boolean = false,
+    showFinancialHero: Boolean = false,
+    offline: Boolean = false,
+) {
     AtlasShimmer {
-        Column(
-            modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 14.dp),
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.48f).height(24.dp))
-            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.78f).height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                repeat(2) {
-                    Column(
-                        Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        AtlasSkeletonBlock(Modifier.size(34.dp), CircleShape)
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.64f).height(12.dp))
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.82f).height(22.dp))
+            // These are the stable Home sections. Data-dependent chart, alert and invoice
+            // placeholders are intentionally omitted until the server tells us they exist.
+            item(key = "home_greeting_skeleton") {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.58f).height(28.dp))
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.78f).height(13.dp))
                     }
+                    AtlasSkeletonBlock(Modifier.size(48.dp), CircleShape)
                 }
             }
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.45f).height(18.dp))
-                AtlasSkeletonBlock(Modifier.fillMaxWidth().height(150.dp), RoundedCornerShape(16.dp))
-            }
-            repeat(2) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    repeat(2) {
-                        AtlasSkeletonBlock(
-                            Modifier.weight(1f).height(74.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun AtlasCatalogSkeleton(modifier: Modifier = Modifier, rows: Int = 5) {
-    AtlasShimmer {
-        Column(
-            modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp),
-        ) {
-            repeat(rows.coerceAtLeast(1)) { index ->
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+            if (offline) item(key = "home_offline_banner") { AtlasOfflineBanner() }
+            item(key = "home_hero_skeleton") {
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                        .background(MaterialTheme.colorScheme.surface).padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp),
                 ) {
-                    AtlasSkeletonBlock(Modifier.size(54.dp), RoundedCornerShape(14.dp))
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.7f else 0.52f).height(15.dp))
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.86f).height(11.dp))
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.38f).height(13.dp))
-                    }
-                    AtlasSkeletonBlock(Modifier.size(34.dp), CircleShape)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun AtlasFinanceSkeleton(modifier: Modifier = Modifier, scrollable: Boolean = false) {
-    AtlasShimmer {
-        val scrollModifier = if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier
-        Column(
-            modifier.fillMaxWidth().then(scrollModifier).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.5f).height(20.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                repeat(2) {
-                    Column(
-                        Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.68f).height(12.dp))
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.88f).height(22.dp))
+                    AtlasSkeletonBlock(Modifier.fillMaxWidth(0.38f).height(10.dp))
+                    AtlasSkeletonBlock(Modifier.fillMaxWidth(0.62f).height(28.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AtlasSkeletonBlock(Modifier.weight(if (showFinancialHero) 1f else 1.2f).height(25.dp), RoundedCornerShape(99.dp))
+                        AtlasSkeletonBlock(Modifier.weight(1f).height(25.dp), RoundedCornerShape(99.dp))
                     }
                 }
             }
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.58f).height(16.dp))
-                AtlasSkeletonBlock(Modifier.fillMaxWidth().height(112.dp), RoundedCornerShape(14.dp))
+            item(key = "home_primary_actions_skeleton") {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AtlasSkeletonBlock(Modifier.weight(1f).height(48.dp), RoundedCornerShape(14.dp))
+                    AtlasSkeletonBlock(Modifier.weight(1f).height(48.dp), RoundedCornerShape(14.dp))
+                }
             }
-            repeat(4) {
+            item(key = "home_notifications_skeleton") {
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface).padding(14.dp),
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                        .background(MaterialTheme.colorScheme.surface).padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    AtlasSkeletonBlock(Modifier.size(36.dp), CircleShape)
+                    AtlasSkeletonBlock(Modifier.size(22.dp), CircleShape)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         AtlasSkeletonBlock(Modifier.fillMaxWidth(0.55f).height(13.dp))
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.8f).height(10.dp))
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.92f).height(10.dp))
                     }
-                    AtlasSkeletonBlock(Modifier.size(width = 64.dp, height = 17.dp))
+                    AtlasSkeletonBlock(Modifier.size(width = 58.dp, height = 24.dp), RoundedCornerShape(99.dp))
                 }
             }
+            item(key = "home_primary_stats_skeleton") {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    repeat(2) { index ->
+                        Column(
+                            Modifier.weight(1f).clip(RoundedCornerShape(18.dp))
+                                .background(MaterialTheme.colorScheme.surface).padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(9.dp),
+                        ) {
+                            AtlasSkeletonBlock(Modifier.size(25.dp), CircleShape)
+                            AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index == 0) 0.5f else 0.68f).height(10.dp))
+                            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.58f).height(19.dp))
+                        }
+                    }
+                }
+            }
+            if (showFinancialHero) {
+                item(key = "home_financial_stats_skeleton") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        repeat(2) { index ->
+                            Column(
+                                Modifier.weight(1f).clip(RoundedCornerShape(18.dp))
+                                    .background(MaterialTheme.colorScheme.surface).padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(9.dp),
+                            ) {
+                                AtlasSkeletonBlock(Modifier.size(25.dp), CircleShape)
+                                AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index == 0) 0.64f else 0.76f).height(10.dp))
+                                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.7f).height(19.dp))
+                            }
+                        }
+                    }
+                }
+            }
+            if (isAdmin) {
+                item(key = "home_finance_card_skeleton") {
+                    AtlasFinanceSkeleton(Modifier.fillMaxWidth())
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AtlasCatalogSkeleton(
+    modifier: Modifier = Modifier,
+    rows: Int = 5,
+    showRoleBanner: Boolean = false,
+    showCartButton: Boolean = true,
+    bottomPadding: Dp = 24.dp,
+) {
+    AtlasShimmer {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 320.dp),
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = bottomPadding),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (showRoleBanner) {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "catalog_role_banner_skeleton") {
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.surface).padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.56f).height(14.dp))
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.76f).height(11.dp))
+                    }
+                }
+            }
+            items((1..rows.coerceAtLeast(1)).toList(), key = { "product_card_skeleton_$it" }) { index ->
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                        .background(MaterialTheme.colorScheme.surface).padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AtlasSkeletonBlock(Modifier.size(64.dp), RoundedCornerShape(14.dp))
+                        Spacer(Modifier.size(10.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.76f else 0.58f).height(15.dp))
+                            AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 3 == 0) 0.68f else 0.45f).height(11.dp))
+                        }
+                        if (showCartButton) AtlasSkeletonBlock(Modifier.size(36.dp), CircleShape)
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        AtlasSkeletonBlock(Modifier.weight(1f).height(28.dp), RoundedCornerShape(99.dp))
+                        AtlasSkeletonBlock(Modifier.weight(0.8f).height(28.dp), RoundedCornerShape(99.dp))
+                        AtlasSkeletonBlock(Modifier.weight(0.9f).height(28.dp), RoundedCornerShape(99.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AtlasProductRequestsSkeleton(
+    modifier: Modifier = Modifier,
+    rows: Int = 6,
+    showActions: Boolean = false,
+    bottomPadding: Dp = 24.dp,
+) {
+    AtlasShimmer {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 320.dp),
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = bottomPadding),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items((1..rows.coerceAtLeast(1)).toList(), key = { "product_request_skeleton_$it" }) { index ->
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                        .background(MaterialTheme.colorScheme.surface).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AtlasSkeletonBlock(Modifier.size(56.dp), RoundedCornerShape(14.dp))
+                        Spacer(Modifier.size(10.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.72f else 0.54f).height(14.dp))
+                            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.82f).height(10.dp))
+                            if (index % 3 == 0) AtlasSkeletonBlock(Modifier.fillMaxWidth(0.48f).height(10.dp))
+                        }
+                        AtlasSkeletonBlock(Modifier.size(width = 76.dp, height = 24.dp), RoundedCornerShape(99.dp))
+                    }
+                    if (showActions) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AtlasSkeletonBlock(Modifier.size(width = 104.dp, height = 32.dp), RoundedCornerShape(99.dp))
+                            AtlasSkeletonBlock(Modifier.size(width = 76.dp, height = 32.dp), RoundedCornerShape(99.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AtlasStockRequestsSkeleton(
+    modifier: Modifier = Modifier,
+    rows: Int = 4,
+    showActions: Boolean = false,
+    bottomPadding: Dp = 24.dp,
+) {
+    AtlasShimmer {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 320.dp),
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = bottomPadding),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items((1..rows.coerceAtLeast(1)).toList(), key = { "stock_request_skeleton_$it" }) { index ->
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                        .background(MaterialTheme.colorScheme.surface).padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.7f else 0.5f).height(14.dp))
+                            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.38f).height(10.dp))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        AtlasSkeletonBlock(Modifier.size(width = 76.dp, height = 24.dp), RoundedCornerShape(99.dp))
+                    }
+                    if (index % 2 == 0) AtlasSkeletonBlock(Modifier.fillMaxWidth(0.76f).height(10.dp))
+                    AtlasSkeletonBlock(Modifier.fillMaxWidth(0.52f).height(10.dp))
+                    if (showActions) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AtlasSkeletonBlock(Modifier.size(width = 96.dp, height = 32.dp), RoundedCornerShape(99.dp))
+                            AtlasSkeletonBlock(Modifier.size(width = 72.dp, height = 32.dp), RoundedCornerShape(99.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AtlasFinanceSkeleton(modifier: Modifier = Modifier) {
+    AtlasShimmer {
+        AtlasCard(modifier = modifier) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    AtlasSkeletonBlock(Modifier.fillMaxWidth(0.54f).height(15.dp))
+                    AtlasSkeletonBlock(Modifier.fillMaxWidth(0.72f).height(10.dp))
+                }
+                AtlasSkeletonBlock(Modifier.size(22.dp), CircleShape)
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    AtlasSkeletonBlock(Modifier.fillMaxWidth(0.38f).height(11.dp))
+                    AtlasSkeletonBlock(Modifier.fillMaxWidth(0.86f).height(10.dp))
+                }
+                AtlasSkeletonBlock(Modifier.size(width = 100.dp, height = 36.dp), RoundedCornerShape(10.dp))
+            }
+            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)))
+            Spacer(Modifier.height(10.dp))
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.36f).height(15.dp))
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.92f).height(10.dp))
+            AtlasSkeletonBlock(Modifier.fillMaxWidth().height(42.dp), RoundedCornerShape(12.dp))
+            AtlasSkeletonBlock(Modifier.fillMaxWidth().height(42.dp), RoundedCornerShape(12.dp))
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.94f).height(10.dp))
         }
     }
 }
@@ -255,84 +430,80 @@ fun AtlasFinanceSkeleton(modifier: Modifier = Modifier, scrollable: Boolean = fa
 fun AtlasPayrollSkeleton(modifier: Modifier = Modifier) {
     AtlasShimmer {
         Column(
-            modifier = modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+            modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // Mirrors the read-only payroll header and month navigation card.
             Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surface).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     AtlasSkeletonBlock(Modifier.size(44.dp), RoundedCornerShape(14.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.62f).height(17.dp))
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.94f).height(11.dp))
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.62f).height(16.dp))
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.9f).height(10.dp))
                     }
-                    AtlasSkeletonBlock(Modifier.size(28.dp), CircleShape)
-                    AtlasSkeletonBlock(Modifier.size(28.dp), CircleShape)
+                    AtlasSkeletonBlock(Modifier.size(38.dp), CircleShape)
+                    AtlasSkeletonBlock(Modifier.size(38.dp), CircleShape)
                 }
+                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.88f).height(10.dp))
                 Spacer(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AtlasSkeletonBlock(Modifier.size(22.dp), CircleShape)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AtlasSkeletonBlock(Modifier.size(36.dp), CircleShape)
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.48f).height(16.dp))
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.76f).height(11.dp))
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.48f).height(15.dp))
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.76f).height(10.dp))
                     }
-                    AtlasSkeletonBlock(Modifier.size(22.dp), CircleShape)
+                    AtlasSkeletonBlock(Modifier.size(36.dp), CircleShape)
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                repeat(2) { index ->
+                repeat(3) { index ->
                     Column(
-                        Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface).padding(12.dp),
+                        Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surface).padding(10.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index == 0) 0.72f else 0.58f).height(10.dp))
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.42f).height(19.dp))
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index == 0) 0.82f else 0.7f).height(9.dp))
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index == 2) 0.72f else 0.46f).height(17.dp))
                     }
                 }
             }
-            AtlasSkeletonBlock(Modifier.fillMaxWidth().height(46.dp), RoundedCornerShape(15.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AtlasSkeletonBlock(Modifier.size(width = 58.dp, height = 30.dp), RoundedCornerShape(99.dp))
-                AtlasSkeletonBlock(Modifier.size(width = 74.dp, height = 30.dp), RoundedCornerShape(99.dp))
-                AtlasSkeletonBlock(Modifier.size(width = 66.dp, height = 30.dp), RoundedCornerShape(99.dp))
-            }
-            PayrollSkeletonRows(rows = 4)
-        }
-    }
-}
-
-@Composable
-fun AtlasPayrollRowsSkeleton(modifier: Modifier = Modifier, rows: Int = 4) {
-    AtlasShimmer {
-        PayrollSkeletonRows(modifier = modifier, rows = rows)
-    }
-}
-
-@Composable
-private fun PayrollSkeletonRows(modifier: Modifier = Modifier, rows: Int) {
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-        repeat(rows.coerceAtLeast(1)) { index ->
             Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).padding(14.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.surface).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(9.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.54f else 0.68f).height(14.dp))
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.78f).height(10.dp))
-                    }
-                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        AtlasSkeletonBlock(Modifier.size(width = 70.dp, height = 14.dp))
-                        AtlasSkeletonBlock(Modifier.size(width = 56.dp, height = 18.dp), RoundedCornerShape(99.dp))
-                    }
+                AtlasSkeletonBlock(Modifier.fillMaxWidth().height(48.dp), RoundedCornerShape(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AtlasSkeletonBlock(Modifier.size(width = 54.dp, height = 30.dp), RoundedCornerShape(99.dp))
+                    AtlasSkeletonBlock(Modifier.size(width = 74.dp, height = 30.dp), RoundedCornerShape(99.dp))
+                    AtlasSkeletonBlock(Modifier.size(width = 68.dp, height = 30.dp), RoundedCornerShape(99.dp))
+                    AtlasSkeletonBlock(Modifier.size(width = 60.dp, height = 30.dp), RoundedCornerShape(99.dp))
                 }
             }
+            AtlasPayrollLoadingIndicator(Modifier.fillMaxWidth().padding(vertical = 18.dp))
         }
+    }
+}
+
+@Composable
+fun AtlasPayrollLoadingIndicator(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth().padding(16.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        Spacer(Modifier.width(10.dp))
+        Text(
+            atlasText("Chargement des versements…", "Loading payroll entries…", "جارٍ تحميل بيانات الرواتب…"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

@@ -117,6 +117,7 @@ fun HomeScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val dashboard = state.dashboard
+    val isAdmin = Roles.isAdmin(user.role)
     val context = LocalContext.current
     val shareReportChooserTitle = atlasText("Partager le rapport PDF", "Share PDF report", "مشاركة تقرير PDF")
     var pendingReportFile by remember { mutableStateOf<java.io.File?>(null) }
@@ -245,7 +246,12 @@ fun HomeScreen(
     }
 
     when {
-        state.loading && dashboard == null -> AtlasDashboardSkeleton(Modifier.fillMaxSize())
+        state.loading && dashboard == null -> AtlasDashboardSkeleton(
+            modifier = Modifier.fillMaxSize(),
+            isAdmin = isAdmin,
+            showFinancialHero = isAdmin && state.finance != null,
+            offline = state.offline,
+        )
         dashboard == null -> HomeErrorContent(
             user = user,
             message = atlasNotice(state.error ?: "Vérifiez l'adresse du serveur et votre connexion.", LocalAtlasLanguage.current),

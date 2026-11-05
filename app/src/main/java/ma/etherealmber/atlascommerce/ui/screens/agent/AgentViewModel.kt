@@ -32,7 +32,6 @@ import ma.etherealmber.atlascommerce.data.model.AssistToolTraceDto
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import java.text.Normalizer
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 /** Preserve any draft edited after Send while clearing the submitted text (including its whitespace). */
@@ -379,7 +378,6 @@ class AgentViewModel @Inject constructor(
         )
 
         AtlasLogBuffer.log("AGENT", "Chat request started: request=${requestId.take(8)} thread=$activeId")
-        val firstTokenLogged = AtomicBoolean(false)
         _state.update {
             it.copy(
                 input = clearSubmittedAgentDraft(it.input, typed),
@@ -400,7 +398,10 @@ class AgentViewModel @Inject constructor(
             }
             val requestScope = activeUser.scopeIdentity
             val result = try {
-                commerceRepository.assistChatStream(
+                // The Worker streaming twin currently omits the role-filtered business tools.
+                // Use the existing buffered chat contract so live questions can invoke the
+                // authorized tools instead of receiving an ungrounded generic model answer.
+                commerceRepository.assistChat(
                     message = clean,
                     role = activeUser.role,
                     username = activeUser.username,
@@ -408,16 +409,6 @@ class AgentViewModel @Inject constructor(
                     images = attachments.flatMap { it.imageDataUrls }.take(4),
                     documents = attachments.flatMap { it.documentDataUrls }.take(2),
                     responseLanguage = responseLanguage,
-                    onToken = { delta ->
-                        if (firstTokenLogged.compareAndSet(false, true)) {
-                            AtlasLogBuffer.log("AGENT", "First response token received")
-                        }
-                        _state.update { current ->
-                            if (activeSendRequestId == requestId && current.sending && current.activeThreadId == activeId) {
-                                current.copy(streamingReply = current.streamingReply + delta)
-                            } else current
-                        }
-                    },
                 )
             } catch (cancelled: CancellationException) {
                 finishSendWithError(requestId, activeId, "Réponse interrompue. Vous pouvez réessayer.")

@@ -71,6 +71,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -266,6 +267,34 @@ fun AgentScreen(
     val quotaLocked = state.policy?.isExhausted == true
     val conversationListState = rememberLazyListState()
     var userScrolledUp by remember(state.activeThreadId) { mutableStateOf(false) }
+    var agentLoadingSeconds by remember(state.activeThreadId) { mutableIntStateOf(0) }
+    LaunchedEffect(state.sending, state.activeThreadId) {
+        if (!state.sending) {
+            agentLoadingSeconds = 0
+            return@LaunchedEffect
+        }
+        agentLoadingSeconds = 0
+        while (true) {
+            delay(1_000)
+            agentLoadingSeconds += 1
+        }
+    }
+    val agentLoadingLabel = when {
+        agentLoadingSeconds >= 15 -> atlasText(
+            "Toujours en cours — la réponse prend plus de temps que prévu.",
+            "Still working — this is taking longer than usual.",
+            "ما زالت المعالجة جارية — الإجابة تستغرق وقتًا أطول من المعتاد.",
+        )
+        agentLoadingSeconds >= 5 -> atlasText(
+            "Préparation de votre réponse…",
+            "Preparing your answer…",
+            "جارٍ إعداد إجابتك…",
+        )
+        else -> atlasText("Atlas Agent réfléchit…", "Atlas Agent is thinking…", "مساعد Atlas يفكر…")
+    }
+    val agentElapsedLabel = if (agentLoadingSeconds >= 3) {
+        atlasText("${agentLoadingSeconds}s", "${agentLoadingSeconds}s", "${agentLoadingSeconds} ث")
+    } else null
     val conversationScrollConnection = remember(conversationListState) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -540,7 +569,8 @@ fun AgentScreen(
                     if (state.sending && state.streamingReply.isBlank()) {
                         item(key = "agent_typing") {
                             AgentTypingIndicator(
-                                label = atlasText("Atlas Agent réfléchit…", "Atlas Agent is thinking…", "مساعد Atlas يفكر…"),
+                                label = agentLoadingLabel,
+                                elapsedLabel = agentElapsedLabel,
                             )
                         }
                     }
@@ -1204,7 +1234,7 @@ private fun AgentAvatar() {
 }
 
 @Composable
-private fun AgentTypingIndicator(label: String) {
+private fun AgentTypingIndicator(label: String, elapsedLabel: String?) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top,
@@ -1231,9 +1261,20 @@ private fun AgentTypingIndicator(label: String) {
                     Spacer(Modifier.width(10.dp))
                     Text(
                         text = label,
+                        modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                    if (elapsedLabel != null) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = elapsedLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             LinearProgressIndicator(

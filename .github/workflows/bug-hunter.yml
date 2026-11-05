@@ -157,11 +157,20 @@ jobs:
           # 3. Static Kotlin Safety, Privacy & Architecture Invariants
           # ------------------------------------------------------------------
           code_hazards = []
+          quarantine_detail = ""
           src_files = {
               os.path.relpath(f, "app/src").replace(os.sep, "/")
               for f in glob.glob("app/src/**/*", recursive=True)
               if os.path.isfile(f)
           }
+          tracked_src_files = set()
+          rc, tracked_raw, _ = sh("git", "ls-files", "-z", "--", "app/src")
+          if rc == 0:
+              tracked_src_files = {
+                  path[len("app/src/"):].replace("\\", "/")
+                  for path in tracked_raw.split("\0")
+                  if path.startswith("app/src/")
+              }
           quarantine_source = "buildSrc/src/main/java/LegacySourceQuarantine.java"
           try:
               quarantine_text = open(quarantine_source, encoding="utf-8").read()
@@ -174,12 +183,39 @@ jobs:
               if missing_from_manifest or missing_from_disk:
                   details = []
                   if missing_from_manifest:
-                      details.append("not in quarantine allowlist: " + ", ".join(missing_from_manifest[:20]))
+                      details.append("not in quarantine allowlist: " + ", ".join(missing_from_manifest[:100]))
                   if missing_from_disk:
-                      details.append("allowlisted but absent: " + ", ".join(missing_from_disk[:20]))
+                      details.append("allowlisted but absent: " + ", ".join(missing_from_disk[:100]))
+                  listed_paths = []
+                  for path in missing_from_manifest[:100]:
+                      source_path = os.path.join("app", "src", path)
+                      try:
+                          with open(source_path, "rb") as source_file:
+                              has_keep_marker = b"@atlas-keep" in source_file.read(512)
+                      except OSError:
+                          has_keep_marker = False
+                      status = "tracked by Git" if path in tracked_src_files else "not tracked by Git (possibly generated or untracked)"
+                      marker = "has @atlas-keep" if has_keep_marker else "no @atlas-keep marker"
+                      listed_paths.append(f"- `{path}` — {status}; {marker}")
+                  absent_paths = [f"- `{path}`" for path in missing_from_disk[:100]]
+                  quarantine_detail = (
+                      "### LegacySourceQuarantine manifest diagnosis\n\n"
+                      f"- Files physically under `app/src/`: **{len(src_files)}**\n"
+                      f"- Paths in `EXPECTED_APP_SRC_FILES`: **{len(expected_src_files)}**\n"
+                      f"- Present but not allowlisted: **{len(missing_from_manifest)}**\n"
+                      f"- Allowlisted but absent: **{len(missing_from_disk)}**\n\n"
+                      "The manifest is the fallback inventory used when source files are checked out without a usable `.git` index (notably GitHub Download ZIP). "
+                      "In a normal Git checkout, tracked files are added from `git ls-files`; in a ZIP checkout, an intentional file omitted from the manifest and lacking `@atlas-keep` can be quarantined during Gradle configuration.\n\n"
+                      "#### Present on disk but absent from the manifest\n"
+                      + ("\n".join(listed_paths) if listed_paths else "- None")
+                      + "\n\n#### Manifest entries absent from disk\n"
+                      + ("\n".join(absent_paths) if absent_paths else "- None")
+                      + "\n"
+                  )
                   code_hazards.append(
-                      f"- **LegacySourceQuarantine manifest drift**: `app/src/` has {len(src_files)} files; "
-                      f"the manifest has {len(expected_src_files)}. " + "; ".join(details)
+                      f"- **LegacySourceQuarantine manifest drift**: {len(src_files)} on-disk file(s), "
+                      f"{len(expected_src_files)} manifest path(s), {len(missing_from_manifest)} missing entries, "
+                      f"{len(missing_from_disk)} stale entries. " + "; ".join(details)
                   )
           except Exception as exc:
               code_hazards.append(f"- **Could not validate LegacySourceQuarantine manifest**: `{exc}`")
@@ -201,6 +237,21 @@ jobs:
               code_hazards.append("- **Hardcoded server recommendation regression**: `ServerUrl.presets()` contains `afmarbre.com`.")
 
           if code_hazards:
+              ai_remediation_prompt = (
+                  "You are a senior Android/Kotlin build-and-security engineer working in this repository. "
+                  "Investigate the automated findings below against the current source tree and Git history before editing.\n\n"
+                  "Requirements:\n"
+                  "1. Explain the root cause for each finding and distinguish a real defect from a detector false positive.\n"
+                  "2. For LegacySourceQuarantine drift, inspect each path and its Git history. Add only intentional, maintained app/src files to EXPECTED_APP_SRC_FILES; do not blindly allow every unknown file. If a path is stale or generated, establish that safely before removing or excluding it. Do not use @atlas-keep to hide unexplained drift.\n"
+                  "3. Preserve server-side role authorization, tenant isolation, cache/offline truth, and existing localization. Never weaken access checks to make a test pass.\n"
+                  "4. Add or update focused regression tests for the root cause and keep the audit detector useful; do not silence the finding or broaden an allowlist without evidence.\n"
+                  "5. Run git diff --check and ./gradlew :buildSrc:test :app:testDebugUnitTest :app:kspReleaseKotlin :app:lintDebug. Report exact results and any environment blocker; do not claim checks passed unless they ran.\n"
+                  "6. Do not change app version/news entries or secrets unless the task explicitly requires it.\n\n"
+                  "Evidence/details from this audit:\n"
+                  + (quarantine_detail if quarantine_detail else "No quarantine-manifest drift details were emitted for this finding.")
+                  + "\nCurrent automated finding(s):\n"
+                  + "\n".join(code_hazards[:30])
+              )
               findings.append({
                   "slug": "static-safety-and-privacy-invariants",
                   "title": f"🔍 [Auto-Audit] {len(code_hazards)} static safety / multi-tenant invariant warning(s)",
@@ -209,7 +260,12 @@ jobs:
                   "body": (
                       "### Static Safety & Multi-Tenant Invariant Findings\n\n"
                       + "\n".join(code_hazards[:30])
-                      + "\n"
+                      + "\n\n"
+                      + (quarantine_detail + "\n" if quarantine_detail else "")
+                      + "### 🤖 Copy/paste prompt for an AI coding agent\n\n"
+                      + "```text\n"
+                      + ai_remediation_prompt
+                      + "\n```\n"
                   ),
               })
 

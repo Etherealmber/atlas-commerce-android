@@ -75,7 +75,6 @@ import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
-import ma.etherealmber.atlascommerce.ui.components.AtlasFinanceSkeleton
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
 import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
@@ -92,6 +91,27 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 private enum class BalanceSection { MOVEMENTS, CLIENTS, REPORTS }
+
+@Composable
+private fun BalanceDataLoading() {
+    Box(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 260.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            CircularProgressIndicator()
+            Text(
+                atlasText(
+                    "Chargement des données financières…",
+                    "Loading balance data…",
+                    "جارٍ تحميل بيانات الرصيد…",
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
 
 @Composable
 fun BalanceScreen(
@@ -243,11 +263,6 @@ fun BalanceScreen(
         }
         return
     }
-    if (state.loading && state.finance == null) {
-        AtlasFinanceSkeleton(Modifier.fillMaxSize(), scrollable = true)
-        return
-    }
-
     Column(Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 8.dp),
@@ -320,7 +335,11 @@ fun BalanceScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                when (section) {
+                if (state.loading && state.finance == null) {
+                    item(key = "balance_loading") {
+                        BalanceDataLoading()
+                    }
+                } else when (section) {
                     BalanceSection.MOVEMENTS -> {
                         val finance = state.finance
                         state.periodBreakdown?.let { periodData ->
