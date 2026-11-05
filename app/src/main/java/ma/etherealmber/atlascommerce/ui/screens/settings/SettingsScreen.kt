@@ -111,8 +111,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import java.time.LocalTime
-import java.time.ZoneId
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
@@ -324,11 +322,7 @@ fun ProfileScreen(
             }
         }
     }
-    val profileGreeting = if (LocalTime.now(ZoneId.systemDefault()).hour in 5..17) {
-        atlasText("Bonjour", "Good morning", "صباح الخير")
-    } else {
-        atlasText("Bonsoir", "Good evening", "مساء الخير")
-    }
+    val profileName = profileNameOrNull(user.displayName, user.username)
 
     Column(
         modifier = Modifier
@@ -390,11 +384,15 @@ fun ProfileScreen(
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(
-                            text = profileGreeting,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
+                        if (profileName != null) {
+                            Text(
+                                text = profileName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                         Text(
                             text = "@${user.username}",
                             style = MaterialTheme.typography.bodySmall,

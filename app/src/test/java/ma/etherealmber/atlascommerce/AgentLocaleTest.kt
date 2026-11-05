@@ -31,6 +31,16 @@ class AgentLocaleTest {
         }
     }
 
+    @Test fun outboundAgentPromptLabelsTheSubstantiveQuestionInEverySupportedLanguage() {
+        val question = "Which products are below their stock threshold?"
+        for (language in AppLanguage.entries) {
+            val result = composeAgentPrompt(question, "[LIVE PRODUCTS] Ceramic tile: stock 2.", language)
+            assertTrue(result.contains("${language.agentQuestionLabel}: $question"))
+            assertTrue(result.indexOf(question) < result.indexOf("[LIVE PRODUCTS]"))
+            assertTrue(result.contains(language.agentContextInstruction))
+        }
+    }
+
     @Test fun successfulOtpResetsSensitiveStateBeforeSignOut() {
         val state = LoginViewModel.UiState(
             username = "atlas", password = "secret", otp = "123456", loading = true,

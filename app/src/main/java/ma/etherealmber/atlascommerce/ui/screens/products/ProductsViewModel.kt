@@ -29,6 +29,7 @@ import ma.etherealmber.atlascommerce.data.CartStore
 import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
 import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import ma.etherealmber.atlascommerce.data.repo.ProductSubmissionOutcome
@@ -47,6 +48,7 @@ class ProductsViewModel @Inject constructor(
         ALL,
         NEEDED,
         REQUESTS,
+        STOCK_ADJUSTMENTS,
     }
 
     private data class StockRequestIntent(
@@ -61,12 +63,19 @@ class ProductsViewModel @Inject constructor(
         val query: String = "",
         val products: List<ProductDto> = emptyList(),
         val openRequests: List<ProductCreationRequestDto> = emptyList(),
+        val loadingProductRequests: Boolean = false,
+        val productRequestsError: String? = null,
+        val stockAdjustmentRequests: List<StockAdjustmentRequestDto> = emptyList(),
+        val stockAdjustmentLoading: Boolean = false,
+        val stockAdjustmentError: String? = null,
+        val decidingStockRequestIds: Set<Long> = emptySet(),
         val filter: FilterMode = FilterMode.ALL,
         val loading: Boolean = true,
         val refreshing: Boolean = false,
         val submitting: Boolean = false,
         val offline: Boolean = false,
         val cachedFallback: Boolean = false,
+        val checkingCachedCatalog: Boolean = false,
         val error: String? = null,
         val currency: String = "MAD",
     ) {
@@ -76,7 +85,7 @@ class ProductsViewModel @Inject constructor(
                     .filter { it.isLowStock || it.isOutOfStock }
                     .sortedBy { it.stock }
 
-                FilterMode.ALL, FilterMode.REQUESTS -> products
+                FilterMode.ALL, FilterMode.REQUESTS, FilterMode.STOCK_ADJUSTMENTS -> products
             }
 
         val lowStockCount: Int
@@ -94,6 +103,7 @@ class ProductsViewModel @Inject constructor(
 
     private var searchJob: Job? = null
     private var fetchJob: Job? = null
+    private var stockAdjustmentJob: Job? = null
     private val pendingStockRequestKeys = LinkedHashMap<StockRequestIntent, String>()
 
     init {
@@ -104,6 +114,7 @@ class ProductsViewModel @Inject constructor(
                 .collect { key ->
                     searchJob?.cancel()
                     fetchJob?.cancel()
+                    stockAdjustmentJob?.cancel()
                     synchronized(pendingStockRequestKeys) { pendingStockRequestKeys.clear() }
                     _state.value = UiState()
                     if (key != null) {
@@ -138,10 +149,72 @@ class ProductsViewModel @Inject constructor(
 
     fun refresh() {
         fetchState(query = _state.value.query, initial = false)
+        if (_state.value.filter == FilterMode.STOCK_ADJUSTMENTS) loadStockAdjustmentRequests()
     }
 
     fun setFilter(mode: FilterMode) {
         _state.update { it.copy(filter = mode) }
+        if (mode == FilterMode.STOCK_ADJUSTMENTS) loadStockAdjustmentRequests()
+    }
+
+    fun loadStockAdjustmentRequests() {
+        val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity ?: return
+        stockAdjustmentJob?.cancel()
+        stockAdjustmentJob = viewModelScope.launch {
+            _state.update { it.copy(stockAdjustmentLoading = true, stockAdjustmentError = null) }
+            when (val result = commerceRepository.stockAdjustmentRequests()) {
+                is ApiResult.Failure -> {
+                    if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope) {
+                        _state.update { it.copy(stockAdjustmentLoading = false, stockAdjustmentError = result.message) }
+                    }
+                }
+                is ApiResult.Success -> {
+                    if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope) {
+                        _state.update {
+                            it.copy(
+                                stockAdjustmentLoading = false,
+                                stockAdjustmentError = null,
+                                stockAdjustmentRequests = result.data,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun decideStockAdjustmentRequest(requestId: Long, approve: Boolean) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+        if (activeUser == null || !Roles.canAdjustStock(activeUser.role)) {
+            _messages.tryEmit("Votre rôle ne permet pas de valider les ajustements de stock.")
+            return
+        }
+        val requestedScope = activeUser.scopeIdentity
+        if (requestId in _state.value.decidingStockRequestIds) return
+        _state.update { it.copy(decidingStockRequestIds = it.decidingStockRequestIds + requestId) }
+        viewModelScope.launch {
+            try {
+                if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+                val result = if (approve) {
+                    commerceRepository.approveStockAdjustmentRequest(requestId)
+                } else {
+                    commerceRepository.rejectStockAdjustmentRequest(requestId)
+                }
+                if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+                when (result) {
+                    is ApiResult.Failure -> _messages.tryEmit(result.message)
+                    is ApiResult.Success -> _messages.tryEmit(
+                        if (approve) "Demande approuvée ; le stock a été actualisé." else "Demande refusée ; le stock reste inchangé.",
+                    )
+                }
+                loadStockAdjustmentRequests()
+                fetchState(query = _state.value.query, initial = false)
+            } finally {
+                if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope) {
+                    _state.update { it.copy(decidingStockRequestIds = it.decidingStockRequestIds - requestId) }
+                }
+            }
+        }
     }
 
     fun addToCart(product: ProductDto, quantity: Double = 1.0) {
@@ -284,7 +357,7 @@ class ProductsViewModel @Inject constructor(
             _messages.tryEmit("Votre rôle ne permet pas de demander un changement de stock.")
             return
         }
-        if (quantity <= 0.0) {
+        if (!quantity.isFinite() || quantity <= 0.0) {
             _messages.tryEmit("Indiquez une quantité supérieure à zéro.")
             return
         }
@@ -348,8 +421,9 @@ class ProductsViewModel @Inject constructor(
                             if (pendingStockRequestKeys[intent] == idempotencyKey) pendingStockRequestKeys.remove(intent)
                         }
                         _messages.tryEmit(
-                            "Demande de stock envoyée à l'Admin pour validation. Le stock ne changera qu'après approbation.",
+                            "Demande de stock envoyée pour validation. Le stock ne changera qu'après approbation.",
                         )
+                        loadStockAdjustmentRequests()
                     }
                 }
             }
@@ -365,6 +439,8 @@ class ProductsViewModel @Inject constructor(
                 it.copy(
                     loading = initial && it.products.isEmpty(),
                     refreshing = !initial,
+                    loadingProductRequests = true,
+                    productRequestsError = null,
                     error = null,
                 )
             }
@@ -373,7 +449,15 @@ class ProductsViewModel @Inject constructor(
                 if (savedCatalog.isNotEmpty() &&
                     (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope
                 ) {
-                    _state.update { it.copy(products = savedCatalog, loading = false, cachedFallback = true) }
+                    _state.update {
+                        it.copy(
+                            products = savedCatalog,
+                            loading = false,
+                            refreshing = true,
+                            cachedFallback = false,
+                            checkingCachedCatalog = true,
+                        )
+                    }
                 }
             }
             val result = commerceRepository.products(query = query, limit = 300)
@@ -381,6 +465,7 @@ class ProductsViewModel @Inject constructor(
             val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
             if (activeUser?.scopeIdentity != requestedScope) return@launch
             val allOpenReqs = (reqResult as? ApiResult.Success)?.data ?: _state.value.openRequests
+            val requestsError = (reqResult as? ApiResult.Failure)?.message
             val visibleReqs = if (Roles.isAdmin(activeUser?.role)) {
                 allOpenReqs
             } else {
@@ -405,6 +490,9 @@ class ProductsViewModel @Inject constructor(
                             refreshing = false,
                             offline = offline,
                             cachedFallback = canUseCache && hasSavedCatalog,
+                            checkingCachedCatalog = false,
+                            loadingProductRequests = false,
+                            productRequestsError = requestsError,
                             openRequests = visibleReqs,
                             products = if (cached.isNotEmpty()) cached else it.products,
                             error = if (canUseCache && hasSavedCatalog) null else result.message,
@@ -419,6 +507,9 @@ class ProductsViewModel @Inject constructor(
                         refreshing = false,
                         offline = false,
                         cachedFallback = false,
+                        checkingCachedCatalog = false,
+                        loadingProductRequests = false,
+                        productRequestsError = requestsError,
                         error = null,
                         openRequests = visibleReqs,
                         products = result.data,

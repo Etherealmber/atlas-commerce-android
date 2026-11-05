@@ -484,6 +484,15 @@ class CommerceRepository @Inject constructor(
         )
     }
 
+    suspend fun stockAdjustmentRequests(status: String? = null): ApiResult<List<StockAdjustmentRequestDto>> =
+        runner.envelope { apiProvider.api().stockAdjustmentRequests(status) }
+
+    suspend fun approveStockAdjustmentRequest(id: Long): ApiResult<StockAdjustmentRequestDto> =
+        runner.envelope { apiProvider.api().approveStockAdjustmentRequest(id) }
+
+    suspend fun rejectStockAdjustmentRequest(id: Long): ApiResult<StockAdjustmentRequestDto> =
+        runner.envelope { apiProvider.api().rejectStockAdjustmentRequest(id) }
+
     suspend fun alerts(): ApiResult<List<AlertItemDto>> =
         runner.envelope { apiProvider.api().alerts() }
 

@@ -44,7 +44,12 @@ class AtlasFirebaseMessagingService : FirebaseMessagingService() {
             val intent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 for ((key, value) in data) putExtra(key, value)
-                if (data["type"].orEmpty().isNotBlank() || data.containsKey("action_id")) {
+                // Worker business pushes use `event` (for example stock_request_decided),
+                // while older notification payloads use `type` / `action_id`.
+                if (data["type"].orEmpty().isNotBlank() ||
+                    data["event"].orEmpty().isNotBlank() ||
+                    data.containsKey("action_id")
+                ) {
                     putExtra(AtlasApp.EXTRA_OPEN_NOTIFICATIONS, true)
                 }
             }

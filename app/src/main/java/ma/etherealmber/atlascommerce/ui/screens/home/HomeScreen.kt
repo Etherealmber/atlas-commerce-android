@@ -245,7 +245,12 @@ fun HomeScreen(
     }
 
     when {
-        state.loading && dashboard == null -> AtlasDashboardSkeleton(Modifier.fillMaxSize())
+        state.loading && dashboard == null -> AtlasDashboardSkeleton(
+            modifier = Modifier.fillMaxSize(),
+            isAdmin = isAdmin,
+            showFinancialHero = isAdmin && state.finance != null,
+            offline = state.offline,
+        )
         dashboard == null -> HomeErrorContent(
             user = user,
             message = atlasNotice(state.error ?: "Vérifiez l'adresse du serveur et votre connexion.", LocalAtlasLanguage.current),

@@ -65,7 +65,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
-import ma.etherealmber.atlascommerce.ui.components.AtlasPayrollRowsSkeleton
+import ma.etherealmber.atlascommerce.ui.components.AtlasPayrollLoadingIndicator
 import ma.etherealmber.atlascommerce.ui.components.AtlasPayrollSkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
@@ -369,7 +369,7 @@ fun EmployeesScreen(
 
         if (state.financeLoading && payroll == null) {
             item(key = "employee_loading") {
-                AtlasPayrollRowsSkeleton(Modifier.padding(horizontal = 8.dp), rows = 4)
+                AtlasPayrollLoadingIndicator(Modifier.padding(horizontal = 8.dp))
             }
         } else if (visibleRows.isEmpty()) {
             item(key = "employee_empty") {

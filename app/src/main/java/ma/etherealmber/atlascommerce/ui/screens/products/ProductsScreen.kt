@@ -45,7 +45,6 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.AddShoppingCart
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -82,6 +81,7 @@ import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
@@ -89,6 +89,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasCatalogSkeleton
+import ma.etherealmber.atlascommerce.ui.components.AtlasProductRequestsSkeleton
+import ma.etherealmber.atlascommerce.ui.components.AtlasStockRequestsSkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasOfflineBanner
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
@@ -236,19 +238,43 @@ fun ProductsScreen(
                     selected = state.filter == ProductsViewModel.FilterMode.REQUESTS,
                     onClick = { viewModel.setFilter(ProductsViewModel.FilterMode.REQUESTS) },
                     label = {
+                        val count = if (state.loadingProductRequests && state.openRequests.isEmpty()) "" else " (${state.openRequests.size})"
                         Text(
                             if (isAdmin) {
-                                atlasText("À valider (${state.openRequests.size})", "To approve (${state.openRequests.size})", "بانتظار الموافقة (${state.openRequests.size})")
+                                atlasText("À valider$count", "To approve$count", "بانتظار الموافقة$count")
                             } else {
-                                atlasText("Mes demandes (${state.openRequests.size})", "My requests (${state.openRequests.size})", "طلباتي (${state.openRequests.size})")
+                                atlasText("Mes demandes$count", "My requests$count", "طلباتي$count")
                             },
                         )
                     },
                 )
+                FilterChip(
+                    selected = state.filter == ProductsViewModel.FilterMode.STOCK_ADJUSTMENTS,
+                    onClick = { viewModel.setFilter(ProductsViewModel.FilterMode.STOCK_ADJUSTMENTS) },
+                    label = {
+                        val pendingCount = state.stockAdjustmentRequests.count { it.status.equals("pending", ignoreCase = true) }
+                        Text(
+                            if (state.stockAdjustmentRequests.isEmpty()) atlasText("Demandes de stock", "Stock requests", "طلبات المخزون")
+                            else atlasText(
+                                "Stock (${pendingCount} en attente)",
+                                "Stock (${pendingCount} pending)",
+                                "المخزون (${pendingCount} معلّقة)",
+                            ),
+                        )
+                    },
+                )
             }
-            if (state.filter != ProductsViewModel.FilterMode.REQUESTS && !state.loading) {
+            if (state.filter != ProductsViewModel.FilterMode.REQUESTS &&
+                state.filter != ProductsViewModel.FilterMode.STOCK_ADJUSTMENTS &&
+                !state.loading && state.error.isNullOrBlank()
+            ) {
                 Text(
                     when {
+                        state.checkingCachedCatalog -> atlasText(
+                            "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue enregistré, vérification en cours",
+                            "${state.visibleProducts.size} results · saved catalog, checking for updates",
+                            "${state.visibleProducts.size} نتيجة · كتالوج محفوظ، جارٍ التحقق من التحديثات",
+                        )
                         state.cachedFallback -> atlasText(
                             "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue enregistré",
                             "${state.visibleProducts.size} results · saved catalog",
@@ -269,6 +295,24 @@ fun ProductsScreen(
         if (state.offline) {
             AtlasOfflineBanner(modifier = Modifier.padding(horizontal = density.screenPadding))
             Spacer(Modifier.height(8.dp))
+        } else if (state.checkingCachedCatalog) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = density.screenPadding),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Text(
+                    atlasText(
+                        "Catalogue enregistré affiché — vérification des mises à jour en cours.",
+                        "Showing the saved catalog while checking for live updates.",
+                        "يتم عرض الكتالوج المحفوظ أثناء التحقق من التحديثات المباشرة.",
+                    ),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
         } else if (state.cachedFallback) {
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = density.screenPadding),
@@ -280,10 +324,10 @@ fun ProductsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Icon(Icons.Outlined.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Icon(Icons.Outlined.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
                     Text(
                         if (state.refreshing) atlasText("Catalogue enregistré affiché pendant l'actualisation.", "Showing the saved catalog while refreshing.", "يتم عرض الكتالوج المحفوظ أثناء التحديث.")
-                        else atlasText("Serveur indisponible — catalogue enregistré affiché.", "Server unavailable — showing the saved catalog.", "الخادم غير متاح — يتم عرض الكتالوج المحفوظ."),
+                        else atlasText("Mise à jour en direct impossible — catalogue enregistré affiché.", "Live update failed — showing the saved catalog.", "تعذر التحديث المباشر — يتم عرض الكتالوج المحفوظ."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
@@ -293,9 +337,86 @@ fun ProductsScreen(
         }
 
         when {
-            state.loading -> AtlasCatalogSkeleton(Modifier.fillMaxSize(), rows = 6)
+            state.filter == ProductsViewModel.FilterMode.STOCK_ADJUSTMENTS -> when {
+                state.stockAdjustmentLoading && state.stockAdjustmentRequests.isEmpty() ->
+                    AtlasStockRequestsSkeleton(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        rows = 4,
+                        showActions = canAdjustStock,
+                        bottomPadding = 24.dp + dockPadding,
+                    )
 
-            !state.error.isNullOrBlank() -> {
+                !state.stockAdjustmentError.isNullOrBlank() ->
+                    Column(Modifier.padding(horizontal = density.screenPadding)) {
+                        AtlasErrorCard(
+                            message = atlasNotice(state.stockAdjustmentError.orEmpty(), LocalAtlasLanguage.current),
+                            onRetry = viewModel::loadStockAdjustmentRequests,
+                        )
+                    }
+
+                state.stockAdjustmentRequests.isEmpty() -> AtlasEmptyState(
+                    title = atlasText("Aucune demande de stock", "No stock requests", "لا توجد طلبات مخزون"),
+                    message = if (canAdjustStock) {
+                        atlasText(
+                            "Les demandes d'ajustement envoyées par l'équipe apparaîtront ici.",
+                            "Stock adjustment requests from your team will appear here.",
+                            "ستظهر هنا طلبات تعديل المخزون المرسلة من الفريق.",
+                        )
+                    } else {
+                        atlasText(
+                            "Vos demandes d'ajustement apparaîtront ici avec leur décision.",
+                            "Your stock adjustment requests and their decisions will appear here.",
+                            "ستظهر هنا طلبات تعديل المخزون والقرارات المتعلقة بها.",
+                        )
+                    },
+                    icon = Icons.Outlined.Inventory2,
+                )
+
+                else -> LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 320.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = density.screenPadding, end = density.screenPadding, bottom = 24.dp + dockPadding),
+                    horizontalArrangement = Arrangement.spacedBy(density.itemGap),
+                    verticalArrangement = Arrangement.spacedBy(density.itemGap),
+                ) {
+                    gridItemsIndexed(state.stockAdjustmentRequests, key = { _, request -> request.id }) { _, request ->
+                        StockAdjustmentRequestRow(
+                            request = request,
+                            canApprove = canAdjustStock,
+                            deciding = request.id in state.decidingStockRequestIds,
+                            onApprove = { viewModel.decideStockAdjustmentRequest(request.id, approve = true) },
+                            onReject = { viewModel.decideStockAdjustmentRequest(request.id, approve = false) },
+                        )
+                    }
+                }
+            }
+
+            state.filter == ProductsViewModel.FilterMode.REQUESTS &&
+                (state.loadingProductRequests || state.loading) && state.openRequests.isEmpty() ->
+                AtlasProductRequestsSkeleton(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    rows = 6,
+                    showActions = isAdmin,
+                    bottomPadding = 24.dp + dockPadding,
+                )
+
+            state.filter == ProductsViewModel.FilterMode.REQUESTS && !state.productRequestsError.isNullOrBlank() ->
+                Column(Modifier.padding(horizontal = density.screenPadding)) {
+                    AtlasErrorCard(
+                        message = atlasNotice(state.productRequestsError.orEmpty(), LocalAtlasLanguage.current),
+                        onRetry = viewModel::refresh,
+                    )
+                }
+
+            state.loading && state.filter != ProductsViewModel.FilterMode.REQUESTS -> AtlasCatalogSkeleton(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                rows = 6,
+                showRoleBanner = !isAdmin,
+                showCartButton = canSell,
+                bottomPadding = 24.dp + dockPadding,
+            )
+
+            !state.error.isNullOrBlank() && state.filter != ProductsViewModel.FilterMode.REQUESTS -> {
                 Column(Modifier.padding(horizontal = density.screenPadding)) {
                     AtlasErrorCard(message = atlasNotice(state.error.orEmpty(), LocalAtlasLanguage.current), onRetry = viewModel::refresh)
                 }
@@ -571,6 +692,94 @@ private fun ProductRequestRow(
     }
 }
 
+@Composable
+private fun StockAdjustmentRequestRow(
+    request: StockAdjustmentRequestDto,
+    canApprove: Boolean,
+    deciding: Boolean,
+    onApprove: () -> Unit,
+    onReject: () -> Unit,
+) {
+    val status = request.status.lowercase()
+    val statusText = when (status) {
+        "pending" -> atlasText("En attente", "Pending", "قيد الانتظار")
+        "approved" -> atlasText("Approuvée", "Approved", "تمت الموافقة")
+        "rejected" -> atlasText("Refusée", "Rejected", "مرفوضة")
+        else -> atlasText("Échec", "Failed", "فشلت")
+    }
+    val directionText = when (request.direction.lowercase()) {
+        "in" -> atlasText("Entrée", "Stock in", "إدخال للمخزون")
+        "out" -> atlasText("Sortie", "Stock out", "إخراج من المخزون")
+        else -> atlasText("Ajustement", "Adjustment", "تعديل")
+    }
+    val tone = when (status) {
+        "pending" -> AtlasTone.WARNING
+        "approved" -> AtlasTone.POSITIVE
+        "rejected", "failed" -> AtlasTone.DANGER
+        else -> AtlasTone.NEUTRAL
+    }
+
+    AtlasCard(padding = 14.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    request.productName.ifBlank {
+                        atlasText("Produit #${request.productId}", "Product #${request.productId}", "المنتج #${request.productId}")
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "$directionText · ${atlasQuantity(request.quantity)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            AtlasChip(text = statusText, tone = tone)
+        }
+        if (!request.reason.isNullOrBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(request.reason.orEmpty(), style = MaterialTheme.typography.bodySmall)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            atlasText(
+                "Demandé par ${request.requestedBy}",
+                "Requested by ${request.requestedBy}",
+                "طلبه ${request.requestedBy}",
+            ),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (request.stockBefore != null && request.stockAfter != null) {
+            Text(
+                atlasText(
+                    "Stock ${atlasQuantity(request.stockBefore)} → ${atlasQuantity(request.stockAfter)}",
+                    "Stock ${atlasQuantity(request.stockBefore)} → ${atlasQuantity(request.stockAfter)}",
+                    "المخزون ${atlasQuantity(request.stockBefore)} ← ${atlasQuantity(request.stockAfter)}",
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (canApprove && status == "pending") {
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onApprove, enabled = !deciding) {
+                    Text(atlasText("Approuver", "Approve", "موافقة"))
+                }
+                TextButton(onClick = onReject, enabled = !deciding) {
+                    Text(atlasText("Refuser", "Reject", "رفض"))
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun ProductRow(
@@ -757,7 +966,7 @@ private fun StockAdjustDialog(
     var rawQuantity by remember(product.id) { mutableStateOf("") }
     var isOut by remember(product.id) { mutableStateOf(true) }
     var reason by remember(product.id) { mutableStateOf("") }
-    val quantity = rawQuantity.replace(',', '.').toDoubleOrNull() ?: 0.0
+    val quantity = parseStockAdjustmentQuantity(rawQuantity)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -833,8 +1042,8 @@ private fun StockAdjustDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSubmit(quantity, isOut, reason) },
-                enabled = quantity > 0.0,
+                onClick = { quantity?.let { onSubmit(it, isOut, reason) } },
+                enabled = quantity != null,
             ) {
                 Text(
                     if (directAdjustment) atlasText("Appliquer", "Apply", "تطبيق")

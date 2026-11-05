@@ -189,8 +189,12 @@ class QrDevicesAndModelsTest {
         assertTrue(Roles.canRequestStockAdjustment("user"))
 
         val stockRequest = moshi.adapter(StockAdjustmentRequestDto::class.java)
-            .fromJson("""{"id":2,"product_id":7,"reason":null,"status":"pending"}""")
+            .fromJson("""{"id":2,"product_id":7,"product_name":"Tile","direction":"out","quantity":2,"requested_by":"staff","stock_before":10,"stock_after":8,"reason":null,"status":"pending"}""")
         assertNull(stockRequest?.reason)
+        assertEquals("Tile", stockRequest?.productName)
+        assertEquals("staff", stockRequest?.requestedBy)
+        assertEquals(10.0, stockRequest?.stockBefore!!, 0.0)
+        assertEquals(8.0, stockRequest?.stockAfter!!, 0.0)
 
         val qr = moshi.adapter(QrSessionStatusDto::class.java)
             .fromJson("""{"status":"claimed","username":"amine","avatar_url":"data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="}""")
