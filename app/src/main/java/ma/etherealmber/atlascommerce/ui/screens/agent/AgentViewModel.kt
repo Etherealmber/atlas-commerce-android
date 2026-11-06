@@ -47,6 +47,11 @@ internal fun newestAgentThreadsFirst(threads: List<AgentThreadSummaryDto>): List
         )
         .map { it.value }
 
+/** The Worker’s done.reply is authoritative; never append it to already-rendered token fragments. */
+@Suppress("UNUSED_PARAMETER")
+internal fun replaceProvisionalReply(provisional: String, doneReply: String): String =
+    doneReply.ifBlank { "Analyse terminée." }
+
 @HiltViewModel
 class AgentViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
@@ -83,6 +88,7 @@ class AgentViewModel @Inject constructor(
         val attachments: List<AgentAttachment> = emptyList(),
         val sensitiveConfirmation: Boolean = false,
         val streamingReply: String = "",
+        val streamingTools: List<AssistToolTraceDto> = emptyList(),
         val sending: Boolean = false,
         val approvingId: String? = null,
         val error: String? = null,
@@ -132,6 +138,7 @@ class AgentViewModel @Inject constructor(
                 messages = emptyList(),
                 attachments = emptyList(),
                 streamingReply = "",
+                streamingTools = emptyList(),
                 sensitiveConfirmation = false,
                 error = null,
                 sending = false,
@@ -168,6 +175,7 @@ class AgentViewModel @Inject constructor(
                 sending = false,
                 attachments = emptyList(),
                 streamingReply = "",
+                streamingTools = emptyList(),
                 sensitiveConfirmation = false,
                 error = null,
             )
@@ -233,6 +241,7 @@ class AgentViewModel @Inject constructor(
                     sending = false,
                     loadingThread = false,
                     streamingReply = "",
+                    streamingTools = emptyList(),
                     error = null,
                 )
             }
@@ -384,6 +393,7 @@ class AgentViewModel @Inject constructor(
                 activeThreadTitle = resolvedTitle,
                 sending = true,
                 streamingReply = "",
+                streamingTools = emptyList(),
                 error = null,
                 messages = it.messages + userBubble,
             )
@@ -397,19 +407,48 @@ class AgentViewModel @Inject constructor(
                 return@launch
             }
             val requestScope = activeUser.scopeIdentity
+            val imageAttachments = attachments.flatMap { it.imageDataUrls }.take(4)
+            val documentAttachments = attachments.flatMap { it.documentDataUrls }.take(2)
             val result = try {
-                // The Worker streaming twin currently omits the role-filtered business tools.
-                // Use the existing buffered chat contract so live questions can invoke the
-                // authorized tools instead of receiving an ungrounded generic model answer.
-                commerceRepository.assistChat(
-                    message = clean,
-                    role = activeUser.role,
-                    username = activeUser.username,
-                    threadId = activeId,
-                    images = attachments.flatMap { it.imageDataUrls }.take(4),
-                    documents = attachments.flatMap { it.documentDataUrls }.take(2),
-                    responseLanguage = responseLanguage,
-                )
+                if (imageAttachments.isNotEmpty()) {
+                    // The Worker keeps vision on the established buffered response path.
+                    commerceRepository.assistChat(
+                        message = clean,
+                        role = activeUser.role,
+                        username = activeUser.username,
+                        threadId = activeId,
+                        images = imageAttachments,
+                        documents = documentAttachments,
+                        responseLanguage = responseLanguage,
+                    )
+                } else {
+                    commerceRepository.assistChatStream(
+                        message = clean,
+                        role = activeUser.role,
+                        username = activeUser.username,
+                        threadId = activeId,
+                        documents = documentAttachments,
+                        responseLanguage = responseLanguage,
+                        onToken = { token ->
+                            if (isCurrentSend(requestId, activeId)) {
+                                _state.update { current ->
+                                    if (current.activeThreadId == activeId && current.sending) {
+                                        current.copy(streamingReply = current.streamingReply + token)
+                                    } else current
+                                }
+                            }
+                        },
+                        onTool = { tool ->
+                            if (isCurrentSend(requestId, activeId)) {
+                                _state.update { current ->
+                                    if (current.activeThreadId == activeId && current.sending) {
+                                        current.copy(streamingTools = current.streamingTools + tool)
+                                    } else current
+                                }
+                            }
+                        },
+                    )
+                }
             } catch (cancelled: CancellationException) {
                 finishSendWithError(requestId, activeId, "Réponse interrompue. Vous pouvez réessayer.")
                 throw cancelled
@@ -443,7 +482,7 @@ class AgentViewModel @Inject constructor(
                 is ApiResult.Success -> {
                     val elapsedMs = (System.currentTimeMillis() - startedMs).coerceAtLeast(1L)
                     AtlasLogBuffer.log("AGENT", "Chat response completed in ${elapsedMs}ms")
-                    val replyText = result.data.reply.ifBlank { "Analyse terminée." }
+                    val replyText = replaceProvisionalReply(_state.value.streamingReply, result.data.reply)
                     val replyBubble = ChatMessage(
                         fromUser = false,
                         text = replyText,
@@ -464,6 +503,7 @@ class AgentViewModel @Inject constructor(
                         else current.copy(
                             sending = false,
                             streamingReply = "",
+                            streamingTools = emptyList(),
                             attachments = emptyList(),
                             messages = allMessages,
                             threads = listOf(summaryEntry) + current.threads.filterNot { it.id == activeId },
@@ -514,6 +554,7 @@ class AgentViewModel @Inject constructor(
             else current.copy(
                 sending = false,
                 streamingReply = "",
+                streamingTools = emptyList(),
                 policy = updatedPolicy ?: current.policy,
                 error = message,
             )

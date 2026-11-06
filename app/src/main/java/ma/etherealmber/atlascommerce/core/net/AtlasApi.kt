@@ -62,6 +62,7 @@ import ma.etherealmber.atlascommerce.push.DeviceTokenRequest
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.Headers
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
@@ -107,7 +108,7 @@ interface AtlasApi {
 
     /** v0.7.5 — voluntary logout marks this device resumable for password-only return. */
     @POST("api/auth/logout")
-    suspend fun logout(): ActionAckDto
+    suspend fun logout(@Header("Authorization") authorization: String? = null): ActionAckDto
 
     @POST("api/auth/login")
     suspend fun login(@Body body: LoginRequest): LoginResponse
@@ -283,6 +284,7 @@ interface AtlasApi {
     suspend fun assistChat(@Body body: AssistChatRequest): ApiEnvelope<AssistChatResponseDto>
 
     @Streaming
+    @Headers("Accept: text/event-stream")
     @POST("api/assist/chat/stream")
     suspend fun assistChatStream(@Body body: AssistChatRequest): Response<ResponseBody>
 

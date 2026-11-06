@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.SystemClock
 import android.os.StatFs
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -32,6 +33,8 @@ import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.net.ProbeReport
+import ma.etherealmber.atlascommerce.core.net.ServerProbe
 import ma.etherealmber.atlascommerce.core.net.SessionEvents
 import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
@@ -98,6 +101,7 @@ class AppViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
     private val sessionEvents: SessionEvents,
     private val apiProvider: ApiProvider,
+    private val serverProbe: ServerProbe,
     private val updateManager: AppUpdateManager,
     private val offlineCache: OfflineCache,
     private val deviceIdentity: DeviceIdentity,
@@ -270,6 +274,55 @@ class AppViewModel @Inject constructor(
     private val _localStorageSummary = MutableStateFlow(LocalStorageSummary())
     val localStorageSummary: StateFlow<LocalStorageSummary> = _localStorageSummary.asStateFlow()
 
+    private val _developerProbeReport = MutableStateFlow<ProbeReport?>(null)
+    val developerProbeReport: StateFlow<ProbeReport?> = _developerProbeReport.asStateFlow()
+    private val _developerProbeLoading = MutableStateFlow(false)
+    val developerProbeLoading: StateFlow<Boolean> = _developerProbeLoading.asStateFlow()
+    private var developerProbeGeneration = 0L
+
+    fun runDeveloperApiProbe() {
+        if (_developerProbeLoading.value) return
+        val generation = ++developerProbeGeneration
+        val target = serverConfig.normalizedSelection()
+        if (target == null) {
+            _developerProbeReport.value = ProbeReport(
+                ok = false,
+                baseUrl = "",
+                message = "Aucune adresse de serveur n'est configurée.",
+            )
+            return
+        }
+        _developerProbeReport.value = null
+        viewModelScope.launch {
+            if (generation != developerProbeGeneration || serverConfig.normalizedSelection() != target) return@launch
+            _developerProbeLoading.value = true
+            try {
+                val report = serverProbe.probe(target)
+                if (generation == developerProbeGeneration && serverConfig.normalizedSelection() == target) {
+                    _developerProbeReport.value = report
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (generation == developerProbeGeneration && serverConfig.normalizedSelection() == target) {
+                    _developerProbeReport.value = ProbeReport(
+                        ok = false,
+                        baseUrl = target,
+                        message = "Vérification impossible — vérifiez votre saisie.",
+                    )
+                }
+            } finally {
+                if (generation == developerProbeGeneration) _developerProbeLoading.value = false
+            }
+        }
+    }
+
+    fun clearDeveloperApiProbe() {
+        developerProbeGeneration += 1
+        _developerProbeReport.value = null
+        _developerProbeLoading.value = false
+    }
+
     fun refreshLocalStorageSummary() {
         viewModelScope.launch {
             _localStorageSummary.value = withContext(Dispatchers.IO) {
@@ -286,7 +339,9 @@ class AppViewModel @Inject constructor(
                     totalAppBytes = applicationContext.dataDir.directorySizeBytes(),
                     cacheBytes = cache.directorySizeBytes(),
                     offlineCatalogBytes = File(files, "atlas-cache").directorySizeBytes(),
-                    financeReportBytes = finance.directorySizeBytes(),
+                    financeReportBytes = finance.walkTopDown()
+                        .filter { it.isFile && it.extension.equals("pdf", ignoreCase = true) }
+                        .sumOf { it.length() },
                     financeReportCount = finance.walkTopDown().count { it.isFile && it.extension.equals("pdf", ignoreCase = true) },
                     diagnosticsBytes = diagnostics.directorySizeBytes() + persistentDiagnostics.directorySizeBytes(),
                     updateDownloadBytes = updateBytes,
@@ -521,11 +576,28 @@ class AppViewModel @Inject constructor(
     }
 
     fun clearOfflineCache(onDone: (String) -> Unit) {
+        val requestedUser = (sessionManager.state.value as? SessionState.Active)?.user
+        if (requestedUser == null) {
+            onDone("Aucune session active; aucun cache n'a été supprimé.")
+            return
+        }
+        if (requestedUser.serverUrl.isBlank() || requestedUser.username.isBlank()) {
+            onDone("Le compte actif ne peut pas être identifié; aucun cache n'a été supprimé.")
+            return
+        }
+        val requestedScope = requestedUser.scopeIdentity
         viewModelScope.launch {
-            offlineCache.clear()
-            _cachedProductCount.value = 0
+            val currentUser = (sessionManager.state.value as? SessionState.Active)?.user
+            if (currentUser?.scopeIdentity != requestedScope) {
+                onDone("Le compte actif a changé; aucun cache n'a été supprimé.")
+                return@launch
+            }
+            offlineCache.clearAccountScope(requestedUser.serverUrl, requestedUser.username)
             refreshLocalStorageSummary()
-            onDone("Cache catalogue hors ligne vidé.")
+            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope) {
+                _cachedProductCount.value = 0
+            }
+            onDone("Nettoyage du cache hors ligne du compte actuel terminé.")
         }
     }
 
@@ -685,14 +757,30 @@ class AppViewModel @Inject constructor(
 
     fun clearFinanceReportCache(onDone: (String) -> Unit) {
         viewModelScope.launch {
-            val removed = withContext(Dispatchers.IO) {
+            val (removed, cleared) = withContext(Dispatchers.IO) {
                 val directory = File(applicationContext.cacheDir, "finance")
-                val count = directory.walkTopDown().count { it.isFile && it.extension.equals("pdf", true) }
-                directory.deleteRecursively()
-                count
+                val reports = directory.walkTopDown()
+                    .filter { it.isFile && it.extension.equals("pdf", ignoreCase = true) }
+                    .toList()
+                var allDeleted = true
+                reports.forEach { report ->
+                    if (!runCatching { !report.exists() || report.delete() }.getOrDefault(false)) {
+                        allDeleted = false
+                    }
+                }
+                directory.walkBottomUp()
+                    .filter { it.isDirectory && it != directory && it.listFiles().isNullOrEmpty() }
+                    .forEach { emptyDirectory -> runCatching { emptyDirectory.delete() } }
+                reports.size to allDeleted
             }
             refreshLocalStorageSummary()
-            onDone(if (removed == 0) "Aucun rapport PDF temporaire à supprimer." else "$removed rapport(s) PDF temporaire(s) supprimé(s).")
+            onDone(
+                when {
+                    !cleared -> "Impossible de supprimer les rapports PDF temporaires."
+                    removed == 0 -> "Aucun rapport PDF temporaire à supprimer."
+                    else -> "Rapports PDF temporaires supprimés."
+                },
+            )
         }
     }
 

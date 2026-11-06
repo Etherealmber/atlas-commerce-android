@@ -64,6 +64,17 @@ sealed interface LoginOutcome {
     data class OtpRequired(val message: String, val emailHint: String?) : LoginOutcome
 }
 
+/** The Worker remains the sole authority on whether this password attempt needs OTP. */
+internal fun loginOtpRequirement(response: LoginResponse): LoginOutcome.OtpRequired? =
+    if (response.needsOtp) {
+        LoginOutcome.OtpRequired(
+            message = response.message ?: "Un code de vérification a été envoyé.",
+            emailHint = null,
+        )
+    } else {
+        null
+    }
+
 /**
  * Owns the authenticated session with strict per-server & per-account isolation:
  * password + OTP + QR pairing, explicit device-authenticated saved-account
@@ -120,26 +131,30 @@ class SessionManager @Inject constructor(
      * explicit password or device-authenticated sign-in. The PWA has its own session lifecycle.
      */
     private suspend fun initializeFreshSession() {
-        try {
-            preferences.migrateLegacyPreferencesAtRest()
-            preferences.clearSession()
-            serverConfig.loaded.filter { it }.first()
-        } catch (error: kotlinx.coroutines.CancellationException) {
-            throw error
-        } catch (error: Throwable) {
-            ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
-                tag = "AUTH",
-                message = "Could not clear active session on native startup (${error.javaClass.simpleName})",
-                level = "WARN",
-            )
-        } finally {
-            try {
-                purgeInMemorySession()
-                _state.value = SessionState.SignedOut
-            } finally {
-                startupCleanup.complete(Unit)
-            }
-        }
+        FreshProcessStartup(
+            preparePreviousSession = {
+                preferences.migrateLegacyPreferencesAtRest()
+                serverConfig.loaded.filter { it }.first()
+                StartupResumePreparation.prepare(
+                    previousSession = preferences.readSession(),
+                    selectedServerUrl = serverConfig.normalizedSelection(),
+                    restoreDisabled = preferences.isSessionRestoreDisabled(),
+                    decryptToken = cryptoStore::decrypt,
+                    notifyServer = authRepository::prepareStartupResume,
+                )
+            },
+            clearStoredSession = preferences::clearSession,
+            purgeActiveState = ::purgeInMemorySession,
+            publishSignedOut = { _state.value = SessionState.SignedOut },
+            releaseStartupGate = { startupCleanup.complete(Unit) },
+            onFailure = { error ->
+                ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+                    tag = "AUTH",
+                    message = "Could not prepare native startup resume (${error.javaClass.simpleName})",
+                    level = "WARN",
+                )
+            },
+        ).run()
     }
 
     suspend fun signIn(
@@ -333,14 +348,7 @@ class SessionManager @Inject constructor(
         fallbackUsername: String,
         rememberAccount: Boolean,
     ): ApiResult<LoginOutcome> {
-        if (response.needsOtp) {
-            return ApiResult.Success(
-                LoginOutcome.OtpRequired(
-                    message = response.message ?: "Un code de vérification a été envoyé.",
-                    emailHint = null,
-                ),
-            )
-        }
+        loginOtpRequirement(response)?.let { return ApiResult.Success(it) }
         val token = response.token
         if (token.isNullOrBlank()) {
             return ApiResult.Failure(
@@ -362,6 +370,7 @@ class SessionManager @Inject constructor(
             email = "",
             avatarUrl = "",
             rememberAccount = rememberAccount,
+            clearRestoreDisabledAfterPasswordLogin = true,
         )
         runCatching { refreshProfile(rememberAccount = rememberAccount) }
         return ApiResult.Success(LoginOutcome.SignedIn)
@@ -377,10 +386,15 @@ class SessionManager @Inject constructor(
         avatarUrl: String,
         phone: String = "",
         rememberAccount: Boolean,
+        clearRestoreDisabledAfterPasswordLogin: Boolean = false,
     ) {
         // A cold deep link can authenticate before startup cleanup finishes. Await cleanup
         // before writing the new active session so its final purge cannot erase this login.
         startupCleanup.await()
+        if (clearRestoreDisabledAfterPasswordLogin) {
+            // This only enables next-start preparation; startup still always publishes SignedOut.
+            runCatching { preferences.disableSessionRestore(disabled = false) }
+        }
         purgeInMemorySession()
         val cipher = cryptoStore.encrypt(token)
         preferences.bindActiveScope(serverUrl, username)

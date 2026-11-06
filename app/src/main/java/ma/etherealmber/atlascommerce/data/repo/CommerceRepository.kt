@@ -31,6 +31,7 @@ import ma.etherealmber.atlascommerce.data.model.AssistChatRequest
 import ma.etherealmber.atlascommerce.data.model.AssistChatResponseDto
 import ma.etherealmber.atlascommerce.data.model.AssistNextActionsDto
 import ma.etherealmber.atlascommerce.data.model.AssistStatusDto
+import ma.etherealmber.atlascommerce.data.model.AssistToolTraceDto
 import ma.etherealmber.atlascommerce.data.model.ClientDto
 import ma.etherealmber.atlascommerce.data.model.CloseProductRequestBody
 import ma.etherealmber.atlascommerce.data.model.CompanySettingsDto
@@ -616,7 +617,7 @@ class CommerceRepository @Inject constructor(
         }
     }
 
-    /** Real SSE tokens from the worker; older servers transparently fall back to JSON chat. */
+    /** Streams the same authorized chat pipeline; images keep their buffered vision path in the caller. */
     suspend fun assistChatStream(
         message: String,
         role: String? = Roles.USER,
@@ -626,6 +627,7 @@ class CommerceRepository @Inject constructor(
         documents: List<String> = emptyList(),
         responseLanguage: AppLanguage = AppLanguage.FRENCH,
         onToken: (String) -> Unit,
+        onTool: (AssistToolTraceDto) -> Unit = {},
     ): ApiResult<AssistChatResponseDto> {
         val cleanQuestion = message.trim()
         if (cleanQuestion.isBlank()) return ApiResult.Failure("EMPTY_MESSAGE", "Message vide.")
@@ -641,6 +643,7 @@ class CommerceRepository @Inject constructor(
             try {
                 val response = apiProvider.api().assistChatStream(request)
                 if (response.code() == 404) {
+                    // Compatibility fallback is only used before an SSE body has opened.
                     response.errorBody()?.close()
                     val fallback = assistChat(
                         message = cleanQuestion,
@@ -664,50 +667,43 @@ class CommerceRepository @Inject constructor(
                     )
                 }
                 val body = response.body() ?: return@withContext ApiResult.Failure("EMPTY_STREAM", "Le serveur n'a pas ouvert le flux Atlas Agent.")
-                var eventName = ""
-                val dataLines = mutableListOf<String>()
                 var completed: AssistChatResponseDto? = null
                 var streamFailure: ApiResult.Failure? = null
-                fun dispatchFrame() {
-                    val payload = dataLines.joinToString("\n")
-                    dataLines.clear()
-                    when (eventName) {
+                val frameParser = AssistSseFrameParser { frame ->
+                    when (frame.event) {
                         "token" -> {
-                            val token = runCatching { JSONObject(payload).optString("t") }.getOrDefault("")
+                            val token = runCatching { JSONObject(frame.data).optString("t") }.getOrDefault("")
                             if (token.isNotEmpty()) onToken(token)
                         }
+                        "tool" -> {
+                            val tool = runCatching {
+                                moshi.adapter(AssistToolTraceDto::class.java).fromJson(frame.data)
+                            }.getOrNull()
+                            tool?.let(onTool)
+                        }
                         "done" -> {
-                            val json = runCatching { JSONObject(payload) }.getOrNull()
-                            if (json != null) completed = AssistChatResponseDto(
-                                reply = json.optString("reply"),
-                                model = json.optString("model").takeIf { it.isNotBlank() },
-                                provider = json.optString("provider").takeIf { it.isNotBlank() },
-                            )
+                            completed = runCatching {
+                                moshi.adapter(AssistChatResponseDto::class.java).fromJson(frame.data)
+                            }.getOrNull()
                         }
                         "error" -> {
-                            val json = runCatching { JSONObject(payload) }.getOrNull()
+                            val json = runCatching { JSONObject(frame.data) }.getOrNull()
                             streamFailure = ApiResult.Failure(
                                 code = json?.optString("code")?.takeIf { it.isNotBlank() } ?: "STREAM_ERROR",
                                 message = json?.optString("error")?.takeIf { it.isNotBlank() } ?: "Erreur du flux Atlas Agent.",
                             )
                         }
+                        else -> Unit // Unknown event names are forward-compatible and ignored.
                     }
-                    eventName = ""
                 }
                 body.byteStream().bufferedReader(Charsets.UTF_8).use { reader ->
                     while (true) {
                         val line = reader.readLine() ?: break
-                        when {
-                            line.isBlank() -> dispatchFrame()
-                            line.startsWith("event:") -> eventName = line.substringAfter(':').trim()
-                            line.startsWith("data:") -> dataLines += line.substringAfter(':').trimStart()
-                        }
+                        frameParser.accept(line)
                     }
-                    if (dataLines.isNotEmpty()) dispatchFrame()
+                    frameParser.finish()
                 }
-                streamFailure?.let { return@withContext it }
-                completed?.let { return@withContext ApiResult.Success(it) }
-                ApiResult.Failure("STREAM_INCOMPLETE", "Le flux Atlas Agent s'est terminé sans réponse complète.")
+                finishAssistSse(completed, streamFailure)
             } catch (c: CancellationException) {
                 throw c
             } catch (e: IOException) {
