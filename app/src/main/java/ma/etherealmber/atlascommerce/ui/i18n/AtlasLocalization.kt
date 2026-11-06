@@ -1026,15 +1026,38 @@ fun atlasNotice(message: String, language: AppLanguage): String {
     } ?: template(Regex("^(\\d+) rapport\\(s\\) PDF temporaire\\(s\\) supprimé\\(s\\)\\.$")) { m ->
         Triple(m.value, "${m.groupValues[1]} temporary PDF report(s) deleted.", "تم حذف ${m.groupValues[1]} من تقارير PDF المؤقتة.")
     } ?: template(Regex("^Données locales supprimées\\.(.*?) Les données de l'entreprise sur le serveur n'ont pas été modifiées\\.$")) { m ->
-        val updateNote = when (m.groupValues[1].trim()) {
-            "Le téléchargement de mise à jour actif est conservé jusqu'à sa fin." -> choose(
-                " Le téléchargement de mise à jour actif est conservé jusqu'à sa fin.",
-                " The active update download will be kept until it finishes.",
-                " سيظل تنزيل التحديث الجاري محفوظاً حتى يكتمل.",
-            )
-            else -> m.groupValues[1]
+        val notes = m.groupValues[1]
+        val translatedNotes = buildString {
+            if ("Le téléchargement de mise à jour actif est conservé jusqu'à sa fin." in notes) {
+                append(choose(
+                    " Le téléchargement de mise à jour actif est conservé jusqu'à sa fin.",
+                    " The active update download will be kept until it finishes.",
+                    " سيظل تنزيل التحديث الجاري محفوظاً حتى يكتمل.",
+                ))
+            }
+            if ("Certains rapports PDF temporaires n'ont pas pu être supprimés." in notes) {
+                append(choose(
+                    " Certains rapports PDF temporaires n'ont pas pu être supprimés.",
+                    " Some temporary PDF reports could not be deleted.",
+                    " تعذّر حذف بعض تقارير PDF المؤقتة.",
+                ))
+            }
+            if ("Les instantanés financiers non-PDF ont été conservés." in notes) {
+                append(choose(
+                    " Les instantanés financiers non-PDF ont été conservés.",
+                    " Non-PDF finance snapshots were retained.",
+                    " تم الاحتفاظ باللقطات المالية غير PDF.",
+                ))
+            }
+            if ("Certains journaux de diagnostic n'ont pas pu être supprimés." in notes) {
+                append(choose(
+                    " Certains journaux de diagnostic n'ont pas pu être supprimés.",
+                    " Some diagnostic logs could not be deleted.",
+                    " تعذّر حذف بعض سجلات التشخيص.",
+                ))
+            }
         }
-        Triple(m.value, "Local data deleted.$updateNote Company data on the server was not changed.", "تم حذف البيانات المحلية.$updateNote لم يتم تغيير بيانات الشركة على الخادم.")
+        Triple(m.value, "Local data deleted.$translatedNotes Company data on the server was not changed.", "تم حذف البيانات المحلية.$translatedNotes لم يتم تغيير بيانات الشركة على الخادم.")
     } ?: message
 }
 

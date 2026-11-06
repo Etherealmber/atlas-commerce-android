@@ -65,6 +65,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.root.roundUpTo50MiB
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import java.text.NumberFormat
 import java.util.Locale
@@ -403,7 +404,7 @@ fun DataCacheManagerDialog(
                         )
                         ManagerActionRow(
                             title = atlasText("Effacer toutes les données locales…", "Clear all local data…", "مسح جميع البيانات المحلية…"),
-                            detail = atlasText("Déconnecte ce compte et réinitialise les préférences de cet appareil.", "Signs out and resets this device's app data.", "يسجل الخروج ويعيد ضبط بيانات التطبيق على هذا الجهاز."),
+                            detail = atlasText("Déconnecte ce compte et réinitialise les données de cette application. Les instantanés financiers non-PDF sont conservés.", "Signs out and resets this device's app data. Non-PDF finance snapshots are retained.", "يسجل الخروج ويعيد ضبط بيانات التطبيق على هذا الجهاز. سيتم الاحتفاظ باللقطات المالية غير PDF."),
                             enabled = true,
                             onClick = { pendingAction = DataManagerAction.ClearAllLocalData },
                             destructive = true,
@@ -456,7 +457,7 @@ fun DataCacheManagerDialog(
             }
             DataManagerAction.ClearAllLocalData -> {
                 title = atlasText("Effacer les données de cet appareil ?", "Clear this device's app data?", "مسح بيانات التطبيق على هذا الجهاز؟")
-                message = atlasText("La session, les comptes/serveurs enregistrés et les préférences locales seront supprimés. Aucune donnée de l'entreprise sur le serveur ne sera modifiée.", "The session, saved accounts/servers, and local preferences will be removed. No company data on the server will be changed.", "سيتم حذف الجلسة والحسابات والخوادم المحفوظة والتفضيلات المحلية. لن تتغير بيانات الشركة على الخادم.")
+                message = atlasText("La session, les comptes/serveurs enregistrés et les préférences locales seront supprimés. Les instantanés financiers non-PDF seront conservés. Aucune donnée de l'entreprise sur le serveur ne sera modifiée.", "The session, saved accounts/servers, and local preferences will be removed. Non-PDF finance snapshots will be retained. No company data on the server will be changed.", "سيتم حذف الجلسة والحسابات والخوادم المحفوظة والتفضيلات المحلية. سيتم الاحتفاظ باللقطات المالية غير PDF. لن تتغير بيانات الشركة على الخادم.")
             }
         }
         AlertDialog(
@@ -479,7 +480,7 @@ fun DataCacheManagerDialog(
                         }
                         DataManagerAction.ClearAllLocalData -> appViewModel.clearAllLocalAppData {
                             onDismiss()
-                            onToast(it)
+                            onToast(atlasNotice(it, appLanguage))
                         }
                     }
                     if (action != DataManagerAction.ClearDiagnosticLogs && action != DataManagerAction.ClearDownloadedUpdate) {

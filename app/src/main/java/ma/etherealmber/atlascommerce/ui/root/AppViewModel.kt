@@ -755,24 +755,28 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun deleteTemporaryFinancePdfs(): Pair<Int, Boolean> {
+        val directory = File(applicationContext.cacheDir, "finance")
+        // The directory also stores finance snapshots; only temporary report PDFs are removable.
+        val reports = directory.walkTopDown()
+            .filter { it.isFile && it.extension.equals("pdf", ignoreCase = true) }
+            .toList()
+        var allDeleted = true
+        reports.forEach { report ->
+            if (!runCatching { !report.exists() || report.delete() }.getOrDefault(false)) {
+                allDeleted = false
+            }
+        }
+        directory.walkBottomUp()
+            .filter { it.isDirectory && it != directory && it.listFiles().isNullOrEmpty() }
+            .forEach { emptyDirectory -> runCatching { emptyDirectory.delete() } }
+        return reports.size to allDeleted
+    }
+
     fun clearFinanceReportCache(onDone: (String) -> Unit) {
         viewModelScope.launch {
             val (removed, cleared) = withContext(Dispatchers.IO) {
-                val directory = File(applicationContext.cacheDir, "finance")
-                // This action clears report PDFs only; the directory also contains finance snapshots.
-                val reports = directory.walkTopDown()
-                    .filter { it.isFile && it.extension.equals("pdf", ignoreCase = true) }
-                    .toList()
-                var allDeleted = true
-                reports.forEach { report ->
-                    if (!runCatching { !report.exists() || report.delete() }.getOrDefault(false)) {
-                        allDeleted = false
-                    }
-                }
-                directory.walkBottomUp()
-                    .filter { it.isDirectory && it != directory && it.listFiles().isNullOrEmpty() }
-                    .forEach { emptyDirectory -> runCatching { emptyDirectory.delete() } }
-                reports.size to allDeleted
+                deleteTemporaryFinancePdfs()
             }
             refreshLocalStorageSummary()
             onDone(
@@ -793,20 +797,21 @@ class AppViewModel @Inject constructor(
             serverConfig.clear()
             preferences.clearAllLocalPreferences()
             offlineCache.clearAll()
-            val diagnosticsCleared = withContext(Dispatchers.IO) {
-                File(applicationContext.cacheDir, "finance").deleteRecursively()
+            val (financeReportsCleared, diagnosticsCleared) = withContext(Dispatchers.IO) {
+                val financeCleared = deleteTemporaryFinancePdfs().second
                 val cacheDiagnostics = File(applicationContext.cacheDir, "diagnostics")
                 val persistentDiagnostics = File(applicationContext.filesDir, "diagnostics")
                 val cacheDiagnosticsCleared = !cacheDiagnostics.exists() || cacheDiagnostics.deleteRecursively()
                 val persistentDiagnosticsCleared = !persistentDiagnostics.exists() || persistentDiagnostics.deleteRecursively()
                 File(applicationContext.filesDir, "atlas-cache").deleteRecursively()
-                cacheDiagnosticsCleared && persistentDiagnosticsCleared
+                financeCleared to (cacheDiagnosticsCleared && persistentDiagnosticsCleared)
             }
             AtlasLogBuffer.clearRecentEntries()
             val updateNote = if (updateFilesCleared) "" else " Le téléchargement de mise à jour actif est conservé jusqu'à sa fin."
+            val financeNote = if (financeReportsCleared) " Les instantanés financiers non-PDF ont été conservés." else " Certains rapports PDF temporaires n'ont pas pu être supprimés. Les instantanés financiers non-PDF ont été conservés."
             val diagnosticsNote = if (diagnosticsCleared) "" else " Certains journaux de diagnostic n'ont pas pu être supprimés."
             refreshLocalStorageSummary()
-            onDone("Données locales supprimées.$updateNote$diagnosticsNote Les données de l'entreprise sur le serveur n'ont pas été modifiées.")
+            onDone("Données locales supprimées.$updateNote$financeNote$diagnosticsNote Les données de l'entreprise sur le serveur n'ont pas été modifiées.")
         }
     }
 
