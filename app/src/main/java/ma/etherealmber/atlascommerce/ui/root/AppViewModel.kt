@@ -759,6 +759,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             val (removed, cleared) = withContext(Dispatchers.IO) {
                 val directory = File(applicationContext.cacheDir, "finance")
+                // This action clears report PDFs only; the directory also contains finance snapshots.
                 val reports = directory.walkTopDown()
                     .filter { it.isFile && it.extension.equals("pdf", ignoreCase = true) }
                     .toList()

@@ -84,6 +84,9 @@ fun DeveloperDiagnosticsScreen(
     val diagnosticsCopyFailed = atlasText("Impossible de copier les diagnostics.", "Could not copy diagnostics.", "تعذّر نسخ التشخيصات.")
     val diagnosticsShareFailed = atlasText("Impossible de préparer le partage des diagnostics.", "Could not prepare diagnostics for sharing.", "تعذّر إعداد التشخيصات للمشاركة.")
     val diagnosticsPrepareFailed = atlasText("Impossible de préparer les diagnostics.", "Could not prepare diagnostics.", "تعذّر إعداد التشخيصات.")
+    val diagnosticsShareReady = atlasText("Choisissez une application pour partager le rapport expurgé.", "Choose an app to share the redacted report.", "اختر تطبيقاً لمشاركة التقرير المنقح.")
+    val updatePackageRemoved = atlasText("Fichier de mise à jour supprimé.", "Downloaded update removed.", "تم حذف ملف التحديث المُنزّل.")
+    val updatePackageRemoveFailed = atlasText("Impossible de supprimer le fichier de mise à jour maintenant.", "Could not remove the downloaded update right now.", "تعذّر حذف التحديث المُنزّل الآن.")
     val scope = rememberCoroutineScope()
     var diagnosticSnapshot by remember(activeRole) {
         mutableStateOf(
@@ -229,8 +232,7 @@ fun DeveloperDiagnosticsScreen(
                                     diagnosticSnapshot = export.snapshot
                                     appViewModel.refreshLocalStorageSummary()
                                     onToast(
-                                        if (shared) atlasText("Choisissez une application pour partager le rapport expurgé.", "Choose an app to share the redacted report.", "اختر تطبيقاً لمشاركة التقرير المنقح.")
-                                        else diagnosticsShareFailed,
+                                        if (shared) diagnosticsShareReady else diagnosticsShareFailed,
                                     )
                                 } catch (_: Exception) {
                                     onToast(diagnosticsPrepareFailed)
@@ -374,10 +376,7 @@ fun DeveloperDiagnosticsScreen(
                             DeveloperCacheAction.UPDATE_PACKAGE -> appViewModel.clearCachedUpdateFiles { cleared ->
                                 cacheActionInProgress = false
                                 pendingCacheAction = null
-                                onToast(
-                                    if (cleared) atlasText("Fichier de mise à jour supprimé.", "Downloaded update removed.", "تم حذف ملف التحديث المُنزّل.")
-                                    else atlasText("تعذّر حذف ملف التحديث الآن.", "Could not remove the downloaded update right now.", "تعذّر حذف التحديث المُنزّل الآن."),
-                                )
+                                onToast(if (cleared) updatePackageRemoved else updatePackageRemoveFailed)
                             }
                         }
                     },
