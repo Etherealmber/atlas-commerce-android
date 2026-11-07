@@ -67,7 +67,17 @@ jobs:
 
       - name: Build Android app for CodeQL
         if: matrix.language == 'java-kotlin'
-        run: ./gradlew --no-daemon --console=plain --stacktrace :app:assembleDebug
+        shell: bash
+        run: |
+          set +e
+          ./gradlew --no-daemon --console=plain --stacktrace :app:assembleDebug 2>&1 | tee "$RUNNER_TEMP/codeql-gradle.log"
+          BUILD_STATUS=${PIPESTATUS[0]}
+          set -e
+          if [ "$BUILD_STATUS" -ne 0 ]; then
+            DIAGNOSTICS=$(grep -E '(^> |^e: |error:|What went wrong|Execution failed|Could not|Caused by:|SDK location not found|No matching variant)' "$RUNNER_TEMP/codeql-gradle.log" | tail -n 15 | paste -sd ' ' - || true)
+            echo "::error::Android Gradle build failed. Relevant diagnostics: ${DIAGNOSTICS:-see the Gradle step output}"
+          fi
+          exit "$BUILD_STATUS"
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
