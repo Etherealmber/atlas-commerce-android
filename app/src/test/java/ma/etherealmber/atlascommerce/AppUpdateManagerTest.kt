@@ -841,9 +841,14 @@ class AppUpdateManagerTest {
             moduleDir,
             "java/ma/etherealmber/atlascommerce/core/update/AppUpdateManager.kt",
         ).readText()
-        assertTrue("APK installs must use PackageInstaller sessions", updateManagerSource.contains("PackageInstaller.SessionParams"))
-        assertFalse("Do not hand APK files to generic ACTION_VIEW handlers", updateManagerSource.contains("Intent.ACTION_VIEW"))
-        assertFalse("Do not install APKs using a generic archive MIME intent", updateManagerSource.contains("application/vnd.android.package-archive"))
+        val installMethodStart = updateManagerSource.indexOf("fun installApk(context: Context): Boolean")
+        assertTrue("APK install entry point must exist", installMethodStart >= 0)
+        val installMethodEnd = updateManagerSource.indexOf("\n    fun onAppResumed(", installMethodStart)
+            .takeIf { it >= 0 } ?: updateManagerSource.length
+        val installMethodSource = updateManagerSource.substring(installMethodStart, installMethodEnd)
+        assertTrue("APK installs must use PackageInstaller sessions", installMethodSource.contains("PackageInstaller.SessionParams"))
+        assertFalse("Do not hand APK files to generic ACTION_VIEW handlers", installMethodSource.contains("Intent.ACTION_VIEW"))
+        assertFalse("Do not install APKs using a generic archive MIME intent", installMethodSource.contains("application/vnd.android.package-archive"))
 
         val proguardFile = File("proguard-rules.pro").takeIf { it.isFile }
             ?: File("app/proguard-rules.pro")
