@@ -338,6 +338,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      attestations: write
+      id-token: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -348,6 +350,11 @@ jobs:
         with:
           name: atlas-commerce-release-apk
           path: signed-apk
+
+      - name: Generate GitHub build provenance for the signed APK
+        uses: actions/attest@v4
+        with:
+          subject-path: signed-apk/atlas-commerce.apk
 
       - name: Auto-generate minimal release notes, latest.json & SHA-256
         id: manifest
