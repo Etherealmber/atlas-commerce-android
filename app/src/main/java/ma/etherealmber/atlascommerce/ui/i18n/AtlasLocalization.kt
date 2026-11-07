@@ -66,6 +66,7 @@ private val commonTranslations = mapOf(
     "Worker local depuis cet appareil" to ("Local Worker from this device" to "Worker المحلي من هذا الجهاز"),
     "Saisissez une adresse de serveur." to ("Enter a server address." to "أدخل عنوان الخادم."),
     "Adresse de serveur invalide." to ("Invalid server address." to "عنوان الخادم غير صالح."),
+    "Aucune adresse de serveur n'est configurée." to ("No server address is configured." to "لم يتم إعداد عنوان خادم."),
     "Cette version refuse HTTP. Utilisez une adresse HTTPS (ou une version debug pour un serveur local)." to ("This version blocks HTTP. Use an HTTPS address (or a debug build for a local server)." to "هذا الإصدار لا يسمح بـ HTTP. استخدم عنوان HTTPS (أو إصدار تصحيح لخادم محلي)."),
     "Worker local vu depuis l'émulateur (npm run dev)" to ("Local Worker from the emulator (npm run dev)" to "Worker المحلي من المحاكي (npm run dev)"),
     "Adresse invalide — vérifiez attentivement que ce que vous avez tapé est correct (ex. https://votre-domaine.com)." to ("Invalid address. Check what you entered (for example, https://your-domain.com)." to "العنوان غير صالح. تحقّق مما أدخلته (مثال: https://your-domain.com)."),
@@ -435,6 +436,10 @@ private val commonTranslations = mapOf(
     "Connexion vérifiée par e-mail — bienvenue !" to ("Email verified — welcome!" to "تم التحقق من البريد الإلكتروني — أهلاً بك!"),
     "Serveur supprimé de cet appareil." to ("Server removed from this device." to "تمت إزالة الخادم من هذا الجهاز."),
     "Cache catalogue hors ligne vidé." to ("Offline catalog cache cleared." to "تم مسح ذاكرة التخزين المؤقت للكتالوج دون اتصال."),
+    "Nettoyage du cache hors ligne du compte actuel terminé." to ("Offline cache cleanup for the current account completed." to "اكتمل تنظيف ذاكرة التخزين المؤقت دون اتصال للحساب الحالي."),
+    "Aucune session active; aucun cache n'a été supprimé." to ("No active session; no cache was cleared." to "لا توجد جلسة نشطة؛ لم يتم مسح أي ذاكرة مؤقتة."),
+    "Le compte actif a changé; aucun cache n'a été supprimé." to ("The active account changed; no cache was cleared." to "تغير الحساب النشط؛ لم يتم مسح أي ذاكرة مؤقتة."),
+    "Le compte actif ne peut pas être identifié; aucun cache n'a été supprimé." to ("The active account could not be identified; no cache was cleared." to "تعذّر تحديد الحساب النشط؛ لم يتم مسح أي ذاكرة مؤقتة."),
     "Impossible de lire cette image." to ("Could not read this image." to "تعذّرت قراءة هذه الصورة."),
     "Photo de profil mise à jour." to ("Profile photo updated." to "تم تحديث صورة الملف الشخصي."),
     "Le nom affiché ne peut pas être vide." to ("Display name cannot be empty." to "لا يمكن أن يكون اسم العرض فارغاً."),
@@ -446,6 +451,8 @@ private val commonTranslations = mapOf(
     "Rapports de plantage activés. Les prochains plantages seront envoyés automatiquement à Firebase Crashlytics." to ("Crash reports enabled. Future crashes will be sent automatically to Firebase Crashlytics." to "تم تفعيل تقارير الأعطال. ستُرسل الأعطال القادمة تلقائياً إلى Firebase Crashlytics."),
     "Envoi automatique des rapports de plantage désactivé." to ("Automatic crash report sending disabled." to "تم إيقاف الإرسال التلقائي لتقارير الأعطال."),
     "Aucun rapport PDF temporaire à supprimer." to ("There are no temporary PDF reports to delete." to "لا توجد تقارير PDF مؤقتة لحذفها."),
+    "Rapports PDF temporaires supprimés." to ("Temporary finance PDFs cleared." to "تم مسح تقارير PDF المالية المؤقتة."),
+    "Impossible de supprimer les rapports PDF temporaires." to ("Could not clear temporary finance PDFs." to "تعذّر مسح تقارير PDF المالية المؤقتة."),
     "Type" to ("Type" to "النوع"),
     "Mode de paiement" to ("Payment method" to "طريقة الدفع"),
     "Filtrer" to ("Filter" to "تصفية"),
@@ -1019,15 +1026,38 @@ fun atlasNotice(message: String, language: AppLanguage): String {
     } ?: template(Regex("^(\\d+) rapport\\(s\\) PDF temporaire\\(s\\) supprimé\\(s\\)\\.$")) { m ->
         Triple(m.value, "${m.groupValues[1]} temporary PDF report(s) deleted.", "تم حذف ${m.groupValues[1]} من تقارير PDF المؤقتة.")
     } ?: template(Regex("^Données locales supprimées\\.(.*?) Les données de l'entreprise sur le serveur n'ont pas été modifiées\\.$")) { m ->
-        val updateNote = when (m.groupValues[1].trim()) {
-            "Le téléchargement de mise à jour actif est conservé jusqu'à sa fin." -> choose(
-                " Le téléchargement de mise à jour actif est conservé jusqu'à sa fin.",
-                " The active update download will be kept until it finishes.",
-                " سيظل تنزيل التحديث الجاري محفوظاً حتى يكتمل.",
-            )
-            else -> m.groupValues[1]
+        val notes = m.groupValues[1]
+        val translatedNotes = buildString {
+            if ("Le téléchargement de mise à jour actif est conservé jusqu'à sa fin." in notes) {
+                append(choose(
+                    " Le téléchargement de mise à jour actif est conservé jusqu'à sa fin.",
+                    " The active update download will be kept until it finishes.",
+                    " سيظل تنزيل التحديث الجاري محفوظاً حتى يكتمل.",
+                ))
+            }
+            if ("Certains rapports PDF temporaires n'ont pas pu être supprimés." in notes) {
+                append(choose(
+                    " Certains rapports PDF temporaires n'ont pas pu être supprimés.",
+                    " Some temporary PDF reports could not be deleted.",
+                    " تعذّر حذف بعض تقارير PDF المؤقتة.",
+                ))
+            }
+            if ("Les instantanés financiers non-PDF ont été conservés." in notes) {
+                append(choose(
+                    " Les instantanés financiers non-PDF ont été conservés.",
+                    " Non-PDF finance snapshots were retained.",
+                    " تم الاحتفاظ باللقطات المالية غير PDF.",
+                ))
+            }
+            if ("Certains journaux de diagnostic n'ont pas pu être supprimés." in notes) {
+                append(choose(
+                    " Certains journaux de diagnostic n'ont pas pu être supprimés.",
+                    " Some diagnostic logs could not be deleted.",
+                    " تعذّر حذف بعض سجلات التشخيص.",
+                ))
+            }
         }
-        Triple(m.value, "Local data deleted.$updateNote Company data on the server was not changed.", "تم حذف البيانات المحلية.$updateNote لم يتم تغيير بيانات الشركة على الخادم.")
+        Triple(m.value, "Local data deleted.$translatedNotes Company data on the server was not changed.", "تم حذف البيانات المحلية.$translatedNotes لم يتم تغيير بيانات الشركة على الخادم.")
     } ?: message
 }
 

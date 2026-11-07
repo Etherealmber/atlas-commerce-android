@@ -16,11 +16,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.lazy.items
@@ -80,6 +83,8 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
 import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.components.AtlasShimmer
+import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonBlock
 import ma.etherealmber.atlascommerce.ui.components.CombinedReportWebViewDialog
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationSuggestion
 import ma.etherealmber.atlascommerce.ui.components.FinancePdfViewerDialog
@@ -93,22 +98,278 @@ import java.util.Locale
 private enum class BalanceSection { MOVEMENTS, CLIENTS, REPORTS }
 
 @Composable
-private fun BalanceDataLoading() {
-    Box(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 260.dp),
-        contentAlignment = Alignment.Center,
+private fun BalanceDataLoading(
+    section: BalanceSection,
+    state: BalanceViewModel.UiState,
+    compact: Boolean,
+    narrowFilters: Boolean,
+    movementRowsToShow: Int,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            CircularProgressIndicator()
-            Text(
-                atlasText(
-                    "Chargement des données financières…",
-                    "Loading balance data…",
-                    "جارٍ تحميل بيانات الرصيد…",
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        AtlasShimmer {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                when (section) {
+                    BalanceSection.MOVEMENTS -> {
+                        if (state.periodBreakdown != null) {
+                            BalanceCashBreakdownSkeleton(compact)
+                        } else state.periodBreakdownError?.let { detailError ->
+                            Text(
+                                atlasText(
+                                    "Ventilation caisse/banque indisponible sur ce serveur. Les soldes détaillés ne sont pas estimés. ${detailError.take(100)}",
+                                    "Cash/bank breakdown is unavailable on this server. Detailed balances are not estimated. ${detailError.take(100)}",
+                                    "تفصيل الصندوق والبنك غير متاح على هذا الخادم. لم يتم تقدير الأرصدة التفصيلية. ${detailError.take(100)}",
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        BalanceSummarySkeleton(compact)
+                        if (state.finance != null) {
+                            BalanceFlowSkeleton(
+                                compact = compact,
+                                expenseRows = state.periodBreakdown?.expenseCategories?.size?.coerceAtLeast(1) ?: 4,
+                            )
+                            BalanceReconciliationSkeleton()
+                        }
+                        BalanceMovementFiltersSkeleton(narrowFilters)
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.44f).height(18.dp))
+                            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.72f).height(14.dp))
+                        }
+                        repeat(movementRowsToShow) { BalanceStatementRowSkeleton() }
+                    }
+                    BalanceSection.CLIENTS -> {
+                        BalanceSummaryAmountSkeleton(subtitle = true)
+                        if (state.finance?.receivables?.documents.isNullOrEmpty()) BalanceEmptyPanelSkeleton()
+                        else repeat(state.finance?.receivables?.documents?.size ?: 0) { BalanceReceivableSkeleton() }
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.48f).height(22.dp))
+                        BalanceSummaryAmountSkeleton(subtitle = true)
+                        if (state.finance?.payables?.documents.isNullOrEmpty()) BalanceEmptyPanelSkeleton()
+                        else repeat(state.finance?.payables?.documents?.size ?: 0) { BalanceReceivableSkeleton() }
+                        BalanceSummaryAmountSkeleton(subtitle = true)
+                    }
+                    BalanceSection.REPORTS -> {
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.52f).height(22.dp))
+                        BalanceReportActionSkeleton()
+                        BalanceReportActionSkeleton()
+                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.94f).height(14.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BalanceSummarySkeleton(compact: Boolean) {
+    if (compact) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            BalanceClosingSkeleton(Modifier.fillMaxWidth())
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BalanceSummaryAmountSkeleton(Modifier.weight(1f))
+                BalanceSummaryAmountSkeleton(Modifier.weight(1f))
+            }
+            BalanceSummaryAmountSkeleton(Modifier.fillMaxWidth())
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            BalanceClosingSkeleton(Modifier.weight(1.25f))
+            BalanceSummaryAmountSkeleton(Modifier.weight(1f))
+            BalanceSummaryAmountSkeleton(Modifier.weight(1f))
+            BalanceSummaryAmountSkeleton(Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun BalanceClosingSkeleton(modifier: Modifier = Modifier) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AtlasSkeletonBlock(Modifier.size(24.dp), CircleShape)
+                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.72f).height(14.dp))
+            }
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.86f).height(28.dp))
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.78f).height(14.dp))
+        }
+    }
+}
+
+@Composable
+private fun BalanceSummaryAmountSkeleton(
+    modifier: Modifier = Modifier,
+    subtitle: Boolean = false,
+) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                AtlasSkeletonBlock(Modifier.size(22.dp), CircleShape)
+                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.7f).height(14.dp))
+            }
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.84f).height(20.dp))
+            if (subtitle) AtlasSkeletonBlock(Modifier.fillMaxWidth(0.92f).height(14.dp))
+        }
+    }
+}
+
+@Composable
+private fun BalanceCashBreakdownSkeleton(compact: Boolean) {
+    if (compact) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            BalanceCashBankRowSkeleton(count = 2, owners = false)
+            BalanceCashBankRowSkeleton(count = 2, owners = true)
+        }
+    } else BalanceCashBankRowSkeleton(count = 4, owners = false, mixed = true)
+}
+
+@Composable
+private fun BalanceCashBankRowSkeleton(count: Int, owners: Boolean, mixed: Boolean = false) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        repeat(count) { index ->
+            val ownerCard = owners || (mixed && index >= 2)
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            ) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(if (ownerCard) 5.dp else 4.dp)) {
+                    AtlasSkeletonBlock(Modifier.fillMaxWidth(0.56f).height(14.dp))
+                    AtlasSkeletonBlock(Modifier.fillMaxWidth(0.9f).height(if (ownerCard) 18.dp else 14.dp))
+                    AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.7f else 0.8f).height(14.dp))
+                    if (!ownerCard) AtlasSkeletonBlock(Modifier.fillMaxWidth(0.76f).height(18.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BalanceFlowSkeleton(compact: Boolean, expenseRows: Int) {
+    if (compact) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            BalanceFlowCardSkeleton(expenseRows)
+            BalanceFlowCardSkeleton(2)
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.weight(1f)) { BalanceFlowCardSkeleton(expenseRows) }
+            Box(Modifier.weight(1f)) { BalanceFlowCardSkeleton(2) }
+        }
+    }
+}
+
+@Composable
+private fun BalanceFlowCardSkeleton(rows: Int) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.72f).height(18.dp))
+            repeat(rows) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        AtlasSkeletonBlock(Modifier.weight(1f).height(14.dp))
+                        AtlasSkeletonBlock(Modifier.width(72.dp).height(14.dp))
+                    }
+                    AtlasSkeletonBlock(Modifier.fillMaxWidth().height(6.dp), RoundedCornerShape(99.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BalanceReconciliationSkeleton() {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.58f).height(18.dp))
+                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.74f).height(14.dp))
+            }
+            AtlasSkeletonBlock(Modifier.size(24.dp), CircleShape)
+        }
+    }
+}
+
+@Composable
+private fun BalanceMovementFiltersSkeleton(narrow: Boolean) {
+    if (narrow) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            BalanceFilterFieldSkeleton(Modifier.fillMaxWidth())
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.34f).height(14.dp))
+                AtlasSkeletonBlock(Modifier.fillMaxWidth().height(56.dp), RoundedCornerShape(10.dp))
+            }
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            BalanceFilterFieldSkeleton(Modifier.weight(1f))
+            Column(Modifier.weight(1.4f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.34f).height(14.dp))
+                AtlasSkeletonBlock(Modifier.fillMaxWidth().height(56.dp), RoundedCornerShape(10.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun BalanceFilterFieldSkeleton(modifier: Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.36f).height(14.dp))
+        AtlasSkeletonBlock(Modifier.fillMaxWidth().height(48.dp), RoundedCornerShape(10.dp))
+    }
+}
+
+@Composable
+private fun BalanceStatementRowSkeleton() {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.74f).height(18.dp))
+                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.94f).height(14.dp))
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                AtlasSkeletonBlock(Modifier.width(92.dp).height(18.dp))
+                AtlasSkeletonBlock(Modifier.width(110.dp).height(14.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun BalanceEmptyPanelSkeleton() {
+    AtlasSkeletonBlock(Modifier.fillMaxWidth().height(58.dp), MaterialTheme.shapes.medium)
+}
+
+@Composable
+private fun BalanceReceivableSkeleton() {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                AtlasSkeletonBlock(Modifier.weight(1f).height(18.dp))
+                AtlasSkeletonBlock(Modifier.width(76.dp).height(20.dp), MaterialTheme.shapes.extraSmall)
+            }
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.84f).height(14.dp))
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.66f).height(14.dp))
+        }
+    }
+}
+
+@Composable
+private fun BalanceReportActionSkeleton() {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                AtlasSkeletonBlock(Modifier.size(24.dp), CircleShape)
+                AtlasSkeletonBlock(Modifier.fillMaxWidth(0.62f).height(18.dp))
+            }
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.95f).height(14.dp))
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.82f).height(14.dp))
+            AtlasSkeletonBlock(Modifier.fillMaxWidth().height(48.dp), RoundedCornerShape(12.dp))
         }
     }
 }
@@ -142,6 +403,18 @@ fun BalanceScreen(
     var entryKind by remember { mutableStateOf(EntryKind.EXPENSE) }
     var movementFilter by remember { mutableStateOf("Toutes les écritures") }
     var movementSearch by remember { mutableStateOf("") }
+    val visibleMovementRows = remember(state.rows, movementFilter, movementSearch) {
+        state.rows.filter { row ->
+            val matchesFilter = when (movementFilter) {
+                "Entrées" -> row.credit > 0.0
+                "Sorties" -> row.debit > 0.0
+                "Dépenses" -> row.type.equals("expense", ignoreCase = true)
+                else -> true
+            }
+            val term = movementSearch.trim()
+            matchesFilter && (term.isBlank() || listOf(row.label, row.ref, row.type, row.ts).any { it.contains(term, ignoreCase = true) })
+        }
+    }
 
     LaunchedEffect(requestedReport) {
         val request = requestedReport ?: return@LaunchedEffect
@@ -335,9 +608,15 @@ fun BalanceScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (state.loading && state.finance == null) {
+                if (state.loading || state.refreshing) {
                     item(key = "balance_loading") {
-                        BalanceDataLoading()
+                        BalanceDataLoading(
+                            section = section,
+                            state = state,
+                            compact = maxWidth < 600.dp,
+                            narrowFilters = maxWidth < 480.dp,
+                            movementRowsToShow = visibleMovementRows.size.coerceAtLeast(if (state.rows.isEmpty()) 3 else 0),
+                        )
                     }
                 } else when (section) {
                     BalanceSection.MOVEMENTS -> {
@@ -441,20 +720,10 @@ fun BalanceScreen(
                                 )
                             }
                         }
-                        val filteredRows = state.rows.filter { row ->
-                            val matchesFilter = when (movementFilter) {
-                                "Entrées" -> row.credit > 0.0
-                                "Sorties" -> row.debit > 0.0
-                                "Dépenses" -> row.type.equals("expense", ignoreCase = true)
-                                else -> true
-                            }
-                            val term = movementSearch.trim()
-                            matchesFilter && (term.isBlank() || listOf(row.label, row.ref, row.type, row.ts).any { it.contains(term, ignoreCase = true) })
-                        }
-                        if (filteredRows.isEmpty() && !state.loading) {
+                        if (visibleMovementRows.isEmpty() && !state.loading) {
                             item(key = "empty-movements") { EmptyPanel(if (state.rows.isEmpty()) atlasText("Aucun mouvement pour cette période.", "No transactions for this period.", "لا توجد حركات لهذه الفترة.") else atlasText("Aucun mouvement ne correspond à ce filtre.", "No transactions match this filter.", "لا توجد حركات تطابق عامل التصفية هذا.")) }
                         } else {
-                            items(filteredRows, key = { "${it.source}-${it.id}" }) { row ->
+                            items(visibleMovementRows, key = { "${it.source}-${it.id}" }) { row ->
                                 StatementRowCard(row = row, currency = state.statement?.currency ?: "MAD")
                             }
                         }

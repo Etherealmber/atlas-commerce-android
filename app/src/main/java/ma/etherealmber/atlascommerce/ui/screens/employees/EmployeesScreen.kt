@@ -123,8 +123,16 @@ fun EmployeesScreen(
         return
     }
 
-    if (state.loading && state.finance == null && state.payroll == null) {
-        AtlasPayrollSkeleton(Modifier.fillMaxSize())
+    if (state.financeLoading || (state.loading && state.finance == null && state.payroll == null)) {
+        AtlasPayrollSkeleton(
+            modifier = Modifier.fillMaxSize(),
+            payrollRows = visibleRows,
+            hasPayrollSnapshot = payroll != null,
+            hasCachedNotice = state.financeFromCache,
+            showReturnToCurrentMonth = selectedMonth != null && currentMonth != null && selectedMonth != currentMonth,
+            hasMoreRows = payroll?.hasMore == true,
+            bottomPadding = 24.dp + dockPadding,
+        )
         return
     }
 
@@ -315,6 +323,7 @@ fun EmployeesScreen(
                 }
             }
         }
+
 
         state.financeError?.let { error ->
             item(key = "employees_error") {

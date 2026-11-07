@@ -65,6 +65,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.root.roundUpTo50MiB
+import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import java.text.NumberFormat
 import java.util.Locale
@@ -384,8 +385,8 @@ fun DataCacheManagerDialog(
                             destructive = true,
                         )
                         ManagerActionRow(
-                            title = atlasText("Vider le catalogue hors ligne · ${Formatter.formatShortFileSize(context, storage.offlineCatalogBytes)}", "Clear offline catalog · ${Formatter.formatShortFileSize(context, storage.offlineCatalogBytes)}", "مسح الكتالوج دون اتصال · ${Formatter.formatShortFileSize(context, storage.offlineCatalogBytes)}"),
-                            detail = atlasText("Les produits seront rechargés lors de la prochaine utilisation en ligne.", "Products will be downloaded again the next time you are online.", "سيتم تنزيل المنتجات مجدداً عند الاتصال بالإنترنت."),
+                            title = atlasText("Vider le cache hors ligne · ${Formatter.formatShortFileSize(context, storage.offlineCatalogBytes)}", "Clear offline cache · ${Formatter.formatShortFileSize(context, storage.offlineCatalogBytes)}", "مسح ذاكرة التخزين المؤقت دون اتصال · ${Formatter.formatShortFileSize(context, storage.offlineCatalogBytes)}"),
+                            detail = atlasText("Les produits et instantanés financiers/paie de ce compte seront rechargés lors de la prochaine utilisation en ligne.", "This account's products and finance/payroll snapshots will be downloaded again the next time you are online.", "سيتم تنزيل منتجات هذا الحساب ولقطات المالية/الرواتب مجدداً عند الاتصال بالإنترنت."),
                             enabled = cachedProductCount > 0,
                             onClick = { pendingAction = DataManagerAction.ClearOfflineCatalog },
                         )
@@ -403,7 +404,7 @@ fun DataCacheManagerDialog(
                         )
                         ManagerActionRow(
                             title = atlasText("Effacer toutes les données locales…", "Clear all local data…", "مسح جميع البيانات المحلية…"),
-                            detail = atlasText("Déconnecte ce compte et réinitialise les préférences de cet appareil.", "Signs out and resets this device's app data.", "يسجل الخروج ويعيد ضبط بيانات التطبيق على هذا الجهاز."),
+                            detail = atlasText("Déconnecte ce compte et réinitialise les données de cette application. Les instantanés financiers non-PDF sont conservés.", "Signs out and resets this device's app data. Non-PDF finance snapshots are retained.", "يسجل الخروج ويعيد ضبط بيانات التطبيق على هذا الجهاز. سيتم الاحتفاظ باللقطات المالية غير PDF."),
                             enabled = true,
                             onClick = { pendingAction = DataManagerAction.ClearAllLocalData },
                             destructive = true,
@@ -431,8 +432,12 @@ fun DataCacheManagerDialog(
                 message = atlasText("Supprimer ${ServerUrl.display(action.server.url)} de la liste locale des serveurs ?", "Remove ${ServerUrl.display(action.server.url)} from this device's saved server list?", "هل تريد إزالة ${ServerUrl.display(action.server.url)} من قائمة الخوادم المحفوظة؟")
             }
             DataManagerAction.ClearOfflineCatalog -> {
-                title = atlasText("Vider le catalogue hors ligne ?", "Clear offline catalog?", "مسح الكتالوج دون اتصال؟")
-                message = atlasText("Les produits devront être rechargés depuis le serveur.", "Products will need to be downloaded again from the server.", "يجب تنزيل المنتجات مجدداً من الخادم.")
+                title = atlasText("Vider le cache hors ligne ?", "Clear offline cache?", "مسح ذاكرة التخزين المؤقت دون اتصال؟")
+                message = atlasText(
+                    "Les produits et instantanés financiers/paie de ce compte seront supprimés de l'appareil puis rechargés lors de la prochaine utilisation en ligne. Aucune donnée du serveur ne sera modifiée.",
+                    "This account's products and finance/payroll snapshots will be removed from this device and downloaded again the next time you are online. No server data will be changed.",
+                    "ستُحذف منتجات هذا الحساب ولقطات المالية/الرواتب من الجهاز ثم تُنزّل مجدداً عند الاتصال بالإنترنت. لن تتغير أي بيانات على الخادم.",
+                )
             }
             DataManagerAction.ClearTemporaryReports -> {
                 title = atlasText("Supprimer les PDF temporaires ?", "Delete temporary PDFs?", "حذف ملفات PDF المؤقتة؟")
@@ -452,7 +457,7 @@ fun DataCacheManagerDialog(
             }
             DataManagerAction.ClearAllLocalData -> {
                 title = atlasText("Effacer les données de cet appareil ?", "Clear this device's app data?", "مسح بيانات التطبيق على هذا الجهاز؟")
-                message = atlasText("La session, les comptes/serveurs enregistrés et les préférences locales seront supprimés. Aucune donnée de l'entreprise sur le serveur ne sera modifiée.", "The session, saved accounts/servers, and local preferences will be removed. No company data on the server will be changed.", "سيتم حذف الجلسة والحسابات والخوادم المحفوظة والتفضيلات المحلية. لن تتغير بيانات الشركة على الخادم.")
+                message = atlasText("La session, les comptes/serveurs enregistrés et les préférences locales seront supprimés. Les instantanés financiers non-PDF seront conservés. Aucune donnée de l'entreprise sur le serveur ne sera modifiée.", "The session, saved accounts/servers, and local preferences will be removed. Non-PDF finance snapshots will be retained. No company data on the server will be changed.", "سيتم حذف الجلسة والحسابات والخوادم المحفوظة والتفضيلات المحلية. سيتم الاحتفاظ باللقطات المالية غير PDF. لن تتغير بيانات الشركة على الخادم.")
             }
         }
         AlertDialog(
@@ -475,7 +480,7 @@ fun DataCacheManagerDialog(
                         }
                         DataManagerAction.ClearAllLocalData -> appViewModel.clearAllLocalAppData {
                             onDismiss()
-                            onToast(it)
+                            onToast(atlasNotice(it, appLanguage))
                         }
                     }
                     if (action != DataManagerAction.ClearDiagnosticLogs && action != DataManagerAction.ClearDownloadedUpdate) {

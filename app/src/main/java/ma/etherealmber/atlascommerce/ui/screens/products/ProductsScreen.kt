@@ -91,6 +91,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasCatalogSkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasProductRequestsSkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasStockRequestsSkeleton
+import ma.etherealmber.atlascommerce.ui.components.AtlasRefreshStatusShimmer
 import ma.etherealmber.atlascommerce.ui.components.AtlasOfflineBanner
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
@@ -303,9 +304,9 @@ fun ProductsScreen(
             ) {
                 Text(
                     atlasText(
-                        "Catalogue enregistré affiché — vérification des mises à jour en cours.",
-                        "Showing the saved catalog while checking for live updates.",
-                        "يتم عرض الكتالوج المحفوظ أثناء التحقق من التحديثات المباشرة.",
+                        "Catalogue enregistré disponible — vérification des mises à jour en cours.",
+                        "Saved catalog available — checking for live updates.",
+                        "الكتالوج المحفوظ متاح — جارٍ التحقق من التحديثات المباشرة.",
                     ),
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     style = MaterialTheme.typography.bodySmall,
@@ -333,6 +334,27 @@ fun ProductsScreen(
                     )
                 }
             }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        val refreshLabel = when {
+            state.filter == ProductsViewModel.FilterMode.STOCK_ADJUSTMENTS &&
+                state.stockAdjustmentLoading && state.stockAdjustmentRequests.isNotEmpty() ->
+                atlasText("Actualisation des demandes de stock…", "Refreshing stock requests…", "جارٍ تحديث طلبات المخزون…")
+            state.filter == ProductsViewModel.FilterMode.REQUESTS &&
+                state.loadingProductRequests && state.openRequests.isNotEmpty() ->
+                atlasText("Actualisation des demandes produit…", "Refreshing product requests…", "جارٍ تحديث طلبات المنتجات…")
+            state.filter != ProductsViewModel.FilterMode.REQUESTS &&
+                state.filter != ProductsViewModel.FilterMode.STOCK_ADJUSTMENTS &&
+                (state.checkingCachedCatalog || state.refreshing && state.visibleProducts.isNotEmpty()) ->
+                atlasText("Vérification du catalogue…", "Refreshing catalog…", "جارٍ تحديث الكتالوج…")
+            else -> null
+        }
+        refreshLabel?.let { label ->
+            AtlasRefreshStatusShimmer(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = density.screenPadding),
+                label = label,
+            )
             Spacer(Modifier.height(8.dp))
         }
 
@@ -408,12 +430,13 @@ fun ProductsScreen(
                     )
                 }
 
-            state.loading && state.filter != ProductsViewModel.FilterMode.REQUESTS -> AtlasCatalogSkeleton(
+            (state.loading || state.refreshing || state.checkingCachedCatalog) && state.filter != ProductsViewModel.FilterMode.REQUESTS -> AtlasCatalogSkeleton(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 rows = 6,
                 showRoleBanner = !isAdmin,
                 showCartButton = canSell,
                 bottomPadding = 24.dp + dockPadding,
+                products = state.visibleProducts,
             )
 
             !state.error.isNullOrBlank() && state.filter != ProductsViewModel.FilterMode.REQUESTS -> {

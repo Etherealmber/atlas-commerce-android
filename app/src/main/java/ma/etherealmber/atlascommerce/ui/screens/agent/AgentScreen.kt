@@ -550,10 +550,14 @@ fun AgentScreen(
                         }
                     }
 
-                    if (state.streamingReply.isNotBlank()) {
+                    if (state.streamingReply.isNotBlank() || state.streamingTools.isNotEmpty()) {
                         item(key = "agent_streaming_reply") {
                             ChatBubbleRow(
-                                message = AgentViewModel.ChatMessage(fromUser = false, text = state.streamingReply),
+                                message = AgentViewModel.ChatMessage(
+                                    fromUser = false,
+                                    text = state.streamingReply,
+                                    tools = state.streamingTools,
+                                ),
                                 approvingId = state.approvingId,
                                 onCopy = {
                                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
@@ -566,7 +570,7 @@ fun AgentScreen(
                         }
                     }
 
-                    if (state.sending && state.streamingReply.isBlank()) {
+                    if (state.sending && state.streamingReply.isBlank() && state.streamingTools.isEmpty()) {
                         item(key = "agent_typing") {
                             AgentTypingIndicator(
                                 label = agentLoadingLabel,
@@ -1135,36 +1139,55 @@ private fun ChatBubbleRow(
 
                         message.proposals.forEach { proposal ->
                             val proposalId = proposal.proposalId.orEmpty()
-                            if (proposalId.isNotBlank()) {
-                                val approved = proposalId in message.approvedIds
-                                Spacer(Modifier.height(8.dp))
-                                AtlasCard(padding = 10.dp) {
+                            val isInventoryAdjustment = proposal.type == "inventory_adjustment" || proposal.kind == "inventory_adjustment"
+                            val proposalTitle = proposal.title ?: if (isInventoryAdjustment) {
+                                atlasText("Ajustement de stock proposé", "Proposed stock adjustment", "تعديل مخزون مقترح")
+                            } else {
+                                atlasText("Action proposée", "Suggested action", "إجراء مقترح")
+                            }
+                            val proposalDetails = proposal.summary?.takeIf { it.isNotBlank() } ?: buildList {
+                                proposal.productName?.takeIf { it.isNotBlank() }?.let { add(it) }
+                                proposal.sku?.takeIf { it.isNotBlank() }?.let { add("SKU $it") }
+                                proposal.delta?.let { delta -> add("Δ ${if (delta > 0) "+" else ""}${delta}") }
+                                proposal.currentStock?.let { add(atlasText("Stock actuel $it", "Current stock $it", "المخزون الحالي $it")) }
+                                proposal.note?.takeIf { it.isNotBlank() }?.let { add(it) }
+                            }.joinToString(" · ")
+                            val approved = proposalId.isNotBlank() && proposalId in message.approvedIds
+                            Spacer(Modifier.height(8.dp))
+                            AtlasCard(padding = 10.dp) {
+                                Text(
+                                    text = proposalTitle,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                if (proposalDetails.isNotBlank()) {
                                     Text(
-                                        text = proposal.title ?: atlasText("Action proposée", "Suggested action", "إجراء مقترح"),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold,
+                                        text = proposalDetails,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                    if (!proposal.summary.isNullOrBlank()) {
-                                        Text(
-                                            text = proposal.summary,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    Spacer(Modifier.height(6.dp))
-                                    if (approved) {
-                                        AtlasChip(
-                                            text = atlasText("Approuvée", "Approved", "تمت الموافقة"),
-                                            tone = AtlasTone.POSITIVE,
-                                            icon = Icons.Outlined.CheckCircle,
-                                        )
-                                    } else {
-                                        TextButton(
-                                            onClick = { onApprove(proposalId) },
-                                            enabled = approvingId == null,
-                                        ) {
-                                            Text(atlasText("Approuver et exécuter", "Approve and run", "الموافقة والتنفيذ"))
-                                        }
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                when {
+                                    proposalId.isBlank() -> Text(
+                                        atlasText(
+                                            "Aucune référence d’approbation fournie; aucune action ne sera exécutée.",
+                                            "No approval reference was provided; no action will be executed.",
+                                            "لم يتم توفير مرجع للموافقة؛ لن يُنفذ أي إجراء.",
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    approved -> AtlasChip(
+                                        text = atlasText("Approuvée", "Approved", "تمت الموافقة"),
+                                        tone = AtlasTone.POSITIVE,
+                                        icon = Icons.Outlined.CheckCircle,
+                                    )
+                                    else -> TextButton(
+                                        onClick = { onApprove(proposalId) },
+                                        enabled = approvingId == null,
+                                    ) {
+                                        Text(atlasText("Approuver et exécuter", "Approve and run", "الموافقة والتنفيذ"))
                                     }
                                 }
                             }

@@ -251,6 +251,13 @@ fun HomeScreen(
             isAdmin = isAdmin,
             showFinancialHero = isAdmin && state.finance != null,
             offline = state.offline,
+            contentPadding = PaddingValues(
+                start = Atlas.density.screenPadding,
+                end = Atlas.density.screenPadding,
+                top = Atlas.density.cardMargin,
+                bottom = 48.dp + LocalAtlasFloatingDockPadding.current,
+            ),
+            itemGap = Atlas.density.itemGap,
         )
         dashboard == null -> HomeErrorContent(
             user = user,

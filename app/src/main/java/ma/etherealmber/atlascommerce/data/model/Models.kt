@@ -14,6 +14,7 @@ data class ActionAckDto(
     override val success: Boolean = false,
     override val error: String? = null,
     override val code: String? = null,
+    @Json(name = "resume_prepared") val resumePrepared: Boolean = false,
 ) : ApiStatus
 
 @JsonClass(generateAdapter = true)
@@ -906,6 +907,20 @@ data class AssistProposalDto(
     val summary: String? = null,
     val action: String? = null,
     val kind: String? = null,
+    val type: String? = null,
+    @Json(name = "product_id") val productId: Long? = null,
+    @Json(name = "product_name") val productName: String? = null,
+    val sku: String? = null,
+    val delta: Double? = null,
+    @Json(name = "current_stock") val currentStock: Double? = null,
+    val note: String? = null,
+    @Json(name = "requires_approval") val requiresApproval: Boolean? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class AssistUsageDto(
+    val prompt: Long? = null,
+    val completion: Long? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -916,6 +931,11 @@ data class AssistChatResponseDto(
     @Json(name = "local_time") val localTime: String? = null,
     @Json(name = "tool_trace") val toolTrace: List<AssistToolTraceDto> = emptyList(),
     val proposals: List<AssistProposalDto> = emptyList(),
+    val usage: AssistUsageDto? = null,
+    val documents: List<Any?> = emptyList(),
+    @Json(name = "thread_id") val threadId: String? = null,
+    val task: String? = null,
+    @Json(name = "history_turns") val historyTurns: Int? = null,
 )
 
 @JsonClass(generateAdapter = true)
