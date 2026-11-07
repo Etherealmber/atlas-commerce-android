@@ -1,6 +1,6 @@
 # Security Policy — Atlas Commerce (Android)
 
-© 2026 Etherealmber — MIT — current app baseline: **1.5.0** (versionCode 150); use the [Releases page](https://github.com/Etherealmber/atlas-commerce-android/releases) for the latest published build.
+© 2026 Etherealmber — MIT — current app baseline: **1.5.1** (versionCode 151); use the [Releases page](https://github.com/Etherealmber/atlas-commerce-android/releases) for the latest published build.
 
 This document covers the **Android client** in this repository. The server (Cloudflare Worker,
 D1, R2) has its own policy in
