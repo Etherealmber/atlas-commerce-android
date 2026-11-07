@@ -3,7 +3,6 @@ package ma.etherealmber.atlascommerce.data.repo
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
-import ma.etherealmber.atlascommerce.data.model.ActionAckDto
 import ma.etherealmber.atlascommerce.data.model.LoginRequest
 import ma.etherealmber.atlascommerce.data.model.LoginResponse
 import ma.etherealmber.atlascommerce.data.model.MeDto
@@ -20,20 +19,6 @@ import ma.etherealmber.atlascommerce.data.model.UserReportReceiptDto
 import ma.etherealmber.atlascommerce.data.model.VerifyLinkRequest
 import javax.inject.Inject
 import javax.inject.Singleton
-
-internal fun requireResumePreparationConfirmation(result: ApiResult<ActionAckDto>): ApiResult<Unit> =
-    when (result) {
-        is ApiResult.Failure -> result
-        is ApiResult.Success -> if (result.data.success && result.data.resumePrepared) {
-            ApiResult.Success(Unit)
-        } else {
-            ApiResult.Failure(
-                code = result.data.code?.takeIf { it.isNotBlank() } ?: "RESUME_NOT_PREPARED",
-                message = result.data.error?.takeIf { it.isNotBlank() }
-                    ?: "The server did not confirm startup resume preparation.",
-            )
-        }
-    }
 
 @Singleton
 class AuthRepository @Inject constructor(
@@ -60,17 +45,9 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    /**
-     * Prepare a same-device password-only return at process startup using the existing logout
-     * route. This uses a server-pinned isolated client and never touches the global TokenHolder.
-     */
-    suspend fun prepareStartupResume(serverUrl: String, previousSessionToken: String): ApiResult<Unit> {
-        if (previousSessionToken.isBlank()) return ApiResult.Failure("NO_SESSION", "No previous session")
-        val result = runner.status {
-            apiProvider.startupResumeApi(serverUrl).logout("Bearer $previousSessionToken")
-        }
-        return requireResumePreparationConfirmation(result)
-    }
+    /** Verify an encrypted same-device session without installing it in the global token holder. */
+    suspend fun validateStartupSession(serverUrl: String, savedBearerToken: String): ApiResult<MeDto> =
+        runner.envelope { apiProvider.startupResumeApi(serverUrl, savedBearerToken).me() }
 
     suspend fun verifyOtp(
         username: String,

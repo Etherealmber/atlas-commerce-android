@@ -82,8 +82,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -371,7 +374,6 @@ private fun LoginScreenContent(
                     OtpForm(
                         state = state,
                         onOtp = viewModel::onOtpChange,
-                        onSubmit = viewModel::submit,
                         onResend = viewModel::resendCode,
                         onBack = { switchAccount() },
                         onDismissError = viewModel::dismissError,
@@ -885,13 +887,24 @@ private fun CredentialsForm(
 private fun OtpForm(
     state: LoginViewModel.UiState,
     onOtp: (String) -> Unit,
-    onSubmit: () -> Unit,
     onResend: () -> Unit,
     onBack: () -> Unit,
     onDismissError: () -> Unit,
 ) {
     val shake = remember { Animatable(0f) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
     val inputDescription = atlasText("Code de vérification à six chiffres", "Six-digit verification code", "رمز تحقق مكوّن من ستة أرقام")
+
+    LaunchedEffect(state.loading) {
+        if (state.loading) {
+            keyboardController?.hide()
+        } else {
+            withFrameNanos { }
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
 
     LaunchedEffect(state.error) {
         if (!state.error.isNullOrBlank()) {
@@ -914,6 +927,7 @@ private fun OtpForm(
             value = state.otp,
             onValueChange = onOtp,
             modifier = Modifier
+                .focusRequester(focusRequester)
                 .fillMaxWidth()
                 .height(56.dp)
                 .offset(x = shake.value.dp)
@@ -922,8 +936,10 @@ private fun OtpForm(
             singleLine = true,
             textStyle = TextStyle(color = Color.Transparent, textAlign = TextAlign.Center),
             cursorBrush = SolidColor(Color.Transparent),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { if (state.canSubmit) onSubmit() }),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+            // OTP is submitted automatically when six digits arrive. Done only hides the IME;
+            // it must never activate one of the adjacent account/resend buttons.
+            keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() }),
             decorationBox = { innerTextField ->
                 Box {
                     Row(

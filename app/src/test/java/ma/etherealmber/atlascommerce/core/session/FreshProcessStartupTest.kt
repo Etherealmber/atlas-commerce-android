@@ -6,14 +6,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import ma.etherealmber.atlascommerce.core.net.ApiResult
-import okhttp3.Interceptor
 import ma.etherealmber.atlascommerce.core.net.SessionEvents
 import ma.etherealmber.atlascommerce.core.net.SessionGuardInterceptor
 import ma.etherealmber.atlascommerce.core.net.isStartupResumeExcludedInterceptor
-import ma.etherealmber.atlascommerce.data.model.ActionAckDto
-import ma.etherealmber.atlascommerce.data.repo.requireResumePreparationConfirmation
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.data.model.LoginResponse
+import ma.etherealmber.atlascommerce.data.model.MeDto
+import okhttp3.Interceptor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -22,41 +21,7 @@ import org.junit.Test
 class FreshProcessStartupTest {
 
     @Test
-    fun `valid previous session is snapshotted before erase and startup always ends signed out`() = runBlocking {
-        val events = mutableListOf<String>()
-        val stateHistory = mutableListOf<SessionState>(SessionState.Loading)
-        val stored = session(serverUrl = "https://shop.example.com", token = "cipher")
-
-        val startup = FreshProcessStartup(
-            preparePreviousSession = {
-                events += "snapshot"
-                val plan = StartupResumePreparation.createRequest(
-                    previousSession = stored,
-                    selectedServerUrl = "https://shop.example.com",
-                    restoreDisabled = false,
-                    decryptToken = { if (it == "cipher") "old-session-token" else null },
-                )
-                assertEquals(StartupResumeResult.PREPARED, plan.result)
-                assertEquals("old-session-token", plan.request?.bearerToken)
-            },
-            clearStoredSession = { events += "clear" },
-            purgeActiveState = { events += "purge" },
-            publishSignedOut = {
-                events += "signed-out"
-                stateHistory += SessionState.SignedOut
-            },
-            releaseStartupGate = { events += "gate" },
-        )
-
-        startup.run()
-
-        assertEquals(listOf("snapshot", "clear", "purge", "signed-out", "gate"), events)
-        assertEquals(SessionState.SignedOut, stateHistory.last())
-        assertFalse(stateHistory.any { it is SessionState.Active })
-    }
-
-    @Test
-    fun `startup resume request snapshots only a same-origin token and redacts it in diagnostics`() {
+    fun `saved token is prepared only for the selected origin and is redacted in diagnostics`() {
         val plan = StartupResumePreparation.createRequest(
             previousSession = session(serverUrl = "https://shop.example.com/api"),
             selectedServerUrl = "https://shop.example.com:443",
@@ -69,100 +34,128 @@ class FreshProcessStartupTest {
         assertTrue(plan.request.toString().contains("[REDACTED]"))
         assertFalse(plan.request.toString().contains("secret-session-proof"))
 
-        val rejected = StartupResumePreparation.createRequest(
+        val otherOrigin = StartupResumePreparation.createRequest(
             previousSession = session(serverUrl = "https://other.example.com"),
             selectedServerUrl = "https://shop.example.com",
             restoreDisabled = false,
-            decryptToken = { "must-not-be-read" },
+            decryptToken = { error("Token must not be decrypted for another origin") },
         )
-        assertEquals(StartupResumeResult.DIFFERENT_ORIGIN, rejected.result)
-        assertEquals(null, rejected.request)
+        assertEquals(StartupResumeResult.DIFFERENT_ORIGIN, otherOrigin.result)
+        assertEquals(null, otherOrigin.request)
     }
 
     @Test
-    fun `only same selected origin can receive previous session proof`() = runBlocking {
-        val sent = mutableListOf<Pair<String, String>>()
-        val result = StartupResumePreparation.prepare(
-            previousSession = session(serverUrl = "https://shop.example.com/api"),
-            selectedServerUrl = "https://shop.example.com:443",
-            restoreDisabled = false,
-            decryptToken = { "decrypted-session-proof" },
-            notifyServer = { server, token ->
-                sent += server to token
-                ApiResult.Success(Unit)
-            },
-        )
-
-        assertEquals(StartupResumeResult.PREPARED, result)
-        // Normalization retains an explicitly configured default port in the request URL.
-        assertEquals(listOf("https://shop.example.com:443" to "decrypted-session-proof"), sent)
-    }
-
-    @Test
-    fun `other origin absent session disabled restore and bad decryption never send a token`() = runBlocking {
-        var sends = 0
-        suspend fun prepare(
-            stored: AtlasPreferences.StoredSession?,
-            selected: String? = "https://shop.example.com",
-            disabled: Boolean = false,
-            decrypt: (String) -> String? = { "secret-proof" },
-        ) = StartupResumePreparation.prepare(
-            previousSession = stored,
-            selectedServerUrl = selected,
-            restoreDisabled = disabled,
-            decryptToken = decrypt,
-            notifyServer = { _, _ -> sends++; ApiResult.Success(Unit) },
-        )
-
-        assertEquals(StartupResumeResult.NO_SESSION, prepare(null))
-        assertEquals(StartupResumeResult.RESTORE_DISABLED, prepare(session(), disabled = true))
+    fun `explicit sign out missing server and undecryptable session never create a request`() {
         assertEquals(
-            StartupResumeResult.DIFFERENT_ORIGIN,
-            prepare(session(serverUrl = "https://other.example.com")),
+            StartupResumeResult.RESTORE_DISABLED,
+            StartupResumePreparation.createRequest(session(), "https://shop.example.com", true) { "token" }.result,
+        )
+        assertEquals(
+            StartupResumeResult.NO_SESSION,
+            StartupResumePreparation.createRequest(null, "https://shop.example.com", false) { "token" }.result,
+        )
+        assertEquals(
+            StartupResumeResult.NO_SELECTED_SERVER,
+            StartupResumePreparation.createRequest(session(), null, false) { "token" }.result,
         )
         assertEquals(
             StartupResumeResult.UNDECRYPTABLE_TOKEN,
-            prepare(session(), decrypt = { null }),
+            StartupResumePreparation.createRequest(session(), "https://shop.example.com", false) { null }.result,
         )
-        assertEquals(0, sends)
     }
 
     @Test
-    fun `server rejection and network failure never become a successful preparation`() = runBlocking {
-        val rejected = StartupResumePreparation.prepare(
-            previousSession = session(),
-            selectedServerUrl = "https://shop.example.com",
-            restoreDisabled = false,
-            decryptToken = { "old-token" },
-            notifyServer = { _, _ -> ApiResult.Failure("SESSION_EXPIRED", "expired", 401) },
-        )
-        assertEquals(StartupResumeResult.SERVER_REJECTED, rejected)
+    fun `session is restored only after the server validates the bearer token`() = runBlocking {
+        val request = StartupResumePreparation.createRequest(
+            session(), "https://shop.example.com", false,
+        ) { "saved-token" }.request!!
+        val profile = MeDto(ok = true, username = "alice", role = "admin")
 
-        val networkFailure = StartupResumePreparation.prepare(
-            previousSession = session(),
-            selectedServerUrl = "https://shop.example.com",
-            restoreDisabled = false,
-            decryptToken = { "old-token" },
-            notifyServer = { _, _ -> throw IllegalStateException("network") },
-        )
-        assertEquals(StartupResumeResult.NETWORK_FAILED, networkFailure)
+        val result = StartupResumePreparation.verify(request) { server, token ->
+            assertEquals("https://shop.example.com", server)
+            assertEquals("saved-token", token)
+            ApiResult.Success(profile)
+        }
+
+        assertEquals(StartupSessionVerification.Valid(profile), result)
     }
 
     @Test
-    fun `deadline and cancellation abort preparation but still clear and publish signed out`() = runBlocking {
-        val outcome = StartupResumePreparation.prepare(
-            previousSession = session(),
-            selectedServerUrl = "https://shop.example.com",
-            restoreDisabled = false,
-            decryptToken = { "old-token" },
-            timeoutMillis = 20,
-            notifyServer = { _, _ -> delay(500); ApiResult.Success(Unit) },
-        )
-        assertEquals(StartupResumeResult.TIMED_OUT, outcome)
+    fun `revoked session is rejected and transient failures remain recoverable`() = runBlocking {
+        val request = StartupResumePreparation.createRequest(
+            session(), "https://shop.example.com", false,
+        ) { "saved-token" }.request!!
 
+        val rejected = StartupResumePreparation.verify(request) { _, _ ->
+            ApiResult.Failure("SESSION_EXPIRED", "expired", 401)
+        }
+        assertEquals(StartupSessionVerification.Rejected, rejected)
+
+        val unavailable = StartupResumePreparation.verify(request) { _, _ ->
+            throw IllegalStateException("temporary network failure")
+        }
+        assertEquals(StartupSessionVerification.Unavailable, unavailable)
+
+        val timeout = StartupResumePreparation.verify(request, timeoutMillis = 20) { _, _ ->
+            delay(500)
+            ApiResult.Success(MeDto(ok = true))
+        }
+        assertEquals(StartupSessionVerification.Unavailable, timeout)
+    }
+
+    @Test
+    fun `restored startup keeps active state and releases startup gate without clearing session`() = runBlocking {
+        val events = mutableListOf<String>()
+        val startup = FreshProcessStartup(
+            restorePreviousSession = {
+                events += "restore"
+                FreshProcessSessionOutcome.RESTORED
+            },
+            clearStoredSession = { events += "clear" },
+            purgeActiveState = { events += "purge" },
+            publishSignedOut = { events += "signed-out" },
+            releaseStartupGate = { events += "gate" },
+        )
+
+        assertEquals(FreshProcessSessionOutcome.RESTORED, startup.run())
+        assertEquals(listOf("restore", "gate"), events)
+    }
+
+    @Test
+    fun `rejected session is cleared and publishes signed out`() = runBlocking {
+        val events = mutableListOf<String>()
+        val startup = FreshProcessStartup(
+            restorePreviousSession = { FreshProcessSessionOutcome.REJECTED },
+            clearStoredSession = { events += "clear" },
+            purgeActiveState = { events += "purge" },
+            publishSignedOut = { events += "signed-out" },
+            releaseStartupGate = { events += "gate" },
+        )
+
+        assertEquals(FreshProcessSessionOutcome.REJECTED, startup.run())
+        assertEquals(listOf("clear", "purge", "signed-out", "gate"), events)
+    }
+
+    @Test
+    fun `network failure preserves encrypted session for a later retry but does not trust it offline`() = runBlocking {
+        val events = mutableListOf<String>()
+        val startup = FreshProcessStartup(
+            restorePreviousSession = { FreshProcessSessionOutcome.UNAVAILABLE },
+            clearStoredSession = { events += "clear" },
+            purgeActiveState = { events += "purge" },
+            publishSignedOut = { events += "signed-out" },
+            releaseStartupGate = { events += "gate" },
+        )
+
+        assertEquals(FreshProcessSessionOutcome.UNAVAILABLE, startup.run())
+        assertEquals(listOf("purge", "signed-out", "gate"), events)
+    }
+
+    @Test
+    fun `cancellation still purges memory and releases startup gate`() = runBlocking {
         val cleanup = mutableListOf<String>()
         val startup = FreshProcessStartup(
-            preparePreviousSession = { awaitCancellation() },
+            restorePreviousSession = { awaitCancellation() },
             clearStoredSession = { cleanup += "clear" },
             purgeActiveState = { cleanup += "purge" },
             publishSignedOut = { cleanup += "signed-out" },
@@ -172,63 +165,39 @@ class FreshProcessStartupTest {
             withTimeout(20) { startup.run() }
             throw AssertionError("Expected startup cancellation")
         } catch (_: CancellationException) {
-            // Expected: cancellation is propagated after NonCancellable cleanup.
+            // Expected: cleanup runs in NonCancellable context and cancellation propagates.
         }
-        assertEquals(listOf("clear", "purge", "signed-out", "gate"), cleanup)
+        assertEquals(listOf("purge", "signed-out", "gate"), cleanup)
     }
 
     @Test
-    fun `cleanup failure does not prevent purge signed out state or gate release`() = runBlocking {
+    fun `cleanup failures do not prevent signed out publication or gate release`() = runBlocking {
         val events = mutableListOf<String>()
         val startup = FreshProcessStartup(
-            preparePreviousSession = { throw IllegalStateException("preparation failed") },
+            restorePreviousSession = { throw IllegalStateException("validation failed") },
             clearStoredSession = { throw IllegalStateException("datastore failure") },
             purgeActiveState = { events += "purge" },
             publishSignedOut = { events += "signed-out" },
             releaseStartupGate = { events += "gate" },
         )
 
-        startup.run()
-
+        assertEquals(FreshProcessSessionOutcome.UNAVAILABLE, startup.run())
         assertEquals(listOf("purge", "signed-out", "gate"), events)
-        assertTrue(events.contains("signed-out"))
     }
 
     @Test
-    fun `resume preparation requires explicit worker confirmation`() {
-        assertTrue(
-            requireResumePreparationConfirmation(
-                ApiResult.Success(ActionAckDto(success = true, resumePrepared = true)),
-            ) is ApiResult.Success,
-        )
-        val notPrepared = requireResumePreparationConfirmation(
-            ApiResult.Success(ActionAckDto(success = true, resumePrepared = false)),
-        ) as ApiResult.Failure
-        assertEquals("RESUME_NOT_PREPARED", notPrepared.code)
-        val contradictory = requireResumePreparationConfirmation(
-            ApiResult.Success(ActionAckDto(success = false, resumePrepared = true)),
-        ) as ApiResult.Failure
-        assertEquals("RESUME_NOT_PREPARED", contradictory.code)
-
-        val rejected = requireResumePreparationConfirmation(
-            ApiResult.Failure("RESUME_PREPARATION_FAILED", "not prepared", 503),
-        ) as ApiResult.Failure
-        assertEquals(503, rejected.httpStatus)
-    }
-
-    @Test
-    fun `startup client strips the global session guard to avoid startup expiry races`() {
+    fun `startup client excludes the global session guard`() {
         assertTrue(isStartupResumeExcludedInterceptor(SessionGuardInterceptor(SessionEvents())))
         val unrelated = Interceptor { chain -> chain.proceed(chain.request()) }
         assertFalse(isStartupResumeExcludedInterceptor(unrelated))
     }
 
     @Test
-    fun `server needs otp remains authoritative after resume preparation`() {
-        val twoFactorEnabled = loginOtpRequirement(
+    fun `server remains authoritative on whether a fresh password login needs otp`() {
+        val required = loginOtpRequirement(
             LoginResponse(success = true, needsOtp = true, message = "OTP required", token = "ignored"),
         )
-        assertEquals(LoginOutcome.OtpRequired("OTP required", null), twoFactorEnabled)
+        assertEquals(LoginOutcome.OtpRequired("OTP required", null), required)
         assertEquals(null, loginOtpRequirement(LoginResponse(success = true, needsOtp = false, token = "server-token")))
     }
 

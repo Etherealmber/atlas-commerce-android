@@ -54,17 +54,17 @@ class ApiProvider @Inject constructor(
     }
 
     /**
-     * Creates a one-shot client for startup resume preparation. It reuses the existing
-     * /api/auth/logout route, but deliberately omits the global token and session-guard
-     * interceptors so an old token is never installed in TokenHolder or reported as a
-     * newly expired active session while the app is still initializing.
+     * Creates a one-shot API client for verifying a saved session during process startup.
+     * It omits the global token holder and session guard, and sends only the supplied token
+     * to the normalized server origin selected by the user.
      */
-    fun startupResumeApi(serverUrl: String): AtlasApi {
+    fun startupResumeApi(serverUrl: String, bearerToken: String): AtlasApi {
         val normalized = ServerUrl.normalize(serverUrl)
             ?: throw IllegalArgumentException("Invalid selected server URL")
+        require(bearerToken.isNotBlank()) { "Missing saved session token" }
         val isolatedClient = client.newBuilder().apply {
             interceptors().removeAll(::isStartupResumeExcludedInterceptor)
-            addInterceptor(StartupResumeHeadersInterceptor(deviceIdentity))
+            addInterceptor(StartupResumeHeadersInterceptor(deviceIdentity, bearerToken))
         }.build()
         return Retrofit.Builder()
             .baseUrl(ServerUrl.withSlash(normalized))
@@ -85,6 +85,7 @@ class ApiProvider @Inject constructor(
 
 private class StartupResumeHeadersInterceptor(
     private val deviceIdentity: DeviceIdentity,
+    private val bearerToken: String,
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request().newBuilder()
@@ -93,6 +94,7 @@ private class StartupResumeHeadersInterceptor(
             .addAtlasAppVersionHeaders()
             .header("X-Device-Fingerprint", deviceIdentity.fingerprint)
             .header("User-Agent", deviceIdentity.userAgent)
+            .header("Authorization", "Bearer $bearerToken")
             .build()
         return chain.proceed(request)
     }
