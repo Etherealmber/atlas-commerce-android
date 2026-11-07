@@ -65,8 +65,8 @@ android {
             ?.takeIf { it.isNotEmpty() }
             ?: "$effectiveRepoUrl/releases/latest/download/atlas-commerce.apk"
 
-        versionCode = overrideVersionCode ?: 149
-        versionName = overrideVersionName ?: "1.4.9"
+        versionCode = overrideVersionCode ?: 150
+        versionName = overrideVersionName ?: "1.5.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // The server is chosen by the user on first launch (see ServerSetupScreen).
