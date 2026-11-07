@@ -1,6 +1,6 @@
 # Security Policy — Atlas Commerce (Android)
 
-© 2026 Etherealmber — MIT — current app baseline: **1.1.2** (versionCode 112); use the [Releases page](https://github.com/Etherealmber/atlas-commerce-android/releases) for the latest published build.
+© 2026 Etherealmber — MIT — current app baseline: **1.4.9** (versionCode 149); use the [Releases page](https://github.com/Etherealmber/atlas-commerce-android/releases) for the latest published build.
 
 This document covers the **Android client** in this repository. The server (Cloudflare Worker,
 D1, R2) has its own policy in
@@ -8,13 +8,18 @@ D1, R2) has its own policy in
 
 ## Supported versions
 
-| Version | Supported |
+| Android app version | Supported |
 | --- | --- |
-| 1.0.x | :white_check_mark: |
-| 0.x / unreleased branches | :x: |
+| Latest stable `1.x` release (support starts at `1.0.0`) | :white_check_mark: |
+| Older `1.x` releases | :x: |
+| Pre-`1.0.0` (`0.x`), prerelease and unreleased builds | :x: |
 
-Only the latest release on `main` receives security fixes. Debug builds are development artifacts
-and are not supported for production use.
+Only the latest published stable `1.x` release receives Android-client security fixes; issues in an
+older client build must be reproduced on the current supported release. This cutoff applies only to
+the Android client. Backend/Worker errors and vulnerabilities are handled under the separate
+[backend security policy](https://github.com/Etherealmber/atlas-commerce/blob/main/SECURITY.md),
+regardless of which Android version reported them. Debug builds are development artifacts and are
+not supported for production use.
 
 ## Reporting a vulnerability
 
