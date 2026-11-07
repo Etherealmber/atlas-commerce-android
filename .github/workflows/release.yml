@@ -46,6 +46,11 @@ on:
         required: false
         default: ''
         type: string
+      validation_only:
+        description: 'Build and test without publishing a release'
+        required: false
+        default: false
+        type: boolean
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -327,6 +332,7 @@ jobs:
     needs: [build]
     if: >-
       needs.build.outputs.signed == 'true' &&
+      inputs.validation_only != true &&
       (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -839,18 +845,18 @@ jobs:
           path: signed-apk/publish-status.json
           if-no-files-found: ignore
 
-  sync-readme-release-version:
-    name: Sync README release version
+  sync-release-docs:
+    name: Sync README and security release baseline
     needs: [build, publish-release]
     if: >-
-      always() &&
       needs.build.outputs.signed == 'true' &&
+      needs.publish-release.result == 'success' &&
       (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     concurrency:
-      group: readme-release-version
+      group: release-docs-version
       cancel-in-progress: false
     steps:
       - name: Checkout main
@@ -859,45 +865,72 @@ jobs:
           ref: main
           fetch-depth: 1
 
-      - name: Update README feature heading and push if changed
+      - name: Update README and SECURITY.md versions
         env:
-          GH_TOKEN: ${{ github.token }}
           VERSION_NAME: ${{ needs.build.outputs.version_name }}
+          VERSION_CODE: ${{ needs.build.outputs.version_code }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           RELEASE_TAG="v${VERSION_NAME}"
           if ! gh release view "$RELEASE_TAG" --json tagName >/dev/null 2>&1; then
-            echo "Release $RELEASE_TAG was not published; leaving README unchanged."
+            echo "Release $RELEASE_TAG was not published; leaving documentation unchanged."
             exit 0
           fi
-          python3 - "$VERSION_NAME" <<'PY'
+          python3 - "$VERSION_NAME" "$VERSION_CODE" <<'PY'
           import re
           import sys
           from pathlib import Path
 
-          version = sys.argv[1]
+          version, version_code = sys.argv[1:]
           if not re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[A-Za-z0-9._-]+)?", version):
               raise SystemExit(f"Not a valid Atlas release version: {version!r}")
+          if not version_code.isdecimal() or int(version_code) <= 0:
+              raise SystemExit(f"Not a valid Android versionCode: {version_code!r}")
 
-          readme = Path("README.md")
-          content = readme.read_text(encoding="utf-8")
-          pattern = re.compile(r"(?m)^## ✨ Key Features \(`v[^`]+`\)$")
-          updated, count = pattern.subn(f"## ✨ Key Features (`v{version}`)", content, count=1)
-          if count != 1:
+          readme_path = Path("README.md")
+          readme = readme_path.read_text(encoding="utf-8")
+          readme_updated, readme_count = re.subn(
+              r"(?m)^## ✨ Key Features \(`v[^`]+`\)$",
+              f"## ✨ Key Features (`v{version}`)",
+              readme,
+              count=1,
+          )
+          if readme_count != 1:
               raise SystemExit("Couldn't find the Key Features version heading in README.md")
-          if updated != content:
-              readme.write_text(updated, encoding="utf-8")
+
+          security_path = Path("SECURITY.md")
+          security = security_path.read_text(encoding="utf-8")
+          security_pattern = re.compile(
+              r"(?m)^(© \d{4} Etherealmber — MIT — current app baseline: \*\*)"
+              r"[^*]+(\*\* \(versionCode )\d+(\); use the \[Releases page\].*)$"
+          )
+          security_updated, security_count = security_pattern.subn(
+              rf"\g<1>{version}\g<2>{version_code}\g<3>",
+              security,
+              count=1,
+          )
+          if security_count != 1:
+              raise SystemExit("Couldn't find the app baseline/versionCode line in SECURITY.md")
+
+          if readme_updated != readme:
+              readme_path.write_text(readme_updated, encoding="utf-8")
               print(f"README Key Features heading updated to v{version}")
           else:
               print(f"README already shows v{version}")
+          if security_updated != security:
+              security_path.write_text(security_updated, encoding="utf-8")
+              print(f"SECURITY.md baseline updated to {version} ({version_code})")
+          else:
+              print(f"SECURITY.md already shows {version} ({version_code})")
           PY
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md
+          git add README.md SECURITY.md
           if git diff --cached --quiet; then
-            echo "README already matches the published release."
+            echo "README and SECURITY.md already match the published release."
             exit 0
           fi
-          git commit -m "docs(readme): sync release version v${VERSION_NAME} [skip ci]"
+          git commit -m "docs: sync README and security baseline for v${VERSION_NAME} [skip ci]"
           git push origin HEAD:main

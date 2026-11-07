@@ -41,6 +41,7 @@ import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
+import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockSetupPrompt
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.server.ServerSelection
@@ -247,8 +248,15 @@ class AppViewModel @Inject constructor(
 
     val deviceUnlockSetupRequests = deviceUnlockSetupPrompt.events
 
-    fun setSavedAccountDeviceUnlock(serverUrl: String, username: String, enabled: Boolean) {
-        viewModelScope.launch { preferences.setSavedAccountDeviceUnlock(serverUrl, username, enabled) }
+    fun setSavedAccountDeviceUnlock(
+        serverUrl: String,
+        username: String,
+        enabled: Boolean,
+        protectedTokenCipher: String? = null,
+    ) {
+        viewModelScope.launch {
+            preferences.setSavedAccountDeviceUnlock(serverUrl, username, enabled, protectedTokenCipher)
+        }
     }
 
     private val _agentPolicy = MutableStateFlow<AgentPolicyDto?>(null)
@@ -487,13 +495,13 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun switchSavedAccount(entry: SavedAccountEntry, onDone: (String) -> Unit) {
-        if (!entry.canUseDeviceUnlock) {
+    fun switchSavedAccount(entry: SavedAccountEntry, authenticatedToken: String, onDone: (String) -> Unit) {
+        if (!entry.canUseDeviceUnlock || authenticatedToken.isBlank()) {
             onDone("Sign in with the account password to switch to this account.")
             return
         }
         viewModelScope.launch {
-            when (val res = sessionManager.switchToSavedAccount(entry)) {
+            when (val res = sessionManager.switchToSavedAccount(entry, authenticatedToken)) {
                 is ApiResult.Success -> onDone(
                     "Connecté en tant que ${entry.displayName.ifBlank { entry.username }}.",
                 )
@@ -794,6 +802,9 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             val updateFilesCleared = withContext(Dispatchers.IO) { updateManager.clearCachedUpdateFiles() }
             sessionManager.signOut()
+            preferences.savedAccounts.first().forEach { account ->
+                DeviceUnlockAuthenticator.forgetSavedAccountKey(account.serverUrl, account.username)
+            }
             serverConfig.clear()
             preferences.clearAllLocalPreferences()
             offlineCache.clearAll()

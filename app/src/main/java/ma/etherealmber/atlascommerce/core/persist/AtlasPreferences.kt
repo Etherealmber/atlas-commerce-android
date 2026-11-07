@@ -33,6 +33,8 @@ import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
+const val DEVICE_UNLOCK_TOKEN_PREFIX = "du1:"
+
 private val Context.atlasDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "atlas_prefs",
     corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
@@ -57,7 +59,7 @@ data class SavedAccountEntry(
     val savedAtMs: Long = 0L,
 ) {
     val canUseDeviceUnlock: Boolean
-        get() = deviceUnlockEnabled && deviceUnlockChoiceMade
+        get() = deviceUnlockEnabled && deviceUnlockChoiceMade && tokenCipher.startsWith(DEVICE_UNLOCK_TOKEN_PREFIX)
 }
 
 /**
@@ -316,12 +318,15 @@ class AtlasPreferences @Inject constructor(
             val existing = current.firstOrNull {
                 it.serverUrl.equals(srv, ignoreCase = true) && it.username.equals(usr, ignoreCase = true)
             }
+            val protectedForUnlock = entry.tokenCipher.startsWith(DEVICE_UNLOCK_TOKEN_PREFIX)
+            val unlockMustBeReconfigured = existing?.deviceUnlockEnabled == true && !protectedForUnlock
             val updated = listOf(
                 entry.copy(
                     serverUrl = srv,
                     username = usr,
-                    deviceUnlockEnabled = entry.deviceUnlockEnabled || existing?.deviceUnlockEnabled == true,
-                    deviceUnlockChoiceMade = entry.deviceUnlockChoiceMade || existing?.deviceUnlockChoiceMade == true,
+                    deviceUnlockEnabled = protectedForUnlock && (entry.deviceUnlockEnabled || existing?.deviceUnlockEnabled == true),
+                    deviceUnlockChoiceMade = if (unlockMustBeReconfigured) false
+                    else entry.deviceUnlockChoiceMade || existing?.deviceUnlockChoiceMade == true,
                     savedAtMs = System.currentTimeMillis(),
                 ),
             ) + current.filterNot {
@@ -332,7 +337,12 @@ class AtlasPreferences @Inject constructor(
         }
     }
 
-    suspend fun setSavedAccountDeviceUnlock(serverUrl: String, username: String, enabled: Boolean) {
+    suspend fun setSavedAccountDeviceUnlock(
+        serverUrl: String,
+        username: String,
+        enabled: Boolean,
+        protectedTokenCipher: String? = null,
+    ) {
         val srv = serverUrl.trim()
         val usr = username.trim().lowercase(Locale.ROOT)
         if (srv.isEmpty() || usr.isEmpty()) return
@@ -340,7 +350,15 @@ class AtlasPreferences @Inject constructor(
             val accounts = decodeSavedAccounts(prefs.safeString(Keys.SAVED_ACCOUNTS.name))
             val updated = accounts.map { account ->
                 if (account.serverUrl.equals(srv, ignoreCase = true) && account.username.equals(usr, ignoreCase = true)) {
-                    account.copy(deviceUnlockEnabled = enabled, deviceUnlockChoiceMade = true)
+                    val tokenCipher = protectedTokenCipher
+                        ?.takeIf { it.startsWith(DEVICE_UNLOCK_TOKEN_PREFIX) }
+                        ?: account.tokenCipher
+                    val canEnable = enabled && tokenCipher.startsWith(DEVICE_UNLOCK_TOKEN_PREFIX)
+                    account.copy(
+                        tokenCipher = tokenCipher,
+                        deviceUnlockEnabled = canEnable,
+                        deviceUnlockChoiceMade = true,
+                    )
                 } else account
             }
             prefs.putClean(Keys.SAVED_ACCOUNTS, encodeSavedAccounts(updated))

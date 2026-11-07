@@ -12,6 +12,7 @@ import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
+import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.di.ApplicationScope
 import javax.inject.Inject
@@ -90,6 +91,9 @@ class ServerConfig @Inject constructor(
     }
 
     suspend fun forgetSavedServer(url: String) {
+        preferences.savedAccountsForServer(url).first().forEach { account ->
+            DeviceUnlockAuthenticator.forgetSavedAccountKey(account.serverUrl, account.username)
+        }
         preferences.removeSavedServer(url)
         offlineCache.clearServerScope(url)
     }

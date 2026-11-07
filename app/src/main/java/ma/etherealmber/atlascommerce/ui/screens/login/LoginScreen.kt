@@ -118,7 +118,7 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 fun LoginScreen(
     onChangeServer: () -> Unit,
     onOpenQrDevice: () -> Unit = {},
-    onUnlockSavedAccount: (SavedAccountEntry, () -> Unit) -> Unit = { _, _ -> },
+    onUnlockSavedAccount: (SavedAccountEntry, (String) -> Unit) -> Unit = { _, _ -> },
     onOpenAbout: () -> Unit = {},
     onToast: (String) -> Unit = {},
     updateState: UpdateState = UpdateState.Idle,
@@ -132,7 +132,7 @@ fun LoginScreen(
 private fun LoginScreenContent(
     onChangeServer: () -> Unit,
     onOpenQrDevice: () -> Unit,
-    onUnlockSavedAccount: (SavedAccountEntry, () -> Unit) -> Unit,
+    onUnlockSavedAccount: (SavedAccountEntry, (String) -> Unit) -> Unit,
     onOpenAbout: () -> Unit,
     onToast: (String) -> Unit,
     updateState: UpdateState,
@@ -322,8 +322,8 @@ private fun LoginScreenContent(
                                 useAnotherAccount = false
                                 viewModel.onUsernameChange(savedAccount.username)
                                 viewModel.onPasswordChange("")
-                                onUnlockSavedAccount(savedAccount) {
-                                    viewModel.signInWithSavedAccount(savedAccount)
+                                onUnlockSavedAccount(savedAccount) { authenticatedToken ->
+                                    viewModel.signInWithSavedAccount(savedAccount, authenticatedToken)
                                 }
                             },
                         )

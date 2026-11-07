@@ -73,7 +73,8 @@ class FreshProcessStartupTest {
         )
 
         assertEquals(StartupResumeResult.PREPARED, result)
-        assertEquals(listOf("https://shop.example.com" to "decrypted-session-proof"), sent)
+        // Normalization retains an explicitly configured default port in the request URL.
+        assertEquals(listOf("https://shop.example.com:443" to "decrypted-session-proof"), sent)
     }
 
     @Test

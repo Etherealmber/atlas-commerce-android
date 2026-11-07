@@ -280,14 +280,23 @@ fun ProfileScreen(
             } else {
                 DeviceUnlockAuthenticator.authenticate(
                     activity,
+                    account.serverUrl,
+                    account.username,
+                    account.tokenCipher,
                     deviceUnlockAuthTitle,
                     deviceUnlockAuthSubtitle,
-                ) { outcome ->
-                    when (outcome) {
-                        DeviceUnlockAuthenticator.Outcome.AUTHENTICATED -> appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, true)
-                        DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
-                        DeviceUnlockAuthenticator.Outcome.UNAVAILABLE,
-                        DeviceUnlockAuthenticator.Outcome.FAILED -> {
+                ) { result ->
+                    when {
+                        result.outcome == DeviceUnlockAuthenticator.Outcome.AUTHENTICATED &&
+                            !result.protectedTokenCipher.isNullOrBlank() ->
+                            appViewModel.setSavedAccountDeviceUnlock(
+                                account.serverUrl,
+                                account.username,
+                                true,
+                                result.protectedTokenCipher,
+                            )
+                        result.outcome == DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
+                        else -> {
                             appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, false)
                             onToast(localUnlockUnavailableMessage)
                         }
@@ -307,14 +316,22 @@ fun ProfileScreen(
         } else {
             DeviceUnlockAuthenticator.authenticate(
                 fragmentActivity,
+                account.serverUrl,
+                account.username,
+                account.tokenCipher,
                 unlockSavedAccountTitle,
                 deviceUnlockAuthSubtitle,
-            ) { outcome ->
-                when (outcome) {
-                    DeviceUnlockAuthenticator.Outcome.AUTHENTICATED -> appViewModel.switchSavedAccount(account, onToast)
-                    DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
-                    DeviceUnlockAuthenticator.Outcome.UNAVAILABLE,
-                    DeviceUnlockAuthenticator.Outcome.FAILED -> {
+            ) { result ->
+                when {
+                    result.outcome == DeviceUnlockAuthenticator.Outcome.AUTHENTICATED &&
+                        !result.sessionToken.isNullOrBlank() -> {
+                        result.protectedTokenCipher?.let { cipher ->
+                            appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, true, cipher)
+                        }
+                        appViewModel.switchSavedAccount(account, result.sessionToken, onToast)
+                    }
+                    result.outcome == DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
+                    else -> {
                         appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, false)
                         onToast(savedAccountUnlockUnavailableMessage)
                     }

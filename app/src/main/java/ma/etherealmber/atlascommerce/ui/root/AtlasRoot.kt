@@ -259,6 +259,7 @@ private fun AtlasGate(
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val defaultStartTab by viewModel.defaultStartTab.collectAsStateWithLifecycle()
     val autoCheckUpdates by viewModel.autoCheckUpdates.collectAsStateWithLifecycle()
+    val allSavedAccounts by viewModel.allSavedAccounts.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -496,14 +497,22 @@ private fun AtlasGate(
                             } else {
                                 DeviceUnlockAuthenticator.authenticate(
                                     authActivity,
+                                    entry.serverUrl,
+                                    entry.username,
+                                    entry.tokenCipher,
                                     loginDeviceUnlockTitle,
                                     loginDeviceUnlockSubtitle,
-                                ) { outcome ->
-                                    when (outcome) {
-                                        DeviceUnlockAuthenticator.Outcome.AUTHENTICATED -> afterAuthentication()
-                                        DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
-                                        DeviceUnlockAuthenticator.Outcome.UNAVAILABLE,
-                                        DeviceUnlockAuthenticator.Outcome.FAILED -> {
+                                ) { result ->
+                                    when {
+                                        result.outcome == DeviceUnlockAuthenticator.Outcome.AUTHENTICATED &&
+                                            !result.sessionToken.isNullOrBlank() -> {
+                                            result.protectedTokenCipher?.let { cipher ->
+                                                viewModel.setSavedAccountDeviceUnlock(entry.serverUrl, entry.username, true, cipher)
+                                            }
+                                            afterAuthentication(result.sessionToken)
+                                        }
+                                        result.outcome == DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
+                                        else -> {
                                             viewModel.setSavedAccountDeviceUnlock(entry.serverUrl, entry.username, false)
                                             showToast(loginDeviceUnlockUnavailableMessage)
                                         }
@@ -743,22 +752,34 @@ private fun AtlasGate(
                                 deviceUnlockSetupRequest = null
                                 viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, false)
                                 val activity = authActivity
-                                if (activity == null) {
+                                val savedAccount = allSavedAccounts.firstOrNull {
+                                    it.serverUrl.equals(request.serverUrl, ignoreCase = true) &&
+                                        it.username.equals(request.username, ignoreCase = true)
+                                }
+                                if (activity == null || savedAccount == null) {
                                     showToast(unavailableOptInMessage)
                                 } else {
                                     DeviceUnlockAuthenticator.authenticate(
                                         activity,
+                                        savedAccount.serverUrl,
+                                        savedAccount.username,
+                                        savedAccount.tokenCipher,
                                         deviceUnlockAuthTitle,
                                         deviceUnlockAuthSubtitle,
-                                    ) { outcome ->
-                                        when (outcome) {
-                                            DeviceUnlockAuthenticator.Outcome.AUTHENTICATED -> {
-                                                viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, true)
+                                    ) { result ->
+                                        when {
+                                            result.outcome == DeviceUnlockAuthenticator.Outcome.AUTHENTICATED &&
+                                                !result.protectedTokenCipher.isNullOrBlank() -> {
+                                                viewModel.setSavedAccountDeviceUnlock(
+                                                    request.serverUrl,
+                                                    request.username,
+                                                    true,
+                                                    result.protectedTokenCipher,
+                                                )
                                                 showToast(deviceUnlockEnabledMessage)
                                             }
-                                            DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
-                                            DeviceUnlockAuthenticator.Outcome.UNAVAILABLE,
-                                            DeviceUnlockAuthenticator.Outcome.FAILED -> {
+                                            result.outcome == DeviceUnlockAuthenticator.Outcome.CANCELED -> Unit
+                                            else -> {
                                                 viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, false)
                                                 showToast(deviceUnlockFailureMessage)
                                             }

@@ -1,6 +1,6 @@
 # Security Policy — Atlas Commerce (Android)
 
-© 2026 Etherealmber — MIT — current app baseline: **1.1.2** (versionCode 112); use the [Releases page](https://github.com/Etherealmber/atlas-commerce-android/releases) for the latest published build.
+© 2026 Etherealmber — MIT — current app baseline: **1.4.9** (versionCode 149); use the [Releases page](https://github.com/Etherealmber/atlas-commerce-android/releases) for the latest published build.
 
 This document covers the **Android client** in this repository. The server (Cloudflare Worker,
 D1, R2) has its own policy in
@@ -8,13 +8,18 @@ D1, R2) has its own policy in
 
 ## Supported versions
 
-| Version | Supported |
+| Android app version | Supported |
 | --- | --- |
-| 1.0.x | :white_check_mark: |
-| 0.x / unreleased branches | :x: |
+| Latest stable `1.x` release (support starts at `1.0.0`) | :white_check_mark: |
+| Older `1.x` releases | :x: |
+| Pre-`1.0.0` (`0.x`), prerelease and unreleased builds | :x: |
 
-Only the latest release on `main` receives security fixes. Debug builds are development artifacts
-and are not supported for production use.
+Only the latest published stable `1.x` release receives Android-client security fixes; issues in an
+older client build must be reproduced on the current supported release. This cutoff applies only to
+the Android client. Backend/Worker errors and vulnerabilities are handled under the separate
+[backend security policy](https://github.com/Etherealmber/atlas-commerce/blob/main/SECURITY.md),
+regardless of which Android version reported them. Debug builds are development artifacts and are
+not supported for production use.
 
 ## Reporting a vulnerability
 
@@ -36,10 +41,16 @@ and are not supported for production use.
 - Session tokens are bound by the worker to `(IP, device fingerprint)`. The fingerprint is a
   SHA-256 digest of a locally generated install UUID, `ANDROID_ID` and the package name — raw
   identifiers never leave the device and the digest is not reversible.
-- The token is kept in memory for requests and stored **encrypted at rest** with AES-256-GCM using
-  a non-exportable Android Keystore key (`atlas.session.v1`). If a device cannot use the Keystore,
-  the app falls back to app-private storage so a user is never locked out; the backup system is
-  disabled (`allowBackup=false`) either way.
+- The active session token is kept in memory for requests and stored **encrypted at rest** with
+  AES-256-GCM using a non-exportable Android Keystore key (`atlas.session.v1`). If a device cannot
+  use the Keystore, the app falls back to app-private storage so a user is never locked out; the
+  backup system is disabled (`allowBackup=false`) either way.
+- Remembered-account quick unlock uses a separate per-account AES-GCM Keystore key that requires
+  fresh local authentication. On Android 11+, `BiometricPrompt` receives a `CryptoObject`; on
+  Android 9/10, the callback must immediately consume the auth-bound cipher inside its short
+  Keystore authorization window. In both paths the saved-account token is released only after the
+  cipher successfully decrypts it. Legacy remembered tokens are not quick-unlockable; they can be
+  upgraded from an active authenticated session in settings or replaced by a new password sign-in.
 - Logout clears the token, the cart and the offline catalogue; sessions are never shared between
   servers, and changing the server forces a fresh login.
 
@@ -61,7 +72,8 @@ and are not supported for production use.
 
 | Data | Where | Purpose |
 | --- | --- | --- |
-| Encrypted session token | DataStore (app-private) | Stay signed in |
+| Encrypted active session token | DataStore (app-private) | Stay signed in |
+| Auth-bound saved-account token | DataStore ciphertext (`du1:`) + per-account Android Keystore key | Quick unlock after fresh biometric/device-credential authentication |
 | Username, role, display name, email, local-unlock opt-in | DataStore | Show the profile and remember device-unlock choice without storing the account password |
 | Server address, theme, density | DataStore | Settings |
 | Last product catalogue | App-private files (`atlas-cache/products.json`) | Offline browsing |

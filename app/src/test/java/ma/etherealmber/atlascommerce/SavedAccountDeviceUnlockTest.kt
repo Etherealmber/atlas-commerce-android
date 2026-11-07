@@ -21,8 +21,12 @@ class SavedAccountDeviceUnlockTest {
         assertFalse(newlySaved.canUseDeviceUnlock)
         assertFalse(newlySaved.copy(deviceUnlockEnabled = true).canUseDeviceUnlock)
 
-        val enabled = newlySaved.copy(deviceUnlockEnabled = true, deviceUnlockChoiceMade = true)
-        assertTrue(enabled.deviceUnlockEnabled)
-        assertTrue(enabled.deviceUnlockChoiceMade)
+        val enabledWithoutProtectedToken = newlySaved.copy(deviceUnlockEnabled = true, deviceUnlockChoiceMade = true)
+        assertTrue(enabledWithoutProtectedToken.deviceUnlockEnabled)
+        assertTrue(enabledWithoutProtectedToken.deviceUnlockChoiceMade)
+        assertFalse(enabledWithoutProtectedToken.canUseDeviceUnlock)
+
+        val enabled = enabledWithoutProtectedToken.copy(tokenCipher = "du1:protected-token")
+        assertTrue(enabled.canUseDeviceUnlock)
     }
 }
