@@ -74,6 +74,20 @@ class UpdateCheckWorker(
             app.languageLoaded.first { it }
             val language = app.activeLanguage.value
             val titleVersion = latest.versionName?.takeIf { it.isNotBlank() } ?: "build ${latest.versionCode}"
+            val downloadableInfo = latest.resolvedPrimaryUrl
+                ?.trim()
+                ?.takeIf { it.toHttpUrlOrNull()?.isHttps == true }
+                ?.let { apkUrl ->
+                    UpdateInfo(
+                        versionCode = latest.versionCode,
+                        versionName = latest.versionName?.takeIf { it.isNotBlank() } ?: latest.versionCode.toString(),
+                        apkUrl = apkUrl,
+                        mandatory = latest.mandatory,
+                        cdn1Url = latest.resolvedCdn1Url,
+                        githubUrl = latest.resolvedGithubUrl,
+                        sha256 = latest.sha256?.trim()?.lowercase()?.takeIf { it.length == 64 },
+                    )
+                }
             val intent = Intent(applicationContext, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra(AtlasApp.EXTRA_OPEN_SETTINGS, true)
@@ -94,6 +108,15 @@ class UpdateCheckWorker(
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
+                .apply {
+                    downloadableInfo?.let { info ->
+                        addAction(
+                            R.drawable.ic_stat_update,
+                            notificationText(language, "Télécharger", "Download", "تنزيل"),
+                            UpdateNotificationActions.downloadPendingIntent(applicationContext, info),
+                        )
+                    }
+                }
                 .build()
             NotificationManagerCompat.from(applicationContext).notify(NOTIFICATION_ID, notification)
             prefs.edit().putInt(KEY_LAST_NOTIFIED_VERSION, latest.versionCode).apply()

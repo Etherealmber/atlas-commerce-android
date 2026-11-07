@@ -22,25 +22,22 @@ import org.junit.Test
 class FreshProcessStartupTest {
 
     @Test
-    fun `valid previous session is prepared before erase and startup always ends signed out`() = runBlocking {
+    fun `valid previous session is snapshotted before erase and startup always ends signed out`() = runBlocking {
         val events = mutableListOf<String>()
         val stateHistory = mutableListOf<SessionState>(SessionState.Loading)
         val stored = session(serverUrl = "https://shop.example.com", token = "cipher")
 
         val startup = FreshProcessStartup(
             preparePreviousSession = {
-                events += "prepare"
-                val result = StartupResumePreparation.prepare(
+                events += "snapshot"
+                val plan = StartupResumePreparation.createRequest(
                     previousSession = stored,
                     selectedServerUrl = "https://shop.example.com",
                     restoreDisabled = false,
                     decryptToken = { if (it == "cipher") "old-session-token" else null },
-                    notifyServer = { _, token ->
-                        assertEquals("old-session-token", token)
-                        ApiResult.Success(Unit)
-                    },
                 )
-                assertEquals(StartupResumeResult.PREPARED, result)
+                assertEquals(StartupResumeResult.PREPARED, plan.result)
+                assertEquals("old-session-token", plan.request?.bearerToken)
             },
             clearStoredSession = { events += "clear" },
             purgeActiveState = { events += "purge" },
@@ -53,9 +50,33 @@ class FreshProcessStartupTest {
 
         startup.run()
 
-        assertEquals(listOf("prepare", "clear", "purge", "signed-out", "gate"), events)
+        assertEquals(listOf("snapshot", "clear", "purge", "signed-out", "gate"), events)
         assertEquals(SessionState.SignedOut, stateHistory.last())
         assertFalse(stateHistory.any { it is SessionState.Active })
+    }
+
+    @Test
+    fun `startup resume request snapshots only a same-origin token and redacts it in diagnostics`() {
+        val plan = StartupResumePreparation.createRequest(
+            previousSession = session(serverUrl = "https://shop.example.com/api"),
+            selectedServerUrl = "https://shop.example.com:443",
+            restoreDisabled = false,
+            decryptToken = { "secret-session-proof" },
+        )
+
+        assertEquals(StartupResumeResult.PREPARED, plan.result)
+        assertEquals("https://shop.example.com:443", plan.request?.serverUrl)
+        assertTrue(plan.request.toString().contains("[REDACTED]"))
+        assertFalse(plan.request.toString().contains("secret-session-proof"))
+
+        val rejected = StartupResumePreparation.createRequest(
+            previousSession = session(serverUrl = "https://other.example.com"),
+            selectedServerUrl = "https://shop.example.com",
+            restoreDisabled = false,
+            decryptToken = { "must-not-be-read" },
+        )
+        assertEquals(StartupResumeResult.DIFFERENT_ORIGIN, rejected.result)
+        assertEquals(null, rejected.request)
     }
 
     @Test

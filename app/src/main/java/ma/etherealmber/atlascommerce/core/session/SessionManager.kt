@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce.core.session
 
 import android.os.Build
+import android.os.SystemClock
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
@@ -133,17 +134,28 @@ class SessionManager @Inject constructor(
      * explicit password or device-authenticated sign-in. The PWA has its own session lifecycle.
      */
     private suspend fun initializeFreshSession() {
+        val startupGateStartedAt = SystemClock.elapsedRealtime()
+        var startupResumeRequest: StartupResumeRequest? = null
         FreshProcessStartup(
             preparePreviousSession = {
                 preferences.migrateLegacyPreferencesAtRest()
                 serverConfig.loaded.filter { it }.first()
-                StartupResumePreparation.prepare(
+                val plan = StartupResumePreparation.createRequest(
                     previousSession = preferences.readSession(),
                     selectedServerUrl = serverConfig.normalizedSelection(),
                     restoreDisabled = preferences.isSessionRestoreDisabled(),
                     decryptToken = cryptoStore::decrypt,
-                    notifyServer = authRepository::prepareStartupResume,
                 )
+                startupResumeRequest = plan.request
+                if (plan.result != StartupResumeResult.PREPARED &&
+                    plan.result != StartupResumeResult.NO_SESSION
+                ) {
+                    ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+                        tag = "AUTH",
+                        message = "Previous-session resume preparation skipped (${plan.result})",
+                        level = "WARN",
+                    )
+                }
             },
             clearStoredSession = preferences::clearSession,
             purgeActiveState = ::purgeInMemorySession,
@@ -157,6 +169,29 @@ class SessionManager @Inject constructor(
                 )
             },
         ).run()
+        ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+            tag = "AUTH",
+            message = "Fresh-process session isolation completed in ${SystemClock.elapsedRealtime() - startupGateStartedAt} ms",
+        )
+
+        // Keep previous-process server cleanup best-effort, but never hold the first login screen
+        // (or a fresh sign-in) behind DNS/TLS/network latency. The old token is isolated and only
+        // sent to the normalized origin it was originally issued for.
+        startupResumeRequest?.let { request ->
+            scope.launch {
+                val result = StartupResumePreparation.send(
+                    request = request,
+                    notifyServer = authRepository::prepareStartupResume,
+                )
+                if (result != StartupResumeResult.PREPARED) {
+                    ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+                        tag = "AUTH",
+                        message = "Previous-session resume preparation did not complete ($result)",
+                        level = "WARN",
+                    )
+                }
+            }
+        }
     }
 
     suspend fun signIn(
@@ -295,10 +330,26 @@ class SessionManager @Inject constructor(
                 "Session expirée — reconnectez-vous avec votre mot de passe.",
             )
         }
+        val savedServerUrl = serverConfig.validateSelection(entry.serverUrl).getOrElse {
+            return ApiResult.Failure(
+                "SAVED_SERVER_CONFIG",
+                "Le serveur enregistré ne peut pas être utilisé dans cette version. Vérifiez son adresse HTTPS puis réessayez.",
+            )
+        }.baseUrl
         purgeInMemorySession()
-        if (!serverConfig.baseUrl().equals(entry.serverUrl, ignoreCase = true)) {
-            serverConfig.select(entry.serverUrl, rememberServer = false)
+        val selectedServer = serverConfig.select(savedServerUrl, rememberServer = false)
+        if (selectedServer.isFailure) {
+            tokenHolder.clear()
+            apiProvider.invalidate()
+            signOut()
+            return ApiResult.Failure(
+                "SAVED_SERVER_CONFIG",
+                "Le serveur enregistré ne peut pas être utilisé dans cette version. Vérifiez son adresse HTTPS puis réessayez.",
+            )
         }
+        // Do not send a saved bearer token using a stale Retrofit instance or a different
+        // selected origin. This also re-applies the release build's HTTPS-only server policy.
+        apiProvider.invalidate()
         tokenHolder.set(token)
         when (val verify = authRepository.me()) {
             is ApiResult.Failure -> {
@@ -325,7 +376,7 @@ class SessionManager @Inject constructor(
                 val resolvedEmail = me.email ?: entry.email
                 val resolvedAvatar = me.avatarUrl?.takeIf { it.isNotBlank() } ?: entry.avatarUrl
                 activateIsolatedSession(
-                    serverUrl = entry.serverUrl,
+                    serverUrl = savedServerUrl,
                     token = token,
                     username = resolvedUser,
                     role = resolvedRole,

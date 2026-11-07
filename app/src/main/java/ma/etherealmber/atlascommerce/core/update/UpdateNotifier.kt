@@ -121,6 +121,11 @@ class AndroidUpdateNotifier @Inject constructor(
                 .setOnlyAlertOnce(false)
                 .setAutoCancel(true)
                 .setProgress(0, 0, false)
+                .addAction(
+                    R.drawable.ic_stat_update,
+                    notificationText(lang, "Installer", "Install", "تثبيت"),
+                    UpdateNotificationActions.installPendingIntent(context, info),
+                )
                 .setContentIntent(openSettingsPendingIntent()),
         )
     }

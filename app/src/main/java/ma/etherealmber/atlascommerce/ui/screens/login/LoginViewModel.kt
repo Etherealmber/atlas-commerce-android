@@ -17,6 +17,7 @@ import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
+import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockSetupPrompt
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.session.LoginOutcome
@@ -118,6 +119,7 @@ class LoginViewModel @Inject constructor(
     }
 
     private fun offerDeviceUnlockIfNeeded() {
+        if (!DeviceUnlockAuthenticator.isPlatformSupported()) return
         viewModelScope.launch {
             val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return@launch
             val saved = preferences.savedAccountsForServer(user.serverUrl).first()
@@ -240,6 +242,10 @@ internal fun LoginViewModel.UiState.afterAuthentication(): LoginViewModel.UiStat
 internal fun authFailureMessage(code: String, httpStatus: Int?, isOtp: Boolean): String = when {
     code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK ->
         "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
+    code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_TLS ->
+        "Impossible de vérifier le certificat HTTPS du serveur. Vérifiez sa configuration HTTPS puis réessayez."
+    code == "SAVED_SERVER_CONFIG" ->
+        "Le serveur enregistré ne peut pas être utilisé dans cette version. Vérifiez son adresse HTTPS puis réessayez."
     code == "APP_UPDATE_REQUIRED" -> "Une mise à jour est nécessaire pour continuer."
     code == "PASSWORD_REHASH_REQUIRED" -> "Un administrateur doit réinitialiser votre mot de passe."
     code == "SAVED_SESSION_EXPIRED" -> "Session expirée — reconnectez-vous avec votre mot de passe."

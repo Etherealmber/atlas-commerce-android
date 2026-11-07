@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.login
 
+import android.view.WindowManager
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -66,6 +67,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
@@ -80,6 +82,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -113,6 +116,7 @@ import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasUsesSystemLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalSetAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalUseSystemAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.util.findActivity
 
 @Composable
 fun LoginScreen(
@@ -123,9 +127,22 @@ fun LoginScreen(
     onToast: (String) -> Unit = {},
     updateState: UpdateState = UpdateState.Idle,
     onShowUpdateProgress: () -> Unit = {},
+    captureProtectionAllowed: Boolean = true,
+    deviceUnlockAvailable: Boolean = true,
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
-    LoginScreenContent(onChangeServer, onOpenQrDevice, onUnlockSavedAccount, onOpenAbout, onToast, updateState, onShowUpdateProgress, viewModel)
+    LoginScreenContent(
+        onChangeServer,
+        onOpenQrDevice,
+        onUnlockSavedAccount,
+        onOpenAbout,
+        onToast,
+        updateState,
+        onShowUpdateProgress,
+        viewModel,
+        captureProtectionAllowed,
+        deviceUnlockAvailable,
+    )
 }
 
 @Composable
@@ -138,6 +155,8 @@ private fun LoginScreenContent(
     updateState: UpdateState,
     onShowUpdateProgress: () -> Unit,
     viewModel: LoginViewModel,
+    captureProtectionAllowed: Boolean,
+    deviceUnlockAvailable: Boolean,
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val loginPanelProgress = remember(motionEnabled) { Animatable(if (motionEnabled) 0f else 1f) }
@@ -155,6 +174,24 @@ private fun LoginScreenContent(
     val loginPanelOffsetPx = with(LocalDensity.current) { 16.dp.toPx() }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val savedAccounts by viewModel.savedAccounts.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var passwordRevealed by remember { mutableStateOf(false) }
+    val protectScreenCapture = captureProtectionAllowed &&
+        state.step == LoginViewModel.Step.CREDENTIALS &&
+        state.password.isNotEmpty() &&
+        passwordRevealed
+    val secureWindow = remember(context) { context.findActivity()?.window }
+    // Capture blocking is scoped to a non-empty, revealed password on the foreground login page.
+    DisposableEffect(secureWindow, protectScreenCapture) {
+        secureWindow?.let { window ->
+            if (protectScreenCapture) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
+        onDispose { secureWindow?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+    }
     val language = LocalAtlasLanguage.current
     val setLanguage = LocalSetAtlasLanguage.current
     val followsSystemLanguage = LocalAtlasUsesSystemLanguage.current
@@ -186,7 +223,7 @@ private fun LoginScreenContent(
     val rememberedAccount = savedAccounts.firstOrNull { it.username.equals(state.username, ignoreCase = true) }
         ?.takeUnless { useAnotherAccount }
     val selectedUnlockAccount = savedAccounts.firstOrNull {
-        it.canUseDeviceUnlock && it.username.equals(state.username, ignoreCase = true)
+        deviceUnlockAvailable && it.canUseDeviceUnlock && it.username.equals(state.username, ignoreCase = true)
     }
     fun useDifferentAccount() {
         accountPickerOpen = false
@@ -304,6 +341,7 @@ private fun LoginScreenContent(
                         onPassword = viewModel::onPasswordChange,
                         onSubmit = viewModel::submit,
                         onDismissError = viewModel::dismissError,
+                        onPasswordVisibilityChange = { passwordRevealed = it },
                         compact = compact,
                     )
                     TextButton(
@@ -781,6 +819,7 @@ private fun CredentialsForm(
     onPassword: (String) -> Unit,
     onSubmit: () -> Unit,
     onDismissError: () -> Unit,
+    onPasswordVisibilityChange: (Boolean) -> Unit,
     compact: Boolean,
 ) {
     Column(Modifier.fillMaxWidth()) {
@@ -826,6 +865,7 @@ private fun CredentialsForm(
             isPassword = true,
             enabled = !state.loading,
             onDone = onSubmit,
+            onPasswordVisibilityChange = onPasswordVisibilityChange,
         )
         LoginInlineError(state, onDismissError)
         Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
@@ -1003,6 +1043,18 @@ private fun localizedLoginMessage(message: String): String = when (message) {
         atlasText("Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau.", "The code is invalid or expired. Check it or request a new one.", "الرمز غير صالح أو منتهي الصلاحية. تحقق منه أو اطلب رمزاً جديداً.")
     "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez." ->
         atlasText("Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.", "Couldn't reach the server. Check your connection and try again.", "تعذّر الاتصال بالخادم. تحقق من اتصالك وحاول مجدداً.")
+    "Impossible de vérifier le certificat HTTPS du serveur. Vérifiez sa configuration HTTPS puis réessayez." ->
+        atlasText(
+            "Impossible de vérifier le certificat HTTPS du serveur. Vérifiez sa configuration HTTPS puis réessayez.",
+            "The server's HTTPS certificate could not be verified. Check the server's HTTPS configuration, then try again.",
+            "تعذّر التحقق من شهادة HTTPS للخادم. تحقق من إعداد HTTPS للخادم ثم أعد المحاولة.",
+        )
+    "Le serveur enregistré ne peut pas être utilisé dans cette version. Vérifiez son adresse HTTPS puis réessayez." ->
+        atlasText(
+            "Le serveur enregistré ne peut pas être utilisé dans cette version. Vérifiez son adresse HTTPS puis réessayez.",
+            "This saved server cannot be used in this app version. Check that its address uses HTTPS, then try again.",
+            "لا يمكن استخدام الخادم المحفوظ في هذا الإصدار. تحقق من أن عنوانه يستخدم HTTPS ثم أعد المحاولة.",
+        )
     "Impossible de joindre ce serveur. Vérifiez votre connexion puis réessayez." ->
         atlasText("Impossible de joindre ce serveur. Vérifiez votre connexion puis réessayez.", "Couldn't reach this server. Check your connection and try again.", "تعذّر الاتصال بهذا الخادم. تحقق من اتصالك وحاول مجدداً.")
     "Une mise à jour est nécessaire pour continuer." ->

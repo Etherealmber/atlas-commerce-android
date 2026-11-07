@@ -21,37 +21,62 @@ internal enum class StartupResumeResult {
     TIMED_OUT,
 }
 
+internal class StartupResumeRequest(
+    val serverUrl: String,
+    val bearerToken: String,
+) {
+    override fun toString(): String = "StartupResumeRequest(serverUrl=$serverUrl, bearerToken=[REDACTED])"
+}
+
+internal data class StartupResumePlan(
+    val result: StartupResumeResult,
+    val request: StartupResumeRequest? = null,
+)
+
 /** A narrow policy seam: only a valid saved session on the currently selected origin may be sent. */
 internal object StartupResumePreparation {
     const val NETWORK_TIMEOUT_MS = 1_500L
 
-    suspend fun prepare(
+    /** Snapshot and validate local data synchronously before the stored token is erased. */
+    fun createRequest(
         previousSession: AtlasPreferences.StoredSession?,
         selectedServerUrl: String?,
         restoreDisabled: Boolean,
         decryptToken: (String) -> String?,
-        timeoutMillis: Long = NETWORK_TIMEOUT_MS,
-        notifyServer: suspend (serverUrl: String, bearerToken: String) -> ApiResult<Unit>,
-    ): StartupResumeResult {
-        if (restoreDisabled) return StartupResumeResult.RESTORE_DISABLED
-        val stored = previousSession ?: return StartupResumeResult.NO_SESSION
+    ): StartupResumePlan {
+        if (restoreDisabled) return StartupResumePlan(StartupResumeResult.RESTORE_DISABLED)
+        val stored = previousSession ?: return StartupResumePlan(StartupResumeResult.NO_SESSION)
         val selectedServer = ServerUrl.normalize(selectedServerUrl)
-            ?: return StartupResumeResult.NO_SELECTED_SERVER
+            ?: return StartupResumePlan(StartupResumeResult.NO_SELECTED_SERVER)
         val selectedOrigin = ServerUrl.origin(selectedServer)
-            ?: return StartupResumeResult.NO_SELECTED_SERVER
+            ?: return StartupResumePlan(StartupResumeResult.NO_SELECTED_SERVER)
         val storedOrigin = ServerUrl.origin(stored.serverUrl)
-            ?: return StartupResumeResult.INVALID_SESSION_ORIGIN
-        if (storedOrigin != selectedOrigin) return StartupResumeResult.DIFFERENT_ORIGIN
+            ?: return StartupResumePlan(StartupResumeResult.INVALID_SESSION_ORIGIN)
+        if (storedOrigin != selectedOrigin) {
+            return StartupResumePlan(StartupResumeResult.DIFFERENT_ORIGIN)
+        }
 
         val token = try {
             decryptToken(stored.tokenCipher)?.takeIf(String::isNotBlank)
         } catch (_: Throwable) {
             null
-        } ?: return StartupResumeResult.UNDECRYPTABLE_TOKEN
+        } ?: return StartupResumePlan(StartupResumeResult.UNDECRYPTABLE_TOKEN)
 
+        return StartupResumePlan(
+            result = StartupResumeResult.PREPARED,
+            request = StartupResumeRequest(selectedServer, token),
+        )
+    }
+
+    /** Network notification is deliberately separate so a slow server cannot gate the login UI. */
+    suspend fun send(
+        request: StartupResumeRequest,
+        timeoutMillis: Long = NETWORK_TIMEOUT_MS,
+        notifyServer: suspend (serverUrl: String, bearerToken: String) -> ApiResult<Unit>,
+    ): StartupResumeResult {
         val response = try {
             withTimeoutOrNull(timeoutMillis) {
-                notifyServer(selectedServer, token)
+                notifyServer(request.serverUrl, request.bearerToken)
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -63,6 +88,19 @@ internal object StartupResumePreparation {
             is ApiResult.Success -> StartupResumeResult.PREPARED
             is ApiResult.Failure -> StartupResumeResult.SERVER_REJECTED
         }
+    }
+
+    suspend fun prepare(
+        previousSession: AtlasPreferences.StoredSession?,
+        selectedServerUrl: String?,
+        restoreDisabled: Boolean,
+        decryptToken: (String) -> String?,
+        timeoutMillis: Long = NETWORK_TIMEOUT_MS,
+        notifyServer: suspend (serverUrl: String, bearerToken: String) -> ApiResult<Unit>,
+    ): StartupResumeResult {
+        val plan = createRequest(previousSession, selectedServerUrl, restoreDisabled, decryptToken)
+        val request = plan.request ?: return plan.result
+        return send(request, timeoutMillis, notifyServer)
     }
 }
 

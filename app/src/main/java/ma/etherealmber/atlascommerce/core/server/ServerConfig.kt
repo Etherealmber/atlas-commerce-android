@@ -62,15 +62,8 @@ class ServerConfig @Inject constructor(
 
     fun normalizedSelection(): String? = _selection.value?.baseUrl
 
-    /**
-     * Validates and stores a server address, optionally adding it to the saved
-     * server list with an optional friendly label.
-     */
-    suspend fun select(
-        rawUrl: String,
-        label: String = "",
-        rememberServer: Boolean = true,
-    ): Result<ServerSelection> {
+    /** Validates a server address without changing the active selection. */
+    fun validateSelection(rawUrl: String): Result<ServerSelection> {
         val normalized = ServerUrl.normalize(rawUrl)
             ?: return Result.failure(IllegalArgumentException("Adresse de serveur invalide."))
         if (ServerUrl.isCleartext(normalized) && !BuildConfig.ALLOW_CLEARTEXT) {
@@ -80,12 +73,22 @@ class ServerConfig @Inject constructor(
                 ),
             )
         }
+        return Result.success(ServerSelection(normalized))
+    }
+
+    /** Stores the selected address and, optionally, remembers it for the server picker. */
+    suspend fun select(
+        rawUrl: String,
+        label: String = "",
+        rememberServer: Boolean = true,
+    ): Result<ServerSelection> {
+        val selection = validateSelection(rawUrl).getOrElse { return Result.failure(it) }
+        val normalized = selection.baseUrl
         preferences.setApiBase(normalized)
         preferences.markOnboardingDone()
         if (rememberServer) {
             preferences.upsertSavedServer(normalized, label.trim())
         }
-        val selection = ServerSelection(normalized)
         _selection.value = selection
         return Result.success(selection)
     }

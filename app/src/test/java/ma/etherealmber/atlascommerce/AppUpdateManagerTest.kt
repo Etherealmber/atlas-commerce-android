@@ -110,6 +110,35 @@ class AppUpdateManagerTest {
     }
 
     @Test
+    fun userStartedDownloadIsQueuedForDurableBackgroundWorkWhenSchedulerIsProvided() {
+        val info = UpdateInfo(
+            versionCode = 2,
+            versionName = "2.0",
+            apkUrl = "https://example.invalid/atlas.apk",
+            mandatory = false,
+            sha256 = "a".repeat(64),
+        )
+        var queuedInfo: UpdateInfo? = null
+        val manager = AppUpdateManager(
+            updatesDirProvider = { tempDir },
+            baseUrlProvider = { "https://example.invalid" },
+            currentVersionCode = 1,
+            currentVersionName = "1.0",
+            probeClient = client,
+            downloadClient = client,
+            moshi = moshi,
+            notifier = RecordingNotifier(),
+            scope = scope,
+            backgroundDownloadScheduler = { queuedInfo = it },
+        )
+
+        manager.startDownload(overrideInfo = info)
+
+        assertEquals(info, queuedInfo)
+        assertTrue(manager.state.value is UpdateState.Downloading)
+    }
+
+    @Test
     fun downloadParallelismIsSourceSpecificAndR2Friendly() {
         val manager = AppUpdateManager(
             updatesDirProvider = { tempDir },

@@ -322,8 +322,8 @@ fun CombinedReportWebViewDialog(
                                 webView = this
                                 settings.javaScriptEnabled = false
                                 settings.domStorageEnabled = false
-                                settings.allowFileAccess = false
-                                settings.allowContentAccess = false
+                                settings.setAllowFileAccess(false)
+                                settings.setAllowContentAccess(false)
                                 settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
                                 settings.saveFormData = false
                                 settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
