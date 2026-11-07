@@ -841,6 +841,8 @@ class AppUpdateManagerTest {
             moduleDir,
             "java/ma/etherealmber/atlascommerce/core/update/AppUpdateManager.kt",
         ).readText()
+        // The updater legitimately uses the APK MIME type in download Accept headers; scope
+        // the no-Intent invariant to installApk so those safe network headers don't fail it.
         val installMethodStart = updateManagerSource.indexOf("fun installApk(context: Context): Boolean")
         assertTrue("APK install entry point must exist", installMethodStart >= 0)
         val installMethodEnd = updateManagerSource.indexOf("\n    fun onAppResumed(", installMethodStart)
