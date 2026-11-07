@@ -4,7 +4,6 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -28,12 +27,6 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Protect OTP, saved-server/account details, dashboards, and recents previews from
-        // screenshots, screen recording, and task-switcher snapshots on every app screen.
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE,
-        )
         if (savedInstanceState == null) (application as AtlasApp).prepareLanguageForFreshLaunch()
         deepLinkQrToken = extractQrFromIntent(intent)
         deepLinkVerify = extractVerifyFromIntent(intent)

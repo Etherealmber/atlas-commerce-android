@@ -489,6 +489,7 @@ private fun AtlasGate(
                         onToast = showToast,
                         updateState = updateState,
                         onShowUpdateProgress = viewModel::showUpdateDownloadBanner,
+                        captureProtectionAllowed = overlay == null,
                         onUnlockSavedAccount = { entry, afterAuthentication ->
                             val authActivity = context.findActivity() as? FragmentActivity
                             if (authActivity == null || !DeviceUnlockAuthenticator.isAvailable(authActivity)) {

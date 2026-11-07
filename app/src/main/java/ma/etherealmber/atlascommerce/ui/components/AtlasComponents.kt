@@ -522,9 +522,17 @@ fun AtlasTextField(
     singleLine: Boolean = true,
     onDone: (() -> Unit)? = null,
     clearFocusOnSend: Boolean = true,
+    onPasswordVisibilityChange: ((Boolean) -> Unit)? = null,
 ) {
     var revealed by remember { mutableStateOf(false) }
+    val currentOnPasswordVisibilityChange by rememberUpdatedState(onPasswordVisibilityChange)
     val focusManager = LocalFocusManager.current
+
+    DisposableEffect(isPassword) {
+        onDispose {
+            if (isPassword) currentOnPasswordVisibilityChange?.invoke(false)
+        }
+    }
 
     val placeholderContent: (@Composable () -> Unit)? = if (placeholder == null) {
         null
@@ -545,7 +553,10 @@ fun AtlasTextField(
         null
     } else {
         {
-            IconButton(onClick = { revealed = !revealed }) {
+            IconButton(onClick = {
+                revealed = !revealed
+                currentOnPasswordVisibilityChange?.invoke(revealed)
+            }) {
                 Icon(
                     imageVector = if (revealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                     contentDescription = if (revealed) atlasText("Masquer") else atlasText("Afficher"),
