@@ -234,6 +234,11 @@ fun AtlasRoot(
                         onOpenNotificationsConsumed = onOpenNotificationsConsumed,
                         openSettingsRequested = openSettingsRequested,
                         onOpenSettingsConsumed = onOpenSettingsConsumed,
+                        notificationDownloadInfo = notificationDownloadInfo,
+                        onNotificationDownloadConsumed = onNotificationDownloadConsumed,
+                        notificationInstallInfo = notificationInstallInfo,
+                        notificationInstallRequested = notificationInstallRequested,
+                        onNotificationInstallConsumed = onNotificationInstallConsumed,
                         viewModel = viewModel,
                     )
                 }
@@ -253,6 +258,11 @@ private fun AtlasGate(
     onOpenNotificationsConsumed: () -> Unit,
     openSettingsRequested: Boolean,
     onOpenSettingsConsumed: () -> Unit,
+    notificationDownloadInfo: UpdateInfo?,
+    onNotificationDownloadConsumed: () -> Unit,
+    notificationInstallInfo: UpdateInfo?,
+    notificationInstallRequested: Boolean,
+    onNotificationInstallConsumed: () -> Unit,
     viewModel: AppViewModel,
 ) {
     val context = LocalContext.current
@@ -415,20 +425,29 @@ private fun AtlasGate(
         onNotificationInstallConsumed()
     }
 
+    val missingUpdateMessage = atlasText(
+        "Le fichier de mise à jour n'est plus disponible. Téléchargez-le à nouveau.",
+        "The update file is no longer available. Download it again.",
+        "ملف التحديث لم يعد متاحاً. قم بتنزيله مرة أخرى.",
+    )
+
     LaunchedEffect(updateState, pendingNotificationInstallInfo) {
         val pending = pendingNotificationInstallInfo ?: return@LaunchedEffect
-        if (updateState is UpdateState.ReadyToInstall && updateState.info.versionCode == pending.versionCode) {
+        val currentUpdateState = updateState
+        if (currentUpdateState is UpdateState.ReadyToInstall &&
+            currentUpdateState.info.versionCode == pending.versionCode
+        ) {
             pendingNotificationInstallInfo = null
             triggerInstall()
         } else if (
-            updateState is UpdateState.Available &&
-            updateState.info.versionCode == pending.versionCode
+            currentUpdateState is UpdateState.Available &&
+            currentUpdateState.info.versionCode == pending.versionCode
         ) {
             pendingNotificationInstallInfo = null
-            showToast(atlasText("Le fichier de mise à jour n'est plus disponible. Téléchargez-le à nouveau.", "The update file is no longer available. Download it again.", "ملف التحديث لم يعد متاحاً. قم بتنزيله مرة أخرى."))
-        } else if (updateState is UpdateState.Error) {
+            showToast(missingUpdateMessage)
+        } else if (currentUpdateState is UpdateState.Error) {
             pendingNotificationInstallInfo = null
-            showToast(atlasText("Le fichier de mise à jour n'est plus disponible. Téléchargez-le à nouveau.", "The update file is no longer available. Download it again.", "ملف التحديث لم يعد متاحاً. قم بتنزيله مرة أخرى."))
+            showToast(missingUpdateMessage)
         }
     }
 
