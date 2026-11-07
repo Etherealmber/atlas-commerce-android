@@ -17,6 +17,7 @@ import ma.etherealmber.atlascommerce.core.net.ServerProbe
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
+import ma.etherealmber.atlascommerce.core.server.ServerSelection
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import javax.inject.Inject
 
@@ -85,11 +86,14 @@ class ServerSetupViewModel @Inject constructor(
 
     fun continueWithSavedServer(entry: SavedServerEntry, onDone: () -> Unit) {
         if (_state.value.saving) return
+        val targetSelection = serverConfig.validateSelection(entry.url).getOrElse { throwable ->
+            _state.update { it.copy(saving = false, error = throwable.message ?: "Adresse de serveur invalide.") }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(saving = true, error = null) }
             val previousUrl = serverConfig.selection.value?.baseUrl
-            val targetNormalized = ServerUrl.normalize(entry.url)
-            if (previousUrl != null && !previousUrl.equals(targetNormalized, ignoreCase = true)) {
+            if (shouldRevokeSessionForServerSwitch(previousUrl, Result.success(targetSelection))) {
                 sessionManager.signOut()
             }
             serverConfig.select(entry.url, entry.label, rememberServer = true).fold(
@@ -141,11 +145,14 @@ class ServerSetupViewModel @Inject constructor(
             _state.update { it.copy(error = "Saisissez une adresse de serveur.") }
             return
         }
+        val targetSelection = serverConfig.validateSelection(raw).getOrElse { throwable ->
+            _state.update { it.copy(saving = false, error = throwable.message ?: "Adresse de serveur invalide.") }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(saving = true, error = null) }
             val previousUrl = serverConfig.selection.value?.baseUrl
-            val targetNormalized = ServerUrl.normalize(raw)
-            if (previousUrl != null && !previousUrl.equals(targetNormalized, ignoreCase = true)) {
+            if (shouldRevokeSessionForServerSwitch(previousUrl, Result.success(targetSelection))) {
                 sessionManager.signOut()
             }
             val result = serverConfig.select(
@@ -169,4 +176,16 @@ class ServerSetupViewModel @Inject constructor(
             )
         }
     }
+}
+
+/** Invalid targets never revoke the active session; unknown prior origins fail closed. */
+internal fun shouldRevokeSessionForServerSwitch(
+    previousUrl: String?,
+    targetSelection: Result<ServerSelection>,
+): Boolean {
+    val targetUrl = targetSelection.getOrNull()?.baseUrl ?: return false
+    if (previousUrl == null) return false
+    val previousNormalized = ServerUrl.normalize(previousUrl) ?: return true
+    val targetNormalized = ServerUrl.normalize(targetUrl) ?: return true
+    return !previousNormalized.equals(targetNormalized, ignoreCase = true)
 }
