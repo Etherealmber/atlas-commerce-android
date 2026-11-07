@@ -945,11 +945,25 @@ jobs:
           EOF
           )"
           if [ -n "$EXISTING_PR" ]; then
-            gh pr edit "$EXISTING_PR" --title "$PR_TITLE" --body "$PR_BODY"
+            if ! gh pr edit "$EXISTING_PR" --title "$PR_TITLE" --body "$PR_BODY"; then
+              echo "::error title=GitHub Actions cannot update pull requests::Enable 'Allow GitHub Actions to create and approve pull requests' in repository Settings > Actions > General, then rerun this workflow. The job already requests pull-requests: write."
+              {
+                echo "## Release metadata PR was not updated"
+                echo "The GitHub Actions token is blocked from creating/updating pull requests by repository settings. Enable **Allow GitHub Actions to create and approve pull requests** at [Settings → Actions → General](https://github.com/${GITHUB_REPOSITORY}/settings/actions), then rerun this workflow."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
             PR_URL="$(gh pr view "$EXISTING_PR" --json url --jq .url)"
             echo "Updated existing release metadata PR: $PR_URL"
           else
-            PR_URL="$(gh pr create --base main --head "$DOCS_BRANCH" --title "$PR_TITLE" --body "$PR_BODY")"
+            if ! PR_URL="$(gh pr create --base main --head "$DOCS_BRANCH" --title "$PR_TITLE" --body "$PR_BODY")"; then
+              echo "::error title=GitHub Actions cannot create pull requests::Enable 'Allow GitHub Actions to create and approve pull requests' in repository Settings > Actions > General, then rerun this workflow. The metadata branch was pushed successfully; the job already requests pull-requests: write."
+              {
+                echo "## Release metadata PR was not created"
+                echo "The metadata branch **${DOCS_BRANCH}** was pushed, but the GitHub Actions token is blocked from creating pull requests by repository settings. Enable **Allow GitHub Actions to create and approve pull requests** at [Settings → Actions → General](https://github.com/${GITHUB_REPOSITORY}/settings/actions), then rerun this workflow."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
             echo "Created release metadata PR: $PR_URL"
           fi
           {

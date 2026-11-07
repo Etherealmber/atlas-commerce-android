@@ -80,6 +80,10 @@
             </intent-filter>
         </service>
 
+        <receiver
+            android:name=".core.update.ApkInstallStatusReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

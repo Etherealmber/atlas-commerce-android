@@ -835,7 +835,15 @@ class AppUpdateManagerTest {
         val manifest = File(moduleDir, "AndroidManifest.xml").readText()
         assertTrue("MainActivity must remain exported launcher", manifest.contains(".MainActivity"))
         assertTrue("Launcher category required", manifest.contains("android.intent.category.LAUNCHER"))
-        assertTrue("FileProvider required for APK updates", manifest.contains("androidx.core.content.FileProvider"))
+        assertTrue("FileProvider required for app-private file sharing", manifest.contains("androidx.core.content.FileProvider"))
+        assertTrue("PackageInstaller status receiver must be declared", manifest.contains(".core.update.ApkInstallStatusReceiver"))
+        val updateManagerSource = File(
+            moduleDir,
+            "java/ma/etherealmber/atlascommerce/core/update/AppUpdateManager.kt",
+        ).readText()
+        assertTrue("APK installs must use PackageInstaller sessions", updateManagerSource.contains("PackageInstaller.SessionParams"))
+        assertFalse("Do not hand APK files to generic ACTION_VIEW handlers", updateManagerSource.contains("Intent.ACTION_VIEW"))
+        assertFalse("Do not install APKs using a generic archive MIME intent", updateManagerSource.contains("application/vnd.android.package-archive"))
 
         val proguardFile = File("proguard-rules.pro").takeIf { it.isFile }
             ?: File("app/proguard-rules.pro")

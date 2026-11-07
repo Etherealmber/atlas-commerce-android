@@ -450,7 +450,7 @@ fun ProfileScreen(
             }
         }
 
-        currentSavedAccount?.let { account ->
+        if (supportsStrongBiometricUnlock) currentSavedAccount?.let { account ->
             AtlasCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -783,13 +783,13 @@ fun ProfileScreen(
                                     role = profileRoleLabel(account.role),
                                     serverBaseUrl = serverSelection?.baseUrl,
                                     active = false,
-                                    subtitle = if (account.canUseDeviceUnlock) {
+                                    subtitle = if (supportsStrongBiometricUnlock && account.canUseDeviceUnlock) {
                                         atlasText("Connexion par biométrie forte activée", "Strong biometric sign-in enabled", "تسجيل الدخول بالبصمة القوية مفعّل")
                                     } else {
                                         atlasText("Mot de passe requis", "Password required", "كلمة المرور مطلوبة")
                                     },
                                     onClick = {
-                                        if (account.canUseDeviceUnlock) {
+                                        if (supportsStrongBiometricUnlock && account.canUseDeviceUnlock) {
                                             unlockAndSwitchSavedAccount(account)
                                         } else {
                                             showAccountManager = false

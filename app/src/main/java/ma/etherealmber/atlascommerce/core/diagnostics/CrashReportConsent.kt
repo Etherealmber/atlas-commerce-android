@@ -4,10 +4,22 @@ import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 
+internal fun <T : Any> resolveCrashlyticsInstance(
+    defaultFirebaseAppPresent: Boolean,
+    getInstance: () -> T,
+    onFailure: (Throwable) -> Unit,
+): T? {
+    if (!defaultFirebaseAppPresent) return null
+    return runCatching(getInstance)
+        .onFailure(onFailure)
+        .getOrNull()
+}
+
 /** Opt-in automatic crash uploads. Collection is also disabled by default in the manifest. */
 object CrashReportConsent {
     private const val PREFS = "atlas_crash_reporting"
     private const val KEY_ENABLED = "automatic_crash_reports_enabled"
+    private val lock = Any()
 
     /** True when Firebase Core has initialized the app used by FCM and other Firebase products. */
     fun hasDefaultFirebaseApp(context: Context): Boolean = runCatching {
@@ -50,21 +62,22 @@ object CrashReportConsent {
         }.getOrDefault(false)
     }
 
-    private fun crashlyticsOrNull(context: Context): FirebaseCrashlytics? {
-        val defaultApp = runCatching {
-            FirebaseApp.getApps(context)
-                .firstOrNull { it.name == FirebaseApp.DEFAULT_APP_NAME }
-                ?: FirebaseApp.initializeApp(context)
+    // Only use FirebaseInitProvider's app. Creating a default FirebaseApp here can run from an
+    // IO caller and expose the Crashlytics accessor before Firebase's UI-executor registrars finish.
+    private fun crashlyticsOrNull(context: Context): FirebaseCrashlytics? = synchronized(lock) {
+        val hasDefaultApp = runCatching {
+            FirebaseApp.getApps(context).any { it.name == FirebaseApp.DEFAULT_APP_NAME }
         }.onFailure { error ->
-            logCrashlyticsFailure("Could not initialize Firebase configuration", error)
-        }.getOrNull()
-        if (defaultApp?.name != FirebaseApp.DEFAULT_APP_NAME) return null
+            logCrashlyticsFailure("Could not inspect Firebase configuration", error)
+        }.getOrDefault(false)
 
-        return runCatching { FirebaseCrashlytics.getInstance() }
-            .onFailure { error ->
+        resolveCrashlyticsInstance(
+            defaultFirebaseAppPresent = hasDefaultApp,
+            getInstance = { FirebaseCrashlytics.getInstance() },
+            onFailure = { error ->
                 logCrashlyticsFailure("Firebase Crashlytics is not usable in this build", error)
-            }
-            .getOrNull()
+            },
+        )
     }
 
     private fun logCrashlyticsFailure(message: String, error: Throwable) {

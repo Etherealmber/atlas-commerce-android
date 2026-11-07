@@ -132,9 +132,10 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
-        viewModelScope.launch(Dispatchers.IO) {
-            // Discover Crashlytics in the configured Firebase build and restore the user's
-            // explicit opt-in. Both state flows used by Settings must reflect persisted consent.
+        viewModelScope.launch {
+            // Resolve Firebase components on the main thread after FirebaseInitProvider has
+            // created the default app. Looking them up from the background startup coroutine
+            // can race Firebase's UI-executor component discovery and report a false NPE.
             val available = CrashReportConsent.isConfigured(applicationContext)
             CrashReportConsent.applyStoredConsent(applicationContext)
             _automaticCrashReportsEnabled.value = available && CrashReportConsent.isEnabled(applicationContext)

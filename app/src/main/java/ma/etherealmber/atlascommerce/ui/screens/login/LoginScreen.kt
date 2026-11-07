@@ -128,7 +128,7 @@ fun LoginScreen(
     updateState: UpdateState = UpdateState.Idle,
     onShowUpdateProgress: () -> Unit = {},
     captureProtectionAllowed: Boolean = true,
-    deviceUnlockAvailable: Boolean = true,
+    deviceUnlockAvailable: Boolean = false,
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     LoginScreenContent(
@@ -211,7 +211,8 @@ private fun LoginScreenContent(
             return@LaunchedEffect
         }
         if (savedAccounts.isNotEmpty()) {
-            val savedAccount = savedAccounts.firstOrNull { it.canUseDeviceUnlock } ?: savedAccounts.first()
+            val savedAccount = savedAccounts.firstOrNull { deviceUnlockAvailable && it.canUseDeviceUnlock }
+                ?: savedAccounts.first()
             viewModel.onUsernameChange(savedAccount.username)
             accountPromptHandled = true
         } else {

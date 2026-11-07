@@ -1,0 +1,72 @@
+package ma.etherealmber.atlascommerce.core.diagnostics
+
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class CrashReportConsentTest {
+    @Test
+    fun doesNotRequestCrashlyticsWhenDefaultFirebaseAppIsMissing() {
+        var factoryCalled = false
+        var failureReported = false
+
+        val instance = resolveCrashlyticsInstance(
+            defaultFirebaseAppPresent = false,
+            getInstance = {
+                factoryCalled = true
+                Any()
+            },
+            onFailure = { failureReported = true },
+        )
+
+        assertNull(instance)
+        assertFalse(factoryCalled)
+        assertFalse(failureReported)
+    }
+
+    @Test
+    fun treatsMissingCrashlyticsComponentAsUnavailableWithoutPropagating() {
+        val expected = NullPointerException("FirebaseCrashlytics component is not present.")
+        var reported: Throwable? = null
+
+        val instance = resolveCrashlyticsInstance(
+            defaultFirebaseAppPresent = true,
+            getInstance = { throw expected },
+            onFailure = { reported = it },
+        )
+
+        assertNull(instance)
+        assertSame(expected, reported)
+    }
+
+    @Test
+    fun returnsCrashlyticsWhenComponentIsAvailable() {
+        val expected = Any()
+        var failureReported = false
+
+        val instance = resolveCrashlyticsInstance(
+            defaultFirebaseAppPresent = true,
+            getInstance = { expected },
+            onFailure = { failureReported = true },
+        )
+
+        assertSame(expected, instance)
+        assertFalse(failureReported)
+    }
+
+    @Test
+    fun firebaseLookupDoesNotInitializeAnAppOutsideFirebaseInitProvider() {
+        val source = java.io.File(
+            "src/main/java/ma/etherealmber/atlascommerce/core/diagnostics/CrashReportConsent.kt",
+        ).takeIf { it.isFile } ?: java.io.File(
+            "app/src/main/java/ma/etherealmber/atlascommerce/core/diagnostics/CrashReportConsent.kt",
+        )
+        assertTrue("CrashReportConsent source must exist", source.isFile)
+        assertFalse(
+            "Do not create FirebaseApp on a background caller; FirebaseInitProvider owns default-app startup",
+            source.readText().contains("FirebaseApp.initializeApp(context)"),
+        )
+    }
+}
