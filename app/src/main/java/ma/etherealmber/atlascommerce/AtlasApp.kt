@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -40,10 +41,12 @@ class AtlasApp : Application() {
             tag = "AtlasApp",
             message = "Application started (${ma.etherealmber.atlascommerce.core.AppDetails.VERSION_NAME} build ${ma.etherealmber.atlascommerce.core.AppDetails.VERSION_CODE})",
         )
-        // These involve disk/Firebase initialization. Keep them off the launch thread so a slow
-        // emulator or a large cached-report directory cannot hold Android on the splash screen.
+        // Keep cache cleanup off the launch thread. Crashlytics lookup is marshalled to the main
+        // dispatcher only after FirebaseInitProvider, avoiding partially registered components.
         startupIoScope.launch {
-            ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent.applyStoredConsent(this@AtlasApp)
+            withContext(Dispatchers.Main.immediate) {
+                ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent.applyStoredConsent(this@AtlasApp)
+            }
             runCatching {
                 ma.etherealmber.atlascommerce.data.FinanceReportCache.pruneExpired(java.io.File(cacheDir, "finance"))
             }.onFailure { error ->

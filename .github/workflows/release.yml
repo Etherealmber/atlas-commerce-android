@@ -815,7 +815,7 @@ jobs:
           if-no-files-found: ignore
 
   sync-release-docs:
-    name: Open release metadata pull request
+    name: Synchronize release metadata on main
     needs: [build, publish-release]
     if: >-
       needs.build.outputs.signed == 'true' &&
@@ -823,24 +823,45 @@ jobs:
       (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-24.04
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     concurrency:
       group: release-docs-version
       cancel-in-progress: false
     steps:
+      - name: Create release-sync App token
+        id: release-sync-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.RELEASE_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_SYNC_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: atlas-commerce-android
+          permission-contents: write
+
+      - name: Resolve release-sync App bot identity
+        id: release-sync-bot
+        env:
+          GH_TOKEN: ${{ steps.release-sync-token.outputs.token }}
+          APP_SLUG: ${{ steps.release-sync-token.outputs.app-slug }}
+        run: |
+          user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          echo "user_id=${user_id}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout main
         uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 1
+          token: ${{ steps.release-sync-token.outputs.token }}
 
-      - name: Prepare release metadata pull request
+      - name: Prepare release metadata directly on main
         env:
           VERSION_NAME: ${{ needs.build.outputs.version_name }}
           VERSION_CODE: ${{ needs.build.outputs.version_code }}
           UPDATE_APP_VERSION: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-sync-token.outputs.token }}
+          APP_SLUG: ${{ steps.release-sync-token.outputs.app-slug }}
+          APP_USER_ID: ${{ steps.release-sync-bot.outputs.user_id }}
         run: |
           set -euo pipefail
           RELEASE_TAG="v${VERSION_NAME}"
@@ -848,9 +869,6 @@ jobs:
             echo "Release $RELEASE_TAG was not published; leaving metadata unchanged."
             exit 0
           fi
-
-          DOCS_BRANCH="automation/release-metadata-${RELEASE_TAG}"
-          git switch -c "$DOCS_BRANCH"
 
           python3 - "$VERSION_NAME" "$VERSION_CODE" "$UPDATE_APP_VERSION" <<'PY'
           import re
@@ -924,36 +942,24 @@ jobs:
                   print(f"app/build.gradle.kts already shows {version} ({version_code})")
           PY
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${APP_USER_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
           git add README.md SECURITY.md app/build.gradle.kts
           if git diff --cached --quiet; then
-            echo "Release metadata already matches $RELEASE_TAG; no pull request is needed."
+            echo "Release metadata already matches $RELEASE_TAG; no commit is needed."
             exit 0
           fi
           git commit -m "chore(release): sync metadata for ${RELEASE_TAG}"
-          # This version-specific branch is owned by this automation; force-update it on reruns.
-          git push --force origin "HEAD:refs/heads/${DOCS_BRANCH}"
-
-          EXISTING_PR="$(gh pr list --state open --base main --json number,headRefName \
-            --jq ".[] | select(.headRefName == \"${DOCS_BRANCH}\") | .number" | head -n 1)"
-          PR_TITLE="chore(release): sync metadata for ${RELEASE_TAG}"
-          PR_BODY="$(cat <<EOF
-          Release metadata for ${RELEASE_TAG}.
-
-          This PR synchronizes the README and security baseline, and for a manual release dispatched from main also synchronizes the Android app version. The repository requires CodeQL results before merging. If GitHub asks for approval to run workflows created by Actions, approve them so CodeQL can report results.
-          EOF
-          )"
-          if [ -n "$EXISTING_PR" ]; then
-            gh pr edit "$EXISTING_PR" --title "$PR_TITLE" --body "$PR_BODY"
-            PR_URL="$(gh pr view "$EXISTING_PR" --json url --jq .url)"
-            echo "Updated existing release metadata PR: $PR_URL"
-          else
-            PR_URL="$(gh pr create --base main --head "$DOCS_BRANCH" --title "$PR_TITLE" --body "$PR_BODY")"
-            echo "Created release metadata PR: $PR_URL"
+          if ! git push origin "HEAD:refs/heads/main"; then
+            echo "::error title=Release metadata push blocked::Confirm the release-sync App has Contents: write, is installed on this repository, and is an Always bypass actor on the Code scanning gate ruleset."
+            {
+              echo "## Release metadata was not written to main"
+              echo "The dedicated release-sync App needs **Contents: write** and must be in the active **Code scanning gate** ruleset bypass list with **Always** mode. This bypass applies to the App identity and skips the ruleset checks for its direct push. If those settings are already correct, retry after syncing with the latest main branch."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
           {
-            echo "## Release metadata"
-            echo "Opened or updated a PR for **${RELEASE_TAG}**: ${PR_URL}"
-            echo "Approve the PR's GitHub Actions workflows if prompted, then wait for CodeQL before merging."
+            echo "## Release metadata synchronized"
+            echo "Committed metadata for **${RELEASE_TAG}** directly to `main` using the dedicated release-sync App."
+            echo "The active ruleset bypass lets this App write directly; other repository actors remain subject to the ruleset."
           } >> "$GITHUB_STEP_SUMMARY"

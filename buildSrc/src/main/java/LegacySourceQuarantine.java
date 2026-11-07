@@ -57,16 +57,22 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/core/security/DeviceUnlockAuthenticator.kt",
             "main/java/ma/etherealmber/atlascommerce/core/security/DeviceUnlockSetupPrompt.kt",
             "main/java/ma/etherealmber/atlascommerce/core/server/ServerConfig.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/session/FreshProcessStartup.kt",
             "main/java/ma/etherealmber/atlascommerce/core/session/SessionManager.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/update/ApkInstallStatusReceiver.kt",
             "main/java/ma/etherealmber/atlascommerce/core/update/AppUpdateManager.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/update/UpdateApkTrust.kt",
             "main/java/ma/etherealmber/atlascommerce/core/update/UpdateCheckWorker.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/update/UpdateDownloadWorker.kt",
             "main/java/ma/etherealmber/atlascommerce/core/update/UpdateModels.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/update/UpdateNotificationActions.kt",
             "main/java/ma/etherealmber/atlascommerce/core/update/UpdateNotifier.kt",
             "main/java/ma/etherealmber/atlascommerce/data/CartStore.kt",
             "main/java/ma/etherealmber/atlascommerce/data/FinanceReportCache.kt",
             "main/java/ma/etherealmber/atlascommerce/data/OfflineCache.kt",
             "main/java/ma/etherealmber/atlascommerce/data/model/Models.kt",
             "main/java/ma/etherealmber/atlascommerce/data/repo/AgentPrompt.kt",
+            "main/java/ma/etherealmber/atlascommerce/data/repo/AssistSseFrameParser.kt",
             "main/java/ma/etherealmber/atlascommerce/data/repo/AuthRepository.kt",
             "main/java/ma/etherealmber/atlascommerce/data/repo/CommerceRepository.kt",
             "main/java/ma/etherealmber/atlascommerce/di/AppModule.kt",
@@ -157,6 +163,7 @@ public final class LegacySourceQuarantine {
             "test/java/ma/etherealmber/atlascommerce/AppLanguageTest.kt",
             "test/java/ma/etherealmber/atlascommerce/AppUpdateManagerTest.kt",
             "test/java/ma/etherealmber/atlascommerce/AtlasFormatTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/DeviceUnlockPlatformPolicyTest.kt",
             "test/java/ma/etherealmber/atlascommerce/DiagnosticReportMessageTest.kt",
             "test/java/ma/etherealmber/atlascommerce/FinanceReportCacheTest.kt",
             "test/java/ma/etherealmber/atlascommerce/LocalStorageRecommendationTest.kt",
@@ -169,8 +176,14 @@ public final class LegacySourceQuarantine {
             "test/java/ma/etherealmber/atlascommerce/SnakeGameTest.kt",
             "test/java/ma/etherealmber/atlascommerce/StockAdjustmentInputTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/diagnostics/CrashBreadcrumbPersistenceTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/core/diagnostics/CrashReportConsentTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/net/AtlasVersionHeadersTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/ui/root/AppResumeRefreshPolicyTest.kt"
+            "test/java/ma/etherealmber/atlascommerce/core/session/FreshProcessStartupTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/core/update/UpdateApkTrustTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/data/repo/AssistSseFrameParserTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/push/PushNotificationContentTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/ui/root/AppResumeRefreshPolicyTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/ui/screens/agent/AgentStreamingTest.kt"
         ))
     );
 
@@ -338,14 +351,20 @@ public final class LegacySourceQuarantine {
         }
     }
 
-    private static String findGitExecutable() {
-        List<String> candidates = new ArrayList<>();
-        candidates.add("git");
-        candidates.add("C:/Program Files/Git/cmd/git.exe");
-        candidates.add("C:/Program Files (x86)/Git/cmd/git.exe");
+    static String findGitExecutable() {
+        // Never ask ProcessBuilder to resolve a bare "git" command through PATH: build
+        // environments may inherit a PATH containing attacker-controlled directories.
+        List<String> candidates = new ArrayList<>(List.of(
+            "/usr/bin/git",
+            "/usr/local/bin/git",
+            "/opt/homebrew/bin/git",
+            "/opt/local/bin/git",
+            "C:/Program Files/Git/cmd/git.exe",
+            "C:/Program Files (x86)/Git/cmd/git.exe"
+        ));
         String localAppData = System.getenv("LOCALAPPDATA");
-        if (localAppData != null && !localAppData.isBlank()) {
-            candidates.add(localAppData + "/Programs/Git/cmd/git.exe");
+        if (localAppData != null && !localAppData.isBlank() && new File(localAppData).isAbsolute()) {
+            candidates.add(new File(localAppData, "Programs/Git/cmd/git.exe").getPath());
             File ghDesktop = new File(localAppData, "GitHubDesktop");
             File[] children = ghDesktop.listFiles();
             if (children != null) {
@@ -356,14 +375,18 @@ public final class LegacySourceQuarantine {
                 }
             }
         }
-        for (String bin : candidates) {
+        for (String candidate : candidates) {
+            File executable = new File(candidate);
+            if (!executable.isAbsolute() || !executable.isFile() || !executable.canExecute()) {
+                continue;
+            }
             try {
-                Process p = new ProcessBuilder(bin, "--version")
+                Process p = new ProcessBuilder(executable.getAbsolutePath(), "--version")
                     .redirectErrorStream(true)
                     .start();
                 p.getInputStream().readAllBytes();
                 if (p.waitFor() == 0) {
-                    return bin;
+                    return executable.getAbsolutePath();
                 }
             } catch (Exception ignored) {
             }

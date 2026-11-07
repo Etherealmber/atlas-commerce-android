@@ -1,8 +1,10 @@
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
+import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -132,9 +134,18 @@ public class BuildSupportTest {
         )));
     }
 
+    @Test
+    public void gitExecutableResolutionUsesAnAbsolutePath() {
+        String git = LegacySourceQuarantine.findGitExecutable();
+        assertNotNull("Git must be installed at a supported absolute path for this test", git);
+        assertTrue("Git executable must not be resolved through PATH", new File(git).isAbsolute());
+    }
+
     private static void runGit(Path cwd, String... args) throws Exception {
+        String git = LegacySourceQuarantine.findGitExecutable();
+        assertNotNull("Git executable must be found without PATH lookup", git);
         String[] cmd = new String[args.length + 1];
-        cmd[0] = "git";
+        cmd[0] = git;
         System.arraycopy(args, 0, cmd, 1, args.length);
         Process p = new ProcessBuilder(cmd).directory(cwd.toFile()).redirectErrorStream(true).start();
         String output = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
