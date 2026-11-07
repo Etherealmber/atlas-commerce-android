@@ -91,11 +91,11 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    fun signInWithSavedAccount(entry: SavedAccountEntry) {
-        if (_state.value.loading || !entry.canUseDeviceUnlock) return
+    fun signInWithSavedAccount(entry: SavedAccountEntry, authenticatedToken: String) {
+        if (_state.value.loading || !entry.canUseDeviceUnlock || authenticatedToken.isBlank()) return
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
-            when (val res = sessionManager.switchToSavedAccount(entry)) {
+            when (val res = sessionManager.switchToSavedAccount(entry, authenticatedToken)) {
                 is ApiResult.Success -> {
                     _state.update { it.copy(loading = false, error = null) }
 

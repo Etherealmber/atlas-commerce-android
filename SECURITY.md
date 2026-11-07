@@ -41,10 +41,16 @@ not supported for production use.
 - Session tokens are bound by the worker to `(IP, device fingerprint)`. The fingerprint is a
   SHA-256 digest of a locally generated install UUID, `ANDROID_ID` and the package name — raw
   identifiers never leave the device and the digest is not reversible.
-- The token is kept in memory for requests and stored **encrypted at rest** with AES-256-GCM using
-  a non-exportable Android Keystore key (`atlas.session.v1`). If a device cannot use the Keystore,
-  the app falls back to app-private storage so a user is never locked out; the backup system is
-  disabled (`allowBackup=false`) either way.
+- The active session token is kept in memory for requests and stored **encrypted at rest** with
+  AES-256-GCM using a non-exportable Android Keystore key (`atlas.session.v1`). If a device cannot
+  use the Keystore, the app falls back to app-private storage so a user is never locked out; the
+  backup system is disabled (`allowBackup=false`) either way.
+- Remembered-account quick unlock uses a separate per-account AES-GCM Keystore key that requires
+  fresh local authentication. On Android 11+, `BiometricPrompt` receives a `CryptoObject`; on
+  Android 9/10, the callback must immediately consume the auth-bound cipher inside its short
+  Keystore authorization window. In both paths the saved-account token is released only after the
+  cipher successfully decrypts it. Legacy remembered tokens are not quick-unlockable; they can be
+  upgraded from an active authenticated session in settings or replaced by a new password sign-in.
 - Logout clears the token, the cart and the offline catalogue; sessions are never shared between
   servers, and changing the server forces a fresh login.
 
@@ -66,7 +72,8 @@ not supported for production use.
 
 | Data | Where | Purpose |
 | --- | --- | --- |
-| Encrypted session token | DataStore (app-private) | Stay signed in |
+| Encrypted active session token | DataStore (app-private) | Stay signed in |
+| Auth-bound saved-account token | DataStore ciphertext (`du1:`) + per-account Android Keystore key | Quick unlock after fresh biometric/device-credential authentication |
 | Username, role, display name, email, local-unlock opt-in | DataStore | Show the profile and remember device-unlock choice without storing the account password |
 | Server address, theme, density | DataStore | Settings |
 | Last product catalogue | App-private files (`atlas-cache/products.json`) | Offline browsing |

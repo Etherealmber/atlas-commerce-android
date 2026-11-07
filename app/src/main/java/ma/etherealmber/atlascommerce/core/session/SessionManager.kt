@@ -21,9 +21,11 @@ import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.TokenHolder
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
+import ma.etherealmber.atlascommerce.core.persist.DEVICE_UNLOCK_TOKEN_PREFIX
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.security.CryptoStore
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
+import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.data.CartStore
@@ -278,15 +280,15 @@ class SessionManager @Inject constructor(
      * Switches into an opted-in, encrypted saved account belonging strictly to
      * `entry.serverUrl`, flushing every trace of any previous session first.
      */
-    suspend fun switchToSavedAccount(entry: SavedAccountEntry): ApiResult<Unit> {
-        if (!entry.canUseDeviceUnlock) {
+    suspend fun switchToSavedAccount(entry: SavedAccountEntry, authenticatedToken: String): ApiResult<Unit> {
+        if (!entry.canUseDeviceUnlock || !entry.tokenCipher.startsWith(DEVICE_UNLOCK_TOKEN_PREFIX)) {
             return ApiResult.Failure(
                 "DEVICE_UNLOCK_DISABLED",
                 "Déverrouillage rapide désactivé — reconnectez-vous avec votre mot de passe.",
             )
         }
-        val token = runCatching { cryptoStore.decrypt(entry.tokenCipher) }.getOrNull()
-        if (token.isNullOrBlank()) {
+        val token = authenticatedToken.takeIf(String::isNotBlank)
+        if (token == null) {
             preferences.resetSavedAccountDeviceUnlockChoice(entry.serverUrl, entry.username)
             return ApiResult.Failure(
                 "SAVED_SESSION_EXPIRED",
@@ -332,6 +334,7 @@ class SessionManager @Inject constructor(
                     avatarUrl = resolvedAvatar,
                     phone = me.phone.orEmpty(),
                     rememberAccount = true,
+                    savedAccountTokenCipher = entry.tokenCipher,
                 )
                 return ApiResult.Success(Unit)
             }
@@ -340,6 +343,7 @@ class SessionManager @Inject constructor(
 
     suspend fun forgetSavedAccount(serverUrl: String, username: String) {
         preferences.removeSavedAccount(serverUrl, username)
+        DeviceUnlockAuthenticator.forgetSavedAccountKey(serverUrl, username)
         offlineCache.clearAccountScope(serverUrl, username)
     }
 
@@ -387,6 +391,7 @@ class SessionManager @Inject constructor(
         phone: String = "",
         rememberAccount: Boolean,
         clearRestoreDisabledAfterPasswordLogin: Boolean = false,
+        savedAccountTokenCipher: String? = null,
     ) {
         // A cold deep link can authenticate before startup cleanup finishes. Await cleanup
         // before writing the new active session so its final purge cannot erase this login.
@@ -420,7 +425,9 @@ class SessionManager @Inject constructor(
                         displayName = displayName,
                         email = email,
                         avatarUrl = avatarUrl,
-                        tokenCipher = cipher,
+                        tokenCipher = savedAccountTokenCipher ?: cipher,
+                        deviceUnlockEnabled = savedAccountTokenCipher?.startsWith(DEVICE_UNLOCK_TOKEN_PREFIX) == true,
+                        deviceUnlockChoiceMade = savedAccountTokenCipher?.startsWith(DEVICE_UNLOCK_TOKEN_PREFIX) == true,
                     ),
                 )
             }
@@ -467,8 +474,10 @@ class SessionManager @Inject constructor(
                         avatarUrl = updated.avatarUrl,
                     )
                     val savedForServer = preferences.savedAccountsForServer(updated.serverUrl).first()
-                    val shouldUpdateSaved = rememberAccount == true ||
-                        savedForServer.any { it.username.equals(updated.username, ignoreCase = true) }
+                    val existingSaved = savedForServer.firstOrNull {
+                        it.username.equals(updated.username, ignoreCase = true)
+                    }
+                    val shouldUpdateSaved = rememberAccount == true || existingSaved != null
                     if (shouldUpdateSaved) {
                         preferences.upsertSavedAccount(
                             SavedAccountEntry(
@@ -478,7 +487,9 @@ class SessionManager @Inject constructor(
                                 displayName = updated.displayName,
                                 email = updated.email,
                                 avatarUrl = updated.avatarUrl,
-                                tokenCipher = cipher,
+                                // /auth/me does not rotate the token; keep the authenticated
+                                // envelope instead of replacing it with an unprotected copy.
+                                tokenCipher = existingSaved?.takeIf { it.canUseDeviceUnlock }?.tokenCipher ?: cipher,
                             ),
                         )
                     }
