@@ -26,7 +26,12 @@ class SavedAccountDeviceUnlockTest {
         assertTrue(enabledWithoutProtectedToken.deviceUnlockChoiceMade)
         assertFalse(enabledWithoutProtectedToken.canUseDeviceUnlock)
 
-        val enabled = enabledWithoutProtectedToken.copy(tokenCipher = "du1:protected-token")
+        val enabled = enabledWithoutProtectedToken.copy(tokenCipher = "du2:protected-token")
         assertTrue(enabled.canUseDeviceUnlock)
+
+        // Tokens wrapped with the old short-window Android 9/10 key must require password sign-in.
+        val legacy = enabledWithoutProtectedToken.copy(tokenCipher = "du1:legacy-token")
+        assertFalse(legacy.canUseDeviceUnlock)
+        assertTrue(legacy.hasLegacyDeviceUnlockEnvelope)
     }
 }

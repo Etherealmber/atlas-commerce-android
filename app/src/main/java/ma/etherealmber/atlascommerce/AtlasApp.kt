@@ -24,6 +24,7 @@ class AtlasApp : Application() {
     val activeLanguage = _activeLanguage.asStateFlow()
     private val _languageLoaded = MutableStateFlow(false)
     val languageLoaded = _languageLoaded.asStateFlow()
+    private var initialActivityLanguageReadConsumed = false
 
     /** Applies a saved language only after the user explicitly chooses Restart now. */
     fun activateSavedLanguage(language: AppLanguage) {
@@ -64,6 +65,12 @@ class AtlasApp : Application() {
 
     /** A new task after the user closes the app applies the saved language; rotations do not. */
     fun prepareLanguageForFreshLaunch() {
+        // onCreate already started the initial language read for this process. Avoid immediately
+        // resetting that state and doing the same DataStore read again on the first Activity.
+        if (!initialActivityLanguageReadConsumed) {
+            initialActivityLanguageReadConsumed = true
+            return
+        }
         _languageLoaded.value = false
         startupIoScope.launch {
             val language = AtlasPreferences(this@AtlasApp).appLanguage.first()

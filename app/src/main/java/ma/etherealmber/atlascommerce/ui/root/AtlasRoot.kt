@@ -65,6 +65,7 @@ import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockSetupPrompt
+import ma.etherealmber.atlascommerce.core.update.UpdateInfo
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AppUpdateBanner
 import ma.etherealmber.atlascommerce.ui.components.AtlasBootSplashScreen
@@ -128,6 +129,11 @@ fun AtlasRoot(
     onOpenNotificationsConsumed: () -> Unit = {},
     openSettingsRequested: Boolean = false,
     onOpenSettingsConsumed: () -> Unit = {},
+    notificationDownloadInfo: UpdateInfo? = null,
+    onNotificationDownloadConsumed: () -> Unit = {},
+    notificationInstallInfo: UpdateInfo? = null,
+    notificationInstallRequested: Boolean = false,
+    onNotificationInstallConsumed: () -> Unit = {},
     viewModel: AppViewModel = hiltViewModel(),
 ) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -285,6 +291,7 @@ private fun AtlasGate(
     var pendingQrToken by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingQrMode by rememberSaveable { mutableStateOf(QrDeviceMode.SIGN_IN_PHONE) }
     var requestedTab by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingNotificationInstallInfo by remember { mutableStateOf<UpdateInfo?>(null) }
     var notificationPermissionPrompted by rememberSaveable { mutableStateOf(false) }
     var deviceUnlockSetupRequest by remember { mutableStateOf<DeviceUnlockSetupPrompt.Request?>(null) }
 
@@ -389,6 +396,42 @@ private fun AtlasGate(
         scope.launch { snackbarHostState.showSnackbar(atlasNotice(message, atlasLanguage)) }
     }
 
+    LaunchedEffect(notificationDownloadInfo) {
+        val info = notificationDownloadInfo ?: return@LaunchedEffect
+        requestNotificationPermissionIfNeeded()
+        viewModel.startUpdateDownload(overrideInfo = info)
+        onNotificationDownloadConsumed()
+    }
+
+    LaunchedEffect(notificationInstallRequested, notificationInstallInfo) {
+        if (!notificationInstallRequested) return@LaunchedEffect
+        val info = notificationInstallInfo
+        if (info != null && viewModel.restoreDownloadedUpdate(info)) {
+            triggerInstall()
+        } else {
+            pendingNotificationInstallInfo = info
+            viewModel.checkForUpdate(manual = true)
+        }
+        onNotificationInstallConsumed()
+    }
+
+    LaunchedEffect(updateState, pendingNotificationInstallInfo) {
+        val pending = pendingNotificationInstallInfo ?: return@LaunchedEffect
+        if (updateState is UpdateState.ReadyToInstall && updateState.info.versionCode == pending.versionCode) {
+            pendingNotificationInstallInfo = null
+            triggerInstall()
+        } else if (
+            updateState is UpdateState.Available &&
+            updateState.info.versionCode == pending.versionCode
+        ) {
+            pendingNotificationInstallInfo = null
+            showToast(atlasText("Le fichier de mise à jour n'est plus disponible. Téléchargez-le à nouveau.", "The update file is no longer available. Download it again.", "ملف التحديث لم يعد متاحاً. قم بتنزيله مرة أخرى."))
+        } else if (updateState is UpdateState.Error) {
+            pendingNotificationInstallInfo = null
+            showToast(atlasText("Le fichier de mise à jour n'est plus disponible. Téléchargez-le à nouveau.", "The update file is no longer available. Download it again.", "ملف التحديث لم يعد متاحاً. قم بتنزيله مرة أخرى."))
+        }
+    }
+
     LaunchedEffect(deepLinkVerify) {
         deepLinkVerify?.let { link ->
             val originHint = deepLinkServerOrigin
@@ -444,12 +487,13 @@ private fun AtlasGate(
         }
     }
     val loginDeviceUnlockUnavailableMessage = atlasText(
-        "Le déverrouillage local est indisponible. Connectez-vous avec votre mot de passe et configurez la biométrie ou un verrouillage sécurisé.",
-        "Local device unlock is unavailable. Sign in with your password and set up biometrics or a secure screen lock.",
-        "إلغاء القفل المحلي غير متاح. سجّل الدخول بكلمة المرور وأعد إعداد القياسات الحيوية أو قفل شاشة آمن.",
+        "La connexion biométrique rapide nécessite Android 11 ou une version ultérieure avec une biométrie forte. Utilisez le mot de passe de votre compte.",
+        "Quick biometric sign-in requires Android 11 or newer and an enrolled strong biometric. Use your account password instead.",
+        "يتطلب تسجيل الدخول السريع بالبصمة Android 11 أو أحدث وبصمة قوية مسجلة. استخدم كلمة مرور حسابك بدلاً من ذلك.",
     )
     val loginDeviceUnlockTitle = atlasText("Déverrouiller Atlas", "Unlock Atlas", "إلغاء قفل Atlas")
-    val loginDeviceUnlockSubtitle = atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك.")
+    val loginDeviceUnlockSubtitle = atlasText("Confirmez avec votre biométrie forte.", "Confirm with your strong biometric.", "أكد هويتك ببصمة قوية.")
+    val loginDeviceUnlockNegativeButton = atlasText("Annuler", "Cancel", "إلغاء")
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -490,6 +534,8 @@ private fun AtlasGate(
                         updateState = updateState,
                         onShowUpdateProgress = viewModel::showUpdateDownloadBanner,
                         captureProtectionAllowed = overlay == null,
+                        deviceUnlockAvailable = (context.findActivity() as? FragmentActivity)
+                            ?.let { DeviceUnlockAuthenticator.isAvailable(it) } == true,
                         onUnlockSavedAccount = { entry, afterAuthentication ->
                             val authActivity = context.findActivity() as? FragmentActivity
                             if (authActivity == null || !DeviceUnlockAuthenticator.isAvailable(authActivity)) {
@@ -503,6 +549,7 @@ private fun AtlasGate(
                                     entry.tokenCipher,
                                     loginDeviceUnlockTitle,
                                     loginDeviceUnlockSubtitle,
+                                    loginDeviceUnlockNegativeButton,
                                 ) { result ->
                                     when {
                                         result.outcome == DeviceUnlockAuthenticator.Outcome.AUTHENTICATED &&
@@ -715,11 +762,12 @@ private fun AtlasGate(
             if (activeUser != null) deviceUnlockSetupRequest?.let { request ->
                 val authActivity = context.findActivity() as? FragmentActivity
                 val localAuthAvailable = authActivity?.let { DeviceUnlockAuthenticator.isAvailable(it) } == true
-                val unavailableOptInMessage = atlasText("Utilisez votre mot de passe et configurez un verrouillage sécurisé pour activer le déverrouillage rapide.", "Use your password and set up a secure device lock to enable quick unlock.", "استخدم كلمة المرور وأعد إعداد قفل آمن لتفعيل إلغاء القفل السريع.")
-                val deviceUnlockAuthTitle = atlasText("Activer le déverrouillage Atlas", "Enable Atlas device unlock", "تفعيل إلغاء قفل Atlas")
-                val deviceUnlockAuthSubtitle = atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك.")
-                val deviceUnlockEnabledMessage = atlasText("Déverrouillage de l'appareil activé.", "Device unlock enabled.", "تم تفعيل إلغاء قفل الجهاز.")
-                val deviceUnlockFailureMessage = atlasText("Le déverrouillage local n'est pas disponible. Utilisez votre mot de passe et configurez un verrouillage sécurisé.", "Local device unlock is unavailable. Use your password and set up a secure device lock.", "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد قفل آمن.")
+                val unavailableOptInMessage = atlasText("La connexion biométrique rapide nécessite Android 11 ou une version ultérieure et une biométrie forte. Utilisez votre mot de passe.", "Quick biometric sign-in requires Android 11 or newer and an enrolled strong biometric. Use your account password instead.", "يتطلب تسجيل الدخول السريع بالبصمة Android 11 أو أحدث وبصمة قوية مسجلة. استخدم كلمة مرور حسابك بدلاً من ذلك.")
+                val deviceUnlockAuthTitle = atlasText("Activer la connexion biométrique Atlas", "Enable Atlas biometric sign-in", "تفعيل تسجيل الدخول ببصمة Atlas")
+                val deviceUnlockAuthSubtitle = atlasText("Confirmez avec votre biométrie forte.", "Confirm with your strong biometric.", "أكد هويتك ببصمة قوية.")
+                val deviceUnlockAuthNegativeButton = atlasText("Annuler", "Cancel", "إلغاء")
+                val deviceUnlockEnabledMessage = atlasText("Connexion biométrique activée.", "Biometric sign-in enabled.", "تم تفعيل تسجيل الدخول بالبصمة.")
+                val deviceUnlockFailureMessage = atlasText("La connexion biométrique nécessite Android 11 ou une version ultérieure et une biométrie forte. Utilisez votre mot de passe.", "Biometric sign-in requires Android 11 or newer and a strong biometric. Use your password instead.", "يتطلب تسجيل الدخول بالبصمة Android 11 أو أحدث وبصمة قوية. استخدم كلمة مرورك بدلاً من ذلك.")
                 AlertDialog(
                     onDismissRequest = {
                         viewModel.setSavedAccountDeviceUnlock(request.serverUrl, request.username, false)
@@ -735,15 +783,15 @@ private fun AtlasGate(
                     text = {
                         Text(if (localAuthAvailable) {
                             atlasText(
-                                "Utilisez votre biométrie ou le code PIN/mot de passe de votre appareil pour ouvrir votre session Atlas enregistrée. Le serveur la vérifiera à chaque connexion.",
-                                "Use biometrics or your device PIN/password to unlock your saved Atlas session. Atlas will verify the session with the server each time.",
-                                "استخدم القياسات الحيوية أو رمز PIN/كلمة مرور الجهاز لفتح جلسة Atlas المحفوظة. سيتحقق Atlas من الجلسة مع الخادم في كل مرة.",
+                                "Sur Android 11 ou une version ultérieure, utilisez une biométrie forte pour ouvrir votre session Atlas enregistrée. Le serveur la vérifiera à chaque connexion.",
+                                "On Android 11 or newer, use a strong biometric to unlock your saved Atlas session. Atlas will verify the session with the server each time.",
+                                "على Android 11 أو أحدث، استخدم بصمة قوية لفتح جلسة Atlas المحفوظة. سيتحقق Atlas من الجلسة مع الخادم في كل مرة.",
                             )
                         } else {
                             atlasText(
-                                "Le déverrouillage rapide est indisponible. Configurez la biométrie ou un verrouillage d'écran sécurisé ; vous pourrez continuer avec votre mot de passe.",
-                                "Quick unlock is unavailable. Set up biometrics or a secure screen lock; you can continue signing in with your password.",
-                                "إلغاء القفل السريع غير متاح. أعد إعداد القياسات الحيوية أو قفل شاشة آمن؛ ويمكنك المتابعة باستخدام كلمة المرور.",
+                                "La connexion biométrique nécessite Android 11 ou une version ultérieure et une biométrie forte. Vous pouvez continuer avec le mot de passe de votre compte.",
+                                "Biometric sign-in requires Android 11 or newer and an enrolled strong biometric. You can continue with your account password.",
+                                "يتطلب تسجيل الدخول بالبصمة Android 11 أو أحدث وبصمة قوية مسجلة. يمكنك المتابعة باستخدام كلمة مرور حسابك.",
                             )
                         })
                     },
@@ -767,6 +815,7 @@ private fun AtlasGate(
                                         savedAccount.tokenCipher,
                                         deviceUnlockAuthTitle,
                                         deviceUnlockAuthSubtitle,
+                                        deviceUnlockAuthNegativeButton,
                                     ) { result ->
                                         when {
                                             result.outcome == DeviceUnlockAuthenticator.Outcome.AUTHENTICATED &&

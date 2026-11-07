@@ -48,6 +48,7 @@ import ma.etherealmber.atlascommerce.core.server.ServerSelection
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
+import ma.etherealmber.atlascommerce.core.update.UpdateInfo
 import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
 import ma.etherealmber.atlascommerce.core.update.ReleaseChangelogEntry
 import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
@@ -398,9 +399,11 @@ class AppViewModel @Inject constructor(
         updateManager.checkForUpdate(manual = manual)
     }
 
-    fun startUpdateDownload(fromSettings: Boolean = false) {
-        updateManager.startDownload(fromSettings = fromSettings)
+    fun startUpdateDownload(fromSettings: Boolean = false, overrideInfo: UpdateInfo? = null) {
+        updateManager.startDownload(overrideInfo = overrideInfo, fromSettings = fromSettings)
     }
+
+    fun restoreDownloadedUpdate(info: UpdateInfo): Boolean = updateManager.restoreDownloadedUpdate(info)
 
     fun setUpdateDownloadSource(source: UpdateDownloadSource) {
         viewModelScope.launch {

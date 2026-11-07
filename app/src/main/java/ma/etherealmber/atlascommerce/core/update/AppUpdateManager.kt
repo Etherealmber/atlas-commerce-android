@@ -2,6 +2,7 @@ package ma.etherealmber.atlascommerce.core.update
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -105,6 +106,7 @@ class AppUpdateManager internal constructor(
     private val releasesApiUrl: String? = null,
     private val networkTransportProvider: () -> DownloadNetworkTransport = { DownloadNetworkTransport.OTHER },
     private val internetAvailableProvider: () -> Boolean = { false },
+    private val backgroundDownloadScheduler: ((UpdateInfo) -> Unit)? = null,
 ) {
 
     @Inject
@@ -154,6 +156,7 @@ class AppUpdateManager internal constructor(
         releasesApiUrl = UpdateDefaults.GITHUB_RELEASES_API_URL,
         networkTransportProvider = { detectDownloadNetworkTransport(context) },
         internetAvailableProvider = { hasDeviceInternetCapability(context) },
+        backgroundDownloadScheduler = { info -> UpdateDownloadWorker.enqueue(context, info) },
     )
 
     private val lock = Any()
@@ -619,10 +622,46 @@ class AppUpdateManager internal constructor(
                 hiddenInForeground = hideActiveDownloadInForeground,
             )
             notifyStarting(infoToDownload)
-            downloadJob = scope.launch(ioDispatcher) {
-                executeDownload(infoToDownload)
+            val queuedForBackground = backgroundDownloadScheduler?.let { scheduler ->
+                runCatching { scheduler(infoToDownload) }.isSuccess
+            } == true
+            if (!queuedForBackground) {
+                downloadJob = scope.launch(ioDispatcher) {
+                    executeDownload(infoToDownload)
+                }
             }
         }
+    }
+
+    /** Executes a queued WorkManager download in this process and requests bounded retries for network failures. */
+    internal suspend fun runDownloadFromWorker(info: UpdateInfo): Boolean {
+        var shouldNotifyStarting = false
+        val shouldRun = synchronized(lock) {
+            when (val current = _state.value) {
+                is UpdateState.ReadyToInstall -> {
+                    if (current.info.versionCode == info.versionCode && current.apkFile.exists()) {
+                        false
+                    } else {
+                        _state.value = UpdateState.Downloading(info, 0L, -1L)
+                        shouldNotifyStarting = true
+                        true
+                    }
+                }
+                is UpdateState.Downloading -> current.info.versionCode == info.versionCode
+                else -> {
+                    settingsStartedDownload = false
+                    deferredSettingsResultNotification = false
+                    hideActiveDownloadInForeground = false
+                    _state.value = UpdateState.Downloading(info, 0L, -1L)
+                    shouldNotifyStarting = true
+                    true
+                }
+            }
+        }
+        if (!shouldRun) return false
+        if (shouldNotifyStarting) notifyStarting(info)
+        executeDownload(info)
+        return (_state.value as? UpdateState.Error)?.recoverableNetwork == true
     }
 
     private suspend fun executeDownload(info: UpdateInfo) {
@@ -1208,6 +1247,49 @@ class AppUpdateManager internal constructor(
         }
     }
 
+    @Suppress("DEPRECATION")
+    private fun hasTrustedUpdateIdentity(context: Context, apkFile: File): Boolean {
+        return try {
+            val packageManager = context.packageManager
+            val candidate = packageManager.getPackageArchiveInfo(
+                apkFile.absolutePath,
+                PackageManager.GET_SIGNING_CERTIFICATES,
+            ) ?: return false
+            if (candidate.packageName != context.packageName) return false
+
+            val installed = packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_SIGNING_CERTIFICATES,
+            )
+            val candidateSigning = candidate.signingInfo ?: return false
+            val installedSigning = installed.signingInfo ?: return false
+            isTrustedUpdateApkIdentity(
+                expectedPackageName = context.packageName,
+                candidatePackageName = candidate.packageName,
+                candidateCurrentSigners = candidateSigning.apkContentsSigners.map { it.toByteArray() },
+                candidateSigningHistory = candidateSigning.signingCertificateHistory.orEmpty().map { it.toByteArray() },
+                installedCurrentSigners = installedSigning.apkContentsSigners.map { it.toByteArray() },
+            )
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Restore a completed package from the app-private cache when an Install notification is tapped after process death. */
+    fun restoreDownloadedUpdate(info: UpdateInfo): Boolean {
+        val apk = targetApkFile(info.versionCode)
+        if (!apk.exists() || apk.length() <= MIN_VALID_APK_BYTES) return false
+        val expectedSha = info.sha256?.takeIf { it.isNotBlank() }
+        if (expectedSha != null && !runCatching { computeSha256Hex(apk) }.getOrNull().equals(expectedSha, ignoreCase = true)) {
+            return false
+        }
+        synchronized(lock) {
+            if (isDownloadingLocked()) return false
+            _state.value = UpdateState.ReadyToInstall(info = info, apkFile = apk)
+        }
+        return true
+    }
+
     /**
      * Launches the Android package installer for a downloaded APK, or redirects to
      * Android's "Install unknown apps" screen if the user has not granted it yet.
@@ -1220,6 +1302,15 @@ class AppUpdateManager internal constructor(
                     message = "Le fichier d'installation n'est plus en cache. Relancez le téléchargement.",
                     info = current.info,
                 )
+            }
+            return false
+        }
+
+        if (!hasTrustedUpdateIdentity(context, current.apkFile)) {
+            val message = "L'APK téléchargé n'est pas une mise à jour Atlas Commerce signée par le certificat attendu."
+            AtlasLogBuffer.log("UPDATE", "Rejected APK with an unexpected package or signing identity", "ERROR")
+            synchronized(lock) {
+                _state.value = UpdateState.Error(message = message, info = current.info)
             }
             return false
         }

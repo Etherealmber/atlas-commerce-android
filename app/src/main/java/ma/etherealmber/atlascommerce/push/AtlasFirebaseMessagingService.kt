@@ -10,6 +10,9 @@ import dagger.hilt.android.AndroidEntryPoint
 import ma.etherealmber.atlascommerce.AtlasApp
 import ma.etherealmber.atlascommerce.MainActivity
 import ma.etherealmber.atlascommerce.R
+import ma.etherealmber.atlascommerce.core.AppLanguage
+import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
+import ma.etherealmber.atlascommerce.ui.i18n.notificationText
 import javax.inject.Inject
 
 /**
@@ -31,15 +34,28 @@ class AtlasFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        val title = message.notification?.title
-            ?: message.data["title"]
-            ?: "Atlas Commerce"
-        val body = message.notification?.body ?: message.data["body"]
-        if (body.isNullOrBlank()) return
-        showNotification(title, body, message.data)
+        val language = (application as? AtlasApp)?.activeLanguage?.value ?: AppLanguage.FRENCH
+        val fallbackBody = notificationText(
+            language,
+            "Vous avez une nouvelle notification Atlas Commerce.",
+            "You have a new Atlas Commerce notification.",
+            "لديك إشعار جديد من Atlas Commerce.",
+        )
+        val content = resolvePushNotificationContent(
+            notificationTitle = message.notification?.title,
+            notificationBody = message.notification?.body,
+            data = message.data,
+            fallbackBody = fallbackBody,
+        ) ?: return
+        showNotification(content.first, content.second, message.data, message.messageId)
     }
 
-    private fun showNotification(title: String, body: String, data: Map<String, String>) {
+    private fun showNotification(
+        title: String,
+        body: String,
+        data: Map<String, String>,
+        messageId: String?,
+    ) {
         runCatching {
             val intent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -53,9 +69,10 @@ class AtlasFirebaseMessagingService : FirebaseMessagingService() {
                     putExtra(AtlasApp.EXTRA_OPEN_NOTIFICATIONS, true)
                 }
             }
+            val notificationId = messageId?.hashCode() ?: System.currentTimeMillis().toInt()
             val pending = PendingIntent.getActivity(
                 this,
-                title.hashCode(),
+                notificationId,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
@@ -69,7 +86,52 @@ class AtlasFirebaseMessagingService : FirebaseMessagingService() {
                 .setContentIntent(pending)
                 .build()
             val nm = getSystemService(NotificationManager::class.java) ?: return
-            nm.notify(title.hashCode(), notification)
+            val channel = nm.getNotificationChannel(AtlasApp.ASSIST_CHANNEL_ID)
+            if (channel == null) {
+                AtlasLogBuffer.log("PUSH", "Incoming push could not be shown because its notification channel is missing", "WARN")
+                return@runCatching
+            }
+            if (!nm.areNotificationsEnabled() || channel.importance == NotificationManager.IMPORTANCE_NONE) {
+                AtlasLogBuffer.log(
+                    tag = "PUSH",
+                    message = "Incoming push could not be shown because app or assistant-channel notifications are disabled",
+                    level = "WARN",
+                )
+                return@runCatching
+            }
+            nm.notify(notificationId, notification)
+        }.onFailure { error ->
+            AtlasLogBuffer.log(
+                tag = "PUSH",
+                message = "Could not display incoming push (${error.javaClass.simpleName})",
+                level = "WARN",
+            )
         }
     }
+}
+
+/** Resolve common server payload conventions without logging or exposing payload contents. */
+internal fun resolvePushNotificationContent(
+    notificationTitle: String?,
+    notificationBody: String?,
+    data: Map<String, String>,
+    fallbackBody: String = "You have a new Atlas Commerce notification.",
+): Pair<String, String>? {
+    fun firstNonBlank(vararg values: String?): String? =
+        values.firstNotNullOfOrNull { it?.trim()?.takeIf(String::isNotEmpty) }
+
+    val dataByLowercaseKey = data.entries.associate { it.key.lowercase() to it.value }
+    fun dataValue(vararg keys: String): String? =
+        keys.firstNotNullOfOrNull { dataByLowercaseKey[it.lowercase()]?.trim()?.takeIf(String::isNotEmpty) }
+
+    val title = firstNonBlank(
+        notificationTitle,
+        dataValue("title", "notification_title", "notificationTitle", "subject"),
+    ) ?: "Atlas Commerce"
+    val body = firstNonBlank(
+        notificationBody,
+        dataValue("body", "message", "text", "content", "description", "notification_body", "notificationBody"),
+    ) ?: if (data.isNotEmpty()) fallbackBody else return null
+
+    return title to body
 }

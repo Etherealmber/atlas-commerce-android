@@ -128,6 +128,7 @@ fun LoginScreen(
     updateState: UpdateState = UpdateState.Idle,
     onShowUpdateProgress: () -> Unit = {},
     captureProtectionAllowed: Boolean = true,
+    deviceUnlockAvailable: Boolean = true,
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     LoginScreenContent(
@@ -140,6 +141,7 @@ fun LoginScreen(
         onShowUpdateProgress,
         viewModel,
         captureProtectionAllowed,
+        deviceUnlockAvailable,
     )
 }
 
@@ -154,6 +156,7 @@ private fun LoginScreenContent(
     onShowUpdateProgress: () -> Unit,
     viewModel: LoginViewModel,
     captureProtectionAllowed: Boolean,
+    deviceUnlockAvailable: Boolean,
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val loginPanelProgress = remember(motionEnabled) { Animatable(if (motionEnabled) 0f else 1f) }
@@ -220,7 +223,7 @@ private fun LoginScreenContent(
     val rememberedAccount = savedAccounts.firstOrNull { it.username.equals(state.username, ignoreCase = true) }
         ?.takeUnless { useAnotherAccount }
     val selectedUnlockAccount = savedAccounts.firstOrNull {
-        it.canUseDeviceUnlock && it.username.equals(state.username, ignoreCase = true)
+        deviceUnlockAvailable && it.canUseDeviceUnlock && it.username.equals(state.username, ignoreCase = true)
     }
     fun useDifferentAccount() {
         accountPickerOpen = false
@@ -1040,6 +1043,18 @@ private fun localizedLoginMessage(message: String): String = when (message) {
         atlasText("Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau.", "The code is invalid or expired. Check it or request a new one.", "الرمز غير صالح أو منتهي الصلاحية. تحقق منه أو اطلب رمزاً جديداً.")
     "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez." ->
         atlasText("Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.", "Couldn't reach the server. Check your connection and try again.", "تعذّر الاتصال بالخادم. تحقق من اتصالك وحاول مجدداً.")
+    "Impossible de vérifier le certificat HTTPS du serveur. Vérifiez sa configuration HTTPS puis réessayez." ->
+        atlasText(
+            "Impossible de vérifier le certificat HTTPS du serveur. Vérifiez sa configuration HTTPS puis réessayez.",
+            "The server's HTTPS certificate could not be verified. Check the server's HTTPS configuration, then try again.",
+            "تعذّر التحقق من شهادة HTTPS للخادم. تحقق من إعداد HTTPS للخادم ثم أعد المحاولة.",
+        )
+    "Le serveur enregistré ne peut pas être utilisé dans cette version. Vérifiez son adresse HTTPS puis réessayez." ->
+        atlasText(
+            "Le serveur enregistré ne peut pas être utilisé dans cette version. Vérifiez son adresse HTTPS puis réessayez.",
+            "This saved server cannot be used in this app version. Check that its address uses HTTPS, then try again.",
+            "لا يمكن استخدام الخادم المحفوظ في هذا الإصدار. تحقق من أن عنوانه يستخدم HTTPS ثم أعد المحاولة.",
+        )
     "Impossible de joindre ce serveur. Vérifiez votre connexion puis réessayez." ->
         atlasText("Impossible de joindre ce serveur. Vérifiez votre connexion puis réessayez.", "Couldn't reach this server. Check your connection and try again.", "تعذّر الاتصال بهذا الخادم. تحقق من اتصالك وحاول مجدداً.")
     "Une mise à jour est nécessaire pour continuer." ->

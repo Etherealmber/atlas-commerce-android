@@ -1,7 +1,5 @@
 package ma.etherealmber.atlascommerce.core.security
 
-import android.app.KeyguardManager
-import android.content.Context
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -33,14 +31,17 @@ object DeviceUnlockAuthenticator {
         val protectedTokenCipher: String? = null,
     )
 
+    fun isPlatformSupported(): Boolean = supportsPerUseStrongBiometric(Build.VERSION.SDK_INT)
+
     fun isAvailable(activity: FragmentActivity): Boolean {
-        val keyguard = activity.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-        val secureDeviceCredential = keyguard?.isDeviceSecure == true
-        val strongBiometric = BiometricManager.from(activity).canAuthenticate(
+        if (!isPlatformSupported()) return false
+        return BiometricManager.from(activity).canAuthenticate(
             BiometricManager.Authenticators.BIOMETRIC_STRONG,
         ) == BiometricManager.BIOMETRIC_SUCCESS
-        return secureDeviceCredential || strongBiometric
     }
+
+    internal fun supportsPerUseStrongBiometric(apiLevel: Int): Boolean =
+        apiLevel >= Build.VERSION_CODES.R
 
     /**
      * For an older app-encrypted saved token, the user is already in an active authenticated
@@ -54,6 +55,7 @@ object DeviceUnlockAuthenticator {
         storedTokenCipher: String,
         title: String,
         subtitle: String,
+        negativeButtonText: String,
         onResult: (Result) -> Unit,
     ) {
         if (!isAvailable(activity)) {
@@ -91,14 +93,10 @@ object DeviceUnlockAuthenticator {
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     try {
-                        // Android 11+ supports a per-operation auth-bound CryptoObject together
-                        // with the device-credential fallback. On Android 9/10 the prompt's
-                        // credential auth unlocks the key for the short validity window below.
-                        val authorizedCipher = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            result.cryptoObject?.cipher ?: throw IllegalStateException("Missing authenticated CryptoObject")
-                        } else {
-                            cipher
-                        }
+                        // Quick unlock is supported only where Android can bind this exact
+                        // cipher operation to an enrolled strong biometric.
+                        val authorizedCipher = result.cryptoObject?.cipher
+                            ?: throw IllegalStateException("Missing authenticated CryptoObject")
                         val payload = if (protectsExistingToken) {
                             authorizedCipher.doFinal(decodeEnvelope(storedTokenCipher).second)
                         } else {
@@ -140,21 +138,12 @@ object DeviceUnlockAuthenticator {
         val promptInfoBuilder = BiometricPrompt.PromptInfo.Builder()
             .setTitle(title)
             .setSubtitle(subtitle)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            promptInfoBuilder.setAllowedAuthenticators(
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                    BiometricManager.Authenticators.DEVICE_CREDENTIAL,
-            )
-        } else {
-            promptInfoBuilder.setDeviceCredentialAllowed(true)
-        }
+        promptInfoBuilder
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .setNegativeButtonText(negativeButtonText)
         val promptInfo = promptInfoBuilder.build()
         runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                prompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
-            } else {
-                prompt.authenticate(promptInfo)
-            }
+            prompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
         }.onFailure {
             onResult(Result(Outcome.UNAVAILABLE))
         }
@@ -195,16 +184,14 @@ object DeviceUnlockAuthenticator {
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
             .setUserAuthenticationRequired(true)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            builder.setUserAuthenticationParameters(
-                0,
-                KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL,
-            )
-        } else {
-            // Device-credential fallback is supported by the pre-Android-11 prompt. The
-            // callback immediately consumes the key operation within this short auth window.
-            builder.setUserAuthenticationValidityDurationSeconds(1)
+            .setInvalidatedByBiometricEnrollment(true)
+        check(supportsPerUseStrongBiometric(Build.VERSION.SDK_INT)) {
+            "Per-operation strong biometric keys require Android 11 or newer"
         }
+        builder.setUserAuthenticationParameters(
+            0,
+            KeyProperties.AUTH_BIOMETRIC_STRONG,
+        )
         generator.init(builder.build())
         return generator.generateKey()
     }
@@ -244,7 +231,7 @@ object DeviceUnlockAuthenticator {
     }
 
     private const val KEYSTORE = "AndroidKeyStore"
-    private const val KEY_ALIAS_PREFIX = "atlas.device.unlock.v1."
+    private const val KEY_ALIAS_PREFIX = "atlas.device.unlock.v2."
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val TAG_BITS = 128
 }

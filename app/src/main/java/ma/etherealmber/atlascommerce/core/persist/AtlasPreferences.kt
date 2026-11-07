@@ -33,7 +33,10 @@ import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
-const val DEVICE_UNLOCK_TOKEN_PREFIX = "du1:"
+// du2 is bound to a per-operation strong biometric key. Older du1 envelopes (which used
+// a short auth-validity window on Android 9/10) intentionally fall back to account-password sign-in.
+const val LEGACY_DEVICE_UNLOCK_TOKEN_PREFIX = "du1:"
+const val DEVICE_UNLOCK_TOKEN_PREFIX = "du2:"
 
 private val Context.atlasDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "atlas_prefs",
@@ -60,6 +63,9 @@ data class SavedAccountEntry(
 ) {
     val canUseDeviceUnlock: Boolean
         get() = deviceUnlockEnabled && deviceUnlockChoiceMade && tokenCipher.startsWith(DEVICE_UNLOCK_TOKEN_PREFIX)
+
+    val hasLegacyDeviceUnlockEnvelope: Boolean
+        get() = tokenCipher.startsWith(LEGACY_DEVICE_UNLOCK_TOKEN_PREFIX)
 }
 
 /**

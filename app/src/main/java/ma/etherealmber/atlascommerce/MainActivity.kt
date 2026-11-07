@@ -13,6 +13,8 @@ import androidx.compose.runtime.setValue
 import dagger.hilt.android.AndroidEntryPoint
 import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.net.VerifyLinkParser
+import ma.etherealmber.atlascommerce.core.update.UpdateInfo
+import ma.etherealmber.atlascommerce.core.update.UpdateNotificationActions
 import ma.etherealmber.atlascommerce.ui.root.AtlasRoot
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrTokenParser
 
@@ -24,6 +26,9 @@ class MainActivity : FragmentActivity() {
     private var deepLinkServerOrigin by mutableStateOf<String?>(null)
     private var openNotificationsIntent by mutableStateOf(false)
     private var openSettingsIntent by mutableStateOf(false)
+    private var notificationDownloadInfo by mutableStateOf<UpdateInfo?>(null)
+    private var notificationInstallInfo by mutableStateOf<UpdateInfo?>(null)
+    private var notificationInstallRequested by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,6 +39,9 @@ class MainActivity : FragmentActivity() {
         openNotificationsIntent = intent?.getBooleanExtra(AtlasApp.EXTRA_OPEN_NOTIFICATIONS, false) == true ||
             intent?.action == AtlasApp.ACTION_ASSIST_NOTIFICATION
         openSettingsIntent = intent?.getBooleanExtra(AtlasApp.EXTRA_OPEN_SETTINGS, false) == true
+        notificationDownloadInfo = UpdateNotificationActions.downloadInfoFrom(intent)
+        notificationInstallInfo = UpdateNotificationActions.installInfoFrom(intent)
+        notificationInstallRequested = UpdateNotificationActions.installRequested(intent)
         enableEdgeToEdge()
         // Let the app surface/content draw behind Android's navigation area. The
         // floating Atlas navigation pill itself remains opaque in MainShell.
@@ -58,6 +66,14 @@ class MainActivity : FragmentActivity() {
                 onOpenNotificationsConsumed = { openNotificationsIntent = false },
                 openSettingsRequested = openSettingsIntent,
                 onOpenSettingsConsumed = { openSettingsIntent = false },
+                notificationDownloadInfo = notificationDownloadInfo,
+                onNotificationDownloadConsumed = { notificationDownloadInfo = null },
+                notificationInstallInfo = notificationInstallInfo,
+                notificationInstallRequested = notificationInstallRequested,
+                onNotificationInstallConsumed = {
+                    notificationInstallRequested = false
+                    notificationInstallInfo = null
+                },
             )
         }
     }
@@ -79,6 +95,11 @@ class MainActivity : FragmentActivity() {
         }
         if (intent.getBooleanExtra(AtlasApp.EXTRA_OPEN_SETTINGS, false)) {
             openSettingsIntent = true
+        }
+        UpdateNotificationActions.downloadInfoFrom(intent)?.let { notificationDownloadInfo = it }
+        UpdateNotificationActions.installInfoFrom(intent)?.let { notificationInstallInfo = it }
+        if (UpdateNotificationActions.installRequested(intent)) {
+            notificationInstallRequested = true
         }
     }
 

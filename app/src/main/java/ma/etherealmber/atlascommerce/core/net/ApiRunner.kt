@@ -7,6 +7,7 @@ import retrofit2.HttpException
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 import kotlin.coroutines.cancellation.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -91,6 +92,10 @@ class ApiRunner @Inject constructor(private val moshi: Moshi) {
             CODE_NETWORK,
             "La connexion prend trop de temps. Réessayez dans quelques instants.",
         )
+        is SSLException -> ApiResult.Failure(
+            CODE_TLS,
+            "La connexion HTTPS n’a pas pu vérifier le certificat de ce serveur. Vérifiez son certificat puis réessayez.",
+        )
         is IOException -> ApiResult.Failure(
             CODE_NETWORK,
             "La connexion a été interrompue. Vérifiez votre réseau puis réessayez.",
@@ -150,6 +155,7 @@ class ApiRunner @Inject constructor(private val moshi: Moshi) {
 
     companion object {
         const val CODE_NETWORK = "NETWORK"
+        const val CODE_TLS = "TLS"
         const val CODE_NOT_ATLAS = "NOT_ATLAS"
         const val CODE_SERVER = "SERVER"
         const val CODE_UNKNOWN = "UNKNOWN"

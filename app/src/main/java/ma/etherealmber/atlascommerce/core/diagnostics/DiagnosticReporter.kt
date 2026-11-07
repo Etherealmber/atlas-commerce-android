@@ -164,7 +164,7 @@ object AtlasLogBuffer {
         // permissions. Capture our process only; structured app events above carry auth details.
         val pid = Process.myPid()
         val pidLogResult = runCatching {
-            val proc = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "1200", "--pid=$pid")
+            val proc = ProcessBuilder("/system/bin/logcat", "-d", "-v", "threadtime", "-t", "1200", "--pid=$pid")
                 .redirectErrorStream(true)
                 .start()
             val out = proc.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }

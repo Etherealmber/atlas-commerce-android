@@ -247,26 +247,24 @@ fun ProfileScreen(
     val currentSavedAccount = savedAccounts.firstOrNull {
         it.username.equals(user.username, ignoreCase = true)
     }
+    val supportsStrongBiometricUnlock = DeviceUnlockAuthenticator.isPlatformSupported()
     val otherSavedAccounts = savedAccounts.filterNot {
         it.username.equals(user.username, ignoreCase = true)
     }
     val configureDeviceUnlockMessage = atlasText(
-        "Configurez la biométrie ou un verrouillage d'écran sécurisé pour activer la connexion rapide.",
-        "Set up biometrics or a secure screen lock to enable quick sign-in.",
-        "أعد إعداد القياسات الحيوية أو قفل شاشة آمن لتفعيل تسجيل الدخول السريع.",
+        "La connexion biométrique rapide nécessite Android 11 ou une version ultérieure et une biométrie forte.",
+        "Quick biometric sign-in requires Android 11 or newer and an enrolled strong biometric.",
+        "يتطلب تسجيل الدخول السريع بالبصمة Android 11 أو أحدث وبصمة قوية مسجلة.",
     )
     val localUnlockUnavailableMessage = atlasText(
-        "Le déverrouillage local est indisponible. Utilisez votre mot de passe et configurez un verrouillage sécurisé.",
-        "Local device unlock is unavailable. Use your password and set up a secure device lock.",
-        "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد قفل آمن.",
+        "La connexion biométrique nécessite Android 11 ou une version ultérieure et une biométrie forte. Utilisez votre mot de passe.",
+        "Biometric sign-in requires Android 11 or newer and a strong biometric. Use your account password instead.",
+        "يتطلب تسجيل الدخول بالبصمة Android 11 أو أحدث وبصمة قوية. استخدم كلمة مرور حسابك بدلاً من ذلك.",
     )
-    val savedAccountUnlockUnavailableMessage = atlasText(
-        "Le déverrouillage local est indisponible. Utilisez le mot de passe et configurez la biométrie ou un verrouillage sécurisé.",
-        "Local device unlock is unavailable. Use your password and set up biometrics or a secure screen lock.",
-        "إلغاء القفل المحلي غير متاح. استخدم كلمة المرور وأعد إعداد القياسات الحيوية أو قفل شاشة آمن.",
-    )
-    val deviceUnlockAuthTitle = atlasText("Activer le déverrouillage Atlas", "Enable Atlas device unlock", "تفعيل إلغاء قفل Atlas")
-    val deviceUnlockAuthSubtitle = atlasText("Confirmez avec la biométrie ou le code de votre appareil.", "Confirm with biometrics or your device PIN/password.", "أكد هويتك بالبصمة أو رمز جهازك.")
+    val savedAccountUnlockUnavailableMessage = localUnlockUnavailableMessage
+    val deviceUnlockAuthTitle = atlasText("Activer la connexion biométrique Atlas", "Enable Atlas biometric sign-in", "تفعيل تسجيل الدخول ببصمة Atlas")
+    val deviceUnlockAuthSubtitle = atlasText("Confirmez avec votre biométrie forte.", "Confirm with your strong biometric.", "أكد هويتك ببصمة قوية.")
+    val deviceUnlockAuthNegativeButton = atlasText("Annuler", "Cancel", "إلغاء")
     val unlockSavedAccountTitle = atlasText("Déverrouiller Atlas", "Unlock Atlas", "إلغاء قفل Atlas")
     val updateCurrentDeviceUnlock: (Boolean) -> Unit = { enabled ->
         val account = currentSavedAccount
@@ -285,6 +283,7 @@ fun ProfileScreen(
                     account.tokenCipher,
                     deviceUnlockAuthTitle,
                     deviceUnlockAuthSubtitle,
+                    deviceUnlockAuthNegativeButton,
                 ) { result ->
                     when {
                         result.outcome == DeviceUnlockAuthenticator.Outcome.AUTHENTICATED &&
@@ -321,6 +320,7 @@ fun ProfileScreen(
                 account.tokenCipher,
                 unlockSavedAccountTitle,
                 deviceUnlockAuthSubtitle,
+                deviceUnlockAuthNegativeButton,
             ) { result ->
                 when {
                     result.outcome == DeviceUnlockAuthenticator.Outcome.AUTHENTICATED &&
@@ -467,10 +467,23 @@ fun ProfileScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            if (account.canUseDeviceUnlock) {
-                                atlasText("Biométrie ou code de l'appareil activé.", "Biometrics or device PIN/password is enabled.", "القياسات الحيوية أو رمز الجهاز مفعّل.")
-                            } else {
-                                atlasText("Désactivé — le mot de passe reste nécessaire.", "Off — your account password is still required.", "متوقف — لا تزال كلمة مرور الحساب مطلوبة.")
+                            when {
+                                account.canUseDeviceUnlock -> atlasText(
+                                    "Connexion par biométrie forte activée.",
+                                    "Strong biometric sign-in is enabled.",
+                                    "تسجيل الدخول بالبصمة القوية مفعّل.",
+                                )
+                                account.hasLegacyDeviceUnlockEnvelope -> atlasText(
+                                    "Connectez-vous une fois avec le mot de passe de votre compte pour renouveler la protection biométrique.",
+                                    "Sign in once with your account password to refresh biometric protection.",
+                                    "سجّل الدخول مرة واحدة بكلمة مرور حسابك لتحديث حماية البصمة.",
+                                )
+                                !supportsStrongBiometricUnlock -> atlasText(
+                                    "Connexion biométrique rapide disponible à partir d'Android 11 ; utilisez votre mot de passe.",
+                                    "Quick biometric sign-in is available on Android 11 and newer; use your account password here.",
+                                    "يتوفر تسجيل الدخول السريع بالبصمة على Android 11 أو أحدث؛ استخدم كلمة مرور حسابك هنا.",
+                                )
+                                else -> atlasText("Désactivé — le mot de passe reste nécessaire.", "Off — your account password is still required.", "متوقف — لا تزال كلمة مرور حسابك مطلوبة.")
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -479,6 +492,7 @@ fun ProfileScreen(
                     Switch(
                         checked = account.canUseDeviceUnlock,
                         onCheckedChange = updateCurrentDeviceUnlock,
+                        enabled = supportsStrongBiometricUnlock && !account.hasLegacyDeviceUnlockEnvelope,
                     )
                 }
             }
@@ -770,7 +784,7 @@ fun ProfileScreen(
                                     serverBaseUrl = serverSelection?.baseUrl,
                                     active = false,
                                     subtitle = if (account.canUseDeviceUnlock) {
-                                        atlasText("Déverrouillage de l'appareil activé", "Device unlock enabled", "إلغاء قفل الجهاز مفعّل")
+                                        atlasText("Connexion par biométrie forte activée", "Strong biometric sign-in enabled", "تسجيل الدخول بالبصمة القوية مفعّل")
                                     } else {
                                         atlasText("Mot de passe requis", "Password required", "كلمة المرور مطلوبة")
                                     },
