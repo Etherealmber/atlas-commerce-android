@@ -161,8 +161,8 @@ class LoginViewModel @Inject constructor(
             _state.update { it.copy(error = "Saisissez votre identifiant et votre mot de passe.") }
             return
         }
+        if (!_state.compareAndSet(current, current.copy(loading = true, error = null))) return
         viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null) }
             when (
                 val result = sessionManager.signIn(
                     username = current.username,
@@ -201,8 +201,8 @@ class LoginViewModel @Inject constructor(
             _state.update { it.copy(error = "Saisissez les 6 chiffres du code reçu par e-mail.") }
             return
         }
+        if (!_state.compareAndSet(current, current.copy(loading = true, error = null))) return
         viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null) }
             when (
                 val result = sessionManager.verifyOtp(
                     username = current.username,

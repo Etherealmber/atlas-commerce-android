@@ -7,6 +7,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
+import ma.etherealmber.atlascommerce.data.model.MeDto
 
 internal enum class StartupResumeResult {
     PREPARED,
@@ -16,9 +17,6 @@ internal enum class StartupResumeResult {
     INVALID_SESSION_ORIGIN,
     DIFFERENT_ORIGIN,
     UNDECRYPTABLE_TOKEN,
-    SERVER_REJECTED,
-    NETWORK_FAILED,
-    TIMED_OUT,
 }
 
 internal class StartupResumeRequest(
@@ -35,9 +33,9 @@ internal data class StartupResumePlan(
 
 /** A narrow policy seam: only a valid saved session on the currently selected origin may be sent. */
 internal object StartupResumePreparation {
-    const val NETWORK_TIMEOUT_MS = 1_500L
+    const val NETWORK_TIMEOUT_MS = 5_000L
 
-    /** Snapshot and validate local data synchronously before the stored token is erased. */
+    /** Snapshot and validate local data before attempting to restore the session. */
     fun createRequest(
         previousSession: AtlasPreferences.StoredSession?,
         selectedServerUrl: String?,
@@ -68,68 +66,88 @@ internal object StartupResumePreparation {
         )
     }
 
-    /** Network notification is deliberately separate so a slow server cannot gate the login UI. */
-    suspend fun send(
+    /** A session is restored only after the selected server confirms it through `/api/auth/me`. */
+    suspend fun verify(
         request: StartupResumeRequest,
         timeoutMillis: Long = NETWORK_TIMEOUT_MS,
-        notifyServer: suspend (serverUrl: String, bearerToken: String) -> ApiResult<Unit>,
-    ): StartupResumeResult {
+        validate: suspend (serverUrl: String, bearerToken: String) -> ApiResult<MeDto>,
+    ): StartupSessionVerification {
         val response = try {
             withTimeoutOrNull(timeoutMillis) {
-                notifyServer(request.serverUrl, request.bearerToken)
+                validate(request.serverUrl, request.bearerToken)
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Throwable) {
-            return StartupResumeResult.NETWORK_FAILED
-        } ?: return StartupResumeResult.TIMED_OUT
+            return StartupSessionVerification.Unavailable
+        } ?: return StartupSessionVerification.Unavailable
 
         return when (response) {
-            is ApiResult.Success -> StartupResumeResult.PREPARED
-            is ApiResult.Failure -> StartupResumeResult.SERVER_REJECTED
+            is ApiResult.Success -> if (response.data.ok) {
+                StartupSessionVerification.Valid(response.data)
+            } else {
+                StartupSessionVerification.Rejected
+            }
+            is ApiResult.Failure -> if (
+                response.httpStatus == 401 || response.httpStatus == 403 ||
+                    response.code == "SESSION_EXPIRED" || response.code.contains("REVOK", ignoreCase = true)
+            ) {
+                StartupSessionVerification.Rejected
+            } else {
+                StartupSessionVerification.Unavailable
+            }
         }
-    }
-
-    suspend fun prepare(
-        previousSession: AtlasPreferences.StoredSession?,
-        selectedServerUrl: String?,
-        restoreDisabled: Boolean,
-        decryptToken: (String) -> String?,
-        timeoutMillis: Long = NETWORK_TIMEOUT_MS,
-        notifyServer: suspend (serverUrl: String, bearerToken: String) -> ApiResult<Unit>,
-    ): StartupResumeResult {
-        val plan = createRequest(previousSession, selectedServerUrl, restoreDisabled, decryptToken)
-        val request = plan.request ?: return plan.result
-        return send(request, timeoutMillis, notifyServer)
     }
 }
 
-/** Guarantees cold-start cleanup and SignedOut publication, even when preparation fails/cancels. */
+internal sealed interface StartupSessionVerification {
+    data class Valid(val profile: MeDto) : StartupSessionVerification
+    data object Rejected : StartupSessionVerification
+    data object Unavailable : StartupSessionVerification
+}
+
+internal enum class FreshProcessSessionOutcome {
+    RESTORED,
+    NO_SESSION,
+    REJECTED,
+    UNAVAILABLE,
+}
+
+/** Restores only server-validated sessions; explicit sign-out or rejected tokens stay signed out. */
 internal class FreshProcessStartup(
-    private val preparePreviousSession: suspend () -> Unit,
+    private val restorePreviousSession: suspend () -> FreshProcessSessionOutcome,
     private val clearStoredSession: suspend () -> Unit,
     private val purgeActiveState: () -> Unit,
     private val publishSignedOut: () -> Unit,
     private val releaseStartupGate: () -> Unit,
     private val onFailure: (Throwable) -> Unit = {},
 ) {
-    suspend fun run() {
+    suspend fun run(): FreshProcessSessionOutcome {
+        var outcome = FreshProcessSessionOutcome.UNAVAILABLE
         try {
-            preparePreviousSession()
+            outcome = restorePreviousSession()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
             runCatching { onFailure(error) }
+            outcome = FreshProcessSessionOutcome.UNAVAILABLE
         } finally {
             withContext(NonCancellable) {
-                runCatching { clearStoredSession() }
-                runCatching { purgeActiveState() }
-                try {
-                    publishSignedOut()
-                } finally {
+                if (outcome != FreshProcessSessionOutcome.RESTORED) {
+                    if (outcome != FreshProcessSessionOutcome.UNAVAILABLE) {
+                        runCatching { clearStoredSession() }
+                    }
+                    runCatching { purgeActiveState() }
+                    try {
+                        publishSignedOut()
+                    } finally {
+                        releaseStartupGate()
+                    }
+                } else {
                     releaseStartupGate()
                 }
             }
         }
+        return outcome
     }
 }

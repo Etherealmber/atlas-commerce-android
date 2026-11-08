@@ -32,6 +32,7 @@ import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.data.CartStore
 import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.data.model.LoginResponse
+import ma.etherealmber.atlascommerce.data.model.MeDto
 import ma.etherealmber.atlascommerce.data.model.QrCompleteDto
 import ma.etherealmber.atlascommerce.data.repo.AuthRepository
 import ma.etherealmber.atlascommerce.di.ApplicationScope
@@ -127,34 +128,55 @@ class SessionManager @Inject constructor(
         }
     }
 
-    /**
-     * Native Android requires a fresh authentication after every new app process. Activity
-     * recreation/background resume does not recreate this singleton, so it keeps the in-memory
-     * session. Only active-session fields are cleared; saved accounts remain available for an
-     * explicit password or device-authenticated sign-in. The PWA has its own session lifecycle.
-     */
+    /** Revalidate an encrypted same-device token at its original selected server on cold start. */
     private suspend fun initializeFreshSession() {
         val startupGateStartedAt = SystemClock.elapsedRealtime()
-        var startupResumeRequest: StartupResumeRequest? = null
-        FreshProcessStartup(
-            preparePreviousSession = {
+        val outcome = FreshProcessStartup(
+            restorePreviousSession = {
                 preferences.migrateLegacyPreferencesAtRest()
                 serverConfig.loaded.filter { it }.first()
+                val stored = preferences.readSession()
                 val plan = StartupResumePreparation.createRequest(
-                    previousSession = preferences.readSession(),
+                    previousSession = stored,
                     selectedServerUrl = serverConfig.normalizedSelection(),
                     restoreDisabled = preferences.isSessionRestoreDisabled(),
                     decryptToken = cryptoStore::decrypt,
                 )
-                startupResumeRequest = plan.request
-                if (plan.result != StartupResumeResult.PREPARED &&
-                    plan.result != StartupResumeResult.NO_SESSION
-                ) {
-                    ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
-                        tag = "AUTH",
-                        message = "Previous-session resume preparation skipped (${plan.result})",
-                        level = "WARN",
-                    )
+                val request = plan.request
+                if (request == null) {
+                    if (plan.result != StartupResumeResult.NO_SESSION) {
+                        ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+                            tag = "AUTH",
+                            message = "Saved-session restore skipped (${plan.result})",
+                            level = "WARN",
+                        )
+                    }
+                    if (plan.result == StartupResumeResult.NO_SESSION) {
+                        FreshProcessSessionOutcome.NO_SESSION
+                    } else {
+                        FreshProcessSessionOutcome.REJECTED
+                    }
+                } else {
+                    when (
+                        val verification = StartupResumePreparation.verify(
+                            request = request,
+                            validate = authRepository::validateStartupSession,
+                        )
+                    ) {
+                        is StartupSessionVerification.Valid -> {
+                            if (stored == null) {
+                                FreshProcessSessionOutcome.REJECTED
+                            } else {
+                                if (restoreVerifiedSession(request, stored, verification.profile)) {
+                                    FreshProcessSessionOutcome.RESTORED
+                                } else {
+                                    FreshProcessSessionOutcome.REJECTED
+                                }
+                            }
+                        }
+                        StartupSessionVerification.Rejected -> FreshProcessSessionOutcome.REJECTED
+                        StartupSessionVerification.Unavailable -> FreshProcessSessionOutcome.UNAVAILABLE
+                    }
                 }
             },
             clearStoredSession = preferences::clearSession,
@@ -164,34 +186,51 @@ class SessionManager @Inject constructor(
             onFailure = { error ->
                 ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
                     tag = "AUTH",
-                    message = "Could not prepare native startup resume (${error.javaClass.simpleName})",
+                    message = "Could not validate saved session at startup (${error.javaClass.simpleName})",
                     level = "WARN",
                 )
             },
         ).run()
         ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
             tag = "AUTH",
-            message = "Fresh-process session isolation completed in ${SystemClock.elapsedRealtime() - startupGateStartedAt} ms",
+            message = "Cold-start session check completed ($outcome) in ${SystemClock.elapsedRealtime() - startupGateStartedAt} ms",
         )
+    }
 
-        // Keep previous-process server cleanup best-effort, but never hold the first login screen
-        // (or a fresh sign-in) behind DNS/TLS/network latency. The old token is isolated and only
-        // sent to the normalized origin it was originally issued for.
-        startupResumeRequest?.let { request ->
-            scope.launch {
-                val result = StartupResumePreparation.send(
-                    request = request,
-                    notifyServer = authRepository::prepareStartupResume,
-                )
-                if (result != StartupResumeResult.PREPARED) {
-                    ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
-                        tag = "AUTH",
-                        message = "Previous-session resume preparation did not complete ($result)",
-                        level = "WARN",
-                    )
-                }
-            }
+    private suspend fun restoreVerifiedSession(
+        request: StartupResumeRequest,
+        stored: AtlasPreferences.StoredSession,
+        profile: MeDto,
+    ): Boolean {
+        val username = (profile.username?.takeIf { it.isNotBlank() } ?: stored.username)
+            .trim().lowercase(Locale.ROOT)
+        if (username.isBlank()) return false
+        val user = SessionUser(
+            username = username,
+            role = profile.role?.takeIf { it.isNotBlank() } ?: stored.role.ifBlank { "user" },
+            displayName = profile.displayName?.takeIf { it.isNotBlank() } ?: stored.displayName.ifBlank { username },
+            email = profile.email ?: stored.email,
+            phone = profile.phone.orEmpty(),
+            avatarUrl = profile.avatarUrl?.takeIf { it.isNotBlank() } ?: stored.avatarUrl,
+            serverUrl = request.serverUrl,
+        )
+        purgeInMemorySession()
+        tokenHolder.set(request.bearerToken)
+        preferences.bindActiveScope(user.serverUrl, user.username)
+        offlineCache.bindScope(user.serverUrl, user.username)
+        runCatching {
+            preferences.writeSession(
+                serverUrl = user.serverUrl,
+                tokenCipher = cryptoStore.encrypt(request.bearerToken),
+                username = user.username,
+                role = user.role,
+                displayName = user.displayName,
+                email = user.email,
+                avatarUrl = user.avatarUrl,
+            )
         }
+        _state.value = SessionState.Active(user)
+        return true
     }
 
     suspend fun signIn(
