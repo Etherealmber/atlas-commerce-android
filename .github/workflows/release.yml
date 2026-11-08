@@ -828,11 +828,25 @@ jobs:
       group: release-docs-version
       cancel-in-progress: false
     steps:
+      - name: Validate release-sync App credentials
+        env:
+          RELEASE_SYNC_CLIENT_ID: ${{ vars.RELEASE_SYNC_APP_CLIENT_ID || secrets.RELEASE_SYNC_APP_CLIENT_ID }}
+          RELEASE_SYNC_PRIVATE_KEY: ${{ secrets.RELEASE_SYNC_APP_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$RELEASE_SYNC_CLIENT_ID" ]]; then
+            echo "::error title=Missing release-sync Client ID::Set RELEASE_SYNC_APP_CLIENT_ID as a repository or organization Actions variable or secret."
+            exit 1
+          fi
+          if [[ -z "$RELEASE_SYNC_PRIVATE_KEY" ]]; then
+            echo "::error title=Missing release-sync private key::Set RELEASE_SYNC_APP_PRIVATE_KEY as a repository or organization Actions secret."
+            exit 1
+          fi
+
       - name: Create release-sync App token
         id: release-sync-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
         with:
-          client-id: ${{ vars.RELEASE_SYNC_APP_CLIENT_ID }}
+          client-id: ${{ vars.RELEASE_SYNC_APP_CLIENT_ID || secrets.RELEASE_SYNC_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_SYNC_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: atlas-commerce-android
