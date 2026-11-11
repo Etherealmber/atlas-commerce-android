@@ -144,6 +144,8 @@ class ScanViewModel @Inject constructor(
         if (code == lastHandledCode && now - lastHandledAt < THROTTLE_MS) return
         lastHandledCode = code
         lastHandledAt = now
+        // Freeze camera preview at the first accepted code to prevent duplicate reads while lookup runs.
+        _state.update { it.copy(cameraEnabled = false) }
         currentScanProductId = null
         currentScanAddedQty = 0.0
         _scanFeedbackEvents.tryEmit(Unit)
@@ -242,6 +244,30 @@ class ScanViewModel @Inject constructor(
         currentScanAddedQty += quantity
         _state.update { it.copy(added = true) }
         _messages.tryEmit("${product.name} · ajouté au panier")
+    }
+
+    /** Clear the finished result for another scan without undoing any cart addition. */
+    fun continueScanning() {
+        lookupJob?.cancel()
+        lookupJob = null
+        currentScanProductId = null
+        currentScanAddedQty = 0.0
+        lastHandledCode = null
+        lastHandledAt = 0L
+        _state.update {
+            it.copy(
+                cameraEnabled = false,
+                lookingUp = false,
+                creating = false,
+                lastCode = null,
+                detectedPcQrToken = null,
+                product = null,
+                notFound = false,
+                pendingApproval = false,
+                added = false,
+                error = null,
+            )
+        }
     }
 
     /**
