@@ -158,7 +158,7 @@ class SessionManager @Inject constructor(
                     }
                 } else {
                     when (
-                        val verification = StartupResumePreparation.verify(
+                        val verification = StartupResumePreparation.verifyWithRetry(
                             request = request,
                             validate = authRepository::validateStartupSession,
                         )

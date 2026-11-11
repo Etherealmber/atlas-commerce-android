@@ -37,16 +37,26 @@ class AtlasApp : Application() {
     override fun onCreate() {
         super.onCreate()
         ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.installCrashBreadcrumbHandler(this)
+        // FirebaseInitProvider runs before Application.onCreate. Restore the user's stored choice
+        // synchronously so Crashlytics never spends early app lifetime in the wrong collection state.
+        ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent.applyStoredConsent(this)
+        if (ma.etherealmber.atlascommerce.BuildConfig.DEBUG) {
+            startupIoScope.launch {
+                val status = withContext(Dispatchers.Main.immediate) {
+                    ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent.runtimeStatus(this@AtlasApp)
+                }
+                ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+                    tag = "Crashlytics",
+                    message = "Startup status configured=${status.configured}, collection_enabled=${status.collectionEnabled}",
+                )
+            }
+        }
         ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
             tag = "AtlasApp",
             message = "Application started (${ma.etherealmber.atlascommerce.core.AppDetails.VERSION_NAME} build ${ma.etherealmber.atlascommerce.core.AppDetails.VERSION_CODE})",
         )
-        // Keep cache cleanup off the launch thread. Crashlytics lookup is marshalled to the main
-        // dispatcher only after FirebaseInitProvider, avoiding partially registered components.
+        // Keep filesystem cleanup off the launch thread.
         startupIoScope.launch {
-            withContext(Dispatchers.Main.immediate) {
-                ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent.applyStoredConsent(this@AtlasApp)
-            }
             runCatching {
                 ma.etherealmber.atlascommerce.data.FinanceReportCache.pruneExpired(java.io.File(cacheDir, "finance"))
             }.onFailure { error ->

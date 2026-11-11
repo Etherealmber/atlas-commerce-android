@@ -36,7 +36,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.net.ProbeReport
 import ma.etherealmber.atlascommerce.core.net.hasDeviceInternetCapability
@@ -63,9 +66,10 @@ fun DeveloperDiagnosticsScreen(
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val crashReportsConfigured = CrashReportConsent.isConfigured(context)
+    val crashStatus = CrashReportConsent.runtimeStatus(context)
+    val crashReportsConfigured = crashStatus.configured
     val firebaseAppConfigured = CrashReportConsent.hasDefaultFirebaseApp(context)
-    val crashReportsEnabled = CrashReportConsent.isEnabled(context)
+    val crashReportsEnabled = crashStatus.collectionEnabled
     val developerMode by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
     val localStorage by appViewModel.localStorageSummary.collectAsStateWithLifecycle()
@@ -80,6 +84,8 @@ fun DeveloperDiagnosticsScreen(
     val activeRole = (session as? SessionState.Active)?.user?.role
     val language = LocalAtlasLanguage.current
     val diagnosticsRefreshed = atlasText("État actualisé.", "Diagnostics refreshed.", "تم تحديث التشخيصات.")
+    val crashTestQueued = atlasText("Événement Crashlytics ajouté; vérifiez Firebase après la prochaine ouverture.", "Crashlytics event queued; check Firebase after the next app launch.", "تمت إضافة حدث Crashlytics؛ تحقق من Firebase بعد فتح التطبيق مرة أخرى.")
+    val crashTestFailed = atlasText("Impossible d'ajouter l'événement de test Crashlytics.", "Could not queue the Crashlytics test event.", "تعذرت إضافة حدث اختبار Crashlytics.")
     val diagnosticsCopied = atlasText("Diagnostics expurgés copiés.", "Redacted diagnostics copied.", "تم نسخ التشخيصات المنقحة.")
     val diagnosticsCopyFailed = atlasText("Impossible de copier les diagnostics.", "Could not copy diagnostics.", "تعذّر نسخ التشخيصات.")
     val diagnosticsShareFailed = atlasText("Impossible de préparer le partage des diagnostics.", "Could not prepare diagnostics for sharing.", "تعذّر إعداد التشخيصات للمشاركة.")
@@ -312,6 +318,33 @@ fun DeveloperDiagnosticsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (BuildConfig.DEBUG && crashReportsConfigured) {
+                    TextButton(
+                        enabled = crashReportsEnabled,
+                        onClick = {
+                            scope.launch(Dispatchers.IO) {
+                                val recorded = CrashReportConsent.recordDebugVerificationEvent(context)
+                                withContext(Dispatchers.Main.immediate) {
+                                    onToast(if (recorded) crashTestQueued else crashTestFailed)
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(atlasText("Envoyer un événement de test non fatal", "Send non-fatal test event", "إرسال حدث اختبار غير فادح"))
+                    }
+                    if (!crashReportsEnabled) {
+                        Text(
+                            atlasText(
+                                "Activez d'abord les rapports Crashlytics avec votre consentement.",
+                                "First enable Crashlytics reports with your consent.",
+                                "فعّل تقارير Crashlytics أولاً بموافقتك.",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
 
             DeveloperCacheToolsCard(

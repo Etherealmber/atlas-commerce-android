@@ -3,6 +3,19 @@ package ma.etherealmber.atlascommerce.core.diagnostics
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+import ma.etherealmber.atlascommerce.BuildConfig
+
+internal data class CrashlyticsRuntimeStatus(
+    val configured: Boolean,
+    val collectionEnabled: Boolean,
+)
+
+internal fun canRecordDebugCrashlyticsVerification(
+    debugBuild: Boolean,
+    crashlyticsConfigured: Boolean,
+    consentGranted: Boolean,
+    collectionEnabled: Boolean,
+): Boolean = debugBuild && crashlyticsConfigured && consentGranted && collectionEnabled
 
 internal fun <T : Any> resolveCrashlyticsInstance(
     defaultFirebaseAppPresent: Boolean,
@@ -33,6 +46,39 @@ object CrashReportConsent {
     fun isEnabled(context: Context): Boolean =
         crashlyticsOrNull(context)?.isCrashlyticsCollectionEnabled() == true
 
+    /** Single snapshot for diagnostics and debug-only startup logging. */
+    internal fun runtimeStatus(context: Context): CrashlyticsRuntimeStatus {
+        val crashlytics = crashlyticsOrNull(context)
+            ?: return CrashlyticsRuntimeStatus(configured = false, collectionEnabled = false)
+        val enabled = runCatching { crashlytics.isCrashlyticsCollectionEnabled() }.getOrDefault(false)
+        return CrashlyticsRuntimeStatus(configured = true, collectionEnabled = enabled)
+    }
+
+    /** Queue a static, non-fatal verification event only in debug builds after explicit consent. */
+    fun recordDebugVerificationEvent(context: Context): Boolean {
+        if (!BuildConfig.DEBUG) return false
+        val consentGranted = hasStoredOptIn(context)
+        if (!consentGranted) return false
+        val crashlytics = crashlyticsOrNull(context) ?: return false
+        val collectionEnabled = runCatching { crashlytics.isCrashlyticsCollectionEnabled() }.getOrDefault(false)
+        if (!canRecordDebugCrashlyticsVerification(
+                debugBuild = true,
+                crashlyticsConfigured = true,
+                consentGranted = consentGranted,
+                collectionEnabled = collectionEnabled,
+            )
+        ) {
+            return false
+        }
+
+        return runCatching {
+            // Fixed message only; never include account/server data or force a fatal crash.
+            crashlytics.recordException(IllegalStateException("Atlas debug Crashlytics verification event"))
+        }.onFailure { error ->
+            logCrashlyticsFailure("Could not queue debug Crashlytics verification", error)
+        }.isSuccess
+    }
+
     private fun hasStoredOptIn(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ENABLED, false)
 
@@ -62,8 +108,7 @@ object CrashReportConsent {
         }.getOrDefault(false)
     }
 
-    // Only use FirebaseInitProvider's app. Creating a default FirebaseApp here can run from an
-    // IO caller and expose the Crashlytics accessor before Firebase's UI-executor registrars finish.
+    // Only use FirebaseInitProvider's app; never manually initialize a duplicate FirebaseApp here.
     private fun crashlyticsOrNull(context: Context): FirebaseCrashlytics? = synchronized(lock) {
         val hasDefaultApp = runCatching {
             FirebaseApp.getApps(context).any { it.name == FirebaseApp.DEFAULT_APP_NAME }

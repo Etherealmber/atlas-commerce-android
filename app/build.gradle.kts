@@ -7,6 +7,33 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
+// Materialize optional Firebase configuration before applying its Gradle plugins below. CI
+// normally writes the ignored file in its validated setup step; this fallback also supports local
+// builds where GOOGLE_SERVICES_JSON_BASE64 is provided directly to Gradle.
+val googleServicesFile = file("google-services.json")
+if (!googleServicesFile.isFile) {
+    val encodedFirebaseConfig = System.getenv("GOOGLE_SERVICES_JSON_BASE64")
+        ?.filterNot { it.isWhitespace() }
+        ?.takeIf { it.isNotEmpty() }
+    if (encodedFirebaseConfig != null) {
+        val firebaseConfigBytes = try {
+            java.util.Base64.getDecoder().decode(encodedFirebaseConfig)
+        } catch (error: IllegalArgumentException) {
+            throw GradleException("GOOGLE_SERVICES_JSON_BASE64 is not valid base64.", error)
+        }
+        val firebaseConfigJson = firebaseConfigBytes.toString(Charsets.UTF_8)
+        val compactFirebaseConfig = firebaseConfigJson.filterNot { it.isWhitespace() }
+        if (!compactFirebaseConfig.contains("\"package_name\":\"ma.etherealmber.atlascommerce\"")) {
+            throw GradleException("Firebase config does not contain Android package ma.etherealmber.atlascommerce.")
+        }
+        googleServicesFile.writeBytes(firebaseConfigBytes)
+        logger.lifecycle("[AtlasCommerce] Materialized ignored google-services.json from the build environment.")
+    }
+}
+if (!googleServicesFile.isFile) {
+    logger.lifecycle("[AtlasCommerce] Firebase config absent; FCM and Crashlytics are disabled for this build.")
+}
+
 // Running `git pull` on top of an earlier local 1.0.4 checkout leaves untracked
 // files in `app/src/` (e.g. `push/AtlasFirebaseMessagingService.kt`), causing
 // `:app:kspReleaseKotlin` to fail on removed Firebase / Room / Hilt classes.
@@ -129,7 +156,7 @@ android {
 
 // Firebase integrations are optional for self-hosters. App-specific Firebase config is
 // injected outside git; without it the APK still builds and push/crash reporting stay inactive.
-if (file("google-services.json").exists()) {
+if (googleServicesFile.isFile) {
     apply(plugin = "com.google.gms.google-services")
     apply(plugin = "com.google.firebase.crashlytics")
 }

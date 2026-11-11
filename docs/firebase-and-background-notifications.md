@@ -6,8 +6,8 @@ Crashlytics does not need an Atlas Worker/Cloudflare backend integration. It rec
 
 1. In Firebase Console, create/select the project, add the Android app with package `ma.etherealmber.atlascommerce`, and enable Crashlytics.
 2. Download that app's `google-services.json`. Keep it out of Git. For a local build, place it at `app/google-services.json`.
-3. For GitHub Actions builds, store the base64-encoded file as the Actions secret `GOOGLE_SERVICES_JSON_BASE64`. The Android workflow validates the package ID and applies Google Services + Crashlytics only when this file is present. A recent CI build reported Firebase config validated; an older APK may not include it.
-4. Install a newly built APK and opt in under **Settings → Diagnostics → Envoyer automatiquement les rapports de plantage**. Collection is deliberately off until the user enables it. Check **Firebase Console → Crashlytics** after the next real crash and a subsequent app launch.
+3. For GitHub Actions builds, store the base64-encoded file as the Actions secret `GOOGLE_SERVICES_JSON_BASE64`. The workflow validates the package ID and materializes the ignored config before Gradle runs. For local Gradle builds, either place the file at `app/google-services.json` or export `GOOGLE_SERVICES_JSON_BASE64`; malformed or wrong-package config fails the build. Builds without either source log that Firebase integrations are disabled.
+4. Install a newly built APK and opt in under **Settings → Diagnostics → Envoyer automatiquement les rapports de plantage**. Collection is deliberately off until the user enables it. A debug build with consent exposes **Send non-fatal test event** in Developer Diagnostics; tap it to queue a static test exception without crashing or attaching account data. Check **Firebase Console → Crashlytics** after the SDK uploads it (usually after a subsequent app launch).
 
 Cloudflare Worker exceptions are not Android Crashlytics events; review those in Cloudflare Worker logs/observability.
 

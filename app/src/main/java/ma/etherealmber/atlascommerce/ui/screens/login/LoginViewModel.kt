@@ -239,9 +239,11 @@ internal fun LoginViewModel.UiState.afterAuthentication(): LoginViewModel.UiStat
     error = null, info = null,
 )
 
+internal const val AUTH_NETWORK_ERROR =
+    "Impossible de joindre le serveur configuré. Ouvrez Serveurs pour tester son adresse et vérifiez que l'appareil ou l'émulateur peut atteindre ce réseau."
+
 internal fun authFailureMessage(code: String, httpStatus: Int?, isOtp: Boolean): String = when {
-    code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK ->
-        "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
+    code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK -> AUTH_NETWORK_ERROR
     code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_TLS ->
         "Impossible de vérifier le certificat HTTPS du serveur. Vérifiez sa configuration HTTPS puis réessayez."
     code == "SAVED_SERVER_CONFIG" ->

@@ -345,6 +345,7 @@ private fun LoginScreenContent(
                         onPassword = viewModel::onPasswordChange,
                         onSubmit = viewModel::submit,
                         onDismissError = viewModel::dismissError,
+                        onChangeServer = { viewModel.dismissError(); onChangeServer() },
                         onPasswordVisibilityChange = { passwordRevealed = it },
                         compact = compact,
                     )
@@ -377,6 +378,7 @@ private fun LoginScreenContent(
                         onResend = viewModel::resendCode,
                         onBack = { switchAccount() },
                         onDismissError = viewModel::dismissError,
+                        onChangeServer = { viewModel.dismissError(); onChangeServer() },
                     )
                 }
 
@@ -822,6 +824,7 @@ private fun CredentialsForm(
     onPassword: (String) -> Unit,
     onSubmit: () -> Unit,
     onDismissError: () -> Unit,
+    onChangeServer: () -> Unit,
     onPasswordVisibilityChange: (Boolean) -> Unit,
     compact: Boolean,
 ) {
@@ -870,7 +873,7 @@ private fun CredentialsForm(
             onDone = onSubmit,
             onPasswordVisibilityChange = onPasswordVisibilityChange,
         )
-        LoginInlineError(state, onDismissError)
+        LoginInlineError(state, onDismissError, onChangeServer)
         Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
         AtlasButton(
             text = atlasText("Se connecter", "Sign in", "تسجيل الدخول"),
@@ -890,6 +893,7 @@ private fun OtpForm(
     onResend: () -> Unit,
     onBack: () -> Unit,
     onDismissError: () -> Unit,
+    onChangeServer: () -> Unit,
 ) {
     val shake = remember { Animatable(0f) }
     val focusRequester = remember { FocusRequester() }
@@ -982,7 +986,7 @@ private fun OtpForm(
                 }
             },
         )
-        LoginInlineError(state, onDismissError)
+        LoginInlineError(state, onDismissError, onChangeServer)
         Spacer(Modifier.height(12.dp))
         Text(
             text = if (state.loading) {
@@ -1016,7 +1020,11 @@ private fun OtpForm(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun LoginInlineError(state: LoginViewModel.UiState, onDismiss: () -> Unit) {
+private fun LoginInlineError(
+    state: LoginViewModel.UiState,
+    onDismiss: () -> Unit,
+    onChangeServer: () -> Unit,
+) {
     val error = state.error?.takeIf { it.isNotBlank() }
     val requester = remember { BringIntoViewRequester() }
     LaunchedEffect(error) {
@@ -1039,6 +1047,14 @@ private fun LoginInlineError(state: LoginViewModel.UiState, onDismiss: () -> Uni
                     message = localizedLoginMessage(error),
                     onDismiss = onDismiss,
                 )
+                if (error == AUTH_NETWORK_ERROR) {
+                    TextButton(
+                        onClick = { onDismiss(); onChangeServer() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(atlasText("Tester ou changer de serveur", "Test or change server", "اختبار الخادم أو تغييره"))
+                    }
+                }
             }
         }
     }
@@ -1058,8 +1074,12 @@ private fun localizedLoginMessage(message: String): String = when (message) {
         atlasText("Session expirée — reconnectez-vous avec votre mot de passe.", "Saved session expired — sign in again with your password.", "انتهت الجلسة المحفوظة — سجّل الدخول مجدداً باستخدام كلمة المرور.")
     "Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau." ->
         atlasText("Code invalide ou expiré. Vérifiez-le ou demandez-en un nouveau.", "The code is invalid or expired. Check it or request a new one.", "الرمز غير صالح أو منتهي الصلاحية. تحقق منه أو اطلب رمزاً جديداً.")
-    "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez." ->
-        atlasText("Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.", "Couldn't reach the server. Check your connection and try again.", "تعذّر الاتصال بالخادم. تحقق من اتصالك وحاول مجدداً.")
+    AUTH_NETWORK_ERROR ->
+        atlasText(
+            AUTH_NETWORK_ERROR,
+            "Couldn't reach the configured server. Open Servers to test its address and check that this device or emulator can reach that network.",
+            "تعذّر الوصول إلى الخادم المحدد. افتح الخوادم لاختبار عنوانه وتأكد من أن الجهاز أو المحاكي يستطيع الوصول إلى تلك الشبكة.",
+        )
     "Impossible de vérifier le certificat HTTPS du serveur. Vérifiez sa configuration HTTPS puis réessayez." ->
         atlasText(
             "Impossible de vérifier le certificat HTTPS du serveur. Vérifiez sa configuration HTTPS puis réessayez.",

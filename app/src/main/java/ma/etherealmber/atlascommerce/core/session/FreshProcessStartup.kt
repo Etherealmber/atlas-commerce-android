@@ -2,6 +2,7 @@ package ma.etherealmber.atlascommerce.core.session
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import ma.etherealmber.atlascommerce.core.net.ApiResult
@@ -97,6 +98,31 @@ internal object StartupResumePreparation {
                 StartupSessionVerification.Unavailable
             }
         }
+    }
+
+    /**
+     * A cold-start check is a read-only GET. Retry one unavailable result once so a transient
+     * network handoff or stale route does not immediately send the user to password/OTP login.
+     * Rejected sessions are never retried, and no token is trusted unless `/api/auth/me` succeeds.
+     */
+    suspend fun verifyWithRetry(
+        request: StartupResumeRequest,
+        timeoutMillis: Long = NETWORK_TIMEOUT_MS,
+        maxAttempts: Int = 2,
+        retryDelayMillis: Long = 350L,
+        validate: suspend (serverUrl: String, bearerToken: String) -> ApiResult<MeDto>,
+    ): StartupSessionVerification {
+        require(maxAttempts > 0) { "maxAttempts must be positive" }
+        require(retryDelayMillis >= 0L) { "retryDelayMillis must not be negative" }
+
+        repeat(maxAttempts) { attempt ->
+            val result = verify(request, timeoutMillis, validate)
+            if (result != StartupSessionVerification.Unavailable || attempt == maxAttempts - 1) {
+                return result
+            }
+            delay(retryDelayMillis)
+        }
+        return StartupSessionVerification.Unavailable
     }
 }
 

@@ -60,6 +60,8 @@ class AgentLocaleTest {
         assertTrue(authFailureMessage("BAD_OTP", null, true).contains("Code invalide"))
         assertTrue(authFailureMessage("PASSWORD_REHASH_REQUIRED", 401, false).contains("administrateur"))
         assertTrue(authFailureMessage("NETWORK", null, false).contains("serveur"))
+        assertTrue(authFailureMessage("NETWORK", null, false).contains("Serveurs"))
+        assertTrue(authFailureMessage("NETWORK", null, false).contains("émulateur"))
         assertTrue(authFailureMessage("TLS", null, false).contains("certificat HTTPS"))
     }
 

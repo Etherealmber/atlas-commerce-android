@@ -64,6 +64,9 @@ class ApiProvider @Inject constructor(
         require(bearerToken.isNotBlank()) { "Missing saved session token" }
         val isolatedClient = client.newBuilder().apply {
             interceptors().removeAll(::isStartupResumeExcludedInterceptor)
+            // This client only sends the idempotent GET /api/auth/me; the regular API client
+            // keeps retries disabled so mutating POSTs are never replayed implicitly.
+            retryOnConnectionFailure(true)
             addInterceptor(StartupResumeHeadersInterceptor(deviceIdentity, bearerToken))
         }.build()
         return Retrofit.Builder()

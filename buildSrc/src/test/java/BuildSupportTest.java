@@ -33,6 +33,34 @@ public class BuildSupportTest {
     }
 
     @Test
+    public void localNetworkSecurityOverridesAreDebugOnlyAndReleaseKeepsTlsPolicy() throws Exception {
+        String debugManifest = Files.readString(Path.of("..", "app", "src", "debug", "AndroidManifest.xml"));
+        String mainManifest = Files.readString(Path.of("..", "app", "src", "main", "AndroidManifest.xml"));
+        String debugNetworkConfig = Files.readString(Path.of(
+            "..", "app", "src", "debug", "res", "xml", "debug_network_security_config.xml"
+        ));
+
+        assertTrue(debugManifest.contains("@xml/debug_network_security_config"));
+        assertTrue(debugNetworkConfig.contains("cleartextTrafficPermitted=\"true\""));
+        assertTrue(debugNetworkConfig.contains("<certificates src=\"user\""));
+        assertTrue(mainManifest.contains("android:usesCleartextTraffic=\"false\""));
+        assertFalse(mainManifest.contains("debug_network_security_config"));
+    }
+
+    @Test
+    public void firebaseEnvironmentFallbackValidatesConfigBeforeApplyingFirebasePlugins() throws Exception {
+        String appBuildScript = Files.readString(Path.of("..", "app", "build.gradle.kts"));
+        int decode = appBuildScript.indexOf("Base64.getDecoder().decode(encodedFirebaseConfig)");
+        int applyGoogleServices = appBuildScript.indexOf("apply(plugin = \"com.google.gms.google-services\")");
+        int applyCrashlytics = appBuildScript.indexOf("apply(plugin = \"com.google.firebase.crashlytics\")");
+
+        assertTrue(appBuildScript.contains("GOOGLE_SERVICES_JSON_BASE64"));
+        assertTrue(appBuildScript.contains("ma.etherealmber.atlascommerce"));
+        assertTrue("Firebase config must be materialized before plugin application", decode >= 0 && decode < applyGoogleServices);
+        assertTrue("Crashlytics plugin must only be applied after config handling", decode < applyCrashlytics);
+    }
+
+    @Test
     public void handlesWindowsBackslashPathsWithoutUnicodeOrControlEscapes() throws Exception {
         String upperU = String.join("\n",
             "storeFile=C:\\Users\\HP\\Desktop\\atlas-release.jks",
