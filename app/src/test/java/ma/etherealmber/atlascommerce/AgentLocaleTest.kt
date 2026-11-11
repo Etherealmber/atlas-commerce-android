@@ -6,6 +6,7 @@ import ma.etherealmber.atlascommerce.data.repo.AGENT_MAX_QUESTION_LENGTH
 import ma.etherealmber.atlascommerce.ui.screens.agent.localizedAgentText
 import ma.etherealmber.atlascommerce.ui.screens.login.LoginViewModel
 import ma.etherealmber.atlascommerce.ui.screens.login.afterAuthentication
+import ma.etherealmber.atlascommerce.ui.screens.login.afterServerSwitch
 import ma.etherealmber.atlascommerce.ui.screens.login.authFailureMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -46,6 +47,25 @@ class AgentLocaleTest {
             username = "atlas", password = "secret", otp = "123456", loading = true,
             step = LoginViewModel.Step.OTP, error = "error", info = "info"
         ).afterAuthentication()
+        assertEquals(LoginViewModel.Step.CREDENTIALS, state.step)
+        assertEquals("", state.password)
+        assertEquals("", state.otp)
+        assertEquals("atlas", state.username)
+        assertEquals(false, state.loading)
+        assertEquals(null, state.error)
+        assertEquals(null, state.info)
+    }
+
+    @Test fun changingServersClearsOtpCredentialsButKeepsTheUsername() {
+        val state = LoginViewModel.UiState(
+            username = "atlas",
+            password = "secret",
+            otp = "123456",
+            step = LoginViewModel.Step.OTP,
+            loading = true,
+            error = "network error",
+            info = "pending",
+        ).afterServerSwitch()
         assertEquals(LoginViewModel.Step.CREDENTIALS, state.step)
         assertEquals("", state.password)
         assertEquals("", state.otp)

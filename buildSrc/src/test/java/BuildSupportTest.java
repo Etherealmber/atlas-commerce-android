@@ -55,6 +55,12 @@ public class BuildSupportTest {
         int applyCrashlytics = appBuildScript.indexOf("apply(plugin = \"com.google.firebase.crashlytics\")");
 
         assertTrue(appBuildScript.contains("GOOGLE_SERVICES_JSON_BASE64"));
+        assertTrue(appBuildScript.contains("import java.util.Base64"));
+        assertTrue(appBuildScript.contains("JsonSlurper().parseText(firebaseConfigJson)"));
+        assertTrue(appBuildScript.contains("android_client_info"));
+        assertTrue(appBuildScript.contains(".google-services.json.generated.sha256"));
+        assertTrue(appBuildScript.contains("generatedConfigIsOwned"));
+        assertFalse(appBuildScript.contains("compactFirebaseConfig"));
         assertTrue(appBuildScript.contains("ma.etherealmber.atlascommerce"));
         assertTrue("Firebase config must be materialized before plugin application", decode >= 0 && decode < applyGoogleServices);
         assertTrue("Crashlytics plugin must only be applied after config handling", decode < applyCrashlytics);

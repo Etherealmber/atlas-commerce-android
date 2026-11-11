@@ -345,7 +345,7 @@ private fun LoginScreenContent(
                         onPassword = viewModel::onPasswordChange,
                         onSubmit = viewModel::submit,
                         onDismissError = viewModel::dismissError,
-                        onChangeServer = { viewModel.dismissError(); onChangeServer() },
+                        onChangeServer = onChangeServer,
                         onPasswordVisibilityChange = { passwordRevealed = it },
                         compact = compact,
                     )
@@ -378,7 +378,8 @@ private fun LoginScreenContent(
                         onResend = viewModel::resendCode,
                         onBack = { switchAccount() },
                         onDismissError = viewModel::dismissError,
-                        onChangeServer = { viewModel.dismissError(); onChangeServer() },
+                        onChangeServer = onChangeServer,
+                        onRetryOtp = viewModel::submit,
                     )
                 }
 
@@ -894,6 +895,7 @@ private fun OtpForm(
     onBack: () -> Unit,
     onDismissError: () -> Unit,
     onChangeServer: () -> Unit,
+    onRetryOtp: () -> Unit,
 ) {
     val shake = remember { Animatable(0f) }
     val focusRequester = remember { FocusRequester() }
@@ -986,7 +988,7 @@ private fun OtpForm(
                 }
             },
         )
-        LoginInlineError(state, onDismissError, onChangeServer)
+        LoginInlineError(state, onDismissError, onChangeServer, onRetryOtp)
         Spacer(Modifier.height(12.dp))
         Text(
             text = if (state.loading) {
@@ -1024,6 +1026,7 @@ private fun LoginInlineError(
     state: LoginViewModel.UiState,
     onDismiss: () -> Unit,
     onChangeServer: () -> Unit,
+    onRetryOtp: (() -> Unit)? = null,
 ) {
     val error = state.error?.takeIf { it.isNotBlank() }
     val requester = remember { BringIntoViewRequester() }
@@ -1047,9 +1050,21 @@ private fun LoginInlineError(
                     message = localizedLoginMessage(error),
                     onDismiss = onDismiss,
                 )
+                if (error == AUTH_NETWORK_ERROR &&
+                    state.step == LoginViewModel.Step.OTP &&
+                    isValidOneTimeCode(state.otp) &&
+                    onRetryOtp != null
+                ) {
+                    TextButton(
+                        onClick = onRetryOtp,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(atlasText("Réessayer le code", "Retry verification", "إعادة محاولة التحقق"))
+                    }
+                }
                 if (error == AUTH_NETWORK_ERROR) {
                     TextButton(
-                        onClick = { onDismiss(); onChangeServer() },
+                        onClick = onChangeServer,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(atlasText("Tester ou changer de serveur", "Test or change server", "اختبار الخادم أو تغييره"))

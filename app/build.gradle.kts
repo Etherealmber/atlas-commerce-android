@@ -1,4 +1,10 @@
+import groovy.json.JsonSlurper
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.util.Base64
 
 plugins {
     id("com.android.application")
@@ -7,28 +13,76 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
-// Materialize optional Firebase configuration before applying its Gradle plugins below. CI
-// normally writes the ignored file in its validated setup step; this fallback also supports local
-// builds where GOOGLE_SERVICES_JSON_BASE64 is provided directly to Gradle.
+// Materialize optional Firebase config before applying its plugins. Preserve an existing
+// developer-provided file; refresh only files whose content still matches our provenance marker.
 val googleServicesFile = file("google-services.json")
-if (!googleServicesFile.isFile) {
+val generatedConfigMarker = file(".google-services.json.generated.sha256")
+fun sha256Hex(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+    .digest(bytes)
+    .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
+val generatedConfigIsOwned = googleServicesFile.isFile && generatedConfigMarker.isFile &&
+    generatedConfigMarker.readText().trim() == sha256Hex(googleServicesFile.readBytes())
+if (generatedConfigMarker.isFile && googleServicesFile.isFile && !generatedConfigIsOwned) {
+    // A developer replaced the generated file; never overwrite it on a later build.
+    generatedConfigMarker.delete()
+}
+
+if (!googleServicesFile.isFile || generatedConfigIsOwned) {
     val encodedFirebaseConfig = System.getenv("GOOGLE_SERVICES_JSON_BASE64")
         ?.filterNot { it.isWhitespace() }
         ?.takeIf { it.isNotEmpty() }
     if (encodedFirebaseConfig != null) {
         val firebaseConfigBytes = try {
-            java.util.Base64.getDecoder().decode(encodedFirebaseConfig)
+            Base64.getDecoder().decode(encodedFirebaseConfig)
         } catch (error: IllegalArgumentException) {
             throw GradleException("GOOGLE_SERVICES_JSON_BASE64 is not valid base64.", error)
         }
         val firebaseConfigJson = firebaseConfigBytes.toString(Charsets.UTF_8)
-        val compactFirebaseConfig = firebaseConfigJson.filterNot { it.isWhitespace() }
-        if (!compactFirebaseConfig.contains("\"package_name\":\"ma.etherealmber.atlascommerce\"")) {
-            throw GradleException("Firebase config does not contain Android package ma.etherealmber.atlascommerce.")
+        val firebaseConfig = try {
+            JsonSlurper().parseText(firebaseConfigJson) as? Map<*, *>
+        } catch (error: Exception) {
+            throw GradleException("GOOGLE_SERVICES_JSON_BASE64 does not contain valid Firebase JSON.", error)
         }
-        googleServicesFile.writeBytes(firebaseConfigBytes)
+        val hasExpectedAndroidClient = (firebaseConfig?.get("client") as? List<*>)
+            ?.any { client ->
+                val clientInfo = (client as? Map<*, *>)?.get("client_info") as? Map<*, *>
+                val androidInfo = clientInfo?.get("android_client_info") as? Map<*, *>
+                androidInfo?.get("package_name") == "ma.etherealmber.atlascommerce"
+            } == true
+        if (!hasExpectedAndroidClient) {
+            throw GradleException("Firebase config has no Android client for package ma.etherealmber.atlascommerce.")
+        }
+
+        val tempConfig = Files.createTempFile(googleServicesFile.parentFile.toPath(), ".google-services-", ".tmp")
+        try {
+            Files.write(tempConfig, firebaseConfigBytes)
+            try {
+                Files.move(
+                    tempConfig,
+                    googleServicesFile.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(tempConfig, googleServicesFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+        } finally {
+            Files.deleteIfExists(tempConfig)
+        }
+        generatedConfigMarker.writeText(sha256Hex(firebaseConfigBytes) + "\n")
         logger.lifecycle("[AtlasCommerce] Materialized ignored google-services.json from the build environment.")
+    } else if (generatedConfigIsOwned) {
+        if (!googleServicesFile.delete()) {
+            throw GradleException("Could not remove stale environment-generated Firebase config.")
+        }
+        generatedConfigMarker.delete()
     }
+} else {
+    logger.lifecycle("[AtlasCommerce] Preserving developer-provided google-services.json; the environment fallback was not applied.")
+}
+if (!googleServicesFile.isFile && generatedConfigMarker.isFile) {
+    generatedConfigMarker.delete()
 }
 if (!googleServicesFile.isFile) {
     logger.lifecycle("[AtlasCommerce] Firebase config absent; FCM and Crashlytics are disabled for this build.")

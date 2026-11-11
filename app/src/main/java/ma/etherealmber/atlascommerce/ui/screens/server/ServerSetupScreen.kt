@@ -249,13 +249,18 @@ private fun ServerSetupScreenContent(
                                 val selected = state.normalizedInput == ServerUrl.normalize(preset.url)
                                 Surface(
                                     onClick = { viewModel.choosePreset(preset.url, preset.label) },
+                                    enabled = !state.testing && !state.saving,
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = MaterialTheme.shapes.medium,
                                     color = if (selected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
                                     border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else Atlas.palette.cardBorder),
                                 ) {
                                     Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        RadioButton(selected = selected, onClick = { viewModel.choosePreset(preset.url, preset.label) })
+                                        RadioButton(
+                                            selected = selected,
+                                            onClick = { viewModel.choosePreset(preset.url, preset.label) },
+                                            enabled = !state.testing && !state.saving,
+                                        )
                                         Column(Modifier.weight(1f)) {
                                             Text(atlasText(preset.label), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                             Text(atlasText(preset.hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -274,6 +279,7 @@ private fun ServerSetupScreenContent(
                                             if (virtualRuntime) "Virtual device gateway" else "Detected network gateway",
                                         )
                                     },
+                                    enabled = !state.testing && !state.saving,
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = MaterialTheme.shapes.medium,
                                     color = MaterialTheme.colorScheme.surface,
