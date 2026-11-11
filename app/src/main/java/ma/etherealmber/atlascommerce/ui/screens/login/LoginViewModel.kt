@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
@@ -54,6 +56,8 @@ class LoginViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
+    private var authenticationJob: Job? = null
+    private var observedServerUrl = ServerUrl.normalize(serverConfig.selection.value?.baseUrl)
 
     val server = serverConfig.selection
 
@@ -64,6 +68,18 @@ class LoginViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {
+        viewModelScope.launch {
+            serverConfig.selection.collect { selection ->
+                val nextServerUrl = ServerUrl.normalize(selection?.baseUrl)
+                val serverChanged = observedServerUrl != nextServerUrl
+                observedServerUrl = nextServerUrl
+                if (serverChanged) {
+                    authenticationJob?.cancel()
+                    authenticationJob = null
+                    _state.update { it.afterServerSwitch() }
+                }
+            }
+        }
         viewModelScope.launch {
             sessionManager.state.collect { session ->
                 if (session is SessionState.Active) _state.update { it.afterAuthentication() }
@@ -162,7 +178,7 @@ class LoginViewModel @Inject constructor(
             return
         }
         if (!_state.compareAndSet(current, current.copy(loading = true, error = null))) return
-        viewModelScope.launch {
+        authenticationJob = viewModelScope.launch {
             when (
                 val result = sessionManager.signIn(
                     username = current.username,
@@ -202,7 +218,7 @@ class LoginViewModel @Inject constructor(
             return
         }
         if (!_state.compareAndSet(current, current.copy(loading = true, error = null))) return
-        viewModelScope.launch {
+        authenticationJob = viewModelScope.launch {
             when (
                 val result = sessionManager.verifyOtp(
                     username = current.username,
@@ -239,9 +255,21 @@ internal fun LoginViewModel.UiState.afterAuthentication(): LoginViewModel.UiStat
     error = null, info = null,
 )
 
+/** Drop password and OTP whenever the selected server origin changes. */
+internal fun LoginViewModel.UiState.afterServerSwitch(): LoginViewModel.UiState = copy(
+    step = LoginViewModel.Step.CREDENTIALS,
+    password = "",
+    otp = "",
+    loading = false,
+    error = null,
+    info = null,
+)
+
+internal const val AUTH_NETWORK_ERROR =
+    "Impossible de joindre le serveur configuré. Ouvrez Serveurs pour tester son adresse et vérifiez que l'appareil ou l'émulateur peut atteindre ce réseau."
+
 internal fun authFailureMessage(code: String, httpStatus: Int?, isOtp: Boolean): String = when {
-    code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK ->
-        "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
+    code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK -> AUTH_NETWORK_ERROR
     code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_TLS ->
         "Impossible de vérifier le certificat HTTPS du serveur. Vérifiez sa configuration HTTPS puis réessayez."
     code == "SAVED_SERVER_CONFIG" ->

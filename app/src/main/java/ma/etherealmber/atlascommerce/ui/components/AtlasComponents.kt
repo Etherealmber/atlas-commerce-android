@@ -806,33 +806,59 @@ fun AtlasEmptyState(
 
 @Composable
 fun AtlasInfoRow(label: String, value: String, modifier: Modifier = Modifier) {
-    Row(
+    val visibleValue = value.replace("\u2066", "").replace("\u2069", "")
+    val trailingToken = visibleValue.substringAfterLast(' ')
+    val containsCurrencyCode = value.any(Char::isDigit) && trailingToken.length == 3 && trailingToken.all { it in 'A'..'Z' }
+
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = atlasText(label),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
-        Spacer(Modifier.width(12.dp))
-        val visibleValue = value.replace("\u2066", "").replace("\u2069", "")
-        val trailingToken = visibleValue.substringAfterLast(' ')
-        val containsCurrencyCode = value.any(Char::isDigit) && trailingToken.length == 3 && trailingToken.all { it in 'A'..'Z' }
-        CompositionLocalProvider(
-            LocalLayoutDirection provides if (containsCurrencyCode) LayoutDirection.Ltr else LocalLayoutDirection.current,
-        ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                softWrap = false,
-            )
+        val compact = maxWidth < 380.dp
+        val valueDirection = if (containsCurrencyCode) LayoutDirection.Ltr else LocalLayoutDirection.current
+        if (compact) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = atlasText(label),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                CompositionLocalProvider(LocalLayoutDirection provides valueDirection) {
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = atlasText(label),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(0.42f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.width(12.dp))
+                CompositionLocalProvider(LocalLayoutDirection provides valueDirection) {
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(0.58f),
+                        textAlign = TextAlign.End,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
     }
 }

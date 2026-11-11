@@ -115,6 +115,12 @@ Open Atlas Commerce, complete the welcome screen, enter your exact HTTPS Worker 
 
 The Android application ID is `ma.etherealmber.atlascommerce`. Debug builds are signed with the local Android debug key; release/Play builds use their own signing certificate. Do not confuse the upload key with the Play app-signing key.
 
+### 3.3 Local emulator, WSA, and virtual-network endpoints
+
+- Android Studio's emulator reaches a backend on the Windows host through `10.0.2.2:<port>`; `localhost` and `127.0.0.1` inside Android refer to Android itself, not the host. The debug server picker includes the emulator alias.
+- WSA and other virtual networks use environment-specific routes. In debug builds, Server Setup can suggest the current private IPv4 default gateway; it is only a candidate, not guaranteed to be the Windows host. Tap it to run `/api/health`, and use the actual reachable host IP/port if that fails. Bind the backend to a reachable interface and allow its port through the Windows firewall.
+- Debug builds allow local HTTP and trust user-installed development CAs. Release builds require HTTPS with a certificate trusted by Android. The app never redirects login credentials to a guessed gateway or disables TLS verification.
+
 ## 4. Optional push notifications and automatic crash reports (Firebase)
 
 Firebase is optional. If `app/google-services.json` is absent, Android still builds; Firebase push registration and automatic Crashlytics upload remain inactive. Crash-report collection is **off by default**. A user must enable **Paramètres → Envoyer automatiquement les rapports de plantage** once; after opting in, subsequent crash reports are uploaded automatically when connectivity is available. Turning the setting off withdraws that choice. Manual in-app diagnostic reports remain a separate, user-submitted flow.

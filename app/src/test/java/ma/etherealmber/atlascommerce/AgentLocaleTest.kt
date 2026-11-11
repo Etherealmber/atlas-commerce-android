@@ -6,6 +6,7 @@ import ma.etherealmber.atlascommerce.data.repo.AGENT_MAX_QUESTION_LENGTH
 import ma.etherealmber.atlascommerce.ui.screens.agent.localizedAgentText
 import ma.etherealmber.atlascommerce.ui.screens.login.LoginViewModel
 import ma.etherealmber.atlascommerce.ui.screens.login.afterAuthentication
+import ma.etherealmber.atlascommerce.ui.screens.login.afterServerSwitch
 import ma.etherealmber.atlascommerce.ui.screens.login.authFailureMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -55,11 +56,32 @@ class AgentLocaleTest {
         assertEquals(null, state.info)
     }
 
+    @Test fun changingServersClearsOtpCredentialsButKeepsTheUsername() {
+        val state = LoginViewModel.UiState(
+            username = "atlas",
+            password = "secret",
+            otp = "123456",
+            step = LoginViewModel.Step.OTP,
+            loading = true,
+            error = "network error",
+            info = "pending",
+        ).afterServerSwitch()
+        assertEquals(LoginViewModel.Step.CREDENTIALS, state.step)
+        assertEquals("", state.password)
+        assertEquals("", state.otp)
+        assertEquals("atlas", state.username)
+        assertEquals(false, state.loading)
+        assertEquals(null, state.error)
+        assertEquals(null, state.info)
+    }
+
     @Test fun passwordAndOtpErrorsAreSpecificWithoutMislabelingNetworkFailures() {
         assertTrue(authFailureMessage("BAD_PASSWORD", null, false).contains("mot de passe incorrect"))
         assertTrue(authFailureMessage("BAD_OTP", null, true).contains("Code invalide"))
         assertTrue(authFailureMessage("PASSWORD_REHASH_REQUIRED", 401, false).contains("administrateur"))
         assertTrue(authFailureMessage("NETWORK", null, false).contains("serveur"))
+        assertTrue(authFailureMessage("NETWORK", null, false).contains("Serveurs"))
+        assertTrue(authFailureMessage("NETWORK", null, false).contains("émulateur"))
         assertTrue(authFailureMessage("TLS", null, false).contains("certificat HTTPS"))
     }
 

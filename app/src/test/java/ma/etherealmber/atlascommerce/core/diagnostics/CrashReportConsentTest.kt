@@ -8,6 +8,15 @@ import org.junit.Test
 
 class CrashReportConsentTest {
     @Test
+    fun debugVerificationEventRequiresDebugBuildConfigurationAndExplicitOptIn() {
+        assertFalse(canRecordDebugCrashlyticsVerification(false, true, true, true))
+        assertFalse(canRecordDebugCrashlyticsVerification(true, false, true, true))
+        assertFalse(canRecordDebugCrashlyticsVerification(true, true, false, true))
+        assertFalse(canRecordDebugCrashlyticsVerification(true, true, true, false))
+        assertTrue(canRecordDebugCrashlyticsVerification(true, true, true, true))
+    }
+
+    @Test
     fun doesNotRequestCrashlyticsWhenDefaultFirebaseAppIsMissing() {
         var factoryCalled = false
         var failureReported = false

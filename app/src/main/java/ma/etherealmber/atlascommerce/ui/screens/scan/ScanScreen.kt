@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.VideocamOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -125,6 +126,7 @@ fun ScanScreen(
         "تم رفض إذن الكاميرا — استخدم الإدخال اليدوي بدلًا من ذلك.",
     )
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showScannedProductDialog by remember { mutableStateOf(false) }
 
     val isAdmin = Roles.canCreateProductDirectly(user.role)
     val canSell = Roles.canCreateDocuments(user.role)
@@ -165,6 +167,9 @@ fun ScanScreen(
         viewModel.scanFeedbackEvents.collect {
             ScanFeedback.trigger(view = view, haptic = scanHaptic, sound = scanSound)
         }
+    }
+    LaunchedEffect(state.product?.id, state.lastCode) {
+        if (state.product != null) showScannedProductDialog = true
     }
 
     val startCameraExplicitly: () -> Unit = {
@@ -407,6 +412,84 @@ fun ScanScreen(
                 )
             }
         }
+    }
+
+    val scannedProduct = state.product
+    if (showScannedProductDialog && scannedProduct != null) {
+        AlertDialog(
+            onDismissRequest = { showScannedProductDialog = false },
+            title = {
+                Text(
+                    text = scannedProduct.displayName?.takeIf { it.isNotBlank() } ?: scannedProduct.name,
+                    style = MaterialTheme.typography.titleLarge,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        atlasText(
+                            "Code : ${state.lastCode.orEmpty()}",
+                            "Code: ${state.lastCode.orEmpty()}",
+                            "الرمز: ${state.lastCode.orEmpty()}",
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (scannedProduct.trackInventory) {
+                        Text(
+                            atlasText(
+                                "Stock : ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
+                                "Stock: ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
+                                "المخزون: ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    Text(
+                        atlasText(
+                            "Prix : ${atlasMoneyCompact(scannedProduct.price)}",
+                            "Price: ${atlasMoneyCompact(scannedProduct.price)}",
+                            "السعر: ${atlasMoneyCompact(scannedProduct.price)}",
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (state.added) {
+                        Text(
+                            atlasText("Ajouté au panier.", "Added to cart.", "تمت الإضافة إلى السلة."),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showScannedProductDialog = false
+                        viewModel.continueScanning()
+                        startCameraExplicitly()
+                    },
+                    enabled = isActive,
+                ) {
+                    Text(atlasText("Suivant", "Scan next", "التالي"))
+                }
+            },
+            dismissButton = {
+                if (canSell && !state.added) {
+                    TextButton(
+                        onClick = {
+                            viewModel.addToCart()
+                            showScannedProductDialog = false
+                        },
+                    ) {
+                        Text(atlasText("Ajouter", "Add", "إضافة"))
+                    }
+                } else {
+                    TextButton(onClick = { showScannedProductDialog = false }) {
+                        Text(atlasText("Fermer", "Close", "إغلاق"))
+                    }
+                }
+            },
+        )
     }
 
     if (showCreateDialog) {

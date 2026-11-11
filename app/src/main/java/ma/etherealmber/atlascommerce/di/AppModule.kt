@@ -97,7 +97,8 @@ object AppModule {
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .callTimeout(20, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(false)
+        // The probe is a read-only GET; recover transparently from a transient virtual/LAN route flap.
+        .retryOnConnectionFailure(true)
         .addInterceptor { chain ->
             val req = chain.request().newBuilder()
                 .header("User-Agent", deviceIdentity.userAgent)

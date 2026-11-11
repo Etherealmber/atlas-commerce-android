@@ -73,10 +73,12 @@ class ServerSetupViewModel @Inject constructor(
     }
 
     fun choosePreset(url: String, presetLabel: String = "") {
+        probeJob?.cancel()
         _state.update {
             it.copy(
                 input = url,
                 label = presetLabel.ifBlank { it.label },
+                testing = false,
                 report = null,
                 error = null,
             )

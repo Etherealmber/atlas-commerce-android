@@ -36,7 +36,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.net.ProbeReport
 import ma.etherealmber.atlascommerce.core.net.hasDeviceInternetCapability
@@ -63,9 +66,10 @@ fun DeveloperDiagnosticsScreen(
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val crashReportsConfigured = CrashReportConsent.isConfigured(context)
+    val crashStatus = CrashReportConsent.runtimeStatus(context)
+    val crashReportsConfigured = crashStatus.configured
     val firebaseAppConfigured = CrashReportConsent.hasDefaultFirebaseApp(context)
-    val crashReportsEnabled = CrashReportConsent.isEnabled(context)
+    val crashReportsEnabled = crashStatus.collectionEnabled
     val developerMode by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
     val localStorage by appViewModel.localStorageSummary.collectAsStateWithLifecycle()
@@ -80,6 +84,8 @@ fun DeveloperDiagnosticsScreen(
     val activeRole = (session as? SessionState.Active)?.user?.role
     val language = LocalAtlasLanguage.current
     val diagnosticsRefreshed = atlasText("État actualisé.", "Diagnostics refreshed.", "تم تحديث التشخيصات.")
+    val crashTestQueued = atlasText("Événement Crashlytics ajouté; vérifiez Firebase après la prochaine ouverture.", "Crashlytics event queued; check Firebase after the next app launch.", "تمت إضافة حدث Crashlytics؛ تحقق من Firebase بعد فتح التطبيق مرة أخرى.")
+    val crashTestFailed = atlasText("Impossible d'ajouter l'événement de test Crashlytics.", "Could not queue the Crashlytics test event.", "تعذرت إضافة حدث اختبار Crashlytics.")
     val diagnosticsCopied = atlasText("Diagnostics expurgés copiés.", "Redacted diagnostics copied.", "تم نسخ التشخيصات المنقحة.")
     val diagnosticsCopyFailed = atlasText("Impossible de copier les diagnostics.", "Could not copy diagnostics.", "تعذّر نسخ التشخيصات.")
     val diagnosticsShareFailed = atlasText("Impossible de préparer le partage des diagnostics.", "Could not prepare diagnostics for sharing.", "تعذّر إعداد التشخيصات للمشاركة.")
@@ -288,30 +294,69 @@ fun DeveloperDiagnosticsScreen(
                 AtlasInfoRow(
                     atlasText("Rapports Crashlytics", "Crashlytics reports", "تقارير Crashlytics"),
                     when {
-                        crashReportsConfigured && crashReportsEnabled -> atlasText("Activés avec consentement", "Enabled with consent", "مفعّلة بموافقة المستخدم")
-                        crashReportsConfigured -> atlasText("Désactivés · consentement requis", "Disabled · consent required", "معطّلة · تتطلب الموافقة")
+                        crashReportsConfigured && crashReportsEnabled -> atlasText("Activés · consentement accordé", "Available · consent granted", "متاحة · تمت الموافقة")
+                        crashReportsConfigured -> atlasText("Inactifs · accord requis", "Off · consent required", "متوقفة · الموافقة مطلوبة")
                         firebaseAppConfigured -> atlasText(
-                            "Firebase est initialisé, mais Crashlytics est indisponible dans cette version",
-                            "Firebase is initialized, but Crashlytics is unavailable in this build",
-                            "تم تهيئة Firebase لكن Crashlytics غير متاح في هذا الإصدار",
+                            "Firebase prêt · Crashlytics indisponible dans cette version",
+                            "Firebase ready · Crashlytics unavailable in this build",
+                            "Firebase جاهز · Crashlytics غير متاح في هذا الإصدار",
                         )
                         else -> atlasText(
-                            "Configuration Firebase absente de cette version",
-                            "Firebase configuration is not bundled in this build",
-                            "إعداد Firebase غير مضمّن في هذا الإصدار",
+                            "Configuration Firebase absente",
+                            "Firebase configuration missing",
+                            "إعداد Firebase غير موجود",
                         )
                     },
                 )
                 Text(
-                    atlasText(
-                        "Les notifications Firebase Cloud Messaging et les rapports Crashlytics sont deux services distincts. Cette ligne indique uniquement si Crashlytics est disponible dans l'application installée. Les journaux techniques restent locaux et ne sont partagés qu'après votre accord.",
-                        "Firebase Cloud Messaging notifications and Crashlytics reports are separate services. This row only reports whether Crashlytics is available in the installed app. Technical logs stay local and are shared only with your consent.",
-                        "إشعارات Firebase Cloud Messaging وتقارير Crashlytics خدمتان منفصلتان. يوضح هذا السطر توفر Crashlytics فقط في التطبيق المثبت. تبقى السجلات التقنية محلية ولا تُشارك إلا بموافقتك.",
-                    ),
+                    when {
+                        crashReportsConfigured -> atlasText(
+                            "Crashlytics suit votre consentement. Les journaux techniques restent locaux et ne sont partagés qu'après votre accord.",
+                            "Crashlytics follows your consent. Technical logs stay local and are shared only with your approval.",
+                            "تتبع Crashlytics موافقتك. تبقى السجلات التقنية محلية ولا تُشارك إلا بعد موافقتك.",
+                        )
+                        firebaseAppConfigured -> atlasText(
+                            "Firebase est initialisé, mais Crashlytics ne démarre pas dans cette version. Vérifiez la configuration Firebase et que la variante installée inclut Crashlytics.",
+                            "Firebase initialized, but Crashlytics did not start in this build. Check the Firebase config and that the installed variant includes Crashlytics.",
+                            "تم تهيئة Firebase لكن Crashlytics لم يبدأ في هذا الإصدار. تحقق من إعداد Firebase ومن تضمين Crashlytics في النسخة المثبتة.",
+                        )
+                        else -> atlasText(
+                            "Aucune configuration Firebase n'est incluse. FCM et Crashlytics restent indisponibles dans cette version; leur configuration est facultative.",
+                            "No Firebase configuration is bundled. FCM and Crashlytics are unavailable in this build; configuring them is optional.",
+                            "لا يوجد إعداد Firebase مضمّن. لا تتوفر FCM وCrashlytics في هذا الإصدار؛ وإعدادهما اختياري.",
+                        )
+                    },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (BuildConfig.DEBUG && crashReportsConfigured) {
+                    TextButton(
+                        enabled = crashReportsEnabled,
+                        onClick = {
+                            scope.launch(Dispatchers.IO) {
+                                val recorded = CrashReportConsent.recordDebugVerificationEvent(context)
+                                withContext(Dispatchers.Main.immediate) {
+                                    onToast(if (recorded) crashTestQueued else crashTestFailed)
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(atlasText("Envoyer un événement de test non fatal", "Send non-fatal test event", "إرسال حدث اختبار غير فادح"))
+                    }
+                    if (!crashReportsEnabled) {
+                        Text(
+                            atlasText(
+                                "Activez d'abord les rapports Crashlytics avec votre consentement.",
+                                "First enable Crashlytics reports with your consent.",
+                                "فعّل تقارير Crashlytics أولاً بموافقتك.",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
 
             DeveloperCacheToolsCard(

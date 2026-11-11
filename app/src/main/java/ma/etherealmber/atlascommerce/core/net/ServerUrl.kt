@@ -52,9 +52,11 @@ object ServerUrl {
         if (!hasScheme) {
             // Reject other schemes outright instead of prefixing them with https://
             if (value.contains("://")) return null
-            // Local dev servers (emulator, LAN) speak http; everything else is https.
-            val looksLocal = Regex("^(localhost|127\\.|10\\.|192\\.168\\.|\\[::1\\])", RegexOption.IGNORE_CASE)
-                .containsMatchIn(value)
+            // Private virtual/LAN networks and loopback commonly host local dev servers.
+            // Infer HTTP only for these addresses; releases still reject HTTP in ServerConfig.
+            val authority = value.substringBefore('/').substringBefore('?').substringBefore('#')
+            val candidateHost = runCatching { URI("http://$authority").host }.getOrNull()
+            val looksLocal = candidateHost?.let(::isLocalHost) == true
             value = (if (looksLocal) "http://" else "https://") + value
         }
         value = value.trimEnd('/')
@@ -89,14 +91,22 @@ object ServerUrl {
 
     fun isCleartext(url: String): Boolean = url.startsWith("http://", ignoreCase = true)
 
-    fun isLocal(url: String): Boolean {
-        val host = host(url)
-        return host == "localhost" ||
-            host == "127.0.0.1" ||
-            host == "10.0.2.2" ||
-            host == "[::1]" ||
-            host.startsWith("192.168.") ||
-            host.startsWith("10.")
+    fun isLocal(url: String): Boolean = isLocalHost(host(url))
+
+    /** RFC 1918 IPv4, loopback, and IPv6 loopback hosts used by local/virtual networks. */
+    private fun isLocalHost(rawHost: String): Boolean {
+        val host = rawHost.lowercase().removePrefix("[").removeSuffix("]")
+        if (host == "localhost" || host == "::1") return true
+        val octets = host.split('.')
+        if (octets.size != 4) return false
+        val address = octets.map { it.toIntOrNull()?.takeIf { value -> value in 0..255 } ?: return false }
+        return when {
+            address[0] == 10 -> true
+            address[0] == 127 -> true
+            address[0] == 192 && address[1] == 168 -> true
+            address[0] == 172 && address[1] in 16..31 -> true
+            else -> false
+        }
     }
 
     /** "stock.afmarbre.com" — what we show in compact chips. */

@@ -27,6 +27,7 @@ public final class LegacySourceQuarantine {
         new TreeSet<>(List.of(
             "androidTest/java/ma/etherealmber/atlascommerce/Android9StartupSmokeTest.kt",
             "debug/AndroidManifest.xml",
+            "debug/res/xml/debug_network_security_config.xml",
             "main/AndroidManifest.xml",
             "main/assets/logo-dark.png",
             "main/assets/logo-dark.svg",
@@ -48,6 +49,7 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/core/net/Interceptors.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/ServerProbe.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/ServerUrl.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/net/VirtualNetworkGateway.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/SessionEvents.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/TokenHolder.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/VerifyLinkParser.kt",
@@ -183,7 +185,8 @@ public final class LegacySourceQuarantine {
             "test/java/ma/etherealmber/atlascommerce/data/repo/AssistSseFrameParserTest.kt",
             "test/java/ma/etherealmber/atlascommerce/push/PushNotificationContentTest.kt",
             "test/java/ma/etherealmber/atlascommerce/ui/root/AppResumeRefreshPolicyTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/ui/screens/agent/AgentStreamingTest.kt"
+            "test/java/ma/etherealmber/atlascommerce/ui/screens/agent/AgentStreamingTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/ui/screens/server/ServerSwitchPolicyTest.kt"
         ))
     );
 

@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
@@ -52,8 +53,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.net.ProbeReport
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
+import ma.etherealmber.atlascommerce.core.net.discoverDefaultGatewayIpv4
+import ma.etherealmber.atlascommerce.core.net.isLikelyVirtualAndroidRuntime
+import ma.etherealmber.atlascommerce.core.net.suggestedLocalEndpoint
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -92,12 +99,21 @@ private fun ServerSetupScreenContent(
     val savedServersLoaded by viewModel.savedServersLoaded.collectAsStateWithLifecycle()
     val density = Atlas.density
     val devPresets = ServerUrl.presets()
+    val context = LocalContext.current
+    var detectedGateway by remember { mutableStateOf<String?>(null) }
     var step by remember { mutableStateOf<ServerSetupStep?>(null) }
     var forgetTarget by remember { mutableStateOf<SavedServerEntry?>(null) }
 
     LaunchedEffect(serverConfigLoaded, savedServersLoaded, savedServers) {
         if (serverConfigLoaded && savedServersLoaded && step == null) {
             step = if (savedServers.isNotEmpty()) ServerSetupStep.PICK_SAVED else ServerSetupStep.ADDRESS
+        }
+    }
+    LaunchedEffect(BuildConfig.DEBUG, context) {
+        if (BuildConfig.DEBUG) {
+            detectedGateway = withContext(Dispatchers.IO) {
+                discoverDefaultGatewayIpv4(context.applicationContext)
+            }
         }
     }
 
@@ -233,17 +249,70 @@ private fun ServerSetupScreenContent(
                                 val selected = state.normalizedInput == ServerUrl.normalize(preset.url)
                                 Surface(
                                     onClick = { viewModel.choosePreset(preset.url, preset.label) },
+                                    enabled = !state.testing && !state.saving,
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = MaterialTheme.shapes.medium,
                                     color = if (selected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
                                     border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else Atlas.palette.cardBorder),
                                 ) {
                                     Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        RadioButton(selected = selected, onClick = { viewModel.choosePreset(preset.url, preset.label) })
+                                        RadioButton(
+                                            selected = selected,
+                                            onClick = { viewModel.choosePreset(preset.url, preset.label) },
+                                            enabled = !state.testing && !state.saving,
+                                        )
                                         Column(Modifier.weight(1f)) {
                                             Text(atlasText(preset.label), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                             Text(atlasText(preset.hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
+                                    }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                            }
+                            val gatewayEndpoint = detectedGateway?.let(::suggestedLocalEndpoint)
+                            if (gatewayEndpoint != null && gatewayEndpoint != ServerUrl.EMULATOR) {
+                                val virtualRuntime = isLikelyVirtualAndroidRuntime()
+                                Surface(
+                                    onClick = {
+                                        viewModel.choosePreset(
+                                            gatewayEndpoint,
+                                            if (virtualRuntime) "Virtual device gateway" else "Detected network gateway",
+                                        )
+                                    },
+                                    enabled = !state.testing && !state.saving,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = MaterialTheme.shapes.medium,
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, Atlas.palette.cardBorder),
+                                ) {
+                                    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                                        Text(
+                                            atlasText(
+                                                "Passerelle détectée · tester avant usage",
+                                                "Detected gateway · test before use",
+                                                "بوابة مكتشفة · اختبرها قبل الاستخدام",
+                                            ),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        Text(
+                                            "$gatewayEndpoint · " + atlasText(
+                                                if (virtualRuntime) "Passerelle virtuelle Android/WSA" else "Passerelle réseau privée",
+                                                if (virtualRuntime) "Android/WSA virtual gateway" else "Private network gateway",
+                                                if (virtualRuntime) "بوابة شبكة Android/WSA الافتراضية" else "بوابة الشبكة الخاصة",
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Text(
+                                            atlasText(
+                                                "Une passerelle n’est pas forcément l’hôte Windows : touchez pour tester, puis confirmez l’adresse du serveur.",
+                                                "A gateway is not necessarily the Windows host: tap to test, then confirm the server address.",
+                                                "البوابة ليست بالضرورة مضيف Windows: اضغط للاختبار ثم أكد عنوان الخادم.",
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
                                 }
                                 Spacer(Modifier.height(8.dp))
@@ -253,12 +322,24 @@ private fun ServerSetupScreenContent(
                         AtlasTextField(
                             value = state.input,
                             onValueChange = viewModel::onInputChange,
-                            label = atlasText("Domaine ou URL HTTPS", "Domain or HTTPS URL", "النطاق أو رابط HTTPS"),
+                            label = atlasText("Adresse ou domaine du serveur", "Server address or domain", "عنوان الخادم أو النطاق"),
                             placeholder = "https://votre-domaine.exemple.com",
                             leadingIcon = Icons.Outlined.Dns,
                             keyboardType = KeyboardType.Uri,
                             imeAction = ImeAction.Done,
-                            supportingText = atlasText("HTTPS requis pour les serveurs de production.", "HTTPS required for production servers.", "HTTPS مطلوب لخوادم الإنتاج."),
+                            supportingText = if (BuildConfig.ALLOW_CLEARTEXT) {
+                                atlasText(
+                                    "Debug : utilisez l’IP accessible du réseau privé (ex. 172.17.0.1:8787) ; l’émulateur Android rejoint l’hôte via 10.0.2.2:PORT. Le serveur doit écouter sur le réseau et son port doit être ouvert.",
+                                    "Debug: use the reachable private-network IP (e.g. 172.17.0.1:8787); Android Emulator reaches the host at 10.0.2.2:PORT. The server must listen on the network and its port must be open.",
+                                    "التصحيح: استخدم عنوان IP المتاح على الشبكة الخاصة (مثل 172.17.0.1:8787)؛ يصل محاكي Android إلى المضيف عبر 10.0.2.2:PORT. يجب أن يستمع الخادم على الشبكة وأن يكون المنفذ مفتوحاً.",
+                                )
+                            } else {
+                                atlasText(
+                                    "Production : HTTPS avec certificat de confiance requis ; les serveurs privés/virtuels restent accessibles si leur adresse est joignable.",
+                                    "Release builds require HTTPS with a trusted certificate; private/virtual network servers work when their address is reachable.",
+                                    "يتطلب إصدار الإنتاج HTTPS بشهادة موثوقة؛ يمكن الاتصال بخوادم الشبكات الافتراضية والخاصة عند إمكانية الوصول إلى عنوانها.",
+                                )
+                            },
                             onDone = viewModel::test,
                         )
                         Spacer(Modifier.height(6.dp))
