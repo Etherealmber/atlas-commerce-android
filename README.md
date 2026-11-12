@@ -99,7 +99,7 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
 
 ### Prerequisites
 - **Android Studio** current stable — JDK 17+ (CI uses JDK 21)
-- **Android SDK 35** (`minSdk = 28` / Android 9+)
+- **Android SDK 35** (`minSdk = 30` / Android 11+)
 
 ```bash
 git clone https://github.com/Etherealmber/atlas-commerce-android.git
