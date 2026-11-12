@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.core.net
 
+import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
 /** Result of every network operation — the UI never sees raw exceptions. */
@@ -10,6 +11,7 @@ sealed interface ApiResult<out T> {
         val code: String,
         val message: String,
         val httpStatus: Int? = null,
+        val retryAfterSeconds: Long? = null,
     ) : ApiResult<Nothing>
 }
 
@@ -43,4 +45,5 @@ data class ApiErrorPayload(
     val error: String? = null,
     val code: String? = null,
     val message: String? = null,
+    @Json(name = "retry_after") val retryAfterSeconds: Long? = null,
 )

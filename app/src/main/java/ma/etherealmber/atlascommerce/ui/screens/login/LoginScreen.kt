@@ -1076,8 +1076,30 @@ private fun LoginInlineError(
 }
 
 @Composable
-private fun localizedLoginMessage(message: String): String = when (message) {
-    "Saisissez votre identifiant et votre mot de passe." ->
+private fun localizedLoginMessage(message: String): String {
+    val retryPrefix = "Trop de tentatives de connexion. Réessayez dans "
+    if (message.startsWith(retryPrefix)) {
+        val seconds = message.removePrefix(retryPrefix).removeSuffix(" s.")
+        return atlasText(
+            "Trop de tentatives de connexion. Réessayez dans $seconds s.",
+            "Too many sign-in attempts. Try again in $seconds seconds.",
+            "محاولات تسجيل دخول كثيرة. أعد المحاولة بعد $seconds ثانية.",
+        )
+    }
+    return when (message) {
+        "Trop de tentatives de connexion. Réessayez plus tard." ->
+            atlasText(
+                "Trop de tentatives de connexion. Réessayez plus tard.",
+                "Too many sign-in attempts. Please try again later.",
+                "محاولات تسجيل دخول كثيرة. يرجى المحاولة لاحقاً.",
+            )
+        "Le contrôle de connexion est temporairement indisponible. Réessayez plus tard." ->
+            atlasText(
+                "Le contrôle de connexion est temporairement indisponible. Réessayez plus tard.",
+                "The sign-in security check is temporarily unavailable. Please try again later.",
+                "فحص أمان تسجيل الدخول غير متاح مؤقتاً. يرجى المحاولة لاحقاً.",
+            )
+        "Saisissez votre identifiant et votre mot de passe." ->
         atlasText("Saisissez votre identifiant et votre mot de passe.", "Enter your username and password.", "أدخل اسم المستخدم وكلمة المرور.")
     "Saisissez les 6 chiffres du code reçu par e-mail.", "Saisissez le code reçu par e-mail.", "Saisissez le code complet reçu par e-mail." ->
         atlasText("Saisissez les 6 chiffres du code reçu par e-mail.", "Enter all six digits of the code sent by email.", "أدخل الأرقام الستة للرمز المرسل عبر البريد الإلكتروني.")
@@ -1117,5 +1139,6 @@ private fun localizedLoginMessage(message: String): String = when (message) {
         atlasText("L'adresse du serveur sélectionné est invalide.", "The selected server address is invalid.", "عنوان الخادم المحدد غير صالح.")
     "Connexion impossible. Vérifiez vos informations et réessayez." ->
         atlasText("Connexion impossible. Vérifiez vos informations et réessayez.", "Couldn't sign in. Check your details and try again.", "تعذّر تسجيل الدخول. تحقق من بياناتك وحاول مجدداً.")
-    else -> atlasText("Une erreur est survenue. Réessayez.", "Something went wrong. Please try again.", "حدث خطأ. يرجى المحاولة مجدداً.")
+        else -> atlasText("Une erreur est survenue. Réessayez.", "Something went wrong. Please try again.", "حدث خطأ. يرجى المحاولة مجدداً.")
+    }
 }

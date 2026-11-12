@@ -121,7 +121,12 @@ class LoginViewModel @Inject constructor(
                     it.copy(
                         loading = false,
                         username = entry.username,
-                        error = safeAuthFailure(res.code, res.httpStatus, isOtp = false),
+                        error = safeAuthFailure(
+                            res.code,
+                            res.httpStatus,
+                            isOtp = false,
+                            retryAfterSeconds = res.retryAfterSeconds,
+                        ),
                     )
                 }
             }
@@ -146,9 +151,14 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    private fun safeAuthFailure(code: String, httpStatus: Int?, isOtp: Boolean): String {
+    private fun safeAuthFailure(
+        code: String,
+        httpStatus: Int?,
+        isOtp: Boolean,
+        retryAfterSeconds: Long? = null,
+    ): String {
         AtlasLogBuffer.log("AUTH", "Authentication rejected: code=$code; http=${httpStatus ?: "none"}", "WARN")
-        return authFailureMessage(code, httpStatus, isOtp)
+        return authFailureMessage(code, httpStatus, isOtp, retryAfterSeconds)
     }
 
     fun submit() {
@@ -188,7 +198,17 @@ class LoginViewModel @Inject constructor(
             ) {
                 is ApiResult.Failure -> {
                     AtlasLogBuffer.log("AUTH", "Sign-in rejected: code=${result.code}; http=${result.httpStatus ?: "none"}", "WARN")
-                    _state.update { it.copy(loading = false, error = safeAuthFailure(result.code, result.httpStatus, isOtp = false)) }
+                    _state.update {
+                        it.copy(
+                            loading = false,
+                            error = safeAuthFailure(
+                                result.code,
+                                result.httpStatus,
+                                isOtp = false,
+                                retryAfterSeconds = result.retryAfterSeconds,
+                            ),
+                        )
+                    }
                 }
 
                 is ApiResult.Success -> when (val outcome = result.data) {
@@ -229,7 +249,17 @@ class LoginViewModel @Inject constructor(
             ) {
                 is ApiResult.Failure -> {
                     AtlasLogBuffer.log("AUTH", "OTP verification rejected: code=${result.code}; http=${result.httpStatus ?: "none"}", "WARN")
-                    _state.update { it.copy(loading = false, error = safeAuthFailure(result.code, result.httpStatus, isOtp = true)) }
+                    _state.update {
+                        it.copy(
+                            loading = false,
+                            error = safeAuthFailure(
+                                result.code,
+                                result.httpStatus,
+                                isOtp = true,
+                                retryAfterSeconds = result.retryAfterSeconds,
+                            ),
+                        )
+                    }
                 }
 
                 is ApiResult.Success -> when (val outcome = result.data) {
@@ -268,7 +298,18 @@ internal fun LoginViewModel.UiState.afterServerSwitch(): LoginViewModel.UiState 
 internal const val AUTH_NETWORK_ERROR =
     "Impossible de joindre le serveur configuré. Ouvrez Serveurs pour tester son adresse et vérifiez que l'appareil ou l'émulateur peut atteindre ce réseau."
 
-internal fun authFailureMessage(code: String, httpStatus: Int?, isOtp: Boolean): String = when {
+internal fun authFailureMessage(
+    code: String,
+    httpStatus: Int?,
+    isOtp: Boolean,
+    retryAfterSeconds: Long? = null,
+): String = when {
+    code == "RATE_LIMITED" || httpStatus == 429 -> retryAfterSeconds
+        ?.takeIf { it > 0 }
+        ?.let { seconds -> "Trop de tentatives de connexion. Réessayez dans $seconds s." }
+        ?: "Trop de tentatives de connexion. Réessayez plus tard."
+    code == "AUTH_LIMIT_UNAVAILABLE" ->
+        "Le contrôle de connexion est temporairement indisponible. Réessayez plus tard."
     code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_NETWORK -> AUTH_NETWORK_ERROR
     code == ma.etherealmber.atlascommerce.core.net.ApiRunner.CODE_TLS ->
         "Impossible de vérifier le certificat HTTPS du serveur. Vérifiez sa configuration HTTPS puis réessayez."

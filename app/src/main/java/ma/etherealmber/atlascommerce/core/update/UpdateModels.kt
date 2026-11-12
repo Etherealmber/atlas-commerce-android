@@ -30,8 +30,11 @@ object UpdateDefaults {
         "${BuildConfig.PROJECT_REPO.trimEnd('/').replace("https://github.com/", "https://api.github.com/repos/")}/releases?per_page=8"
 }
 
+enum class MirrorTestTarget { CDN1, GITHUB }
+
 data class MirrorPingResult(
     val testing: Boolean = false,
+    val currentTest: MirrorTestTarget? = null,
     val cdn1Ms: Long? = null,
     val cdn1Online: Boolean? = null,
     val githubMs: Long? = null,
@@ -45,6 +48,34 @@ data class MirrorPingResult(
             githubOnline == true && githubMs != null -> "GitHub actif (${githubMs} ms)"
             else -> null
         }
+}
+
+/** Tests mirrors in order and publishes the first result before starting the second request. */
+internal suspend fun pingMirrorsSequentially(
+    cdnTarget: String,
+    githubTarget: String,
+    measure: suspend (String) -> Pair<Boolean, Long?>,
+    publish: (MirrorPingResult) -> Unit,
+) {
+    publish(MirrorPingResult(testing = true, currentTest = MirrorTestTarget.CDN1))
+    val (cdnOnline, cdnMs) = measure(cdnTarget)
+    val cdnResult = MirrorPingResult(
+        testing = true,
+        currentTest = MirrorTestTarget.GITHUB,
+        cdn1Ms = cdnMs,
+        cdn1Online = cdnOnline,
+    )
+    publish(cdnResult)
+
+    val (githubOnline, githubMs) = measure(githubTarget)
+    publish(
+        cdnResult.copy(
+            testing = false,
+            currentTest = null,
+            githubMs = githubMs,
+            githubOnline = githubOnline,
+        ),
+    )
 }
 
 data class ReleaseChangelogEntry(
