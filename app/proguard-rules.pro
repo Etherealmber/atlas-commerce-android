@@ -52,6 +52,13 @@
     <init>();
 }
 
+# Firebase discovers component registrars reflectively and needs their no-arg constructors.
+# R8 full mode can otherwise remove these constructors in minified release builds,
+# leaving FirebaseApp initialized but Crashlytics/Installations components unavailable.
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    <init>();
+}
+
 # Hilt / Dagger
 -keep class dagger.hilt.** { *; }
 -keep class javax.inject.** { *; }

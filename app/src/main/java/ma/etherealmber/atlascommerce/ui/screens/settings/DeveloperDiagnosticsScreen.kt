@@ -189,7 +189,6 @@ fun DeveloperDiagnosticsScreen(
                             deviceReportsInternetCapability = hasDeviceInternetCapability(context)
                             appViewModel.refreshCachedProductCount()
                             appViewModel.refreshLocalStorageSummary()
-                            appViewModel.runDeveloperApiProbe()
                             onToast(diagnosticsRefreshed)
                         },
                     ) {

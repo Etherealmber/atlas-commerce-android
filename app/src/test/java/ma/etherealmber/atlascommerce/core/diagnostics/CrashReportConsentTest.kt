@@ -66,6 +66,15 @@ class CrashReportConsentTest {
     }
 
     @Test
+    fun releaseRulesKeepFirebaseComponentRegistrarNoArgConstructorsForR8() {
+        val rules = java.io.File("proguard-rules.pro").takeIf { it.isFile } ?: java.io.File("app/proguard-rules.pro")
+        assertTrue("R8 rules file must exist", rules.isFile)
+        val content = rules.readText()
+        assertTrue(content.contains("-keep class * implements com.google.firebase.components.ComponentRegistrar"))
+        assertTrue(content.contains("<init>();"))
+    }
+
+    @Test
     fun firebaseLookupDoesNotInitializeAnAppOutsideFirebaseInitProvider() {
         val source = java.io.File(
             "src/main/java/ma/etherealmber/atlascommerce/core/diagnostics/CrashReportConsent.kt",
