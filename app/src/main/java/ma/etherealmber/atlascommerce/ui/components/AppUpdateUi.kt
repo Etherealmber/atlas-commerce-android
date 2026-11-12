@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
+import ma.etherealmber.atlascommerce.core.update.MirrorTestTarget
 import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
@@ -631,7 +632,15 @@ fun SettingsUpdateCard(
             }
         }
 
-        // Live Ping tester (CDN 1 vs GitHub in ms)
+        // Mirrors are tested serially so each result is visible before the next request starts.
+        val mirrorActionLabel = when {
+            mirrorPing.testing && mirrorPing.currentTest == MirrorTestTarget.CDN1 ->
+                atlasText("Test CDN 1…", "Testing CDN 1…", "جارٍ اختبار CDN 1…")
+            mirrorPing.testing && mirrorPing.currentTest == MirrorTestTarget.GITHUB ->
+                atlasText("Test GitHub…", "Testing GitHub…", "جارٍ اختبار GitHub…")
+            mirrorPing.testing -> atlasText("Test en cours…")
+            else -> atlasText("Tester les miroirs", "Test mirrors", "اختبار المرايا")
+        }
         Spacer(Modifier.height(6.dp))
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             if (maxWidth < 480.dp) {
@@ -650,9 +659,7 @@ fun SettingsUpdateCard(
                     ) {
                         Icon(Icons.Outlined.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(
-                            if (mirrorPing.testing) atlasText("Test en cours…") else atlasText("Tester les miroirs"),
-                        )
+                        Text(mirrorActionLabel)
                     }
                 }
             } else {
@@ -666,7 +673,7 @@ fun SettingsUpdateCard(
                     TextButton(onClick = onPingMirrors, enabled = !mirrorPing.testing) {
                         Icon(Icons.Outlined.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(atlasText("Ping"))
+                        Text(mirrorActionLabel)
                     }
                 }
             }
@@ -919,15 +926,35 @@ fun DownloadProgressBlock(state: UpdateState.Downloading) {
 
 @Composable
 private fun MirrorLatencyChips(mirrorPing: MirrorPingResult) {
-    MirrorLatencyChip("CDN 1", mirrorPing.cdn1Online, mirrorPing.cdn1Ms, mirrorPing.testing)
-    MirrorLatencyChip("GitHub", mirrorPing.githubOnline, mirrorPing.githubMs, mirrorPing.testing)
+    MirrorLatencyChip(
+        label = "CDN 1",
+        online = mirrorPing.cdn1Online,
+        latencyMs = mirrorPing.cdn1Ms,
+        target = MirrorTestTarget.CDN1,
+        mirrorPing = mirrorPing,
+    )
+    MirrorLatencyChip(
+        label = "GitHub",
+        online = mirrorPing.githubOnline,
+        latencyMs = mirrorPing.githubMs,
+        target = MirrorTestTarget.GITHUB,
+        mirrorPing = mirrorPing,
+    )
 }
 
 @Composable
-private fun MirrorLatencyChip(label: String, online: Boolean?, latencyMs: Long?, testing: Boolean) {
+private fun MirrorLatencyChip(
+    label: String,
+    online: Boolean?,
+    latencyMs: Long?,
+    target: MirrorTestTarget,
+    mirrorPing: MirrorPingResult,
+) {
     val dark = LocalAtlasDarkTheme.current
+    val testingThis = mirrorPing.testing && mirrorPing.currentTest == target
+    val waitingNext = mirrorPing.testing && mirrorPing.currentTest != target && online == null
     val (container, foreground) = when {
-        testing -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+        testingThis || waitingNext -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
         online == false ->
             (if (dark) Color(0xFF3E2023) else Color(0xFFFEE2E2)) to
                 (if (dark) Color(0xFFFCA5A5) else Color(0xFFB91C1C))
@@ -943,13 +970,14 @@ private fun MirrorLatencyChip(label: String, online: Boolean?, latencyMs: Long?,
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
     val text = when {
-        testing -> atlasText("$label : test…", "$label: testing…", "$label: جارٍ الاختبار…")
+        testingThis -> atlasText("$label : test…", "$label: testing…", "$label: جارٍ الاختبار…")
         online == true && latencyMs != null -> atlasText(
             "$label : $latencyMs ms",
             "$label: $latencyMs ms",
             "$label: $latencyMs مللي ثانية",
         )
         online == false -> atlasText("$label : indisponible", "$label: unavailable", "$label: غير متاح")
+        waitingNext -> atlasText("À suivre", "Up next", "التالي")
         else -> atlasText("$label : prêt", "$label: ready", "$label: جاهز")
     }
     Surface(shape = RoundedCornerShape(10.dp), color = container, contentColor = foreground) {

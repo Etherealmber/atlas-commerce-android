@@ -340,22 +340,22 @@ class AppUpdateManager internal constructor(
         val ghTarget = activeInfo?.githubUrl?.takeIf { it.isNotBlank() }
             ?: UpdateDefaults.GITHUB_LATEST_APK_URL
 
-        _mirrorPing.value = _mirrorPing.value.copy(testing = true)
         pingJob = scope.launch(ioDispatcher) {
-            val report = coroutineScope {
-                val cdnDeferred = async { measureEndpointMs(cdnTarget) }
-                val ghDeferred = async { measureEndpointMs(ghTarget) }
-                val (cdnOk, cdnMs) = cdnDeferred.await()
-                val (ghOk, ghMs) = ghDeferred.await()
-                MirrorPingResult(
-                    testing = false,
-                    cdn1Ms = cdnMs,
-                    cdn1Online = cdnOk,
-                    githubMs = ghMs,
-                    githubOnline = ghOk,
+            try {
+                pingMirrorsSequentially(
+                    cdnTarget = cdnTarget,
+                    githubTarget = ghTarget,
+                    measure = ::measureEndpointMs,
+                    publish = { _mirrorPing.value = it },
                 )
+            } finally {
+                if (_mirrorPing.value.testing) {
+                    _mirrorPing.value = _mirrorPing.value.copy(
+                        testing = false,
+                        currentTest = null,
+                    )
+                }
             }
-            _mirrorPing.value = report
         }
     }
 

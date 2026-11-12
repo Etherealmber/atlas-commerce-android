@@ -3,6 +3,9 @@ package ma.etherealmber.atlascommerce
 import ma.etherealmber.atlascommerce.ui.screens.login.LoginViewModel
 import ma.etherealmber.atlascommerce.ui.screens.login.isValidOneTimeCode
 import ma.etherealmber.atlascommerce.ui.screens.login.authFailureMessage
+import ma.etherealmber.atlascommerce.core.net.ApiErrorPayload
+import ma.etherealmber.atlascommerce.core.net.parseRetryAfterSeconds
+import com.squareup.moshi.Moshi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -28,6 +31,45 @@ class LoginOtpValidationTest {
             "Session expirée — reconnectez-vous avec votre mot de passe.",
             authFailureMessage("SAVED_SESSION_EXPIRED", httpStatus = 401, isOtp = false),
         )
+    }
+
+    @Test
+    fun rateLimitIsReportedAsAWaitNotAsBadCredentialsOrNetworkFailure() {
+        assertEquals(
+            "Trop de tentatives de connexion. Réessayez dans 75 s.",
+            authFailureMessage("RATE_LIMITED", 429, isOtp = false, retryAfterSeconds = 75),
+        )
+        assertEquals(
+            "Trop de tentatives de connexion. Réessayez plus tard.",
+            authFailureMessage("RATE_LIMITED", 429, isOtp = true),
+        )
+    }
+
+    @Test
+    fun limiterUnavailableIsDistinctFromBadCredentials() {
+        assertEquals(
+            "Le contrôle de connexion est temporairement indisponible. Réessayez plus tard.",
+            authFailureMessage("AUTH_LIMIT_UNAVAILABLE", 503, isOtp = false),
+        )
+    }
+
+    @Test
+    fun errorPayloadReadsRetryAfterSeconds() {
+        val payload = Moshi.Builder().build()
+            .adapter(ApiErrorPayload::class.java)
+            .fromJson("""{"code":"RATE_LIMITED","retry_after":75}""")
+
+        assertEquals("RATE_LIMITED", payload?.code)
+        assertEquals(75L, payload?.retryAfterSeconds)
+    }
+
+    @Test
+    fun retryAfterAcceptsOnlyBoundedPositiveDeltaSeconds() {
+        assertEquals(75L, parseRetryAfterSeconds("75", payloadSeconds = null))
+        assertEquals(40L, parseRetryAfterSeconds("not-a-number", payloadSeconds = 40L))
+        assertEquals(null, parseRetryAfterSeconds("0", payloadSeconds = null))
+        assertEquals(null, parseRetryAfterSeconds("90000", payloadSeconds = null))
+        assertEquals(null, parseRetryAfterSeconds("-1", payloadSeconds = null))
     }
 
     private fun otp(code: String) = LoginViewModel.UiState(

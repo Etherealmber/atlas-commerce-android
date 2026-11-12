@@ -12,6 +12,12 @@ import kotlin.coroutines.cancellation.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Accepts only a bounded Retry-After delta, falling back to the API's retry_after field. */
+internal fun parseRetryAfterSeconds(headerValue: String?, payloadSeconds: Long?): Long? {
+    val fromHeader = headerValue?.trim()?.toLongOrNull()?.takeIf { it in 1L..86_400L }
+    return fromHeader ?: payloadSeconds?.takeIf { it in 1L..86_400L }
+}
+
 /**
  * Runs a network call and converts every outcome into an [ApiResult].
  *
@@ -108,7 +114,8 @@ class ApiRunner @Inject constructor(private val moshi: Moshi) {
 
     private fun httpFailure(exception: HttpException): ApiResult.Failure {
         val status = exception.code()
-        val raw = runCatching { exception.response()?.errorBody()?.string() }.getOrNull()
+        val response = exception.response()
+        val raw = runCatching { response?.errorBody()?.string() }.getOrNull()
         if (raw != null && (raw.contains("__cf_chl_opt") || raw.contains("Just a moment", ignoreCase = true))) {
             return ApiResult.Failure(
                 code = "CF_CHALLENGE_$status",
@@ -126,6 +133,10 @@ class ApiRunner @Inject constructor(private val moshi: Moshi) {
                 httpStatus = status,
             )
         }
+        val retryAfterSeconds = parseRetryAfterSeconds(
+            headerValue = response?.headers()?.get("Retry-After"),
+            payloadSeconds = payload?.retryAfterSeconds,
+        )
         val message = if (status in 500..599) {
             "Une erreur du service est survenue. Réessayez plus tard."
         } else {
@@ -135,6 +146,7 @@ class ApiRunner @Inject constructor(private val moshi: Moshi) {
             code = payload?.code ?: "HTTP_$status",
             message = message,
             httpStatus = status,
+            retryAfterSeconds = retryAfterSeconds,
         )
     }
 

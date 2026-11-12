@@ -22,6 +22,9 @@ import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
 import ma.etherealmber.atlascommerce.core.update.DownloadNetworkTransport
+import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
+import ma.etherealmber.atlascommerce.core.update.MirrorTestTarget
+import ma.etherealmber.atlascommerce.core.update.pingMirrorsSequentially
 import ma.etherealmber.atlascommerce.core.update.UpdateFormatter
 import ma.etherealmber.atlascommerce.core.update.formatReleaseNotesForDisplay
 import ma.etherealmber.atlascommerce.core.update.UpdateInfo
@@ -87,6 +90,73 @@ class AppUpdateManagerTest {
     fun tearDown() {
         scope.cancel()
         tempDir.deleteRecursively()
+    }
+
+    @Test
+    fun mirrorTestsRunOneAtATimeAndPublishFirstFailureBeforeContinuing() = runBlocking {
+        val requests = mutableListOf<String>()
+        val published = mutableListOf<MirrorPingResult>()
+
+        pingMirrorsSequentially(
+            cdnTarget = "https://cdn.example/latest.apk",
+            githubTarget = "https://github.example/latest.apk",
+            measure = { url ->
+                requests += url
+                if (url.contains("cdn.example")) {
+                    false to 15L
+                } else {
+                    val partial = published.last()
+                    assertTrue(partial.testing)
+                    assertEquals(MirrorTestTarget.GITHUB, partial.currentTest)
+                    assertEquals(false, partial.cdn1Online)
+                    assertEquals(15L, partial.cdn1Ms)
+                    assertNull(partial.githubOnline)
+                    true to 30L
+                }
+            },
+            publish = published::add,
+        )
+
+        assertEquals(
+            listOf("https://cdn.example/latest.apk", "https://github.example/latest.apk"),
+            requests,
+        )
+        assertEquals(3, published.size)
+        assertEquals(MirrorTestTarget.CDN1, published.first().currentTest)
+        assertEquals(MirrorTestTarget.GITHUB, published[1].currentTest)
+        assertFalse(published.last().testing)
+        assertNull(published.last().currentTest)
+        assertEquals(false, published.last().cdn1Online)
+        assertEquals(15L, published.last().cdn1Ms)
+        assertEquals(true, published.last().githubOnline)
+        assertEquals(30L, published.last().githubMs)
+    }
+
+    @Test
+    fun mirrorSuccessIsPublishedBeforeTestingTheNextMirror() = runBlocking {
+        val published = mutableListOf<MirrorPingResult>()
+
+        pingMirrorsSequentially(
+            cdnTarget = "https://cdn.example/latest.apk",
+            githubTarget = "https://github.example/latest.apk",
+            measure = { url ->
+                if (url.contains("cdn.example")) {
+                    true to 42L
+                } else {
+                    val partial = published.last()
+                    assertEquals(MirrorTestTarget.GITHUB, partial.currentTest)
+                    assertEquals(true, partial.cdn1Online)
+                    assertEquals(42L, partial.cdn1Ms)
+                    assertNull(partial.githubOnline)
+                    false to 55L
+                }
+            },
+            publish = published::add,
+        )
+
+        assertEquals(true, published[1].cdn1Online)
+        assertEquals(false, published.last().githubOnline)
+        assertEquals(55L, published.last().githubMs)
     }
 
     @Test
