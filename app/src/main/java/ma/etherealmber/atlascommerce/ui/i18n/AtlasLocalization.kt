@@ -545,6 +545,7 @@ private val commonTranslations = mapOf(
     "La session est liée à l'adresse IP et à l'empreinte de l'appareil." to ("The session is bound to the IP address and device fingerprint." to "ترتبط الجلسة بعنوان IP وبصمة الجهاز."),
     "Le jeton est chiffré en AES-256-GCM avec une clé du Keystore Android." to ("The token is encrypted with AES-256-GCM using an Android Keystore key." to "يُشفّر الرمز باستخدام AES-256-GCM ومفتاح من Android Keystore."),
     "La déconnexion efface le jeton, le panier et le cache du catalogue." to ("Signing out clears the token, cart and catalog cache." to "يؤدي تسجيل الخروج إلى مسح الرمز والسلة وذاكرة الكتالوج المؤقتة."),
+    "Déconnexion effectuée, mais le serveur n’a pas confirmé la reprise par mot de passe. Une vérification OTP peut être nécessaire." to ("Signed out, but the server did not confirm password-only resumption. OTP verification may be required next time." to "تم تسجيل الخروج، لكن الخادم لم يؤكد إمكانية الاستئناف بكلمة المرور فقط. قد يلزم التحقق برمز OTP في المرة القادمة."),
     "Les versions de production refusent le trafic HTTP en clair." to ("Production builds reject unencrypted HTTP traffic." to "ترفض إصدارات الإنتاج حركة HTTP غير المشفّرة."),
     "Le certificat TLS est vérifié par la pile réseau d'Android." to ("The Android network stack verifies the TLS certificate." to "يتحقق مكدس الشبكة في Android من شهادة TLS."),
     "Seules les versions debug autorisent un serveur local (émulateur)." to ("Only debug builds allow a local server (emulator)." to "تسمح إصدارات التصحيح فقط بخادم محلي (المحاكي)."),

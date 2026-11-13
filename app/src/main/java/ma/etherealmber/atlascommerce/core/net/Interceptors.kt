@@ -48,6 +48,8 @@ internal fun diagnosticAddressClass(address: InetAddress): String {
         val octets = address.address.map { it.toInt() and 0xff }
         if (octets.size == 4 && octets[0] == 198 && octets[1] in 18..19) return "benchmark"
     }
+    val addressBytes = address.address
+    if (addressBytes.size == 16 && (addressBytes[0].toInt() and 0xfe) == 0xfc) return "private"
     if (address.isSiteLocalAddress) return "private"
     return "global"
 }
@@ -200,7 +202,7 @@ class AtlasNetworkEventListener private constructor(private val traceId: Long) :
         runCatching {
             AtlasLogBuffer.log(
                 tag = "NETWORK",
-                message = "trace=$traceId ${request.method} host=${request.url.host} path=${request.url.encodedPath} $details",
+                message = "trace=$traceId ${request.method} host=${request.url.host} path=${diagnosticPath(request.url.encodedPath)} $details",
                 level = level,
             )
         }
@@ -211,6 +213,14 @@ class AtlasNetworkEventListener private constructor(private val traceId: Long) :
         override fun create(call: Call): EventListener = AtlasNetworkEventListener(ids.incrementAndGet())
     }
 }
+
+private val QR_SESSION_TOKEN_SEGMENT = Regex("(/api/auth/qr/session/)[^/]+")
+
+/** Redacts opaque QR-session bearer material embedded in request paths before logging. */
+internal fun diagnosticPath(encodedPath: String): String =
+    QR_SESSION_TOKEN_SEGMENT.replace(encodedPath) { match ->
+        "${match.groupValues[1]}[REDACTED]"
+    }
 
 private const val SLOW_NETWORK_EVENT_MS = 1_000L
 private const val SLOW_CALL_EVENT_MS = 3_000L

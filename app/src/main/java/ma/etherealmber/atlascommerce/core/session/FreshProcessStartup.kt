@@ -10,6 +10,9 @@ import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.data.model.MeDto
 
+internal fun validatedSessionToken(refreshedToken: String?, existingToken: String): String =
+    refreshedToken?.takeIf(String::isNotBlank) ?: existingToken
+
 internal fun startupOutcomeForResumePreparation(result: StartupResumeResult): FreshProcessSessionOutcome? = when (result) {
     StartupResumeResult.NO_SESSION -> FreshProcessSessionOutcome.NO_SESSION
     StartupResumeResult.UNDECRYPTABLE_TOKEN -> FreshProcessSessionOutcome.UNAVAILABLE
@@ -146,7 +149,7 @@ internal enum class FreshProcessSessionOutcome {
     UNAVAILABLE,
 }
 
-/** Restores only server-validated sessions; explicit sign-out or rejected tokens stay signed out. */
+/** Restores only server-validated sessions; temporary validation failures never become a login prompt. */
 internal class FreshProcessStartup(
     private val restorePreviousSession: suspend () -> FreshProcessSessionOutcome,
     private val clearStoredSession: suspend () -> Unit,
@@ -166,10 +169,13 @@ internal class FreshProcessStartup(
             outcome = FreshProcessSessionOutcome.UNAVAILABLE
         } finally {
             withContext(NonCancellable) {
-                if (outcome != FreshProcessSessionOutcome.RESTORED) {
-                    if (outcome != FreshProcessSessionOutcome.UNAVAILABLE) {
-                        runCatching { clearStoredSession() }
-                    }
+                if (outcome == FreshProcessSessionOutcome.UNAVAILABLE) {
+                    // Keep the encrypted token and Loading state. Login would incorrectly
+                    // invite a fresh OTP when the only problem is temporary connectivity.
+                    runCatching { purgeActiveState() }
+                    releaseStartupGate()
+                } else if (outcome != FreshProcessSessionOutcome.RESTORED) {
+                    runCatching { clearStoredSession() }
                     runCatching { purgeActiveState() }
                     try {
                         publishSignedOut()

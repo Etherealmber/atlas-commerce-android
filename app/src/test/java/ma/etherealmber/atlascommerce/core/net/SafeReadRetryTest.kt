@@ -60,11 +60,23 @@ class SafeReadRetryTest {
     fun dnsDiagnosticsClassifySyntheticAndPrivateAnswersWithoutRetainingAddresses() {
         val synthetic = InetAddress.getByAddress(byteArrayOf(198.toByte(), 18, 0, 38))
         val privateAddress = InetAddress.getByAddress(byteArrayOf(192.toByte(), 168.toByte(), 1, 2))
+        val uniqueLocalIpv6 = InetAddress.getByName("fd00::1")
         val publicAddress = InetAddress.getByAddress(byteArrayOf(1, 1, 1, 1))
 
         assertEquals("benchmark", diagnosticAddressClass(synthetic))
         assertEquals("private", diagnosticAddressClass(privateAddress))
+        assertEquals("private", diagnosticAddressClass(uniqueLocalIpv6))
+        assertTrue(summarizeDiagnosticDnsAnswers(listOf(uniqueLocalIpv6)).hasNonGlobalAnswer)
         assertEquals("global", diagnosticAddressClass(publicAddress))
+    }
+
+    @Test
+    fun diagnosticPathsRedactQrSessionTokensButKeepRouteContext() {
+        assertEquals(
+            "/api/auth/qr/session/[REDACTED]/claim",
+            diagnosticPath("/api/auth/qr/session/opaque-session-token/claim"),
+        )
+        assertEquals("/api/auth/me", diagnosticPath("/api/auth/me"))
     }
 
     @Test

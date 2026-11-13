@@ -186,7 +186,7 @@ public final class LegacySourceQuarantine {
             "test/java/ma/etherealmber/atlascommerce/ui/root/AppResumeRefreshPolicyTest.kt",
             "test/java/ma/etherealmber/atlascommerce/ui/screens/agent/AgentStreamingTest.kt",
             "test/java/ma/etherealmber/atlascommerce/ui/screens/server/ServerSwitchPolicyTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/ui/screens/settings/DeveloperDiagnosticsScreenTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/ui/screens/settings/DeveloperDiagnosticsScreenTest.kt"
         ))
     );
 

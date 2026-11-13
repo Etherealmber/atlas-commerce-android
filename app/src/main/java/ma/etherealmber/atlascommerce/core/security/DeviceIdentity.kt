@@ -15,7 +15,7 @@ internal fun resolveDeviceInstallId(
     decryptAtRest: (String?) -> String?,
     encryptAtRest: (String) -> String,
     generate: () -> String,
-    persist: (String) -> Unit,
+    persist: (String) -> Boolean,
 ): String {
     if (!stored.isNullOrBlank()) {
         if (stored.startsWith("v2:")) {
@@ -26,12 +26,20 @@ internal fun resolveDeviceInstallId(
             return decoded
         }
         // Migrate the UUID stored by older versions without changing this device's fingerprint.
+        // If migration cannot be saved, the legacy value remains readable and stable.
         val migrated = runCatching { encryptAtRest(stored) }.getOrNull()
         if (migrated != null) runCatching { persist(migrated) }
         return stored
     }
-    val generated = generate()
-    runCatching { persist(encryptAtRest(generated)) }
+    val generated = generate().takeIf(String::isNotBlank)
+        ?: throw DeviceIdentityUnavailableException()
+    // Never authenticate with a one-process identity. If Keystore encryption or the
+    // synchronous preference commit fails, a later launch would otherwise generate a
+    // different fingerprint and the backend would reject the session as device-changed.
+    val encrypted = runCatching { encryptAtRest(generated) }.getOrNull()
+        ?: throw DeviceIdentityUnavailableException()
+    val wasPersisted = runCatching { persist(encrypted) }.getOrDefault(false)
+    if (!wasPersisted) throw DeviceIdentityUnavailableException()
     return generated
 }
 
@@ -63,7 +71,7 @@ class DeviceIdentity @Inject constructor(
             decryptAtRest = cryptoStore::decryptAtRest,
             encryptAtRest = cryptoStore::encryptAtRest,
             generate = { UUID.randomUUID().toString() },
-            persist = { encrypted -> prefs.edit().putString(KEY_INSTALL_ID, encrypted).apply() },
+            persist = { encrypted -> prefs.edit().putString(KEY_INSTALL_ID, encrypted).commit() },
         )
     }
 
