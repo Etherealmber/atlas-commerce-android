@@ -55,6 +55,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -189,8 +190,9 @@ fun toneBackground(tone: AtlasTone): Color {
 fun AtlasMark(
     modifier: Modifier = Modifier,
     size: Dp = 56.dp,
+    tint: Color = MaterialTheme.colorScheme.onBackground,
 ) {
-    val ink = MaterialTheme.colorScheme.onBackground
+    val ink = tint
     Canvas(modifier = modifier.size(size)) {
         val diameter = this.size.minDimension
         val center = Offset(this.size.width / 2f, this.size.height / 2f)
@@ -603,6 +605,7 @@ fun AtlasTopBar(
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
     titleLeading: (@Composable () -> Unit)? = null,
+    windowInsets: WindowInsets? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
@@ -640,6 +643,7 @@ fun AtlasTopBar(
             }
         },
         actions = actions,
+        windowInsets = windowInsets ?: TopAppBarDefaults.windowInsets,
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.background,
             titleContentColor = MaterialTheme.colorScheme.onBackground,

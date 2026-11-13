@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -77,6 +78,7 @@ fun NotificationsScreen(
     onBack: () -> Unit,
     onNavigateHref: (String?) -> Unit,
     onToast: (String) -> Unit,
+    embeddedInTabletPane: Boolean = false,
     viewModel: NotificationsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -103,6 +105,7 @@ fun NotificationsScreen(
                     "${roleLabel} · ${state.alerts.size} تنبيه · ${state.pendingCount} معلّق",
                 ),
                 onBack = onBack,
+                windowInsets = if (embeddedInTabletPane) WindowInsets(0, 0, 0, 0) else null,
                 actions = {
                     IconButton(onClick = { showComposeDialog = true }) {
                         Icon(Icons.Outlined.Send, contentDescription = atlasText("Envoyer une notification"))
