@@ -1,0 +1,45 @@
+name: Sync license copyright year
+
+on:
+  schedule:
+    # Check daily; only the annual change produces a PR.
+    - cron: '17 0 * * *'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: license-year-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Update MIT and Apache copyright notices
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Sync license notices to the current UTC year
+        run: python3 scripts/sync_license_copyright_year.py
+
+      - name: Open or update a pull request when files changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: main
+          branch: automation/license-copyright-year
+          delete-branch: true
+          commit-message: "chore: sync license copyright year"
+          title: "chore: sync license copyright year"
+          body: |
+            Updates the Etherealmber copyright year in the repository's MIT license and both copies of the Apache 2.0 license.
+
+            This scheduled maintenance PR is created only when the UTC calendar year changes the notices.

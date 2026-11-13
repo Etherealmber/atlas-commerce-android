@@ -1925,8 +1925,12 @@ fun SettingsScreen(
         AtlasCard(padding = 4.dp) {
             SettingsRow(
                 icon = Icons.Outlined.Security,
-                title = atlasText("Sécurité & confidentialité", "Security & privacy", "الأمان والخصوصية"),
-                subtitle = atlasText("Isolation multi-comptes, sessions, chiffrement", "Account isolation, sessions, encryption", "عزل الحسابات والجلسات والتشفير"),
+                title = atlasText("Conditions & confidentialité", "Terms & privacy", "الشروط والخصوصية"),
+                subtitle = atlasText(
+                    "Données envoyées et responsabilités de votre serveur",
+                    "Data sent and your server operator's responsibilities",
+                    "البيانات المُرسلة ومسؤوليات مشغّل خادمك",
+                ),
                 onClick = onOpenSecurity,
             )
             AtlasDivider(Modifier.padding(horizontal = 12.dp))

@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
+import ma.etherealmber.atlascommerce.core.security.DeviceIdentityUnavailableException
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.model.QrSessionStatusDto
@@ -89,6 +90,20 @@ class QrDeviceViewModel @Inject constructor(
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
     val serverUrl: String? get() = serverConfig.selection.value?.baseUrl
+
+    private fun deviceFingerprintOrNull(): String? = try {
+        sessionManager.fingerprint
+    } catch (_: DeviceIdentityUnavailableException) {
+        _state.update {
+            it.copy(
+                loading = false,
+                step = Step.IDLE,
+                activeToken = "",
+                error = "L'identité sécurisée de cet appareil est temporairement indisponible. Réessayez dans quelques instants.",
+            )
+        }
+        null
+    }
 
     private var pollJob: Job? = null
     private var initializedRoute: Pair<String?, QrDeviceMode>? = null
@@ -194,10 +209,11 @@ class QrDeviceViewModel @Inject constructor(
                     statusMessage = "Vérification de la demande du poste PC…",
                 )
             }
+            val fingerprint = deviceFingerprintOrNull() ?: return@launch
             when (
                 val res = authRepository.qrPhoneBind(
                     token = token,
-                    fingerprint = sessionManager.fingerprint,
+                    fingerprint = fingerprint,
                     userAgent = sessionManager.deviceUserAgent(),
                     confirm = false,
                 )
@@ -232,10 +248,11 @@ class QrDeviceViewModel @Inject constructor(
         if (token.isBlank()) return
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
+            val fingerprint = deviceFingerprintOrNull() ?: return@launch
             when (
                 val res = authRepository.qrPhoneBind(
                     token = token,
-                    fingerprint = sessionManager.fingerprint,
+                    fingerprint = fingerprint,
                     userAgent = sessionManager.deviceUserAgent(),
                     confirm = true,
                 )
@@ -293,9 +310,10 @@ class QrDeviceViewModel @Inject constructor(
                     statusMessage = "Association avec la session ouverte sur l'ordinateur…",
                 )
             }
+            val fingerprint = deviceFingerprintOrNull() ?: return@launch
             val claim = authRepository.qrClaim(
                 token = token,
-                fingerprint = sessionManager.fingerprint,
+                fingerprint = fingerprint,
                 userAgent = sessionManager.deviceUserAgent(),
             )
             if (claim is ApiResult.Failure) {
@@ -365,8 +383,9 @@ class QrDeviceViewModel @Inject constructor(
     }
 
     private suspend fun finalizePhoneLogin(token: String) {
+        val fingerprint = deviceFingerprintOrNull() ?: return
         _state.update { it.copy(loading = true, statusMessage = "Ouverture de votre session Atlas…") }
-        when (val done = authRepository.qrComplete(token, sessionManager.fingerprint)) {
+        when (val done = authRepository.qrComplete(token, fingerprint)) {
             is ApiResult.Failure -> {
                 _state.update {
                     it.copy(
@@ -420,7 +439,7 @@ class QrDeviceViewModel @Inject constructor(
     }
 
     fun isCurrentDevice(device: TrustedDeviceDto): Boolean {
-        val fingerprint = sessionManager.fingerprint
+        val fingerprint = deviceFingerprintOrNull() ?: return device.current
         val shortFingerprint = device.fingerprint.removeSuffix("…").removeSuffix("...")
         return device.current || device.full.equals(fingerprint, ignoreCase = true) ||
             (shortFingerprint.isNotBlank() && fingerprint.startsWith(shortFingerprint, ignoreCase = true))

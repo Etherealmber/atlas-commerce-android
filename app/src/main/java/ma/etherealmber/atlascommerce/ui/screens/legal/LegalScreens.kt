@@ -127,12 +127,15 @@ fun ProblemReportDialog(
     var submitting by remember { mutableStateOf(false) }
     var submitError by remember { mutableStateOf<ApiResult.Failure?>(null) }
     val attachments = remember { mutableStateListOf<CompressedReportAttachment>() }
+    var deviceIdentityDiagnostics by remember(appViewModel) {
+        mutableStateOf(appViewModel.deviceIdentityDiagnostics())
+    }
 
-    val snapshot = remember(screenOrigin, activeRole) {
+    val snapshot = remember(screenOrigin, activeRole, deviceIdentityDiagnostics) {
         DiagnosticReporter.collectSnapshot(
             context = context,
-            shortDeviceId = appViewModel.deviceShortId,
-            fullFingerprint = appViewModel.deviceFingerprint,
+            shortDeviceId = deviceIdentityDiagnostics?.shortId.orEmpty(),
+            fullFingerprint = deviceIdentityDiagnostics?.fingerprint.orEmpty(),
             role = activeRole,
             screenOrigin = screenOrigin,
         )
@@ -203,6 +206,22 @@ fun ProblemReportDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                if (deviceIdentityDiagnostics == null) {
+                    AtlasCard {
+                        Text(
+                            atlasText(
+                                "Empreinte de l'appareil indisponible; elle sera omise du rapport. Réessayez.",
+                                "Device identity is temporarily unavailable and will be omitted from this report. Retry.",
+                                "بصمة الجهاز غير متاحة مؤقتاً وستُحذف من التقرير. أعد المحاولة.",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        TextButton(onClick = { deviceIdentityDiagnostics = appViewModel.deviceIdentityDiagnostics() }) {
+                            Text(atlasText("Réessayer", "Retry", "إعادة المحاولة"))
+                        }
+                    }
+                }
                 Text(
                     text = atlasText("Catégorie"),
                     style = MaterialTheme.typography.labelMedium,
@@ -768,8 +787,12 @@ private fun ThirdParty(name: String, license: String) {
 fun SecurityScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     LegalPage(
-        title = atlasText("Sécurité & confidentialité"),
-        subtitle = atlasText("Ce que l'app fait de vos données"),
+        title = atlasText("Conditions & confidentialité", "Terms & privacy", "الشروط والخصوصية"),
+        subtitle = atlasText(
+            "Données échangées par l'application et rôle de votre serveur",
+            "What the app sends and the role of your server",
+            "البيانات التي يرسلها التطبيق ودور خادمك",
+        ),
         onBack = onBack,
     ) {
         AtlasEntrance(delayMillis = 0) {
@@ -778,12 +801,12 @@ fun SecurityScreen(onBack: () -> Unit) {
                     AtlasMark(size = 36.dp)
                     Spacer(Modifier.width(8.dp))
                     Column {
-                        Text(atlasText("Aucun traqueur publicitaire"), style = MaterialTheme.typography.titleSmall)
+                        Text(atlasText("Confidentialité de l'application", "App privacy", "خصوصية التطبيق"), style = MaterialTheme.typography.titleSmall)
                         Text(
                             text = atlasText(
-                                "Pas d'analytics, pas de publicité. Seul ML Kit (scan) transmet ses statistiques d'usage à Google.",
-                                "No analytics or advertising. Only ML Kit (scanning) sends usage statistics to Google.",
-                                "لا تحليلات ولا إعلانات. يرسل ML Kit فقط، المستخدم للمسح، إحصاءات الاستخدام إلى Google.",
+                                "L'application Android est un client : les demandes de compte et de gestion sont envoyées au serveur Atlas que vous avez choisi. Nous n'exploitons pas votre serveur auto-hébergé et ne recevons pas ses données dans le fonctionnement normal de l'app.",
+                                "The Android app is a client: account and business requests go to the Atlas server you selected. We do not operate your self-hosted server or receive its data during normal app use.",
+                                "تطبيق Android هو عميل: تُرسل طلبات الحساب وإدارة الأعمال إلى خادم Atlas الذي اخترته. نحن لا ندير خادمك المستضاف ذاتياً ولا نتلقى بياناته أثناء الاستخدام المعتاد للتطبيق.",
                             ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -791,18 +814,89 @@ fun SecurityScreen(onBack: () -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                AtlasBullet("L'application ne contacte que le serveur Atlas que vous avez choisi, à une exception : ML Kit.")
+                AtlasBullet(atlasText(
+                    "À la connexion, votre nom d'utilisateur, votre mot de passe et, si demandé, le code OTP sont transmis au serveur choisi via HTTPS. Après connexion, le jeton de session accompagne les requêtes authentifiées ; le mot de passe n'est pas conservé par l'app.",
+                    "At sign-in, your username, password and, if requested, OTP code are sent to the selected server over HTTPS. After sign-in, the session token accompanies authenticated requests; the app does not store your password.",
+                    "عند تسجيل الدخول، يُرسل اسم المستخدم وكلمة المرور ورمز OTP عند طلبه إلى الخادم المحدد عبر HTTPS. بعد الدخول، يُرفق رمز الجلسة بالطلبات الموثّقة؛ ولا يحتفظ التطبيق بكلمة مرورك.",
+                ))
+                AtlasBullet(atlasText(
+                    "Le serveur choisi reçoit l'adresse IP source de la connexion et les données des requêtes. L'app utilise aussi une empreinte d'appareil pseudonyme et une description Android pour gérer la session et les appareils de confiance.",
+                    "The selected server can see the connection's source IP and request data. The app also uses a pseudonymous device fingerprint and Android device description for session and trusted-device management.",
+                    "يمكن للخادم المحدد رؤية عنوان IP المصدر وبيانات الطلبات. كما يستخدم التطبيق بصمة جهاز مستعارة ووصف جهاز Android لإدارة الجلسة والأجهزة الموثوقة.",
+                ))
+                AtlasBullet(atlasText(
+                    "Les données professionnelles que vous consultez ou modifiez — produits, stock, ventes et finances, par exemple — sont envoyées à votre serveur, qui les conserve et les gère.",
+                    "Business data you view or change—such as products, inventory, sales and financial data—is sent to your selected server, which stores and manages those records.",
+                    "تُرسل بيانات الأعمال التي تعرضها أو تعدّلها—مثل المنتجات والمخزون والمبيعات والبيانات المالية—إلى خادمك المحدد، وهو الذي يخزّن هذه السجلات ويديرها.",
+                ))
+                AtlasBullet(atlasText(
+                    "Les messages d'Atlas Agent sont envoyés à votre serveur, qui peut les transmettre au fournisseur d'IA configuré par son exploitant.",
+                    "Atlas Agent messages go to your selected server; that server may forward them to the AI provider configured by its operator.",
+                    "تُرسل رسائل Atlas Agent إلى خادمك المحدد؛ وقد يحيلها الخادم إلى مزوّد الذكاء الاصطناعي الذي أعدّه مشغّله.",
+                ))
+                AtlasBullet(atlasText(
+                    "Si Firebase est configuré, Google fournit un jeton FCM que l'app enregistre auprès de votre serveur pour les notifications. Crashlytics n'envoie des rapports d'erreur que si vous l'activez dans les paramètres ; ils peuvent contenir une trace d'exception et des informations sur l'appareil, Android, l'heure et l'installation Firebase, mais ni mot de passe, ni code OTP, ni jeton de session, ni données financières.",
+                    "If Firebase is configured, Google provides an FCM token that the app registers with your server for notifications. Crashlytics sends crash reports only if you enable it in Settings; reports may include an exception stack trace, app/device/Android details, time and Firebase installation identifier, but not passwords, OTP codes, session tokens or financial records.",
+                    "إذا كان Firebase مُعدّاً، توفّر Google رمز FCM الذي يسجّله التطبيق لدى خادمك للإشعارات. ولا يرسل Crashlytics تقارير الأعطال إلا إذا فعّلته من الإعدادات؛ وقد تتضمن التقارير أثر الاستثناء ومعلومات التطبيق والجهاز وAndroid والوقت ومعرّف تثبيت Firebase، لكنها لا تتضمن كلمات المرور أو رموز OTP أو رموز الجلسات أو السجلات المالية.",
+                ))
+                AtlasBullet(atlasText(
+                    "Lors du scan des codes-barres, ML Kit de Google peut transmettre des métriques d'utilisation et de performance (version de l'application et identifiants d'installation/appareil) ; ni les images de caméra ni les codes scannés ne sont envoyés. L'application peut aussi contacter GitHub ou un réseau de distribution pour vérifier et télécharger les mises à jour.",
+                    "When you use barcode scanning, Google's ML Kit may send usage and performance metrics (app version and installation/device identifiers); camera images and scanned codes are not sent. The app may contact GitHub or a file-delivery network to check for and download updates.",
+                    "عند استخدام ماسح الباركود، قد يرسل ML Kit من Google مقاييس الاستخدام والأداء (إصدار التطبيق ومعرّفات التثبيت والجهاز)؛ ولا تُرسل صور الكاميرا أو الرموز الممسوحة. وقد يتصل التطبيق بـ GitHub أو شبكة توزيع الملفات للتحقق من التحديثات وتنزيلها.",
+                ))
+                AtlasBullet(atlasText(
+                    "Le rapport d'assistance et son résumé technique expurgé sont envoyés au serveur choisi uniquement si vous appuyez sur Envoyer. Selon sa configuration, ce serveur peut transmettre le rapport à l'équipe d'assistance ou créer une issue GitHub. Les captures d'écran ne sont pas jointes ; elles ne sont partagées qu'avec l'action Android séparée.",
+                    "A support report and its redacted technical summary are sent to the selected server only when you tap Submit. Depending on its setup, that server may forward the report to support or create a GitHub issue. Screenshots are not attached; they are shared only through the separate Android sharing action.",
+                    "لا يُرسل تقرير الدعم وملخصه التقني المنقّح إلى الخادم المحدد إلا عند الضغط على إرسال. وقد يحيل الخادم التقرير إلى فريق الدعم أو ينشئ بلاغاً في GitHub حسب إعداداته. ولا تُرفق لقطات الشاشة؛ بل تُشارك فقط عبر إجراء المشاركة المنفصل في Android.",
+                ))
                 AtlasBullet("Aucune image de caméra n'est envoyée : les codes-barres sont décodés sur l'appareil.")
-                AtlasBullet(
-                    "ML Kit (Google, lecture des codes-barres) transmet ses métriques d'usage et de " +
-                        "performance à Google : version de l'app, identifiant d'installation, appareil. " +
-                        "Aucune image, aucun code scanné.",
-                )
                 AtlasBullet("Aucun contact, aucune localisation, aucun accès au stockage n'est demandé.")
             }
         }
 
-        AtlasEntrance(delayMillis = 50) {
+        AtlasEntrance(delayMillis = 35) {
+            AtlasCard {
+                Text(atlasText("Auto-hébergement et confidentialité du serveur", "Self-hosted server and its privacy policy", "الاستضافة الذاتية وخصوصية الخادم"), style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    atlasText(
+                        "Si vous utilisez votre propre site ou serveur Atlas, son exploitant en est responsable : accès aux données, journaux, sauvegardes, durée de conservation, sécurité, prestataires et politique de confidentialité du site. Le développeur de l'application ne contrôle pas ces choix. Pour savoir ce que ce site collecte, conserve ou transmet, consultez sa politique de confidentialité ou demandez directement à son administrateur. Cette page décrit l'application Android, pas la politique de votre serveur.",
+                        "If you use your own Atlas website or server, its operator is responsible for data access, logs, backups, retention, security, service providers and the website's privacy policy. The app developer does not control those choices. To learn what that site collects, stores or shares, read its privacy notice or ask its administrator directly. This page describes the Android app, not your server's policy.",
+                        "إذا استخدمت موقع Atlas أو خادمه الخاص بك، فمشغّله مسؤول عن الوصول إلى البيانات والسجلات والنسخ الاحتياطية ومدة الاحتفاظ والأمان ومزوّدي الخدمة وسياسة خصوصية الموقع. لا يتحكم مطوّر التطبيق بهذه الخيارات. لمعرفة ما يجمعه ذلك الموقع أو يخزّنه أو يشاركه، اقرأ إشعار الخصوصية لديه أو اسأل مسؤول الخادم مباشرةً. تصف هذه الصفحة تطبيق Android، لا سياسة خادمك.",
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+
+        AtlasEntrance(delayMillis = 55) {
+            AtlasCard {
+                Text(atlasText("Conditions d'utilisation", "Terms of use", "شروط الاستخدام"), style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    atlasText(
+                        "Utilisez l'application uniquement avec un compte et un serveur auxquels vous êtes autorisé à accéder. Protégez votre mot de passe et votre appareil, utilisez l'adresse HTTPS exacte du serveur choisi et respectez les règles de son exploitant ainsi que les lois applicables. Vous êtes responsable des données que vous saisissez et des actions effectuées depuis votre compte.",
+                        "Use the app only with an account and server you are authorized to access. Protect your password and device, use the exact HTTPS address of the server you chose, and follow its operator's rules and applicable law. You are responsible for the data you enter and actions performed from your account.",
+                        "استخدم التطبيق فقط مع حساب وخادم مخوّل لك الوصول إليهما. احمِ كلمة مرورك وجهازك، واستخدم عنوان HTTPS الدقيق للخادم الذي اخترته، واتبع قواعد مشغّله والقوانين المعمول بها. أنت مسؤول عن البيانات التي تدخلها والإجراءات المنفذة من حسابك.",
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    atlasText(
+                        "Pour un serveur auto-hébergé, son propriétaire est responsable du site web, de son fonctionnement, de sa sécurité, de ses sauvegardes, des données et des avis de confidentialité qu'il publie. Consultez ses conditions et sa politique de confidentialité pour toute question sur le traitement des données côté serveur.",
+                        "For a self-hosted server, its owner is responsible for the website, its operation, security, backups, data and privacy notices it publishes. Consult that operator's terms and privacy policy for questions about server-side data handling.",
+                        "في الخادم المستضاف ذاتياً، يكون مالكه مسؤولاً عن الموقع وتشغيله وأمانه ونسخه الاحتياطية وبياناته وإشعارات الخصوصية التي ينشرها. راجع شروط المشغّل وسياسة الخصوصية لديه لأي سؤال عن معالجة البيانات على الخادم.",
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+
+        AtlasEntrance(delayMillis = 80) {
             AtlasCard {
                 SectionTitle("Authentification", "Mot de passe + code e-mail")
                 AtlasBullet("Le mot de passe part en HTTPS et n'est jamais stocké sur l'appareil.")

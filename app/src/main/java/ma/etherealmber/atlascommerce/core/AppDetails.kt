@@ -24,7 +24,7 @@ object AppDetails {
     const val ISSUES_URL: String = BuildConfig.ISSUES_URL
     const val SECURITY_EMAIL: String = BuildConfig.SECURITY_EMAIL
 
-    const val LICENSE_NAME = "MIT"
+    const val LICENSE_NAME = "MIT OR Apache-2.0"
     const val COPYRIGHT_HOLDER = "Etherealmber"
     val COPYRIGHT_YEAR: String
         get() = Calendar.getInstance().get(Calendar.YEAR).coerceAtLeast(2026).toString()
