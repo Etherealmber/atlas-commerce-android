@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set +e
+
+# Reset persisted app state outside instrumentation so pm clear cannot disrupt UiAutomation.
+installed_package=$(adb shell pm list packages ma.etherealmber.atlascommerce 2>/dev/null | tr -d '\r')
+if printf '%s\n' "$installed_package" | grep -Fxq 'package:ma.etherealmber.atlascommerce'; then
+  clear_result=$(adb shell pm clear ma.etherealmber.atlascommerce 2>&1 | tr -d '\r')
+  echo "Reset installed Atlas app before instrumentation: $clear_result"
+  if [ "$clear_result" != "Success" ]; then
+    echo "Could not reset the installed app to first-run state."
+    exit 1
+  fi
+else
+  echo "Atlas app is not installed yet; instrumentation will install it as a clean first run."
+fi
+
+# Keep a stuck instrumentation runner from consuming the entire emulator job budget.
+timeout --signal=TERM --kill-after=30s 15m ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain --stacktrace 2>&1 | tee api30-gradle.log
+debug_status=${PIPESTATUS[0]}
+smoke_status=$debug_status
+
+# The production APK is minified, unlike the debug APK used by the instrumentation test.
+# Run this check even if debug instrumentation fails so the two variants provide independent evidence.
+timeout --signal=TERM --kill-after=30s 10m ./gradlew :app:assembleRelease --no-daemon --console=plain --stacktrace 2>&1 | tee api30-release-gradle.log
+release_build_status=${PIPESTATUS[0]}
+if [ "$release_build_status" -ne 0 ]; then
+  if [ "$smoke_status" -eq 0 ]; then smoke_status=$release_build_status; fi
+else
+    sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+    apksigner=$(find "$sdk_root/build-tools" -type f -name apksigner 2>/dev/null | sort -V | tail -n 1)
+    release_apk=$(find app/build/outputs/apk/release -type f -name '*.apk' 2>/dev/null | head -n 1)
+    debug_keystore="$HOME/.android/debug.keystore"
+    mkdir -p "$HOME/.android"
+    if [ ! -f "$debug_keystore" ]; then
+      keytool -genkeypair -keystore "$debug_keystore" -storepass android -keypass android \
+        -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
+    fi
+    if [ -z "$apksigner" ] || [ -z "$release_apk" ]; then
+      echo "Could not locate apksigner or the minified release APK."
+      smoke_status=1
+    else
+      cp "$release_apk" api30-release-signed.apk
+      "$apksigner" sign --ks "$debug_keystore" --ks-key-alias androiddebugkey \
+        --ks-pass pass:android --key-pass pass:android api30-release-signed.apk
+      sign_status=$?
+      if [ "$sign_status" -ne 0 ]; then
+        smoke_status=$sign_status
+      else
+        adb uninstall ma.etherealmber.atlascommerce >/dev/null 2>&1 || true
+        timeout 120s adb install api30-release-signed.apk > api30-release-install.txt 2>&1
+        install_status=$?
+        if [ "$install_status" -ne 0 ]; then
+          cat api30-release-install.txt
+          smoke_status=$install_status
+        else
+          adb shell am force-stop ma.etherealmber.atlascommerce
+          timeout 30s adb shell am start -W -n ma.etherealmber.atlascommerce/.MainActivity > api30-release-start.txt 2>&1
+          start_status=$?
+          adb shell rm -f /sdcard/api30-window.xml
+          rm -f api30-release-window.xml
+          reached_first_run=false
+          for attempt in $(seq 1 12); do
+            timeout 8s adb shell uiautomator dump /sdcard/api30-window.xml >/dev/null 2>&1 || true
+            timeout 8s adb pull /sdcard/api30-window.xml api30-release-window.xml >/dev/null 2>&1 || true
+            if grep -Eq "Connectez votre serveur|Connect your server|اربط الخادم الخاص بك|Choisissez un serveur|Choose a server|اختر خادماً|STEP 1 · SAVED SERVERS|ÉTAPE 1 · SERVEURS ENREGISTRÉS|الخطوة ١ · الخوادم المحفوظة|Saisissez l'adresse de votre organisation\.|Enter your organization's server address\.|أدخل عنوان خادم مؤسستك\.|Saisissez l'adresse du site Atlas Commerce de votre organisation\.|Enter your organization's Atlas Commerce site address\.|أدخل عنوان موقع Atlas Commerce الخاص بمؤسستك\." api30-release-window.xml 2>/dev/null; then
+              reached_first_run=true
+              break
+            fi
+            sleep 5
+          done
+          if [ "$start_status" -ne 0 ] || [ "$reached_first_run" != "true" ]; then
+            echo "Minified release APK failed the Android 11 cold-start check."
+            cat api30-release-start.txt || true
+            adb shell dumpsys activity activities > api30-activities.txt 2>&1
+            smoke_status=1
+          else
+            echo "Minified release APK reached first-run server setup on Android 11 (API 30)."
+          fi
+        fi
+      fi
+    fi
+  fi
+
+adb logcat -d -v threadtime > api30-logcat.txt 2>&1
+adb shell dumpsys activity activities > api30-activities.txt 2>&1
+
+if [ "$smoke_status" -ne 0 ]; then
+  echo "=== Android 11 startup, build and app diagnostics ==="
+  test_details=$(grep -E -i "FAILURE:|FAILED|Tests run:|Timed out|AssertionError|NoSuchMethodError|NoClassDefFoundError|AndroidJUnitRunner|ma\.etherealmber\.atlascommerce|^e: |error:|Unresolved reference|Type mismatch|Cannot infer|Compilation error|Minified release APK" api30-gradle.log api30-release-gradle.log api30-release-start.txt 2>/dev/null | tail -n 35 || true)
+  app_details=$(grep -A 40 -B 5 -E "FATAL EXCEPTION|ANR in ma\.etherealmber\.atlascommerce" api30-logcat.txt | tail -n 55 || true)
+  app_process=$(grep -E -i "Android11StartupSmoke|Process: ma\.etherealmber\.atlascommerce|ma\.etherealmber\.atlascommerce" api30-logcat.txt | tail -n 12 || true)
+  window_details=$(grep -oE '.{0,100}(Connectez votre serveur|Connect your server|اربط الخادم الخاص بك|Saisissez l'adresse du site Atlas Commerce de votre organisation|Enter your organization's Atlas Commerce site address|أدخل عنوان موقع Atlas Commerce الخاص بمؤسستك|Atlas Commerce|Not responding|has stopped).{0,180}' api30-release-window.xml 2>/dev/null | head -n 8 || true)
+  matches=$(printf '%s\n%s\n%s\n%s' "$test_details" "$app_details" "$app_process" "$window_details" | sed '/^[[:space:]]*$/d')
+  if [ -z "$matches" ]; then
+    matches=$(tail -n 50 api30-gradle.log 2>/dev/null || true)
+  fi
+  printf '%s\n' "$matches"
+  summary=$(printf '%s' "$matches" | tr '\n' ' ' | cut -c1-6500)
+  echo "::error title=Android 11 startup diagnostics::$summary"
+  echo "=== Activity state ==="
+  cat api30-activities.txt || true
+fi
+
+exit "$smoke_status"

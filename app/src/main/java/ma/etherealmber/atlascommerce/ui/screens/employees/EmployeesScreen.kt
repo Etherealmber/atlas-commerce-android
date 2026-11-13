@@ -81,6 +81,7 @@ import java.util.Locale
 @Composable
 fun EmployeesScreen(
     user: SessionUser,
+    wideLayout: Boolean = false,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val dockPadding = LocalAtlasFloatingDockPadding.current
@@ -401,8 +402,16 @@ fun EmployeesScreen(
                 )
             }
         } else {
+            if (wideLayout) {
+                item(key = "employee_table_header") { EmployeePayrollTableHeader() }
+            }
             items(visibleRows, key = { "${it.employeeId}-${it.payPeriod.from}" }) { row ->
-                EmployeePayrollCard(row = row, asOf = payroll?.asOf.orEmpty(), currency = payroll?.currency ?: "MAD")
+                EmployeePayrollCard(
+                    row = row,
+                    asOf = payroll?.asOf.orEmpty(),
+                    currency = payroll?.currency ?: "MAD",
+                    wideLayout = wideLayout,
+                )
             }
         }
 
@@ -435,59 +444,112 @@ private fun SummaryCard(label: String, value: String, modifier: Modifier = Modif
 }
 
 @Composable
-private fun EmployeePayrollCard(row: PayrollRowDto, asOf: String, currency: String) {
+private fun EmployeePayrollTableHeader() {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(atlasText("Employé", "Employee", "الموظف"), Modifier.weight(1.5f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(atlasText("Période", "Period", "الفترة"), Modifier.weight(1.2f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(atlasText("Montant", "Amount", "المبلغ"), Modifier.weight(0.8f), textAlign = TextAlign.End, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(atlasText("Statut", "Status", "الحالة"), Modifier.weight(0.65f), textAlign = TextAlign.End, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun EmployeePayrollCard(row: PayrollRowDto, asOf: String, currency: String, wideLayout: Boolean) {
     val status = payrollStatus(row, asOf)
+    val employeeName = row.displayName.ifBlank { atlasText("Employé #${row.employeeId}", "Employee #${row.employeeId}", "موظف رقم ${row.employeeId}") }
     val fromDate = atlasShortDate(row.payPeriod.from).takeIf { it != "—" } ?: "—"
     val toDate = atlasShortDate(row.payPeriod.to).takeIf { it != "—" } ?: "—"
-    val periodLabel = atlasText("Période $fromDate → $toDate", "Period $fromDate → $toDate", "الفترة $fromDate → $toDate")
-    val dueDateLabel = row.dueDate?.takeIf(String::isNotBlank)?.let {
-        atlasText(" · Échéance ${atlasShortDate(it)}", " · Due ${atlasShortDate(it)}", " · الاستحقاق ${atlasShortDate(it)}")
-    }.orEmpty()
-    AtlasCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    row.displayName.ifBlank { atlasText("Employé #${row.employeeId}", "Employee #${row.employeeId}", "موظف رقم ${row.employeeId}") },
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = periodLabel + dueDateLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(atlasMoney(row.amountDue, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                AtlasChip(
-                    text = when (status) {
-                        "Payé" -> atlasText("Payé", "Paid", "مدفوع")
-                        "À venir" -> atlasText("À venir", "Upcoming", "قادم")
-                        "À payer" -> atlasText("À payer", "To pay", "مستحق الدفع")
-                        else -> status
-                    },
-                    tone = when (status) {
-                        "Payé" -> AtlasTone.POSITIVE
-                        "À venir" -> AtlasTone.INFO
-                        else -> AtlasTone.WARNING
-                    },
-                )
+    val periodLabel = atlasText("$fromDate → $toDate", "$fromDate → $toDate", "$fromDate → $toDate")
+    val statusLabel = when (status) {
+        "Payé" -> atlasText("Payé", "Paid", "مدفوع")
+        "À venir" -> atlasText("À venir", "Upcoming", "قادم")
+        "À payer" -> atlasText("À payer", "To pay", "مستحق الدفع")
+        else -> status
+    }
+    val tone = when (status) {
+        "Payé" -> AtlasTone.POSITIVE
+        "À venir" -> AtlasTone.INFO
+        else -> AtlasTone.WARNING
+    }
+    if (wideLayout) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1.5f)) {
+                    Text(employeeName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("#${row.employeeId}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Column(Modifier.weight(1.2f)) {
+                    Text(periodLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    row.dueDate?.takeIf(String::isNotBlank)?.let { dueDate ->
+                        Text(
+                            atlasText("Échéance ${atlasShortDate(dueDate)}", "Due ${atlasShortDate(dueDate)}", "الاستحقاق ${atlasShortDate(dueDate)}"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    row.lastPayment?.let { payment ->
+                        Text(
+                            atlasText("Dernier versement ${atlasShortDate(payment.paidAt)}", "Last paid ${atlasShortDate(payment.paidAt)}", "آخر دفعة ${atlasShortDate(payment.paidAt)}"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Text(atlasMoney(row.amountDue, currency), Modifier.weight(0.8f), textAlign = TextAlign.End, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Box(Modifier.weight(0.65f), contentAlignment = Alignment.CenterEnd) {
+                    AtlasChip(text = statusLabel, tone = tone)
+                }
             }
         }
-        row.lastPayment?.let { payment ->
-            AtlasDivider(Modifier.padding(vertical = 8.dp))
-            Text(
-                atlasText(
-                    "Dernier versement · ${atlasMoney(payment.amount, currency)} · ${atlasShortDate(payment.paidAt)}",
-                    "Last payment · ${atlasMoney(payment.amount, currency)} · ${atlasShortDate(payment.paidAt)}",
-                    "آخر دفعة · ${atlasMoney(payment.amount, currency)} · ${atlasShortDate(payment.paidAt)}",
-                ),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    } else {
+        AtlasCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(employeeName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    val dueDateLabel = row.dueDate?.takeIf(String::isNotBlank)?.let {
+                        atlasText(" · Échéance ${atlasShortDate(it)}", " · Due ${atlasShortDate(it)}", " · الاستحقاق ${atlasShortDate(it)}")
+                    }.orEmpty()
+                    Text(
+                        text = atlasText("Période $periodLabel$dueDateLabel", "Period $periodLabel$dueDateLabel", "الفترة $periodLabel$dueDateLabel"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(atlasMoney(row.amountDue, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    AtlasChip(text = statusLabel, tone = tone)
+                }
+            }
+            row.lastPayment?.let { payment ->
+                AtlasDivider(Modifier.padding(vertical = 8.dp))
+                Text(
+                    atlasText(
+                        "Dernier versement · ${atlasMoney(payment.amount, currency)} · ${atlasShortDate(payment.paidAt)}",
+                        "Last payment · ${atlasMoney(payment.amount, currency)} · ${atlasShortDate(payment.paidAt)}",
+                        "آخر دفعة · ${atlasMoney(payment.amount, currency)} · ${atlasShortDate(payment.paidAt)}",
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

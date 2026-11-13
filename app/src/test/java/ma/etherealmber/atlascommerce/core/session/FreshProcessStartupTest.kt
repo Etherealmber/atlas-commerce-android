@@ -45,6 +45,33 @@ class FreshProcessStartupTest {
     }
 
     @Test
+    fun `undecryptable token is unavailable rather than rejected so its ciphertext is preserved`() = runBlocking {
+        assertEquals(
+            FreshProcessSessionOutcome.UNAVAILABLE,
+            startupOutcomeForResumePreparation(StartupResumeResult.UNDECRYPTABLE_TOKEN),
+        )
+        assertEquals(
+            FreshProcessSessionOutcome.NO_SESSION,
+            startupOutcomeForResumePreparation(StartupResumeResult.NO_SESSION),
+        )
+        assertEquals(
+            FreshProcessSessionOutcome.REJECTED,
+            startupOutcomeForResumePreparation(StartupResumeResult.DIFFERENT_ORIGIN),
+        )
+
+        var cleared = false
+        val startup = FreshProcessStartup(
+            restorePreviousSession = { FreshProcessSessionOutcome.UNAVAILABLE },
+            clearStoredSession = { cleared = true },
+            purgeActiveState = {},
+            publishSignedOut = {},
+            releaseStartupGate = {},
+        )
+        assertEquals(FreshProcessSessionOutcome.UNAVAILABLE, startup.run())
+        assertFalse(cleared)
+    }
+
+    @Test
     fun `explicit sign out missing server and undecryptable session never create a request`() {
         assertEquals(
             StartupResumeResult.RESTORE_DISABLED,

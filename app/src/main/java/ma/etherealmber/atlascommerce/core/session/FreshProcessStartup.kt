@@ -10,6 +10,13 @@ import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.data.model.MeDto
 
+internal fun startupOutcomeForResumePreparation(result: StartupResumeResult): FreshProcessSessionOutcome? = when (result) {
+    StartupResumeResult.NO_SESSION -> FreshProcessSessionOutcome.NO_SESSION
+    StartupResumeResult.UNDECRYPTABLE_TOKEN -> FreshProcessSessionOutcome.UNAVAILABLE
+    StartupResumeResult.PREPARED -> null
+    else -> FreshProcessSessionOutcome.REJECTED
+}
+
 internal enum class StartupResumeResult {
     PREPARED,
     NO_SESSION,

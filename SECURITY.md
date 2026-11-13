@@ -8,6 +8,9 @@ D1, R2) has its own policy in
 
 ## Supported versions
 
+The current Android app has `minSdk = 30` (Android 11). Android 10 and earlier cannot install
+current builds; security and troubleshooting steps below describe Android 11+ behavior.
+
 | Android app version | Supported |
 | --- | --- |
 | Latest stable `1.x` release (support starts at `1.0.0`) | :white_check_mark: |
@@ -45,12 +48,11 @@ not supported for production use.
   AES-256-GCM using a non-exportable Android Keystore key (`atlas.session.v1`). If a device cannot
   use the Keystore, the app falls back to app-private storage so a user is never locked out; the
   backup system is disabled (`allowBackup=false`) either way.
-- Remembered-account quick unlock uses a separate per-account AES-GCM Keystore key that requires
-  fresh local authentication. On Android 11+, `BiometricPrompt` receives a `CryptoObject`; on
-  Android 9/10, the callback must immediately consume the auth-bound cipher inside its short
-  Keystore authorization window. In both paths the saved-account token is released only after the
-  cipher successfully decrypts it. Legacy remembered tokens are not quick-unlockable; they can be
-  upgraded from an active authenticated session in settings or replaced by a new password sign-in.
+- Remembered-account quick unlock uses a separate per-account AES-GCM Keystore key and requires
+  fresh local authentication through `BiometricPrompt` with a `CryptoObject` (Android 11+; the
+  current minimum supported version). The saved-account token is released only after the cipher
+  successfully decrypts it. Legacy remembered tokens are not quick-unlockable; they can be upgraded
+  from an active authenticated session in settings or replaced by a new password sign-in.
 - Logout clears the token, the cart and the offline catalogue; sessions are never shared between
   servers, and changing the server forces a fresh login.
 
@@ -97,7 +99,7 @@ No location, contacts, microphone, storage or advertising permissions are reques
 
 ### Third parties
 
-There is no advertising SDK and no Firebase Analytics dependency. Firebase is an optional build-time provider for FCM push and Firebase Crashlytics. **Automatic Crashlytics collection is off by default in the manifest and remains off until the user opts in under Settings**; opting out disables future automatic uploads. If opted in and the build has a valid Firebase Android configuration, Crashlytics can upload an uncaught crash report (stack trace, app/device/OS version, timestamp and Firebase installation identifiers) automatically when connectivity permits. The app does not attach session tokens, passwords, OTPs, financial records, or its redacted in-app log buffer as Crashlytics custom data. Firebase provider configuration and the exact consent flow are documented in [docs/SETUP.md](docs/SETUP.md#4-optional-push-notifications-and-automatic-crash-reports-firebase).
+There is no advertising SDK and no Firebase Analytics dependency. Firebase is an optional build-time provider for FCM push and Firebase Crashlytics in local/self-hosted builds. **Official release publishing requires a validated Firebase Android configuration for package `ma.etherealmber.atlascommerce`; the release workflow fails rather than publishing an APK with Crashlytics silently absent.** Automatic collection remains off by default in the manifest and until the user opts in under Settings; opting out disables future automatic uploads. If opted in, Crashlytics can upload an uncaught crash report (stack trace, app/device/OS version, timestamp and Firebase installation identifiers) automatically when connectivity permits. The app does not attach session tokens, passwords, OTPs, financial records, or its redacted in-app log buffer as Crashlytics custom data. Firebase provider configuration and the exact consent flow are documented in [docs/SETUP.md](docs/SETUP.md#4-optional-push-notifications-and-automatic-crash-reports-firebase).
 
 ML Kit barcode decoding runs on-device with the bundled model; per Google's ML Kit terms the SDK may report its own usage/performance metrics (app version, installation and device identifiers — never images or scanned codes). Network calls for business data go only to the selected Atlas Worker; Crashlytics/FCM use Google's Firebase services only when configured. Opening GitHub or e-mail links hands control to the user's browser/mail app.
 

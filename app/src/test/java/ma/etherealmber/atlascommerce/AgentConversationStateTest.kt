@@ -1,7 +1,10 @@
 package ma.etherealmber.atlascommerce
 
 import ma.etherealmber.atlascommerce.data.model.AgentThreadSummaryDto
+import ma.etherealmber.atlascommerce.data.model.AssistProposalDto
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationDestination
+import ma.etherealmber.atlascommerce.ui.screens.agent.detectExplicitAgentNavigationRequest
+import ma.etherealmber.atlascommerce.ui.screens.agent.mobileNavigationSuggestion
 import ma.etherealmber.atlascommerce.ui.screens.agent.clearSubmittedAgentDraft
 import ma.etherealmber.atlascommerce.ui.screens.agent.detectAgentNavigationSuggestion
 import ma.etherealmber.atlascommerce.ui.screens.agent.newestAgentThreadsFirst
@@ -39,6 +42,34 @@ class AgentConversationStateTest {
     @Test
     fun unrelatedPromptDoesNotCreateANavigationAction() {
         assertEquals(null, detectAgentNavigationSuggestion("Summarize today's low stock items"))
+    }
+
+    @Test
+    fun explicitNaturalLanguageSettingsCommandIsRecognizedLocally() {
+        val action = detectExplicitAgentNavigationRequest("Can you put me inside the settings?")
+
+        assertEquals(AgentNavigationDestination.SETTINGS, action?.destination)
+    }
+
+    @Test
+    fun mobileUiNavigationMapsOnlyAllowlistedNativeRoutes() {
+        val action = mobileNavigationSuggestion(
+            AssistProposalDto(type = "mobile_ui", action = "NAVIGATE", path = "/m/settings"),
+        )
+
+        assertEquals(AgentNavigationDestination.SETTINGS, action?.destination)
+        assertEquals(
+            null,
+            mobileNavigationSuggestion(
+                AssistProposalDto(type = "mobile_ui", action = "NAVIGATE", path = "https://evil.example/"),
+            ),
+        )
+        assertEquals(
+            null,
+            mobileNavigationSuggestion(
+                AssistProposalDto(type = "mobile_ui", action = "NAVIGATE", path = "/m/unknown"),
+            ),
+        )
     }
 
     @Test

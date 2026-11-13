@@ -296,7 +296,7 @@ internal fun LoginViewModel.UiState.afterServerSwitch(): LoginViewModel.UiState 
 )
 
 internal const val AUTH_NETWORK_ERROR =
-    "Impossible de joindre le serveur configuré. Ouvrez Serveurs pour tester son adresse et vérifiez que l'appareil ou l'émulateur peut atteindre ce réseau."
+    "La requête de connexion n'a pas abouti au serveur configuré. Réessayez; si le problème persiste, testez son adresse et vérifiez le réseau de l'appareil."
 
 internal fun authFailureMessage(
     code: String,

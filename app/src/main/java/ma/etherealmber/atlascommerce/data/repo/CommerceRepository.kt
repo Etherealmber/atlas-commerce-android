@@ -724,42 +724,75 @@ class CommerceRepository @Inject constructor(
             "^(bonjour|bonsoir|salut|hello|hi|hey|coucou|salam|مرحبا|مرحباً|السلام عليكم|شكرا|شكراً|bonne\\s*(journée|soirée)|merci)[\\s!.?]*$",
             RegexOption.IGNORE_CASE,
         ).matches(cleanQuestion)
-        val snapshot = if (isGreeting) "" else {
-            runCatching { buildLiveBusinessSnapshot(cleanQuestion, role, username) }.getOrDefault("")
+        val contextNeeds = agentContextNeeds(cleanQuestion)
+        val snapshot = if (isGreeting || contextNeeds.isEmpty) "" else {
+            try {
+                buildLiveBusinessSnapshot(cleanQuestion, role, username, contextNeeds)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                ""
+            }
         }
         return composeAgentPrompt(cleanQuestion, snapshot, responseLanguage)
     }
 
-    private suspend fun buildLiveBusinessSnapshot(userQuestion: String, role: String?, username: String?): String = coroutineScope {
+    private suspend fun buildLiveBusinessSnapshot(
+        userQuestion: String,
+        role: String?,
+        username: String?,
+        needs: AgentContextNeeds,
+    ): String = coroutineScope {
         val isAdmin = Roles.isAdmin(role)
         val canViewClientsAndInvoices = Roles.canCreateDocuments(role)
-        val dashDef = async { runCatching { dashboard() }.getOrNull() }
-        val financeDef = if (isAdmin) async { runCatching { financeMonthly() }.getOrNull() } else null
-        val prodsDef = async { runCatching { products(query = null, limit = 250) }.getOrNull() }
-        val clientsDef = if (canViewClientsAndInvoices) async { runCatching { clients() }.getOrNull() } else null
-        val actsDef = async { runCatching { mobileActions(status = "pending") }.getOrNull() }
-        val alertsDef = async { runCatching { alerts() }.getOrNull() }
+        val dashDef = if (needs.dashboard || (needs.finance && isAdmin)) async { loadAgentContextSource { dashboard() } } else null
+        val financeDef = if (needs.finance && isAdmin) async { loadAgentContextSource { financeMonthly() } } else null
+        val prodsDef = if (needs.products) async { loadAgentContextSource { products(query = null, limit = 250) } } else null
+        val clientsDef = if (needs.clients && canViewClientsAndInvoices) async { loadAgentContextSource { clients() } } else null
+        val actsDef = if (needs.actions) async { loadAgentContextSource { mobileActions(status = "pending") } } else null
+        val alertsDef = if (needs.alerts) async { loadAgentContextSource { alerts() } } else null
 
-        val dash = (dashDef.await() as? ApiResult.Success)?.data
-        val finance = (financeDef?.await() as? ApiResult.Success)?.data
-        val prods = (prodsDef.await() as? ApiResult.Success)?.data
-            ?: runCatching { cachedProducts() }.getOrDefault(emptyList())
-        val cliList = (clientsDef?.await() as? ApiResult.Success)?.data.orEmpty()
-        val pendingActions = (actsDef.await() as? ApiResult.Success)?.data.orEmpty()
+        val dashResult = dashDef?.await()
+        val financeResult = financeDef?.await()
+        val productResult = prodsDef?.await()
+        val clientsResult = clientsDef?.await()
+        val actionsResult = actsDef?.await()
+        val alertsResult = alertsDef?.await()
+        val dash = (dashResult as? ApiResult.Success)?.data
+        val finance = (financeResult as? ApiResult.Success)?.data
+        val liveProducts = (productResult as? ApiResult.Success)?.data
+        val productCacheUsed = needs.products && productResult !is ApiResult.Success
+        val prods = liveProducts ?: if (productCacheUsed) runCatching { cachedProducts() }.getOrDefault(emptyList()) else emptyList()
+        val cliList = (clientsResult as? ApiResult.Success)?.data.orEmpty()
+        val pendingActions = (actionsResult as? ApiResult.Success)?.data.orEmpty()
             .filter { Roles.isActionVisibleForUser(role, username, it) }
         val activeAlerts = Roles.filterAlertsForRole(
             role,
-            (alertsDef.await() as? ApiResult.Success)?.data.orEmpty(),
+            (alertsResult as? ApiResult.Success)?.data.orEmpty(),
         )
 
         val cur = finance?.currency?.takeIf { it.isNotBlank() } ?: dash?.activeCurrency ?: "MAD"
         val sb = StringBuilder()
-        sb.appendLine("[DONNÉES TEMPS RÉEL ATLAS COMMERCE]")
+        sb.appendLine("[DONNÉES ATLAS SÉLECTIONNÉES POUR CETTE QUESTION]")
+        val unavailableSources = buildList {
+            if ((needs.dashboard || (needs.finance && isAdmin)) && dashResult !is ApiResult.Success) add("dashboard")
+            if (needs.finance && isAdmin && financeResult !is ApiResult.Success) add("finance")
+            if (needs.products && productResult !is ApiResult.Success && prods.isEmpty()) add("catalogue")
+            if (needs.clients && canViewClientsAndInvoices && clientsResult !is ApiResult.Success) add("clients")
+            if (needs.actions && actionsResult !is ApiResult.Success) add("actions")
+            if (needs.alerts && alertsResult !is ApiResult.Success) add("alerts")
+        }
+        if (unavailableSources.isNotEmpty()) {
+            sb.appendLine("Sources indisponibles ou trop lentes: ${unavailableSources.joinToString()}. Ne pas inventer leurs données.")
+        }
+        if (productCacheUsed && prods.isNotEmpty()) {
+            sb.appendLine("Catalogue local en cache uniquement; ces données peuvent être obsolètes.")
+        }
         if (dash != null) {
             val permittedKpis = buildList {
                 add("Produits=${dash.productCount}")
                 add("StockBas=${dash.lowStockCount}")
-                if (canViewClientsAndInvoices) add("Clients=${cliList.size}")
+                if (canViewClientsAndInvoices && needs.clients) add("Clients=${cliList.size}")
                 if (isAdmin && finance != null) {
                     add("SoldeClôture=${AtlasFormat.money(finance.closingBalance, finance.currency)}")
                     add("VentesEncaissées=${AtlasFormat.money(finance.salesReceived, finance.currency)}")
@@ -850,6 +883,16 @@ class CommerceRepository @Inject constructor(
             )
         }
         sb.toString().take(1850)
+    }
+
+    private suspend fun <T> loadAgentContextSource(
+        request: suspend () -> ApiResult<T>,
+    ): ApiResult<T>? = try {
+        kotlinx.coroutines.withTimeoutOrNull(4_000L) { request() }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
     }
 
     suspend fun assistApprove(proposalId: String): ApiResult<AssistApproveDto> =

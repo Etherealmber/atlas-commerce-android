@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce
 import ma.etherealmber.atlascommerce.ui.screens.login.LoginViewModel
 import ma.etherealmber.atlascommerce.ui.screens.login.isValidOneTimeCode
 import ma.etherealmber.atlascommerce.ui.screens.login.authFailureMessage
+import ma.etherealmber.atlascommerce.ui.screens.login.AUTH_NETWORK_ERROR
 import ma.etherealmber.atlascommerce.core.net.ApiErrorPayload
 import ma.etherealmber.atlascommerce.core.net.parseRetryAfterSeconds
 import com.squareup.moshi.Moshi
@@ -43,6 +44,15 @@ class LoginOtpValidationTest {
             "Trop de tentatives de connexion. Réessayez plus tard.",
             authFailureMessage("RATE_LIMITED", 429, isOtp = true),
         )
+    }
+
+    @Test
+    fun transientNetworkFailureOffersActionableSignInRetryGuidance() {
+        val message = authFailureMessage("NETWORK", httpStatus = null, isOtp = false)
+
+        assertEquals(AUTH_NETWORK_ERROR, message)
+        assertTrue(message.contains("Réessayez"))
+        assertTrue(message.contains("vérifiez le réseau"))
     }
 
     @Test

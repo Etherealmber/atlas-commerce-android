@@ -16,9 +16,9 @@
         android:name=".AtlasApp"
         android:allowBackup="false"
         android:fullBackupContent="false"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/ic_launcher_direct"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:roundIcon="@drawable/ic_launcher_direct"
         android:supportsRtl="true"
         android:theme="@style/Theme.Atlas"
         android:usesCleartextTraffic="false">

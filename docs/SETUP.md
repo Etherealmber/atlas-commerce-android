@@ -100,7 +100,7 @@ Never use the public production data set as a test fixture. Record the Worker UR
 
 ### 3.1 Install a release APK
 
-Download the latest signed APK from [Android releases](https://github.com/Etherealmber/atlas-commerce-android/releases). Install only APKs signed by a publisher you trust. Android may ask you to allow installation from the browser or file manager used to open the APK.
+The current Android app requires Android 11 or newer (API 30+). Download the latest signed APK from [Android releases](https://github.com/Etherealmber/atlas-commerce-android/releases). Install only APKs signed by a publisher you trust. Android may ask you to allow installation from the browser or file manager used to open the APK.
 
 ### 3.2 Build from source
 
@@ -123,7 +123,7 @@ The Android application ID is `ma.etherealmber.atlascommerce`. Debug builds are 
 
 ## 4. Optional push notifications and automatic crash reports (Firebase)
 
-Firebase is optional. If `app/google-services.json` is absent, Android still builds; Firebase push registration and automatic Crashlytics upload remain inactive. Crash-report collection is **off by default**. A user must enable **Paramètres → Envoyer automatiquement les rapports de plantage** once; after opting in, subsequent crash reports are uploaded automatically when connectivity is available. Turning the setting off withdraws that choice. Manual in-app diagnostic reports remain a separate, user-submitted flow.
+Firebase remains optional for local and validation-only builds: if `app/google-services.json` is absent, Android still builds without push registration or automatic Crashlytics uploads. **A publishable GitHub Release build requires the repository Actions secret `GOOGLE_SERVICES_JSON_BASE64`; the release workflow validates the Android package and fails closed if the secret is absent or invalid, rather than publishing an APK without Crashlytics.** Crash-report collection is **off by default**. A user must enable **Paramètres → Envoyer automatiquement les rapports de plantage** once; after opting in, subsequent crash reports are uploaded automatically when connectivity is available. Turning the setting off withdraws that choice. Manual in-app diagnostic reports remain a separate, user-submitted flow.
 
 ### 4.1 Create the Firebase project and Android app
 

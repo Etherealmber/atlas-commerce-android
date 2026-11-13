@@ -75,6 +75,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -139,8 +140,10 @@ internal fun detectAgentNavigationSuggestion(prompt: String): AgentNavigationSug
     val asksLocation = listOf(
         "where is", "where are", "where can i find", "where do i find", "where can i go",
         "where is the", "where are the", "where can i access", "where do i access",
+        "put me", "take me to", "take me into", "bring me to", "send me to", "go to", "navigate to", "open", "show me",
         "ou est", "ou sont", "ou se trouve", "ou trouver", "ou puis-je", "ou se situe",
-        "أين", "فين", "وين",
+        "ouvre", "ouvrir", "emmene moi", "amene moi", "va a", "aller a", "conduis moi",
+        "أين", "فين", "وين", "افتح", "اذهب الى",
     ).any { phrase -> normalized.contains(phrase) }
     val mentionsReport = listOf("report", "reports", "rapport", "rapports", "bilan", "financial statement")
         .any { phrase -> normalized.contains(phrase) }
@@ -204,6 +207,41 @@ internal fun detectAgentNavigationSuggestion(prompt: String): AgentNavigationSug
     return destination?.let { AgentNavigationSuggestion(destination = it) }
 }
 
+/** Direct, explicitly requested navigation is local and does not need a slow LLM round-trip. */
+internal fun detectExplicitAgentNavigationRequest(prompt: String): AgentNavigationSuggestion? {
+    val normalized = Normalizer.normalize(prompt, Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .lowercase(Locale.ROOT)
+    val explicit = listOf(
+        "open", "go to", "take me to", "take me into", "put me", "bring me to", "send me to", "navigate to",
+        "ouvre", "ouvrir", "emmene moi", "amene moi", "va a", "aller a",
+        "افتح", "اذهب الى",
+    ).any(normalized::contains)
+    if (!explicit) return null
+    return detectAgentNavigationSuggestion(prompt)
+}
+
+/** Only map known native routes. Never execute an arbitrary model-provided URL or path. */
+internal fun mobileNavigationSuggestion(proposal: AssistProposalDto): AgentNavigationSuggestion? {
+    val type = (proposal.type ?: proposal.kind)?.trim()?.lowercase(Locale.ROOT)
+    if (type != "mobile_ui") return null
+    if (proposal.action?.trim()?.lowercase(Locale.ROOT) !in setOf("navigate", "navigation")) return null
+    val path = proposal.path?.trim()?.takeIf { it.startsWith('/') && !it.contains('?') && !it.contains('#') } ?: return null
+    val destination = when (path.trimEnd('/').lowercase(Locale.ROOT)) {
+        "/m/home", "/m/dashboard" -> AgentNavigationDestination.HOME
+        "/m/stock", "/m/products", "/m/inventory" -> AgentNavigationDestination.PRODUCTS
+        "/m/sales" -> AgentNavigationDestination.SALES
+        "/m/finance", "/m/reports" -> AgentNavigationDestination.BALANCE_REPORT
+        "/m/employees" -> AgentNavigationDestination.EMPLOYEES
+        "/m/scan" -> AgentNavigationDestination.SCAN
+        "/m/inbox", "/m/notifications" -> AgentNavigationDestination.NOTIFICATIONS
+        "/m/settings" -> AgentNavigationDestination.SETTINGS
+        "/m/profile" -> AgentNavigationDestination.PROFILE
+        else -> return null
+    }
+    return AgentNavigationSuggestion(destination)
+}
+
 @Composable
 fun AgentScreen(
     onToast: (String) -> Unit,
@@ -263,6 +301,10 @@ fun AgentScreen(
     LaunchedEffect(Unit) {
         viewModel.notices.collect { msg -> onToast(msg) }
     }
+    val currentOnNavigate by rememberUpdatedState(onNavigate)
+    LaunchedEffect(viewModel) {
+        viewModel.navigationRequests.collect { suggestion -> currentOnNavigate(suggestion) }
+    }
 
     val quotaLocked = state.policy?.isExhausted == true
     val conversationListState = rememberLazyListState()
@@ -295,6 +337,16 @@ fun AgentScreen(
     val agentElapsedLabel = if (agentLoadingSeconds >= 3) {
         atlasText("${agentLoadingSeconds}s", "${agentLoadingSeconds}s", "${agentLoadingSeconds} ث")
     } else null
+    var showAgentChatShimmer by remember(state.activeThreadId) { mutableStateOf(false) }
+    LaunchedEffect(isActive, state.loadingContext, state.loadingThread, state.activeThreadId) {
+        if (isActive && (state.loadingContext || state.loadingThread)) {
+            showAgentChatShimmer = false
+            delay(700L)
+            showAgentChatShimmer = true
+        } else {
+            showAgentChatShimmer = false
+        }
+    }
     val conversationScrollConnection = remember(conversationListState) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -455,12 +507,16 @@ fun AgentScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(density.itemGap),
                 ) {
-                    if (state.loadingThread) {
+                    if (state.loadingContext || state.loadingThread) {
                         item(key = "agent_loading") {
-                            AtlasChatSkeleton(Modifier.fillMaxWidth())
+                            if (showAgentChatShimmer) {
+                                AtlasChatSkeleton(Modifier.fillMaxWidth())
+                            } else {
+                                AgentStartupLoadingAnimation()
+                            }
                         }
                     }
-                    if (state.messages.isEmpty() && !state.loadingThread && !quotaLocked) {
+                    if (state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && !quotaLocked) {
                         item(key = "agent_quick_prompts") {
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 quickPrompts.forEach { prompt ->
@@ -470,7 +526,7 @@ fun AgentScreen(
                         }
                     }
 
-                    if (state.messages.isEmpty() && !state.loadingThread && visibleNextActions.isNotEmpty() && !quotaLocked) {
+                    if (state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && visibleNextActions.isNotEmpty() && !quotaLocked) {
                         item(key = "agent_suggestions_hdr") {
                             AtlasSectionHeader(title = atlasText("Actions suggérées par l'IA", "AI suggestions", "اقتراحات الذكاء الاصطناعي"))
                         }
@@ -514,6 +570,7 @@ fun AgentScreen(
                                 onToast("Réponse copiée.")
                             },
                             onApprove = { proposalId -> viewModel.approveProposal(msg.id, proposalId) },
+                            onNavigate = onNavigate,
                         )
                     }
 
@@ -1063,6 +1120,7 @@ private fun ChatBubbleRow(
     approvingId: String?,
     onCopy: () -> Unit,
     onApprove: (String) -> Unit,
+    onNavigate: (AgentNavigationSuggestion) -> Unit = {},
     isStreaming: Boolean = false,
 ) {
     val isUser = message.fromUser
@@ -1118,6 +1176,14 @@ private fun ChatBubbleRow(
                                     color = userInk,
                                 )
                             }
+                        } else if (isStreaming) {
+                            // Rendering a full Markdown tree for every tiny SSE delta is costly.
+                            // Stream lightweight text now and format it once the final frame arrives.
+                            Text(
+                                text = displayText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
                         } else {
                             AtlasMarkdown(
                                 markdown = displayText,
@@ -1139,11 +1205,26 @@ private fun ChatBubbleRow(
 
                         message.proposals.forEach { proposal ->
                             val proposalId = proposal.proposalId.orEmpty()
+                            val mobileNavigation = mobileNavigationSuggestion(proposal)
+                            val isMobileUiAction = (proposal.type ?: proposal.kind).equals("mobile_ui", ignoreCase = true)
                             val isInventoryAdjustment = proposal.type == "inventory_adjustment" || proposal.kind == "inventory_adjustment"
-                            val proposalTitle = proposal.title ?: if (isInventoryAdjustment) {
-                                atlasText("Ajustement de stock proposé", "Proposed stock adjustment", "تعديل مخزون مقترح")
-                            } else {
-                                atlasText("Action proposée", "Suggested action", "إجراء مقترح")
+                            val proposalTitle = proposal.title ?: when {
+                                mobileNavigation != null -> atlasText("Navigation suggérée", "Suggested navigation", "تنقل مقترح")
+                                isMobileUiAction -> atlasText("Action mobile", "Mobile action", "إجراء للهاتف")
+                                isInventoryAdjustment -> atlasText("Ajustement de stock proposé", "Proposed stock adjustment", "تعديل مخزون مقترح")
+                                else -> atlasText("Action proposée", "Suggested action", "إجراء مقترح")
+                            }
+                            val mobileNavigationLabel = when (mobileNavigation?.destination) {
+                                AgentNavigationDestination.HOME -> atlasText("Accueil", "Home", "الرئيسية")
+                                AgentNavigationDestination.PRODUCTS -> atlasText("Produits et stock", "Products and inventory", "المنتجات والمخزون")
+                                AgentNavigationDestination.SALES -> atlasText("Ventes", "Sales", "المبيعات")
+                                AgentNavigationDestination.BALANCE_REPORT -> atlasText("Rapports financiers", "Finance reports", "التقارير المالية")
+                                AgentNavigationDestination.EMPLOYEES -> atlasText("Employés", "Employees", "الموظفون")
+                                AgentNavigationDestination.SCAN -> atlasText("Scan", "Scan", "المسح")
+                                AgentNavigationDestination.NOTIFICATIONS -> atlasText("Notifications", "Notifications", "الإشعارات")
+                                AgentNavigationDestination.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
+                                AgentNavigationDestination.PROFILE -> atlasText("Profil", "Profile", "الملف الشخصي")
+                                null -> ""
                             }
                             val proposalDetails = proposal.summary?.takeIf { it.isNotBlank() } ?: buildList {
                                 proposal.productName?.takeIf { it.isNotBlank() }?.let { add(it) }
@@ -1169,6 +1250,18 @@ private fun ChatBubbleRow(
                                 }
                                 Spacer(Modifier.height(6.dp))
                                 when {
+                                    mobileNavigation != null -> TextButton(onClick = { onNavigate(mobileNavigation) }) {
+                                        Text(atlasText("Ouvrir $mobileNavigationLabel", "Open $mobileNavigationLabel", "افتح $mobileNavigationLabel"))
+                                    }
+                                    isMobileUiAction -> Text(
+                                        atlasText(
+                                            "Cette action mobile n’est pas prise en charge ici; aucune action n’a été exécutée.",
+                                            "This mobile action is not supported here; nothing was executed.",
+                                            "هذا الإجراء غير مدعوم هنا؛ لم يتم تنفيذ أي إجراء.",
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                     proposalId.isBlank() -> Text(
                                         atlasText(
                                             "Aucune référence d’approbation fournie; aucune action ne sera exécutée.",
@@ -1252,6 +1345,31 @@ private fun AgentAvatar() {
     ) {
         Box(contentAlignment = Alignment.Center) {
             AtlasMark(size = 19.dp)
+        }
+    }
+}
+
+@Composable
+private fun AgentStartupLoadingAnimation() {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AtlasAgentMascot(Modifier.size(42.dp), isThinking = true)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    atlasText("Préparation de l’Agent…", "Getting Atlas Agent ready…", "جارٍ تجهيز مساعد Atlas…"),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                AtlasTypingDots()
+            }
         }
     }
 }

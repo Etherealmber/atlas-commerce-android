@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -63,6 +64,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -185,9 +187,15 @@ fun QrDeviceScreen(
         }
     }
 
+    // Keep one-time route setup through Activity recreation; otherwise tablet rotation
+    // would reset an active QR approval and cancel the ViewModel's polling job.
+    var routeInitialized by rememberSaveable(initialToken, mode) { mutableStateOf(false) }
     LaunchedEffect(initialToken, mode) {
-        viewModel.resetScan()
-        viewModel.consumeInitialToken(initialToken, mode)
+        if (!routeInitialized) {
+            routeInitialized = true
+            viewModel.resetScan()
+            viewModel.consumeInitialToken(initialToken, mode)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -281,7 +289,11 @@ fun QrDeviceScreen(
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .widthIn(max = 1000.dp)
+                .fillMaxWidth()
+                .weight(1f)
+                .align(Alignment.CenterHorizontally),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -362,6 +374,7 @@ fun QrDeviceScreen(
                     QrDeviceViewModel.Step.IDLE -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(
                             modifier = Modifier
+                                .widthIn(max = if (shouldRunCamera) 440.dp else 560.dp)
                                 .fillMaxWidth(0.86f)
                                 .then(if (shouldRunCamera) Modifier.aspectRatio(1f) else Modifier)
                                 .align(Alignment.CenterHorizontally),

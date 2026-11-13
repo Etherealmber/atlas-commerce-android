@@ -874,7 +874,12 @@ private fun CredentialsForm(
             onDone = onSubmit,
             onPasswordVisibilityChange = onPasswordVisibilityChange,
         )
-        LoginInlineError(state, onDismissError, onChangeServer)
+        LoginInlineError(
+            state = state,
+            onDismiss = onDismissError,
+            onChangeServer = onChangeServer,
+            onRetrySignIn = onSubmit,
+        )
         Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
         AtlasButton(
             text = atlasText("Se connecter", "Sign in", "تسجيل الدخول"),
@@ -1027,6 +1032,7 @@ private fun LoginInlineError(
     onDismiss: () -> Unit,
     onChangeServer: () -> Unit,
     onRetryOtp: (() -> Unit)? = null,
+    onRetrySignIn: (() -> Unit)? = null,
 ) {
     val error = state.error?.takeIf { it.isNotBlank() }
     val requester = remember { BringIntoViewRequester() }
@@ -1050,6 +1056,17 @@ private fun LoginInlineError(
                     message = localizedLoginMessage(error),
                     onDismiss = onDismiss,
                 )
+                if (error == AUTH_NETWORK_ERROR &&
+                    state.step == LoginViewModel.Step.CREDENTIALS &&
+                    onRetrySignIn != null
+                ) {
+                    TextButton(
+                        onClick = onRetrySignIn,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(atlasText("Réessayer la connexion", "Retry sign-in", "إعادة محاولة تسجيل الدخول"))
+                    }
+                }
                 if (error == AUTH_NETWORK_ERROR &&
                     state.step == LoginViewModel.Step.OTP &&
                     isValidOneTimeCode(state.otp) &&
@@ -1114,8 +1131,8 @@ private fun localizedLoginMessage(message: String): String {
     AUTH_NETWORK_ERROR ->
         atlasText(
             AUTH_NETWORK_ERROR,
-            "Couldn't reach the configured server. Open Servers to test its address and check that this device or emulator can reach that network.",
-            "تعذّر الوصول إلى الخادم المحدد. افتح الخوادم لاختبار عنوانه وتأكد من أن الجهاز أو المحاكي يستطيع الوصول إلى تلك الشبكة.",
+            "The sign-in request could not reach the configured server. Retry sign-in; if it persists, test the address and device network. A server test checks /api/health, not the sign-in route.",
+            "تعذّر وصول طلب تسجيل الدخول إلى الخادم المحدد. أعد المحاولة؛ وإذا استمرت المشكلة، اختبر العنوان وشبكة الجهاز. يفحص اختبار الخادم /api/health ولا يفحص مسار تسجيل الدخول.",
         )
     "Impossible de vérifier le certificat HTTPS du serveur. Vérifiez sa configuration HTTPS puis réessayez." ->
         atlasText(

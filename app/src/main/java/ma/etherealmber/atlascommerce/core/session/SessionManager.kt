@@ -136,12 +136,25 @@ class SessionManager @Inject constructor(
                 preferences.migrateLegacyPreferencesAtRest()
                 serverConfig.loaded.filter { it }.first()
                 val stored = preferences.readSession()
-                val plan = StartupResumePreparation.createRequest(
+                val selectedServerUrl = serverConfig.normalizedSelection()
+                val restoreDisabled = preferences.isSessionRestoreDisabled()
+                var plan = StartupResumePreparation.createRequest(
                     previousSession = stored,
-                    selectedServerUrl = serverConfig.normalizedSelection(),
-                    restoreDisabled = preferences.isSessionRestoreDisabled(),
+                    selectedServerUrl = selectedServerUrl,
+                    restoreDisabled = restoreDisabled,
                     decryptToken = cryptoStore::decrypt,
                 )
+                if (plan.result == StartupResumeResult.UNDECRYPTABLE_TOKEN) {
+                    // Keystore access can fail transiently on some devices. Retry once, but
+                    // never discard an encrypted session solely because local decryption failed.
+                    kotlinx.coroutines.delay(350)
+                    plan = StartupResumePreparation.createRequest(
+                        previousSession = stored,
+                        selectedServerUrl = selectedServerUrl,
+                        restoreDisabled = restoreDisabled,
+                        decryptToken = cryptoStore::decrypt,
+                    )
+                }
                 val request = plan.request
                 if (request == null) {
                     if (plan.result != StartupResumeResult.NO_SESSION) {
@@ -151,11 +164,8 @@ class SessionManager @Inject constructor(
                             level = "WARN",
                         )
                     }
-                    if (plan.result == StartupResumeResult.NO_SESSION) {
-                        FreshProcessSessionOutcome.NO_SESSION
-                    } else {
-                        FreshProcessSessionOutcome.REJECTED
-                    }
+                    startupOutcomeForResumePreparation(plan.result)
+                        ?: FreshProcessSessionOutcome.REJECTED
                 } else {
                     when (
                         val verification = StartupResumePreparation.verifyWithRetry(
