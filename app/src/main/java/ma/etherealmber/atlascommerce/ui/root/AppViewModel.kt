@@ -125,6 +125,7 @@ class AppViewModel @Inject constructor(
     val crashReportsAvailabilityChecked: StateFlow<Boolean> = _crashReportsAvailabilityChecked.asStateFlow()
 
     init {
+        checkUpdatesOnceServerReady()
         viewModelScope.launch {
             sessionEvents.expired.collect { event ->
                 // An in-flight response from a previous account must not sign out the newly
@@ -928,6 +929,18 @@ class AppViewModel @Inject constructor(
 
     fun completeOnboarding() {
         viewModelScope.launch { preferences.markOnboardingDone() }
+    }
+
+    fun completeWelcomeSetup(themeMode: ThemeMode, densityMode: DensityMode, crashReportsEnabled: Boolean?) {
+        viewModelScope.launch {
+            preferences.setThemeMode(themeMode)
+            preferences.setDensityMode(densityMode)
+            crashReportsEnabled?.let { enabled ->
+                val consentSaved = CrashReportConsent.setEnabled(applicationContext, enabled)
+                _automaticCrashReportsEnabled.value = consentSaved && enabled
+            }
+            preferences.markOnboardingDone()
+        }
     }
 
     fun replayOnboarding() {

@@ -916,7 +916,7 @@ jobs:
           security_path = Path("SECURITY.md")
           security = security_path.read_text(encoding="utf-8")
           security_pattern = re.compile(
-              r"(?m)^(© \d{4} Etherealmber — MIT — current app baseline: \*\*)"
+              r"(?m)^(© \d{4} Etherealmber — MIT(?: OR Apache-2\.0)? — current app baseline: \*\*)"
               r"[^*]+(\*\* \(versionCode )\d+(\); use the \[Releases page\].*)$"
           )
           security_updated, security_count = security_pattern.subn(
