@@ -1,10 +1,9 @@
 package ma.etherealmber.atlascommerce.ui.shell
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,17 +14,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AddComment
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.HourglassBottom
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -36,17 +31,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.session.SessionUser
@@ -55,6 +47,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasMark
 import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun AtlasSidebarContent(
     user: SessionUser,
@@ -64,21 +57,28 @@ internal fun AtlasSidebarContent(
     cartCount: Int,
     notificationCount: Int,
     expanded: Boolean,
+    onOpenDataStorageManager: () -> Unit,
     canCollapse: Boolean,
     onToggleCollapse: () -> Unit,
     onNavigate: (MainTab) -> Unit,
     onOpenNotifications: () -> Unit,
-    onAgentHistory: () -> Unit,
-    onNewAgentConversation: () -> Unit,
-    onRefreshAgentContext: () -> Unit,
-    onShowAgentQuota: () -> Unit,
     onRequestSignOut: () -> Unit,
     onAvatarSurprise: () -> Unit,
     modifier: Modifier = Modifier,
-    showCloseButton: Boolean = false,
-    onClose: () -> Unit = {},
 ) {
-    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val logoDescription = when {
+        !canCollapse -> atlasText("Logo Atlas Commerce", "Atlas Commerce logo", "شعار أطلس كوميرس")
+        expanded -> atlasText(
+            "Logo Atlas Commerce. Appuyez deux fois pour réduire le menu",
+            "Atlas Commerce logo. Double-tap to collapse navigation",
+            "شعار أطلس كوميرس. انقر مرتين لتصغير القائمة",
+        )
+        else -> atlasText(
+            "Logo Atlas Commerce. Appuyez deux fois pour développer le menu",
+            "Atlas Commerce logo. Double-tap to expand navigation",
+            "شعار أطلس كوميرس. انقر مرتين لتوسيع القائمة",
+        )
+    }
     Column(
         modifier = modifier.fillMaxSize().padding(horizontal = if (expanded) 12.dp else 8.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -88,63 +88,32 @@ internal fun AtlasSidebarContent(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AtlasMark(
-                modifier = if (!expanded && canCollapse) Modifier.clickable(onClick = onToggleCollapse) else Modifier,
-                size = if (expanded) 46.dp else 28.dp,
+                modifier = if (canCollapse) {
+                    Modifier
+                        .combinedClickable(
+                            onClick = {},
+                            onDoubleClick = onToggleCollapse,
+                        )
+                        .semantics { contentDescription = logoDescription }
+                } else {
+                    Modifier
+                },
+                size = if (expanded) 46.dp else 32.dp,
+                tint = MaterialTheme.colorScheme.onSurface,
             )
             if (expanded) {
                 Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text(
-                        "Atlas",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                    )
-                    Text(
-                        "Commerce",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
+                Text(
+                    "Atlas Commerce",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             } else {
                 Spacer(Modifier.weight(1f))
             }
-            when {
-                showCloseButton -> IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Outlined.Close, contentDescription = atlasText("Fermer la navigation", "Close navigation", "إغلاق التنقل"))
-                }
-                canCollapse -> {
-                    val rotation by animateFloatAsState(
-                        targetValue = if (expanded) {
-                            if (isRtl) -90f else 90f
-                        } else {
-                            if (isRtl) 90f else -90f
-                        },
-                        animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f),
-                        label = "sidebar-collapse-chevron",
-                    )
-                    IconButton(onClick = onToggleCollapse, modifier = Modifier.size(if (expanded) 40.dp else 32.dp)) {
-                        Icon(
-                            Icons.Outlined.KeyboardArrowDown,
-                            contentDescription = if (expanded) atlasText("Réduire le menu", "Collapse sidebar", "تصغير القائمة") else atlasText("Développer le menu", "Expand sidebar", "توسيع القائمة"),
-                            modifier = Modifier.graphicsLayer { rotationZ = rotation },
-                        )
-                    }
-                }
-            }
-        }
-
-        if (expanded) {
-            Text(
-                text = selectedTab.localizedLabel(),
-                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp, bottom = 2.dp),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
 
         Column(
@@ -182,55 +151,18 @@ internal fun AtlasSidebarContent(
                 )
             }
             SidebarNavigationItem(
-                icon = MainTab.AGENT.icon,
-                label = MainTab.AGENT.localizedLabel(),
-                isSelected = selectedTab == MainTab.AGENT,
-                expanded = expanded,
-                onClick = { onNavigate(MainTab.AGENT) },
-            )
-            if (selectedTab == MainTab.AGENT) {
-                SidebarNavigationItem(
-                    icon = Icons.Outlined.History,
-                    label = atlasText("Historique", "History", "السجل"),
-                    isSelected = false,
-                    expanded = expanded,
-                    onClick = onAgentHistory,
-                )
-                SidebarNavigationItem(
-                    icon = Icons.Outlined.AddComment,
-                    label = atlasText("Nouvelle discussion", "New conversation", "محادثة جديدة"),
-                    isSelected = false,
-                    expanded = expanded,
-                    onClick = onNewAgentConversation,
-                )
-                SidebarNavigationItem(
-                    icon = Icons.Outlined.Refresh,
-                    label = atlasText("Actualiser le contexte", "Refresh context", "تحديث السياق"),
-                    isSelected = false,
-                    expanded = expanded,
-                    onClick = onRefreshAgentContext,
-                )
-                SidebarNavigationItem(
-                    icon = Icons.Outlined.HourglassBottom,
-                    label = atlasText("Quota IA", "AI quota", "حصة الذكاء الاصطناعي"),
-                    isSelected = false,
-                    expanded = expanded,
-                    onClick = onShowAgentQuota,
-                )
-            }
-            SidebarNavigationItem(
-                icon = MainTab.PROFILE.icon,
-                label = MainTab.PROFILE.localizedLabel(),
-                isSelected = selectedTab == MainTab.PROFILE,
-                expanded = expanded,
-                onClick = { onNavigate(MainTab.PROFILE) },
-            )
-            SidebarNavigationItem(
                 icon = MainTab.SETTINGS.icon,
                 label = MainTab.SETTINGS.localizedLabel(),
                 isSelected = selectedTab == MainTab.SETTINGS,
                 expanded = expanded,
                 onClick = { onNavigate(MainTab.SETTINGS) },
+            )
+            SidebarNavigationItem(
+                icon = Icons.Outlined.Inventory2,
+                label = atlasText("Stockage des données", "Data storage", "تخزين البيانات"),
+                isSelected = false,
+                expanded = expanded,
+                onClick = onOpenDataStorageManager,
             )
         }
 
@@ -315,8 +247,8 @@ private fun SidebarNavigationItem(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { selected = isSelected },
         shape = RoundedCornerShape(14.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerLow,
-        border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)) else null,
+        color = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
+        border = null,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = if (expanded) 14.dp else 0.dp, vertical = 11.dp),
@@ -330,12 +262,21 @@ private fun SidebarNavigationItem(
                     }
                 },
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = if (expanded) null else label,
-                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(23.dp),
-                )
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(32.dp)) {
+                    if (isSelected) {
+                        Surface(
+                            modifier = Modifier.size(30.dp),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f),
+                        ) {}
+                    }
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = if (expanded) null else label,
+                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(21.dp),
+                    )
+                }
             }
             if (expanded) {
                 Spacer(Modifier.width(14.dp))
@@ -343,7 +284,7 @@ private fun SidebarNavigationItem(
                     label,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

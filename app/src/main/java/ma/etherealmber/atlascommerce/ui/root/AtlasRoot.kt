@@ -17,9 +17,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -489,6 +492,7 @@ private fun AtlasGate(
     val activeUser = (session as? SessionState.Active)?.user
     var savedShellTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
     var savedLastBottomTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
+    var sidebarCollapsed by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf(false) }
 
     val baseStage = when {
         !bootSplashFinished || loadingBackend -> RootStage.SPLASH
@@ -612,6 +616,8 @@ private fun AtlasGate(
                                 onActiveTabChange = { savedShellTab = it },
                                 lastBottomTabOverride = savedLastBottomTab,
                                 onLastBottomTabChange = { savedLastBottomTab = it },
+                                sidebarCollapsed = sidebarCollapsed,
+                                onSidebarCollapsedChange = { sidebarCollapsed = it },
                                 isForeground = overlay == null,
                                 externalTabRequest = requestedTab,
                                 onExternalTabHandled = { requestedTab = null },
@@ -655,6 +661,19 @@ private fun AtlasGate(
             if (overlay != null) {
                 lastOverlay = overlay
             }
+            val visibleOverlay = overlay ?: lastOverlay
+            val notificationRailInset = if (
+                visibleOverlay == Overlay.NOTIFICATIONS && LocalConfiguration.current.screenWidthDp >= 600
+            ) {
+                if (sidebarCollapsed) 76.dp else 264.dp
+            } else {
+                0.dp
+            }
+            val notificationTopInset = if (notificationRailInset > 0.dp) {
+                WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 55.dp
+            } else {
+                0.dp
+            }
             AnimatedVisibility(
                 visible = bootSplashFinished && onboardingDone && !loadingBackend && overlay != null,
                 enter = slideInHorizontally(initialOffsetX = { it / 6 }) + fadeIn(),
@@ -662,10 +681,10 @@ private fun AtlasGate(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().padding(start = notificationRailInset, top = notificationTopInset),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    when (overlay ?: lastOverlay) {
+                    when (visibleOverlay) {
                         Overlay.SNAKE -> SnakeScreen(onClose = { showReconnectPrompt = false; overlay = null }, pausedByPrompt = showReconnectPrompt, isActive = overlay == Overlay.SNAKE)
                         Overlay.SERVER -> ServerSetupScreen(onClose = { overlay = null })
 
@@ -681,6 +700,7 @@ private fun AtlasGate(
                         )
 
                         Overlay.NOTIFICATIONS -> NotificationsScreen(
+                            embeddedInTabletPane = notificationRailInset > 0.dp,
                             onBack = { overlay = null },
                             onNavigateHref = { href ->
                                 overlay = null
