@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Refresh
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -88,6 +90,7 @@ fun DataCacheManagerDialog(
     onDismiss: () -> Unit,
     onToast: (String) -> Unit = {},
     appViewModel: AppViewModel = hiltViewModel(),
+    tabletSidebarWidth: Dp? = null,
 ) {
     val context = LocalContext.current
     val savedServers by appViewModel.savedServers.collectAsStateWithLifecycle()
@@ -154,8 +157,16 @@ fun DataCacheManagerDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(
-            modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
-            shape = RoundedCornerShape(0.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(start = tabletSidebarWidth ?: 0.dp),
+            shape = if (tabletSidebarWidth != null) {
+                RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp)
+            } else {
+                RoundedCornerShape(0.dp)
+            },
             color = MaterialTheme.colorScheme.background,
         ) {
             Column(Modifier.fillMaxSize()) {
@@ -163,8 +174,12 @@ fun DataCacheManagerDialog(
                     modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 10.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
+                    if (tabletSidebarWidth == null) {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
+                        }
+                    } else {
+                        Spacer(Modifier.width(16.dp))
                     }
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -183,6 +198,11 @@ fun DataCacheManagerDialog(
                         appViewModel.refreshCachedProductCount()
                     }) {
                         Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser le stockage", "Refresh storage", "تحديث التخزين"))
+                    }
+                    if (tabletSidebarWidth != null) {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Outlined.Close, contentDescription = atlasText("Fermer", "Close", "إغلاق"))
+                        }
                     }
                 }
                 AtlasDivider()

@@ -32,7 +32,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.widthIn
@@ -111,7 +110,6 @@ import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.screens.settings.DataCacheManagerDialog
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
-import ma.etherealmber.atlascommerce.ui.components.AtlasMark
 import ma.etherealmber.atlascommerce.ui.components.AtlasSurpriseDialog
 import ma.etherealmber.atlascommerce.ui.components.nextSurprise
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
@@ -287,14 +285,6 @@ fun MainShell(
         onShake = { showShakeReportPrompt = true },
     )
 
-    if (showDataCacheManagerDialog) {
-        DataCacheManagerDialog(
-            onDismiss = { showDataCacheManagerDialog = false },
-            onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
-            appViewModel = appViewModel,
-        )
-    }
-
     if (showAvatarSurprise || showAgentSurprise) {
         AtlasSurpriseDialog(surpriseIndex) { showAvatarSurprise = false; showAgentSurprise = false }
     }
@@ -434,6 +424,15 @@ fun MainShell(
         animationSpec = spring(dampingRatio = 0.86f, stiffness = 360f),
         label = "atlas-sidebar-width",
     )
+    if (showDataCacheManagerDialog) {
+        DataCacheManagerDialog(
+            onDismiss = { showDataCacheManagerDialog = false },
+            onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+            appViewModel = appViewModel,
+            tabletSidebarWidth = sidebarWidth.takeIf { useRail },
+        )
+    }
+
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val floatingBarWidth by animateDpAsState(
         targetValue = maxWidth,
@@ -448,11 +447,9 @@ fun MainShell(
         modifier = Modifier.fillMaxSize(),
         containerColor = Color.Transparent,
         topBar = {
-            if (!productHistoryActive || useRail) {
-                Column {
-                    if (isForeground && !productHistoryActive) {
-                        AtlasTopBar(
-                title = tab.localizedLabel(),
+            if (isForeground && !productHistoryActive) {
+                AtlasTopBar(
+                title = if (useRail) "" else tab.localizedLabel(),
                 subtitle = agentState?.let { state ->
                     val thread = state.activeThreadTitle.takeIf(String::isNotBlank)?.let { localizedAgentText(it, atlasLanguage) }
                         ?: atlasText("Sans titre", "Untitled", "بلا عنوان")
@@ -477,7 +474,7 @@ fun MainShell(
                         )
                     }
                 } else null,
-                onBack = when (tab) {
+                onBack = if (useRail) null else when (tab) {
                     MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
                     MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> ({ setTabName(lastBottomTabName) })
                     else -> null
@@ -489,7 +486,7 @@ fun MainShell(
                         is UpdateState.ReadyToInstall -> state.dismissedBanner && !state.info.mandatory
                         else -> false
                     }
-                    if (isForeground) {
+                    if (isForeground && !useRail) {
                         UpdateMiniProgressBall(
                             state = updateState,
                             onClick = onShowUpdateProgress,
@@ -524,7 +521,7 @@ fun MainShell(
                                 contentDescription = atlasText("Quota IA", "AI quota", "حصة الذكاء الاصطناعي"),
                             )
                         }
-                    } else if (!useRail) {
+                    } else {
                         IconButton(onClick = { switchTab(MainTab.AGENT) }) {
                             Icon(
                                 imageVector = MainTab.AGENT.icon,
@@ -582,18 +579,7 @@ fun MainShell(
                         }
                     }
                 },
-                        )
-                    }
-                    if (useRail) {
-                        TabletPrimaryNavigation(
-                            selectedTab = tab,
-                            showBalance = MainTab.BALANCE in roleTabs,
-                            onSelect = switchTab,
-                            onToggleSidebar = { onSidebarCollapsedChange(!sidebarCollapsed) },
-                            modifier = if (!isForeground || productHistoryActive) Modifier.statusBarsPadding() else Modifier,
-                        )
-                    }
-                }
+                )
             }
         },
     ) { padding ->
@@ -613,10 +599,12 @@ fun MainShell(
                 AtlasSidebarContent(
                     user = user,
                     serverBaseUrl = serverBaseUrl,
-                    roleTabs = roleTabs.filterNot { it == MainTab.HOME || it == MainTab.BALANCE },
+                    roleTabs = roleTabs,
                     selectedTab = tab,
                     cartCount = cartCount,
                     notificationCount = notificationCount,
+                    updateState = updateState,
+                    onUpdateClick = onShowUpdateProgress,
                     expanded = sidebarExpanded,
                     onOpenDataStorageManager = { showDataCacheManagerDialog = true },
                     canCollapse = true,
@@ -649,7 +637,17 @@ fun MainShell(
                 .padding(start = if (showRail) sidebarWidth else 0.dp),
         ) { currentTab ->
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                Box(Modifier.widthIn(max = if (useRail) 1440.dp else 840.dp).fillMaxSize()) {
+                Column(Modifier.widthIn(max = if (useRail) 1440.dp else 840.dp).fillMaxSize()) {
+                    if (useRail) {
+                        Text(
+                            currentTab.localizedLabel(),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                    }
+                    Box(Modifier.fillMaxSize().weight(1f)) {
                 when (currentTab) {
                     MainTab.HOME -> HomeScreen(
                         user = user,
@@ -666,7 +664,7 @@ fun MainShell(
                         onOpenSale = { switchTab(MainTab.SALE) },
                         onToast = onToast,
                         onHistoryPageVisibilityChanged = { productHistoryActive = it },
-                        showPageTitle = useRail,
+                        showPageTitle = false,
                     )
 
                     MainTab.SCAN -> ScanScreen(
@@ -723,6 +721,7 @@ fun MainShell(
                         onToast = onToast,
                     )
                 }
+                    }
                 }
             }
         }
@@ -823,100 +822,6 @@ fun MainShell(
     }
 }
 
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun TabletPrimaryNavigation(
-    selectedTab: MainTab,
-    showBalance: Boolean,
-    onSelect: (MainTab) -> Unit,
-    onToggleSidebar: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val logoDescription = atlasText(
-        "Logo Atlas Commerce. Appuyez deux fois pour réduire ou développer le menu",
-        "Atlas Commerce logo. Double-tap to expand or collapse the sidebar",
-        "شعار أطلس كوميرس. انقر مرتين لتوسيع القائمة أو تصغيرها",
-    )
-    val tabs = buildList {
-        add(MainTab.HOME)
-        if (showBalance) add(MainTab.BALANCE)
-        add(MainTab.AGENT)
-    }
-    Column(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AtlasMark(
-                    modifier = Modifier
-                        .combinedClickable(onClick = {}, onDoubleClick = onToggleSidebar)
-                        .semantics { contentDescription = logoDescription },
-                    size = 30.dp,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.width(9.dp))
-                Text(
-                    "Atlas Commerce",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            tabs.forEach { destination ->
-                TabletPrimaryNavigationItem(
-                    tab = destination,
-                    isSelected = selectedTab == destination,
-                    onClick = { onSelect(destination) },
-                )
-            }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
-    }
-}
-
-@Composable
-private fun TabletPrimaryNavigationItem(
-    tab: MainTab,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        modifier = Modifier
-            .heightIn(min = 42.dp)
-            .semantics { selected = isSelected },
-        shape = RoundedCornerShape(14.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = tab.icon,
-                contentDescription = null,
-                tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(7.dp))
-            Text(
-                text = tab.localizedLabel(),
-                style = MaterialTheme.typography.labelLarge,
-                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
-    }
-}
 
 @Composable
 private fun AtlasFloatingBottomBar(

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -774,7 +775,11 @@ private fun AtlasGate(
                         null
                     },
                     belowTopBar = baseStage == RootStage.SHELL || overlay != null,
-                    modifier = Modifier.align(Alignment.TopCenter),
+                    modifier = if (LocalConfiguration.current.screenWidthDp >= 600) {
+                        Modifier.align(Alignment.TopEnd).widthIn(max = 420.dp)
+                    } else {
+                        Modifier.align(Alignment.TopCenter)
+                    },
                 )
             }
 
