@@ -44,6 +44,36 @@ jobs:
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: Build, test, and lint Android sources
-        run: >-
-          ./gradlew :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
-          --no-daemon --console=plain --stacktrace
+        shell: bash
+        run: |
+          GRADLE_LOG="$RUNNER_TEMP/android-validation-gradle.log"
+          set +e
+          ./gradlew :buildSrc:test :app:assembleDebug :app:testDebugUnitTest :app:kspReleaseKotlin :app:lintDebug \
+            --build-cache --console=plain --stacktrace 2>&1 | tee "$GRADLE_LOG"
+          GRADLE_RC=${PIPESTATUS[0]}
+          ./gradlew --stop >/dev/null 2>&1 || true
+          if [ "$GRADLE_RC" -ne 0 ]; then
+            python3 - "$GRADLE_LOG" "$GITHUB_STEP_SUMMARY" <<'PY'
+          import re, sys
+          from pathlib import Path
+
+          lines = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace").splitlines()
+          patterns = re.compile(
+              r"(^e: |FAILURE:|What went wrong:|Execution failed for task|Caused by:|"
+              r"Unresolved reference|Compilation error|No matching variant|Could not resolve|"
+              r"Could not find|FAILED$|error:)",
+              re.IGNORECASE,
+          )
+          selected = [line for line in lines if patterns.search(line)]
+          if not selected:
+              selected = lines[-60:]
+          detail = "\n".join(selected[-40:])[-3000:]
+          with open(sys.argv[2], "a", encoding="utf-8") as summary:
+              summary.write("## Gradle failure details\n\n```text\n")
+              summary.write(detail)
+              summary.write("\n```\n")
+          annotation = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Gradle failure details::{annotation}")
+          PY
+          fi
+          exit "$GRADLE_RC"
