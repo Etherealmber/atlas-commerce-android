@@ -792,7 +792,7 @@ class CommerceRepository @Inject constructor(
             val permittedKpis = buildList {
                 add("Produits=${dash.productCount}")
                 add("StockBas=${dash.lowStockCount}")
-                if (canViewClientsAndInvoices && needs.clients) add("Clients=${cliList.size}")
+                if (canViewClientsAndInvoices && needs.clients && clientsResult is ApiResult.Success) add("Clients=${cliList.size}")
                 if (isAdmin && finance != null) {
                     add("SoldeClôture=${AtlasFormat.money(finance.closingBalance, finance.currency)}")
                     add("VentesEncaissées=${AtlasFormat.money(finance.salesReceived, finance.currency)}")
@@ -824,6 +824,9 @@ class CommerceRepository @Inject constructor(
                     },
                 )
             }
+        }
+        if (dash == null && canViewClientsAndInvoices && needs.clients && clientsResult is ApiResult.Success) {
+            sb.appendLine("KPIs : Clients=${cliList.size}")
         }
         val tokens = userQuestion.lowercase()
             .split(Regex("[^\\p{L}\\p{N}]+"))

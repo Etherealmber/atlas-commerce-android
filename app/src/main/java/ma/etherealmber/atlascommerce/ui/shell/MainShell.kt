@@ -585,45 +585,49 @@ fun MainShell(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text(
-                        atlasText("ATLAS COMMERCE", "ATLAS COMMERCE", "أطلس للتجارة"),
-                        modifier = Modifier.padding(start = 14.dp, top = 8.dp, bottom = 14.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    roleTabs.forEach { item ->
-                        val selected = tab == item
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-                                .clickable { switchTab(item) }
-                                .padding(horizontal = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        ) {
-                            if (item == MainTab.SALE && cartCount > 0) {
-                                BadgedBox(badge = { Badge { Text(cartCount.toString()) } }) {
-                                    AnimatedTabIcon(item.icon, item.localizedLabel(), selected)
-                                }
-                            } else AnimatedTabIcon(item.icon, item.localizedLabel(), selected)
-                            Text(
-                                item.localizedLabel(),
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                    Column(
+                        modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            atlasText("ATLAS COMMERCE", "ATLAS COMMERCE", "أطلس للتجارة"),
+                            modifier = Modifier.padding(start = 14.dp, top = 8.dp, bottom = 14.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        roleTabs.forEach { item ->
+                            val selected = tab == item
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                                    .clickable { switchTab(item) }
+                                    .padding(horizontal = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                if (item == MainTab.SALE && cartCount > 0) {
+                                    BadgedBox(badge = { Badge { Text(cartCount.toString()) } }) {
+                                        AnimatedTabIcon(item.icon, item.localizedLabel(), selected)
+                                    }
+                                } else AnimatedTabIcon(item.icon, item.localizedLabel(), selected)
+                                Text(
+                                    item.localizedLabel(),
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     }
-                    Spacer(Modifier.weight(1f))
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { switchTab(MainTab.PROFILE) }.padding(10.dp),

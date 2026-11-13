@@ -212,11 +212,11 @@ internal fun detectExplicitAgentNavigationRequest(prompt: String): AgentNavigati
     val normalized = Normalizer.normalize(prompt, Normalizer.Form.NFD)
         .replace(Regex("\\p{Mn}+"), "")
         .lowercase(Locale.ROOT)
-    val explicit = listOf(
-        "open", "go to", "take me to", "take me into", "put me", "bring me to", "send me to", "navigate to",
-        "ouvre", "ouvrir", "emmene moi", "amene moi", "va a", "aller a",
-        "افتح", "اذهب الى",
-    ).any(normalized::contains)
+    // Only treat a prompt as navigation when its opening phrase is an imperative
+    // (optionally preceded by a polite request). Words like "open invoices" remain questions.
+    val explicit = Regex(
+        "^(?:(?:please|can you|could you|would you)\\s+)?(?:open\\b|go to\\b|take me to\\b|take me into\\b|put me\\b|bring me to\\b|send me to\\b|navigate to\\b|ouvre\\b|ouvrir\\b|emmene moi\\b|amene moi\\b|va a\\b|aller a\\b|افتح|اذهب الى)",
+    ).containsMatchIn(normalized)
     if (!explicit) return null
     return detectAgentNavigationSuggestion(prompt)
 }

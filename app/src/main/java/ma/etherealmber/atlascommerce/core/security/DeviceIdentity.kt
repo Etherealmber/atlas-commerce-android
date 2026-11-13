@@ -19,15 +19,11 @@ internal fun resolveDeviceInstallId(
 ): String {
     if (!stored.isNullOrBlank()) {
         if (stored.startsWith("v2:")) {
-            // A failed decrypt can be a temporary Keystore/OEM error. Do not delete or
-            // replace the only stable device identity; derive a stable fallback from the
-            // ciphertext so requests never rotate identity on every process start.
+            // Keystore access can fail transiently. Keep this identity unavailable rather
+            // than authenticating with a substitute fingerprint that invalidates the session.
             val decoded = runCatching { decryptAtRest(stored) }.getOrNull()?.takeIf(String::isNotBlank)
-            if (decoded != null) return decoded
-            val stableFallback = MessageDigest.getInstance("SHA-256")
-                .digest(stored.toByteArray(Charsets.UTF_8))
-                .joinToString("") { "%02x".format(it) }
-            return "unavailable:$stableFallback"
+                ?: throw DeviceIdentityUnavailableException()
+            return decoded
         }
         // Migrate the UUID stored by older versions without changing this device's fingerprint.
         val migrated = runCatching { encryptAtRest(stored) }.getOrNull()
@@ -38,6 +34,11 @@ internal fun resolveDeviceInstallId(
     runCatching { persist(encryptAtRest(generated)) }
     return generated
 }
+
+/** Raised when the persisted device identity cannot yet be decrypted. */
+internal class DeviceIdentityUnavailableException : IllegalStateException(
+    "Saved device identity is temporarily unavailable",
+)
 
 /**
  * Stable, privacy-preserving device identity.

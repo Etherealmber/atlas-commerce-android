@@ -502,7 +502,7 @@ private fun EmployeePayrollCard(row: PayrollRowDto, asOf: String, currency: Stri
                     }
                     row.lastPayment?.let { payment ->
                         Text(
-                            atlasText("Dernier versement ${atlasShortDate(payment.paidAt)}", "Last paid ${atlasShortDate(payment.paidAt)}", "آخر دفعة ${atlasShortDate(payment.paidAt)}"),
+                            atlasText("Dernier versement ${atlasMoney(payment.amount, currency)} · ${atlasShortDate(payment.paidAt)}", "Last payment ${atlasMoney(payment.amount, currency)} · ${atlasShortDate(payment.paidAt)}", "آخر دفعة ${atlasMoney(payment.amount, currency)} · ${atlasShortDate(payment.paidAt)}"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,

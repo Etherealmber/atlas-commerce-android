@@ -843,7 +843,9 @@ private fun ProductRow(
                         Text(product.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                ProductMetaChips(product, currency, wideLayout = true)
+                Box(Modifier.weight(1f, fill = false)) {
+                    ProductMetaChips(product, currency, wideLayout = true)
+                }
                 if (canSell) {
                     IconButton(onClick = onAdd) {
                         Icon(Icons.Outlined.AddShoppingCart, contentDescription = atlasText("Ajouter au panier"), tint = MaterialTheme.colorScheme.primary)

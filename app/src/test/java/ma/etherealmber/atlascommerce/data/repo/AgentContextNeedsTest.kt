@@ -37,6 +37,12 @@ class AgentContextNeedsTest {
     }
 
     @Test
+    fun payrollAndSalaryQuestionsSelectFinanceContext() {
+        assertTrue(agentContextNeeds("How much payroll is due?").finance)
+        assertTrue(agentContextNeeds("Combien de salaires restent à payer ?").finance)
+    }
+
+    @Test
     fun businessOverviewSelectsDashboard() {
         val needs = agentContextNeeds("Give me an overview of the company")
 

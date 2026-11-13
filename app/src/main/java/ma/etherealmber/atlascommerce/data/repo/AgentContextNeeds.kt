@@ -37,6 +37,7 @@ internal fun agentContextNeeds(question: String): AgentContextNeeds {
     val finance = has(
         "sale", "sales", "revenue", "invoice", "invoices", "payment", "payments", "expense", "expenses",
         "profit", "margin", "balance", "receivable", "payable", "finance", "financial", "paid", "unpaid",
+        "payroll", "salary", "salaries", "wage", "wages", "paie", "salaires", "salaire", "أجور", "رواتب",
         "vente", "ventes", "facture", "factures", "dépense", "depense", "dépenses", "depenses", "bénéfice", "benefice",
         "رصيد", "مبيعات", "فاتورة", "فواتير", "مدفوعات",
     )

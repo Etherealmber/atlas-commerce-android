@@ -64,7 +64,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -187,15 +186,10 @@ fun QrDeviceScreen(
         }
     }
 
-    // Keep one-time route setup through Activity recreation; otherwise tablet rotation
-    // would reset an active QR approval and cancel the ViewModel's polling job.
-    var routeInitialized by rememberSaveable(initialToken, mode) { mutableStateOf(false) }
+    // The ViewModel owns the guard: it survives Activity recreation, while a new instance
+    // after process death re-consumes the route token and restarts the approval flow.
     LaunchedEffect(initialToken, mode) {
-        if (!routeInitialized) {
-            routeInitialized = true
-            viewModel.resetScan()
-            viewModel.consumeInitialToken(initialToken, mode)
-        }
+        viewModel.initializeRoute(initialToken, mode)
     }
 
     LaunchedEffect(Unit) {

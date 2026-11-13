@@ -1,32 +1,27 @@
 package ma.etherealmber.atlascommerce.core.security
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class DeviceIdentityTest {
     @Test
-    fun `keystore decrypt failure retains stable fallback without overwriting ciphertext`() {
+    fun `keystore decrypt failure keeps ciphertext and never returns an authenticated fallback`() {
         val ciphertext = "v2:iv:body"
         val writes = mutableListOf<String>()
-        val unavailable = resolveDeviceInstallId(
-            stored = ciphertext,
-            decryptAtRest = { null },
-            encryptAtRest = { "encrypted:$it" },
-            generate = { error("must not generate a new identity when ciphertext exists") },
-            persist = { writes.add(it) },
-        )
-        val nextProcess = resolveDeviceInstallId(
-            stored = ciphertext,
-            decryptAtRest = { null },
-            encryptAtRest = { "encrypted:$it" },
-            generate = { error("must not generate a new identity when ciphertext exists") },
-            persist = { writes.add(it) },
-        )
-
-        assertEquals(unavailable, nextProcess)
-        assertTrue(unavailable.startsWith("unavailable:"))
+        try {
+            resolveDeviceInstallId(
+                stored = ciphertext,
+                decryptAtRest = { null },
+                encryptAtRest = { "encrypted:$it" },
+                generate = { error("must not generate a new identity when ciphertext exists") },
+                persist = { writes.add(it) },
+            )
+            fail("identity must remain unavailable until its original value can be decrypted")
+        } catch (_: DeviceIdentityUnavailableException) {
+            // Expected: never substitute a different authenticated fingerprint.
+        }
         assertTrue(writes.isEmpty())
     }
 
@@ -46,24 +41,29 @@ class DeviceIdentityTest {
     }
 
     @Test
-    fun `a later successful decrypt recovers the original install identity`() {
+    fun `decryption retry recovers the original install identity without caching failure`() {
         val ciphertext = "v2:iv:body"
-        val unavailable = resolveDeviceInstallId(
-            stored = ciphertext,
-            decryptAtRest = { null },
-            encryptAtRest = { "unused" },
-            generate = { error("must retain ciphertext") },
-            persist = {},
-        )
-        val recovered = resolveDeviceInstallId(
-            stored = ciphertext,
-            decryptAtRest = { "original-install-id" },
-            encryptAtRest = { "unused" },
-            generate = { error("must retain ciphertext") },
-            persist = {},
-        )
+        var decryptCalls = 0
+        val identity by lazy {
+            resolveDeviceInstallId(
+                stored = ciphertext,
+                decryptAtRest = {
+                    decryptCalls++
+                    if (decryptCalls == 1) null else "original-install-id"
+                },
+                encryptAtRest = { "unused" },
+                generate = { error("must retain ciphertext") },
+                persist = {},
+            )
+        }
 
-        assertNotEquals(unavailable, recovered)
-        assertEquals("original-install-id", recovered)
+        try {
+            identity
+            fail("first transient decryption failure must not return a fallback")
+        } catch (_: DeviceIdentityUnavailableException) {
+            // A subsequent identity access retries because Kotlin lazy does not cache exceptions.
+        }
+        assertEquals("original-install-id", identity)
+        assertEquals(2, decryptCalls)
     }
 }

@@ -72,6 +72,28 @@ class FreshProcessStartupTest {
     }
 
     @Test
+    fun `saved token can be decrypted on a later startup attempt without replacing ciphertext`() {
+        val stored = session()
+        var decryptCalls = 0
+        fun prepare() = StartupResumePreparation.createRequest(
+            previousSession = stored,
+            selectedServerUrl = "https://shop.example.com",
+            restoreDisabled = false,
+            decryptToken = {
+                decryptCalls++
+                if (decryptCalls == 1) null else "original-session-token"
+            },
+        )
+
+        assertEquals(StartupResumeResult.UNDECRYPTABLE_TOKEN, prepare().result)
+        val retry = prepare()
+        assertEquals(StartupResumeResult.PREPARED, retry.result)
+        assertEquals("original-session-token", retry.request?.bearerToken)
+        assertEquals("encrypted-token", stored.tokenCipher)
+        assertEquals(2, decryptCalls)
+    }
+
+    @Test
     fun `explicit sign out missing server and undecryptable session never create a request`() {
         assertEquals(
             StartupResumeResult.RESTORE_DISABLED,

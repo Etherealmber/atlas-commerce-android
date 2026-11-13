@@ -52,6 +52,15 @@ class AgentConversationStateTest {
     }
 
     @Test
+    fun openInvoiceQuestionDoesNotBecomeNavigation() {
+        assertEquals(null, detectExplicitAgentNavigationRequest("How many open invoices are unpaid?"))
+        assertEquals(
+            AgentNavigationDestination.SETTINGS,
+            detectExplicitAgentNavigationRequest("Can you put me inside the settings?")?.destination,
+        )
+    }
+
+    @Test
     fun mobileUiNavigationMapsOnlyAllowlistedNativeRoutes() {
         val action = mobileNavigationSuggestion(
             AssistProposalDto(type = "mobile_ui", action = "NAVIGATE", path = "/m/settings"),
