@@ -425,6 +425,7 @@ fun MainShell(
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val useRail = maxWidth >= 600.dp
+    val useDesktopSidebar = maxWidth >= 1000.dp
     val sidebarExpanded = !sidebarCollapsed
     val sidebarWidth by animateDpAsState(
         targetValue = if (!useRail) 0.dp else if (sidebarExpanded) 264.dp else 76.dp,

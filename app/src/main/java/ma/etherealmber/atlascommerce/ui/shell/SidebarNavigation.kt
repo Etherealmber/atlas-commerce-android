@@ -58,7 +58,7 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 @Composable
 internal fun AtlasSidebarContent(
     user: SessionUser,
-    serverBaseUrl: String,
+    serverBaseUrl: String?,
     roleTabs: List<MainTab>,
     selectedTab: MainTab,
     cartCount: Int,
@@ -352,6 +352,3 @@ private fun SidebarNavigationItem(
         }
     }
 }
-
-@Composable
-private fun AtlasFloatingBottomBar(
