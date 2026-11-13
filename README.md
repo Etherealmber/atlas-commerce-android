@@ -16,7 +16,8 @@
 **[Web Backend Repository (`Etherealmber/atlas-commerce`)](https://github.com/Etherealmber/atlas-commerce)** ·
 **[Download Latest APK](https://github.com/Etherealmber/atlas-commerce-android/releases)** ·
 **[Report a Bug](https://github.com/Etherealmber/atlas-commerce-android/issues/new)** ·
-**[Security Policy](SECURITY.md)**
+**[Security Policy](SECURITY.md)** ·
+**[Contributing](CONTRIBUTING.md)**
 
 </div>
 
@@ -46,6 +47,12 @@
    - If **« Mémoriser ce compte »** is enabled, Atlas asks once whether to allow future sign-ins with biometrics or your Android device PIN/password. The encrypted saved session is verified with the selected server; declining or unavailable device authentication leaves password sign-in available.
 
 ---
+
+## 🔒 Security and self-hosted servers
+
+Atlas Commerce is designed to connect to the server the user selects, including self-hosted domains. The Android app intentionally does not pin server certificates: pinning can break self-hosted deployments when operators renew certificates or change certificate providers. Release builds still require HTTPS and use Android's normal certificate-chain and hostname validation. Invalid certificates are not bypassed, and release builds do not permit cleartext HTTP.
+
+See the [Android security policy](SECURITY.md), the [TLS compatibility decision](docs/android-certificate-pinning-policy.md), and the [contribution guide](CONTRIBUTING.md) for the security rationale and review expectations.
 
 ## 🩺 Troubleshooting — If a Server, Website, or Feature Appears Unavailable
 
