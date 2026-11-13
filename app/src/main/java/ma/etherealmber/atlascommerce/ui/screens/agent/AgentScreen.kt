@@ -97,6 +97,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
+import ma.etherealmber.atlascommerce.data.model.AssistProposalDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChatSkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasShimmer

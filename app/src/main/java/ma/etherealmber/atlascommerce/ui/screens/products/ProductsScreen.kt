@@ -24,6 +24,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -844,7 +845,7 @@ private fun ProductRow(
                     }
                 }
                 Box(Modifier.weight(1f, fill = false)) {
-                    ProductMetaChips(product, currency, wideLayout = true)
+                    ProductMetaChips(product, currency)
                 }
                 if (canSell) {
                     IconButton(onClick = onAdd) {
@@ -874,16 +875,16 @@ private fun ProductRow(
                         }
                     }
                 }
-                ProductMetaChips(product, currency, wideLayout = false)
+                ProductMetaChips(product, currency)
             }
         }
     }
 }
 
 @Composable
-private fun ProductMetaChips(product: ProductDto, currency: String, wideLayout: Boolean) {
+private fun ProductMetaChips(product: ProductDto, currency: String) {
     Row(
-        modifier = Modifier.then(if (wideLayout) Modifier else Modifier.horizontalScroll(rememberScrollState())),
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

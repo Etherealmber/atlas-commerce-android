@@ -788,21 +788,26 @@ class CommerceRepository @Inject constructor(
         if (productCacheUsed && prods.isNotEmpty()) {
             sb.appendLine("Catalogue local en cache uniquement; ces données peuvent être obsolètes.")
         }
-        if (dash != null) {
-            val permittedKpis = buildList {
+        val permittedKpis = buildList {
+            if (dash != null) {
                 add("Produits=${dash.productCount}")
                 add("StockBas=${dash.lowStockCount}")
                 if (canViewClientsAndInvoices && needs.clients && clientsResult is ApiResult.Success) add("Clients=${cliList.size}")
-                if (isAdmin && finance != null) {
-                    add("SoldeClôture=${AtlasFormat.money(finance.closingBalance, finance.currency)}")
-                    add("VentesEncaissées=${AtlasFormat.money(finance.salesReceived, finance.currency)}")
-                    add("Dépenses=${AtlasFormat.money(finance.expenses, finance.currency)}")
-                    add("ÀRecevoir=${AtlasFormat.money(finance.receivables.totalOutstanding, finance.currency)}")
-                    add("ÀPayerFournisseurs=${AtlasFormat.money(finance.payables.totalOutstanding, finance.currency)}")
-                    add("PaieÀVerser=${AtlasFormat.money(finance.payroll.totalDue, finance.currency)}")
-                }
             }
+            // Finance is an independent source: retain its values when the dashboard times out.
+            if (isAdmin && finance != null) {
+                add("SoldeClôture=${AtlasFormat.money(finance.closingBalance, finance.currency)}")
+                add("VentesEncaissées=${AtlasFormat.money(finance.salesReceived, finance.currency)}")
+                add("Dépenses=${AtlasFormat.money(finance.expenses, finance.currency)}")
+                add("ÀRecevoir=${AtlasFormat.money(finance.receivables.totalOutstanding, finance.currency)}")
+                add("ÀPayerFournisseurs=${AtlasFormat.money(finance.payables.totalOutstanding, finance.currency)}")
+                add("PaieÀVerser=${AtlasFormat.money(finance.payroll.totalDue, finance.currency)}")
+            }
+        }
+        if (permittedKpis.isNotEmpty()) {
             sb.appendLine("KPIs : ${permittedKpis.joinToString()}")
+        }
+        if (dash != null) {
             if (isAdmin && finance != null && dash.monthlySeries.isNotEmpty()) {
                 sb.appendLine(
                     "Mensuel : " + dash.monthlySeries.takeLast(3).joinToString(" | ") { m ->

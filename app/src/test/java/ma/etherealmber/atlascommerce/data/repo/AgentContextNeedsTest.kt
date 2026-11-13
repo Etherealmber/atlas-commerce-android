@@ -40,6 +40,7 @@ class AgentContextNeedsTest {
     fun payrollAndSalaryQuestionsSelectFinanceContext() {
         assertTrue(agentContextNeeds("How much payroll is due?").finance)
         assertTrue(agentContextNeeds("Combien de salaires restent à payer ?").finance)
+        assertTrue(agentContextNeeds("كم أجور الموظفين؟").finance)
     }
 
     @Test

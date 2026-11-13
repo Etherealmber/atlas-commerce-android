@@ -207,6 +207,7 @@ fun QrDeviceScreen(
         if (mode == QrDeviceMode.SIGN_IN_PHONE &&
             state.step == QrDeviceViewModel.Step.COMPLETED && state.statusDto == null
         ) {
+            viewModel.clearInitializedRoute()
             onClose()
         }
     }
@@ -230,7 +231,10 @@ fun QrDeviceScreen(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onClose) {
+            IconButton(onClick = {
+                viewModel.clearInitializedRoute()
+                onClose()
+            }) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                     contentDescription = atlasText("Retour", "Back", "رجوع"),
@@ -362,7 +366,10 @@ fun QrDeviceScreen(
                     QrDeviceViewModel.Step.COMPLETED -> CompletedPairingCard(
                         message = statusMessage ?: atlasText("Appareil synchronisé avec succès.", "Device connected successfully.", "تم ربط الجهاز بنجاح."),
                         onScanAnother = viewModel::resetScan,
-                        onDone = onClose,
+                        onDone = {
+                            viewModel.clearInitializedRoute()
+                            onClose()
+                        },
                     )
 
                     QrDeviceViewModel.Step.IDLE -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

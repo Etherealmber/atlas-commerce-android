@@ -116,6 +116,10 @@ class QrDeviceViewModel @Inject constructor(
     }
 
     /** Idempotent for a retained ViewModel; a new ViewModel after process death consumes again. */
+    fun clearInitializedRoute() {
+        initializedRoute = null
+    }
+
     fun initializeRoute(token: String?, mode: QrDeviceMode) {
         val route = token to mode
         if (initializedRoute == route) return
