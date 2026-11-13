@@ -81,6 +81,10 @@ class SafeReadRetryTest {
             "Unknown session /api/auth/qr/session/[REDACTED]",
             diagnosticPath("Unknown session /api/auth/qr/session/opaqueSecret"),
         )
+        assertEquals(
+            "Unknown session /api/auth/qr/session/[REDACTED] expired",
+            diagnosticPath("Unknown session /api/auth/qr/session/opaqueSecret expired"),
+        )
     }
 
     @Test
@@ -92,6 +96,16 @@ class SafeReadRetryTest {
 
         assertEquals("message=Unknown session /api/auth/qr/session/[REDACTED]", details)
         assertFalse(details.contains(secret))
+    }
+
+    @Test
+    fun apiErrorDetailsDecodeEscapedSlashesBeforeRedactingTokens() {
+        val details = diagnosticApiErrorDetails(
+            """{"message":"Unknown session \/api\/auth\/qr\/session\/opaqueSecret"}""",
+        )
+
+        assertEquals("message=Unknown session /api/auth/qr/session/[REDACTED]", details)
+        assertFalse(details.contains("opaqueSecret"))
     }
 
     @Test

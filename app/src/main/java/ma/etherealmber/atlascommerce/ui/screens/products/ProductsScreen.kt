@@ -83,6 +83,7 @@ import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
+import ma.etherealmber.atlascommerce.ui.components.ProductArtwork
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
@@ -107,6 +108,7 @@ fun ProductsScreen(
     onOpenSale: () -> Unit,
     onToast: (String) -> Unit,
     onHistoryPageVisibilityChanged: (Boolean) -> Unit = {},
+    showPageTitle: Boolean = false,
     viewModel: ProductsViewModel = hiltViewModel(),
 ) {
     val dockPadding = LocalAtlasFloatingDockPadding.current
@@ -175,6 +177,15 @@ fun ProductsScreen(
             )
         } else {
         Column(modifier = Modifier.fillMaxSize()) {
+        if (showPageTitle) {
+            Text(
+                text = atlasText("Produits", "Products", "المنتجات"),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = density.screenPadding, vertical = density.itemGap),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()

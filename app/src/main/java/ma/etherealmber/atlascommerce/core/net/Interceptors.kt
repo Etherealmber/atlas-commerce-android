@@ -4,6 +4,7 @@ import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentityUnavailableException
+import com.squareup.moshi.JsonReader
 import okhttp3.Call
 import okhttp3.Connection
 import okhttp3.Dns
@@ -13,6 +14,7 @@ import okhttp3.Interceptor
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
+import okio.Buffer
 import java.io.IOException
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -214,7 +216,7 @@ class AtlasNetworkEventListener private constructor(private val traceId: Long) :
     }
 }
 
-private val QR_SESSION_TOKEN_SEGMENT = Regex("(/api/auth/qr/session/)[^/]+")
+private val QR_SESSION_TOKEN_SEGMENT = Regex("(/api/auth/qr/session/)[^/\\s]+")
 
 /** Redacts opaque QR-session bearer material embedded in request paths before logging. */
 internal fun diagnosticPath(encodedPath: String): String =
@@ -224,12 +226,18 @@ internal fun diagnosticPath(encodedPath: String): String =
 
 private val API_ERROR_FIELD = Regex("\\\"(code|error|message)\\\"\\s*:\\s*\\\"([^\\\"]{1,400})\\\"", RegexOption.IGNORE_CASE)
 
+/** Decode a JSON string value before applying path redaction so escaped slashes cannot bypass it. */
+private fun decodeDiagnosticJsonString(encodedValue: String): String? = runCatching {
+    JsonReader.of(Buffer().writeUtf8("$encodedValue")).nextString()
+}.getOrNull()
+
 /** Extract only short API error fields and redact any QR-session token before log ingestion. */
 internal fun diagnosticApiErrorDetails(responseBody: String): String =
     API_ERROR_FIELD.findAll(responseBody)
         .mapNotNull { match ->
             val key = match.groupValues[1]
-            val value = diagnosticPath(match.groupValues[2].trim()).take(180)
+            val decodedValue = decodeDiagnosticJsonString(match.groupValues[2]) ?: return@mapNotNull null
+            val value = diagnosticPath(decodedValue.trim()).take(180)
             value.takeIf(String::isNotBlank)?.let { "$key=$it" }
         }
         .take(3)

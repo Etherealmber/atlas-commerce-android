@@ -1,4 +1,4 @@
-package ma.etherealmber.atlascommerce.ui.screens.products
+package ma.etherealmber.atlascommerce.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -21,7 +21,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import ma.etherealmber.atlascommerce.ui.components.AvatarBitmapCache
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
 /**

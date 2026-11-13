@@ -299,11 +299,11 @@ fun ProductCreateDialog(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    AtlasAvatar(
-                        avatarUrl = photoUrl,
-                        label = name.ifBlank { barcode.ifBlank { "Atlas" } },
-                        size = 52.dp,
+                    ProductArtwork(
+                        imageUrl = photoUrl,
                         serverBaseUrl = imageServerBaseUrl,
+                        label = name.ifBlank { barcode.ifBlank { "Atlas" } },
+                        modifier = Modifier.size(56.dp),
                     )
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {

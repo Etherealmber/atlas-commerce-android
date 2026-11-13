@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.ProductMovementDto
+import ma.etherealmber.atlascommerce.ui.components.ProductArtwork
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
