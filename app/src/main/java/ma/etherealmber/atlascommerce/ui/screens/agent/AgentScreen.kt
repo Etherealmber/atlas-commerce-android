@@ -338,16 +338,6 @@ fun AgentScreen(
     val agentElapsedLabel = if (agentLoadingSeconds >= 3) {
         atlasText("${agentLoadingSeconds}s", "${agentLoadingSeconds}s", "${agentLoadingSeconds} ث")
     } else null
-    var showAgentChatShimmer by remember(state.activeThreadId) { mutableStateOf(false) }
-    LaunchedEffect(isActive, state.loadingContext, state.loadingThread, state.activeThreadId) {
-        if (isActive && (state.loadingContext || state.loadingThread)) {
-            showAgentChatShimmer = false
-            delay(700L)
-            showAgentChatShimmer = true
-        } else {
-            showAgentChatShimmer = false
-        }
-    }
     val conversationScrollConnection = remember(conversationListState) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -508,13 +498,9 @@ fun AgentScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(density.itemGap),
                 ) {
-                    if (state.loadingContext || state.loadingThread) {
+                    if (shouldShowAgentChatSkeleton(state)) {
                         item(key = "agent_loading") {
-                            if (showAgentChatShimmer) {
-                                AtlasChatSkeleton(Modifier.fillMaxWidth())
-                            } else {
-                                AgentStartupLoadingAnimation()
-                            }
+                            AgentStartupLoadingCard()
                         }
                     }
                     if (state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && !quotaLocked) {
@@ -1351,27 +1337,36 @@ private fun AgentAvatar() {
 }
 
 @Composable
-private fun AgentStartupLoadingAnimation() {
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
+private fun AgentStartupLoadingCard() {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
-            AtlasAgentMascot(Modifier.size(42.dp), isThinking = true)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    atlasText("Préparation de l’Agent…", "Getting Atlas Agent ready…", "جارٍ تجهيز مساعد Atlas…"),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AtlasAgentMascot(Modifier.size(36.dp), isThinking = true)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        atlasText("Chargement de votre discussion…", "Loading your conversation…", "جارٍ تحميل محادثتك…"),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        atlasText("Atlas prépare votre espace de travail.", "Atlas is checking your workspace context.", "يتحقق Atlas من سياق مساحة العمل."),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
                 AtlasTypingDots()
             }
         }
+        AtlasChatSkeleton(Modifier.fillMaxWidth())
     }
 }
 

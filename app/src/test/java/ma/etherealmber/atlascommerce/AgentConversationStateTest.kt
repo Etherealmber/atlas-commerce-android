@@ -3,11 +3,13 @@ package ma.etherealmber.atlascommerce
 import ma.etherealmber.atlascommerce.data.model.AgentThreadSummaryDto
 import ma.etherealmber.atlascommerce.data.model.AssistProposalDto
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationDestination
+import ma.etherealmber.atlascommerce.ui.screens.agent.AgentViewModel
 import ma.etherealmber.atlascommerce.ui.screens.agent.detectExplicitAgentNavigationRequest
 import ma.etherealmber.atlascommerce.ui.screens.agent.mobileNavigationSuggestion
 import ma.etherealmber.atlascommerce.ui.screens.agent.clearSubmittedAgentDraft
 import ma.etherealmber.atlascommerce.ui.screens.agent.detectAgentNavigationSuggestion
 import ma.etherealmber.atlascommerce.ui.screens.agent.newestAgentThreadsFirst
+import ma.etherealmber.atlascommerce.ui.screens.agent.shouldShowAgentChatSkeleton
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -79,6 +81,21 @@ class AgentConversationStateTest {
                 AssistProposalDto(type = "mobile_ui", action = "NAVIGATE", path = "/m/unknown"),
             ),
         )
+    }
+
+    @Test
+    fun agentLoaderDoesNotReplaceExistingConversationMessages() {
+        val loadingEmptyState = AgentViewModel.UiState(loadingContext = true)
+        val loadingThreadState = AgentViewModel.UiState(loadingThread = true)
+        val loadedConversationRefreshingContext = AgentViewModel.UiState(
+            loadingContext = true,
+            messages = listOf(AgentViewModel.ChatMessage(fromUser = true, text = "Keep showing this")),
+        )
+
+        assertEquals(true, shouldShowAgentChatSkeleton(loadingEmptyState))
+        assertEquals(true, shouldShowAgentChatSkeleton(loadingThreadState))
+        assertEquals(false, shouldShowAgentChatSkeleton(loadedConversationRefreshingContext))
+        assertEquals(false, shouldShowAgentChatSkeleton(AgentViewModel.UiState()))
     }
 
     @Test

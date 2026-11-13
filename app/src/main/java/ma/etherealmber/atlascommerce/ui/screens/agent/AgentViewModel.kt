@@ -275,26 +275,39 @@ class AgentViewModel @Inject constructor(
             val nextDef = async { loadAgentContext { commerceRepository.assistNextActions() } }
             val threadsDef = async { loadAgentContext { commerceRepository.listAgentThreads() } }
 
-            val statusRes = statusDef.await()
-            val policyRes = policyDef.await()
-            val nextRes = nextDef.await()
+            // Prioritize the conversation list: waiting for status/policy first could hold
+            // a ready thread behind an unrelated slow endpoint. Start loading its detail as
+            // soon as the list arrives, while the other context calls continue concurrently.
             val threadsRes = threadsDef.await()
-
             val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
             if (currentScope != requestedScope) return@launch
             val remoteThreads = newestAgentThreadsFirst((threadsRes as? ApiResult.Success)?.data.orEmpty())
-            _state.update {
-                it.copy(
-                    status = (statusRes as? ApiResult.Success)?.data ?: it.status,
-                    policy = (policyRes as? ApiResult.Success)?.data ?: it.policy,
-                    nextActions = (nextRes as? ApiResult.Success)?.data?.items ?: it.nextActions,
-                    threads = if (threadsRes is ApiResult.Success) remoteThreads else it.threads,
+            val selectedThread = if (loadLatestRemoteThread && _state.value.messages.isEmpty()) {
+                remoteThreads.firstOrNull()
+            } else {
+                null
+            }
+            _state.update { current ->
+                current.copy(
+                    threads = if (threadsRes is ApiResult.Success) remoteThreads else current.threads,
                     loadingContext = false,
+                    // Keep one continuous loading state while moving from context to thread detail.
+                    loadingThread = selectedThread != null || current.loadingThread,
                 )
             }
+            selectedThread?.let(::selectThread)
 
-            if (loadLatestRemoteThread && _state.value.messages.isEmpty() && remoteThreads.isNotEmpty()) {
-                selectThread(remoteThreads.first())
+            val statusRes = statusDef.await()
+            val policyRes = policyDef.await()
+            val nextRes = nextDef.await()
+            val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (stillSameScope != requestedScope) return@launch
+            _state.update { current ->
+                current.copy(
+                    status = (statusRes as? ApiResult.Success)?.data ?: current.status,
+                    policy = (policyRes as? ApiResult.Success)?.data ?: current.policy,
+                    nextActions = (nextRes as? ApiResult.Success)?.data?.items ?: current.nextActions,
+                )
             }
         }
     }
@@ -663,3 +676,7 @@ class AgentViewModel @Inject constructor(
             "t-${java.lang.Long.toString(System.currentTimeMillis(), 36)}"
     }
 }
+
+/** Keep the empty conversation placeholder visible only while there is no content to show. */
+internal fun shouldShowAgentChatSkeleton(state: AgentViewModel.UiState): Boolean =
+    state.messages.isEmpty() && (state.loadingContext || state.loadingThread)
