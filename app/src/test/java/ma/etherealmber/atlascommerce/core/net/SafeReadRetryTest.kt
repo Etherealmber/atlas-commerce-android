@@ -77,6 +77,45 @@ class SafeReadRetryTest {
             diagnosticPath("/api/auth/qr/session/opaque-session-token/claim"),
         )
         assertEquals("/api/auth/me", diagnosticPath("/api/auth/me"))
+        assertEquals(
+            "Unknown session /api/auth/qr/session/[REDACTED]",
+            diagnosticPath("Unknown session /api/auth/qr/session/opaqueSecret"),
+        )
+        assertEquals(
+            "Unknown session /api/auth/qr/session/[REDACTED] expired",
+            diagnosticPath("Unknown session /api/auth/qr/session/opaqueSecret expired"),
+        )
+    }
+
+    @Test
+    fun apiErrorDetailsRedactQrSessionTokensBeforeTheyCanReachDiagnostics() {
+        val secret = "opaqueSecret"
+        val details = diagnosticApiErrorDetails(
+            """{"message":"Unknown session /api/auth/qr/session/$secret"}""",
+        )
+
+        assertEquals("message=Unknown session /api/auth/qr/session/[REDACTED]", details)
+        assertFalse(details.contains(secret))
+    }
+
+    @Test
+    fun apiErrorDetailsDecodeEscapedSlashesBeforeRedactingTokens() {
+        val details = diagnosticApiErrorDetails(
+            """{"message":"Unknown session \/api\/auth\/qr\/session\/opaqueSecret"}""",
+        )
+
+        assertEquals("message=Unknown session /api/auth/qr/session/[REDACTED]", details)
+        assertFalse(details.contains("opaqueSecret"))
+    }
+
+    @Test
+    fun apiErrorDetailsKeepOnlyBoundedRecognizedFields() {
+        assertEquals(
+            "code=INVALID_SESSION; error=expired; message=Please sign in again",
+            diagnosticApiErrorDetails(
+                """{"code":"INVALID_SESSION","error":"expired","message":"Please sign in again","debug":"ignored"}""",
+            ),
+        )
     }
 
     @Test

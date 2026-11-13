@@ -23,6 +23,7 @@ import androidx.compose.animation.core.tween
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -1218,7 +1219,11 @@ private fun ThemePreviewCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val dark = mode == ThemeMode.DARK
+    val dark = when (mode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
     val previewBackground = if (dark) Color(0xFF191A1E) else Color(0xFFF4F1EA)
     val previewSurface = if (dark) Color(0xFF282A30) else Color.White
     val previewInk = if (dark) Color(0xFFF4F4F5) else Color(0xFF202124)
@@ -1286,17 +1291,11 @@ private fun ThemePreviewCard(
             ) {
                 Column(Modifier.padding(7.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(shape = CircleShape, color = if (mode == ThemeMode.SYSTEM) Color(0xFFB88A44) else MaterialTheme.colorScheme.primary, modifier = Modifier.size(8.dp)) {}
+                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(8.dp)) {}
                         Spacer(Modifier.width(5.dp))
                         Surface(shape = RoundedCornerShape(99.dp), color = previewMuted.copy(alpha = 0.48f), modifier = Modifier.fillMaxWidth(0.58f).height(4.dp)) {}
                     }
                     Surface(shape = RoundedCornerShape(99.dp), color = previewMuted.copy(alpha = 0.25f), modifier = Modifier.fillMaxWidth(0.82f).height(4.dp)) {}
-                    if (mode == ThemeMode.SYSTEM) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Surface(shape = RoundedCornerShape(99.dp), color = Color(0xFFE8E3D9), modifier = Modifier.weight(1f).height(8.dp)) {}
-                            Surface(shape = RoundedCornerShape(99.dp), color = Color(0xFF34363C), modifier = Modifier.weight(1f).height(8.dp)) {}
-                        }
-                    }
                 }
             }
             Text(

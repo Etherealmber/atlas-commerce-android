@@ -273,6 +273,11 @@ private fun AtlasGate(
     val serverLoaded by viewModel.serverLoaded.collectAsStateWithLifecycle()
     val onboardingDone by viewModel.onboardingDone.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val densityMode by viewModel.densityMode.collectAsStateWithLifecycle()
+    val crashReportsAvailable by viewModel.automaticCrashReportsAvailable.collectAsStateWithLifecycle()
+    val crashReportsAvailabilityChecked by viewModel.crashReportsAvailabilityChecked.collectAsStateWithLifecycle()
+    val crashReportsEnabled by viewModel.automaticCrashReportsEnabled.collectAsStateWithLifecycle()
     val defaultStartTab by viewModel.defaultStartTab.collectAsStateWithLifecycle()
     val autoCheckUpdates by viewModel.autoCheckUpdates.collectAsStateWithLifecycle()
     val allSavedAccounts by viewModel.allSavedAccounts.collectAsStateWithLifecycle()
@@ -490,8 +495,8 @@ private fun AtlasGate(
         // Fresh installs select the backend before onboarding or login; a saved
         // selection is reused for every later sign-in unless the user switches it.
         server == null && session !is SessionState.Active -> RootStage.SERVER_SETUP
-        !onboardingDone -> RootStage.ONBOARDING
         mandatoryBlocking -> RootStage.MANDATORY_UPDATE
+        !onboardingDone -> RootStage.ONBOARDING
         session is SessionState.SignedOut -> RootStage.LOGIN
         activeUser != null -> RootStage.SHELL
         else -> RootStage.SPLASH
@@ -529,6 +534,14 @@ private fun AtlasGate(
 
                     RootStage.ONBOARDING -> AtlasWelcomeOnboardingScreen(
                         isLoggedIn = activeUser != null,
+                        themeMode = themeMode,
+                        densityMode = densityMode,
+                        crashReportsAvailable = crashReportsAvailable,
+                        crashReportsAvailabilityChecked = crashReportsAvailabilityChecked,
+                        crashReportsEnabled = crashReportsEnabled,
+                        updateState = updateState,
+                        onCheckUpdates = { viewModel.checkForUpdate(manual = true) },
+                        onApplySetup = viewModel::completeWelcomeSetup,
                         onComplete = { viewModel.completeOnboarding() },
                     )
 

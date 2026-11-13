@@ -85,7 +85,6 @@ class ServerConfig @Inject constructor(
         val selection = validateSelection(rawUrl).getOrElse { return Result.failure(it) }
         val normalized = selection.baseUrl
         preferences.setApiBase(normalized)
-        preferences.markOnboardingDone()
         if (rememberServer) {
             preferences.upsertSavedServer(normalized, label.trim())
         }

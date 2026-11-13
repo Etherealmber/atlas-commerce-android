@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +37,8 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Inventory2
@@ -46,6 +49,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -73,6 +77,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppLanguage
+import ma.etherealmber.atlascommerce.core.DensityMode
+import ma.etherealmber.atlascommerce.core.ThemeMode
+import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
@@ -127,6 +134,14 @@ private val AtlasAmber = Color(0xFFFFC66D)
 @Composable
 fun AtlasWelcomeOnboardingScreen(
     isLoggedIn: Boolean = false,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    densityMode: DensityMode = DensityMode.COMPACT,
+    crashReportsAvailable: Boolean = false,
+    crashReportsAvailabilityChecked: Boolean = true,
+    crashReportsEnabled: Boolean = false,
+    updateState: UpdateState = UpdateState.Idle,
+    onCheckUpdates: () -> Unit = {},
+    onApplySetup: (ThemeMode, DensityMode, Boolean?) -> Unit = { _, _, _ -> },
     onComplete: () -> Unit,
 ) {
     val pagerState = rememberPagerState(pageCount = { welcomeSlides.size })
@@ -134,12 +149,17 @@ fun AtlasWelcomeOnboardingScreen(
     val language = LocalAtlasLanguage.current
     val scope = rememberCoroutineScope()
     var showTutorial by rememberSaveable { mutableStateOf(false) }
+    var showPreferences by rememberSaveable { mutableStateOf(false) }
     var tutorialStep by rememberSaveable { mutableIntStateOf(0) }
+    var selectedThemeKey by rememberSaveable(themeMode.storageKey) { mutableStateOf(themeMode.storageKey) }
+    var selectedDensityKey by rememberSaveable(densityMode.storageKey) { mutableStateOf(densityMode.storageKey) }
+    var selectedCrashReports by rememberSaveable(crashReportsEnabled) { mutableStateOf(crashReportsEnabled) }
+    var crashChoiceMade by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(showTutorial, pagerState.currentPage, pagerState.isScrollInProgress, animationsEnabled) {
-        if (!showTutorial && animationsEnabled && !pagerState.isScrollInProgress && pagerState.currentPage < welcomeSlides.lastIndex) {
+    LaunchedEffect(showTutorial, showPreferences, pagerState.currentPage, pagerState.isScrollInProgress, animationsEnabled) {
+        if (!showTutorial && !showPreferences && animationsEnabled && !pagerState.isScrollInProgress && pagerState.currentPage < welcomeSlides.lastIndex) {
             delay(8_000)
-            if (!showTutorial && !pagerState.isScrollInProgress && pagerState.currentPage < welcomeSlides.lastIndex) {
+            if (!showTutorial && !showPreferences && !pagerState.isScrollInProgress && pagerState.currentPage < welcomeSlides.lastIndex) {
                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
             }
         }
@@ -150,8 +170,16 @@ fun AtlasWelcomeOnboardingScreen(
     } else {
         atlasText("Se connecter", "Log in", "تسجيل الدخول")
     }
-    val indicatorCount = if (showTutorial) 3 else welcomeSlides.size
-    val indicatorPage = if (showTutorial) tutorialStep else pagerState.currentPage
+    val indicatorCount = when {
+        showPreferences -> 1
+        showTutorial -> 3
+        else -> welcomeSlides.size
+    }
+    val indicatorPage = when {
+        showPreferences -> 0
+        showTutorial -> tutorialStep
+        else -> pagerState.currentPage
+    }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -196,7 +224,7 @@ fun AtlasWelcomeOnboardingScreen(
                                 .clip(CircleShape)
                                 .background(dotColor)
                                 .then(
-                                    if (showTutorial) Modifier
+                                    if (showTutorial || showPreferences) Modifier
                                     else Modifier.clickable { scope.launch { pagerState.animateScrollToPage(page) } },
                                 )
                                 .semantics { contentDescription = "${page + 1} / $indicatorCount" },
@@ -221,14 +249,53 @@ fun AtlasWelcomeOnboardingScreen(
                 }
             }
 
-            if (showTutorial) {
+            if (showPreferences) {
+                WelcomePreferencesContent(
+                    themeMode = ThemeMode.fromKey(selectedThemeKey),
+                    densityMode = DensityMode.fromKey(selectedDensityKey),
+                    crashReportsAvailable = crashReportsAvailable,
+                    crashReportsAvailabilityChecked = crashReportsAvailabilityChecked,
+                    crashReportsEnabled = selectedCrashReports,
+                    updateState = updateState,
+                    onThemeSelected = { selectedThemeKey = it.storageKey },
+                    onDensitySelected = { selectedDensityKey = it.storageKey },
+                    onCrashReportsChanged = {
+                        selectedCrashReports = it
+                        crashChoiceMade = true
+                    },
+                    onCheckUpdates = onCheckUpdates,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+                Button(
+                    onClick = {
+                        onApplySetup(
+                            ThemeMode.fromKey(selectedThemeKey),
+                            DensityMode.fromKey(selectedDensityKey),
+                            selectedCrashReports.takeIf { crashChoiceMade },
+                        )
+                    },
+                    modifier = Modifier.widthIn(max = 900.dp).fillMaxWidth().align(Alignment.CenterHorizontally).height(52.dp),
+                    shape = RoundedCornerShape(17.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                ) {
+                    Text(
+                        if (isLoggedIn) atlasText("Terminer", "Finish setup", "إنهاء الإعداد")
+                        else atlasText("Continuer vers la connexion", "Continue to sign in", "متابعة إلى تسجيل الدخول"),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            } else if (showTutorial) {
                 WelcomeTutorialContent(
                     step = tutorialStep,
                     animationsEnabled = animationsEnabled,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
                 Row(
-                    Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
+                    Modifier.widthIn(max = 900.dp).fillMaxWidth().align(Alignment.CenterHorizontally).padding(top = 4.dp, bottom = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -239,7 +306,7 @@ fun AtlasWelcomeOnboardingScreen(
                     }
                     Button(
                         onClick = {
-                            if (tutorialStep < 2) tutorialStep += 1 else onComplete()
+                            if (tutorialStep < 2) tutorialStep += 1 else showPreferences = true
                         },
                         modifier = Modifier.weight(1f).height(50.dp),
                         shape = RoundedCornerShape(17.dp),
@@ -250,21 +317,11 @@ fun AtlasWelcomeOnboardingScreen(
                     ) {
                         Text(
                             if (tutorialStep < 2) atlasText("Suivant", "Next", "التالي")
-                            else atlasText("Terminer", "Finish tour", "إنهاء الجولة"),
+                            else atlasText("Personnaliser", "Set up Atlas", "إعداد Atlas"),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                         )
                     }
-                }
-                TextButton(
-                    onClick = onComplete,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                ) {
-                    Text(
-                        atlasText("Passer le tutoriel", "Skip tutorial", "تخطي الجولة"),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelMedium,
-                    )
                 }
             } else {
                 HorizontalPager(
@@ -277,7 +334,7 @@ fun AtlasWelcomeOnboardingScreen(
                 }
 
                 Row(
-                    Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp),
+                    Modifier.widthIn(max = 900.dp).fillMaxWidth().align(Alignment.CenterHorizontally).padding(top = 4.dp, bottom = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -318,11 +375,233 @@ fun AtlasWelcomeOnboardingScreen(
                     "By joining Atlas, you acknowledge our Terms of Service and Privacy Policy.",
                     "بانضمامك إلى Atlas، فإنك توافق على شروط الخدمة وسياسة الخصوصية.",
                 ),
-                modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp),
+                modifier = Modifier.widthIn(max = 900.dp).fillMaxWidth().align(Alignment.CenterHorizontally).padding(top = 2.dp, bottom = 8.dp),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
+        }
+    }
+}
+
+@Composable
+private fun WelcomePreferencesContent(
+    themeMode: ThemeMode,
+    densityMode: DensityMode,
+    crashReportsAvailable: Boolean,
+    crashReportsAvailabilityChecked: Boolean,
+    crashReportsEnabled: Boolean,
+    updateState: UpdateState,
+    onThemeSelected: (ThemeMode) -> Unit,
+    onDensitySelected: (DensityMode) -> Unit,
+    onCrashReportsChanged: (Boolean) -> Unit,
+    onCheckUpdates: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(modifier) {
+        val wideLayout = maxWidth >= 720.dp
+        Column(
+            modifier = Modifier
+                .widthIn(max = 1_040.dp)
+                .fillMaxSize()
+                .align(Alignment.Center)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = if (wideLayout) 20.dp else 4.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(
+                    atlasText("Personnalisez Atlas", "Make Atlas yours", "خصص Atlas كما تحب"),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    atlasText(
+                        "Choisissez votre apparence et vos préférences. Vous pourrez tout modifier plus tard dans les paramètres.",
+                        "Choose your look and preferences. You can change everything later in Settings.",
+                        "اختر المظهر والتفضيلات. يمكنك تعديل كل ذلك لاحقاً من الإعدادات.",
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                WelcomePreferenceCard {
+                    Text(
+                        atlasText("Thème", "Theme", "المظهر"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        atlasText("Le mode système suit automatiquement l'apparence de votre appareil.", "System mode follows your device appearance automatically.", "يتبع وضع النظام مظهر جهازك تلقائياً."),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ThemeMode.entries.forEach { mode ->
+                            WelcomePreferenceChoice(
+                                title = when (mode) {
+                                    ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
+                                    ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
+                                    ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+                                },
+                                detail = when (mode) {
+                                    ThemeMode.SYSTEM -> atlasText("Suit l'appareil", "Follows device", "حسب الجهاز")
+                                    ThemeMode.LIGHT -> atlasText("Lumineux", "Bright", "مشرق")
+                                    ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+                                },
+                                selected = themeMode == mode,
+                                modifier = Modifier.weight(1f),
+                                onClick = { onThemeSelected(mode) },
+                            )
+                        }
+                    }
+                }
+
+                WelcomePreferenceCard {
+                    Text(
+                        atlasText("Espacement", "Layout density", "كثافة العرض"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DensityMode.entries.forEach { mode ->
+                            WelcomePreferenceChoice(
+                                title = when (mode) {
+                                    DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
+                                    DensityMode.COMFORT -> atlasText("Confort", "Comfort", "مريح")
+                                },
+                                detail = when (mode) {
+                                    DensityMode.COMPACT -> atlasText("Plus d'informations à l'écran", "More on screen", "معلومات أكثر على الشاشة")
+                                    DensityMode.COMFORT -> atlasText("Plus d'espace et de lisibilité", "More space and readability", "مساحة ووضوح أكبر")
+                                },
+                                selected = densityMode == mode,
+                                modifier = Modifier.weight(1f),
+                                onClick = { onDensitySelected(mode) },
+                            )
+                        }
+                    }
+                }
+
+                WelcomePreferenceCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                atlasText("Rapports de plantage automatiques", "Automatic crash reports", "تقارير الأعطال التلقائية"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                when {
+                                    !crashReportsAvailabilityChecked -> atlasText(
+                                        "Vérification de la disponibilité de Firebase…",
+                                        "Checking Firebase availability…",
+                                        "جارٍ التحقق من توفر Firebase…",
+                                    )
+                                    crashReportsAvailable -> atlasText(
+                                        "Facultatif : partage les rapports techniques de plantage avec Firebase pour améliorer la stabilité. Aucun compte, mot de passe ou donnée commerciale n'est joint.",
+                                        "Optional: shares technical crash reports with Firebase to improve stability. No account, password, or business data is attached.",
+                                        "اختياري: يشارك تقارير الأعطال التقنية مع Firebase لتحسين الاستقرار. لا تتم مشاركة الحساب أو كلمة المرور أو بيانات العمل.",
+                                    )
+                                    else -> atlasText(
+                                        "Indisponible dans cette version. Vous pourrez modifier ce choix dans les paramètres si Firebase est configuré.",
+                                        "Unavailable in this build. You can change this in Settings if Firebase is configured.",
+                                        "غير متاح في هذا الإصدار. يمكنك تغيير ذلك من الإعدادات عند إعداد Firebase.",
+                                    )
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = crashReportsEnabled && crashReportsAvailable,
+                            onCheckedChange = onCrashReportsChanged,
+                            enabled = crashReportsAvailabilityChecked && crashReportsAvailable,
+                        )
+                    }
+                }
+
+                WelcomePreferenceCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                atlasText("Mise à jour", "App update", "تحديث التطبيق"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                when (updateState) {
+                                    UpdateState.Checking -> atlasText("Vérification des mises à jour…", "Checking for updates…", "جارٍ البحث عن تحديثات…")
+                                    is UpdateState.UpToDate -> atlasText("Votre application est à jour.", "Your app is up to date.", "تطبيقك محدّث.")
+                                    is UpdateState.Available -> if (updateState.info.mandatory) atlasText(
+                                        "La mise à jour requise ${updateState.info.displayVersion} doit être installée avant de continuer.",
+                                        "Required update ${updateState.info.displayVersion} must be installed before continuing.",
+                                        "يجب تثبيت التحديث المطلوب ${updateState.info.displayVersion} قبل المتابعة.",
+                                    ) else atlasText(
+                                        "La mise à jour ${updateState.info.displayVersion} est disponible.",
+                                        "Update ${updateState.info.displayVersion} is available.",
+                                        "التحديث ${updateState.info.displayVersion} متاح.",
+                                    )
+                                    is UpdateState.Downloading -> atlasText("Téléchargement de la mise à jour en cours.", "Update download in progress.", "جارٍ تنزيل التحديث.")
+                                    is UpdateState.ReadyToInstall -> atlasText("La mise à jour est prête à installer.", "The update is ready to install.", "التحديث جاهز للتثبيت.")
+                                    is UpdateState.Error -> atlasText("Vérification impossible pour le moment. Réessayez lorsque vous êtes en ligne.", "Could not check right now. Try again when you are online.", "تعذّر التحقق الآن. أعد المحاولة عند الاتصال بالإنترنت.")
+                                    UpdateState.Idle -> atlasText("Nous vérifions les mises à jour disponibles.", "We'll check for available updates.", "سنتحقق من التحديثات المتاحة.")
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(onClick = onCheckUpdates, enabled = updateState !is UpdateState.Checking) {
+                            Text(atlasText("Vérifier", "Check", "تحقق"))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WelcomePreferenceCard(content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 2.dp,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun WelcomePreferenceChoice(
+    title: String,
+    detail: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = modifier.heightIn(min = 68.dp).clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(
+            width = if (selected) 2.dp else 1.dp,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            Text(detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -345,22 +624,73 @@ private fun WelcomeTutorialContent(
         atlasText("Prévisualisez une facture et le total avant de confirmer une vraie vente.", "Review a receipt and total before confirming a real sale.", "راجع الإيصال والإجمالي قبل تأكيد عملية بيع حقيقية."),
     )
 
-    Column(
-        modifier.padding(horizontal = 2.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier.fillMaxWidth().weight(1f).heightIn(min = 230.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (animationsEnabled) {
-                AnimatedContent(targetState = safeStep, label = "tutorial_demo_step") { visibleStep ->
-                    TutorialDemoCard(visibleStep, Modifier.fillMaxWidth())
-                }
-            } else {
-                TutorialDemoCard(safeStep, Modifier.fillMaxWidth())
+    BoxWithConstraints(modifier.padding(horizontal = 2.dp, vertical = 6.dp)) {
+        val wideLayout = maxWidth >= 760.dp
+        if (wideLayout) {
+            Row(
+                Modifier.fillMaxSize().padding(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(28.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TutorialDemoPreview(
+                    step = safeStep,
+                    animationsEnabled = animationsEnabled,
+                    modifier = Modifier.weight(1.2f),
+                )
+                TutorialCaption(
+                    title = titles[safeStep],
+                    description = descriptions[safeStep],
+                    modifier = Modifier.weight(0.8f),
+                )
+            }
+        } else {
+            Column(
+                Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                TutorialDemoPreview(
+                    step = safeStep,
+                    animationsEnabled = animationsEnabled,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+                TutorialCaption(
+                    title = titles[safeStep],
+                    description = descriptions[safeStep],
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun TutorialDemoPreview(
+    step: Int,
+    animationsEnabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier.heightIn(min = 230.dp), contentAlignment = Alignment.Center) {
+        if (animationsEnabled) {
+            AnimatedContent(targetState = step, label = "tutorial_demo_step") { visibleStep ->
+                TutorialDemoCard(visibleStep, Modifier.fillMaxWidth())
+            }
+        } else {
+            TutorialDemoCard(step, Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun TutorialCaption(
+    title: String,
+    description: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
         Surface(
             shape = CircleShape,
             color = AtlasCyan.copy(alpha = 0.12f),
@@ -374,24 +704,21 @@ private fun WelcomeTutorialContent(
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
-        Spacer(Modifier.height(10.dp))
         Text(
-            titles[safeStep],
+            title,
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(6.dp))
         Text(
-            descriptions[safeStep],
+            description,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(10.dp))
     }
 }
 
@@ -493,33 +820,63 @@ private fun TutorialProductRow(name: String, stock: String, accent: Color) {
 @Composable
 private fun WelcomeSlideContent(page: Int, language: AppLanguage) {
     val slide = welcomeSlides[page]
-    Column(
-        Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .heightIn(min = 215.dp, max = 330.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            WelcomeIllustration(page)
+    BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 8.dp)) {
+        val wideLayout = maxWidth >= 760.dp
+        if (wideLayout) {
+            Row(
+                Modifier.fillMaxSize().padding(horizontal = 28.dp),
+                horizontalArrangement = Arrangement.spacedBy(28.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.weight(1.1f).fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    WelcomeIllustration(page)
+                }
+                WelcomeSlideCopy(slide, language, Modifier.weight(0.9f), wideLayout = true)
+            }
+        } else {
+            Column(
+                Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    Modifier.fillMaxWidth().weight(1f).heightIn(min = 215.dp, max = 330.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    WelcomeIllustration(page)
+                }
+                WelcomeSlideCopy(slide, language, Modifier.fillMaxWidth(), wideLayout = false)
+            }
         }
-        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun WelcomeSlideCopy(
+    slide: AtlasWelcomeSlide,
+    language: AppLanguage,
+    modifier: Modifier = Modifier,
+    wideLayout: Boolean,
+) {
+    Column(
+        modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(if (wideLayout) 16.dp else 8.dp),
+    ) {
         AtlasEntrance(delayMillis = 70, offsetY = 14.dp, modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = chooseLanguage(slide.title, language),
                 modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.headlineSmall,
-                fontSize = 27.sp,
-                lineHeight = 32.sp,
+                fontSize = if (wideLayout) 32.sp else 27.sp,
+                lineHeight = if (wideLayout) 38.sp else 32.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Center,
             )
         }
-        Spacer(Modifier.height(9.dp))
         AtlasEntrance(delayMillis = 150, offsetY = 10.dp, modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = chooseLanguage(slide.subtitle, language),
@@ -530,7 +887,6 @@ private fun WelcomeSlideContent(page: Int, language: AppLanguage) {
                 textAlign = TextAlign.Center,
             )
         }
-        Spacer(Modifier.height(14.dp))
     }
 }
 

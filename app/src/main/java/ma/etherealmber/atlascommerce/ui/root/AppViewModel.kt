@@ -222,6 +222,10 @@ class AppViewModel @Inject constructor(
     val autoCheckUpdates: StateFlow<Boolean> = preferences.autoCheckUpdates
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    init {
+        checkUpdatesOnceServerReady()
+    }
+
     val parallelUpdateDownload: StateFlow<Boolean> = preferences.parallelUpdateDownload
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
@@ -928,6 +932,18 @@ class AppViewModel @Inject constructor(
 
     fun completeOnboarding() {
         viewModelScope.launch { preferences.markOnboardingDone() }
+    }
+
+    fun completeWelcomeSetup(themeMode: ThemeMode, densityMode: DensityMode, crashReportsEnabled: Boolean?) {
+        viewModelScope.launch {
+            preferences.setThemeMode(themeMode)
+            preferences.setDensityMode(densityMode)
+            crashReportsEnabled?.let { enabled ->
+                val consentSaved = CrashReportConsent.setEnabled(applicationContext, enabled)
+                _automaticCrashReportsEnabled.value = consentSaved && enabled
+            }
+            preferences.markOnboardingDone()
+        }
     }
 
     fun replayOnboarding() {
