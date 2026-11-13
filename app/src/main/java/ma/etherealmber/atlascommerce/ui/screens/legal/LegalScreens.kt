@@ -550,7 +550,7 @@ fun EtherealmberAuthorCard(
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    AtlasChip(text = "MIT", tone = AtlasTone.POSITIVE)
+                    AtlasChip(text = "MIT OR Apache-2.0", tone = AtlasTone.POSITIVE)
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -618,9 +618,12 @@ SOFTWARE."""
 @Composable
 fun LicenseScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val apacheLicenseText = remember(context) {
+        context.assets.open("licenses/LICENSE-APACHE.txt").bufferedReader().use { it.readText() }
+    }
     LegalPage(
         title = atlasText("Licence"),
-        subtitle = atlasText("MIT · open source"),
+        subtitle = atlasText("MIT ou Apache 2.0 · open source", "MIT or Apache 2.0 · open source", "MIT أو Apache 2.0 · مفتوح المصدر"),
         onBack = onBack,
     ) {
         AtlasEntrance(delayMillis = 0) {
@@ -631,7 +634,7 @@ fun LicenseScreen(onBack: () -> Unit) {
             AtlasCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = atlasText("Licence MIT"),
+                        text = atlasText("Licence MIT ou Apache 2.0", "MIT OR Apache License 2.0", "ترخيص MIT أو Apache 2.0"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -641,9 +644,9 @@ fun LicenseScreen(onBack: () -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = atlasText(
-                        "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}. L'application Android Atlas Commerce est distribuée sous licence MIT, comme le projet web dont elle dépend.",
-                        "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}. The Atlas Commerce Android app is distributed under the MIT License, like the web project it accompanies.",
-                        "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}. يُوزّع تطبيق Atlas Commerce لنظام Android بموجب ترخيص MIT، مثل مشروع الويب الذي يرافقه.",
+                        "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}. Le code original de l'application Android Atlas Commerce est proposé sous licence MIT ou Apache 2.0, au choix. Le projet web conserve sa licence distincte.",
+                        "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}. The original Atlas Commerce Android source is available under either the MIT License or Apache License 2.0, at your option. The web project has a separate license.",
+                        "© ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}. يتوفر المصدر الأصلي لتطبيق Atlas Commerce على Android بموجب ترخيص MIT أو Apache 2.0، حسب اختيارك. للمشروع الإلكتروني ترخيص منفصل.",
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -666,7 +669,7 @@ fun LicenseScreen(onBack: () -> Unit) {
         AtlasEntrance(delayMillis = 80) {
             AtlasCard {
                 Text(
-                    text = atlasText("Texte de la licence"),
+                    text = atlasText("Texte de la licence MIT", "MIT License text", "نص ترخيص MIT"),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -680,6 +683,22 @@ fun LicenseScreen(onBack: () -> Unit) {
         }
 
         AtlasEntrance(delayMillis = 120) {
+            AtlasCard {
+                Text(
+                    text = atlasText("Licence Apache 2.0", "Apache License 2.0", "ترخيص Apache 2.0"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = apacheLicenseText,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        AtlasEntrance(delayMillis = 160) {
             AtlasCard {
                 Text(
                     text = atlasText("Composants tiers"),
@@ -698,14 +717,12 @@ fun LicenseScreen(onBack: () -> Unit) {
                 ThirdParty("OkHttp, Retrofit, Moshi", "Apache License 2.0")
                 ThirdParty("CameraX", "Apache License 2.0")
                 ThirdParty("Google ML Kit — Barcode Scanning", "Google APIs Terms of Service (modèle embarqué)")
-                ThirdParty(
-                    "Atlas Commerce worker & Android",
-                    "MIT — © ${AppDetails.COPYRIGHT_YEAR} ${AppDetails.COPYRIGHT_HOLDER}",
-                )
+                ThirdParty("Atlas Commerce Android", "MIT OR Apache License 2.0")
+                ThirdParty("Atlas Commerce Web backend", "MIT (see upstream repository)")
             }
         }
 
-        AtlasEntrance(delayMillis = 150) {
+        AtlasEntrance(delayMillis = 200) {
             AtlasCard {
                 Text(
                     text = atlasText("Marques"),
@@ -923,7 +940,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     AtlasChip(text = "v${AppDetails.VERSION_NAME}", tone = AtlasTone.INFO)
                     AtlasChip(text = "build ${AppDetails.VERSION_CODE}")
-                    AtlasChip(text = "MIT", tone = AtlasTone.POSITIVE)
+                    AtlasChip(text = "MIT OR Apache-2.0", tone = AtlasTone.POSITIVE)
                 }
             }
         }
@@ -1010,7 +1027,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             style = MaterialTheme.typography.titleSmall,
                         )
                         Text(
-                            text = atlasText("Distribué sous licence MIT. Forkez, modifiez, citez-nous."),
+                            text = atlasText("Distribué sous licence MIT ou Apache 2.0. Forkez, modifiez, citez-nous."),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

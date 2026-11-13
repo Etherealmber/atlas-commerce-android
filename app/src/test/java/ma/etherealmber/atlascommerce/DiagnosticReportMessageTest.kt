@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.diagnostics.DeviceDiagnosticSnapshot
 import ma.etherealmber.atlascommerce.core.diagnostics.DiagnosticReporter
+import ma.etherealmber.atlascommerce.core.diagnostics.diagnosticNetworkStatus
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,6 +25,26 @@ class DiagnosticReportMessageTest {
         userRole = "Utilisateur",
         screenOrigin = "https://stock.afmarbre.com",
     )
+
+    @Test
+    fun `network diagnostics identify VPN validation and DNS configuration without exposing DNS addresses`() {
+        val status = diagnosticNetworkStatus(
+            hasWifi = true,
+            hasCellular = false,
+            hasEthernet = false,
+            hasVpn = true,
+            hasInternetCapability = true,
+            isValidated = false,
+            dnsServerCount = 2,
+        )
+
+        assertTrue(status.contains("Wi-Fi+VPN"))
+        assertTrue(status.contains("internet=yes"))
+        assertTrue(status.contains("validated=no"))
+        assertTrue(status.contains("dns=2"))
+        assertTrue(status.length <= 50)
+        assertFalse(status.contains("192.168."))
+    }
 
     @Test
     fun `user report stays within Worker limit and retains latest diagnostic lines`() {

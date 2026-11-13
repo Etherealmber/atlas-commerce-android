@@ -250,14 +250,15 @@ private fun LoginScreenContent(
         ),
         contentAlignment = Alignment.TopCenter,
     ) {
-        val compact = maxWidth < 600.dp || maxHeight < 840.dp
+        val tabletLayout = maxWidth >= 600.dp
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+        val compact = maxWidth < 600.dp || maxHeight < 640.dp || keyboardVisible
         val heroHeight = if (keyboardVisible) 82.dp else if (compact) 108.dp else 136.dp
 
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .widthIn(max = 520.dp)
+                .widthIn(max = if (tabletLayout) 640.dp else 520.dp)
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .statusBarsPadding()
@@ -280,7 +281,7 @@ private fun LoginScreenContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(horizontal = if (compact) 12.dp else 18.dp, vertical = 8.dp)
+                    .padding(horizontal = if (compact) 12.dp else if (tabletLayout) 24.dp else 18.dp, vertical = 8.dp)
                     .clip(RoundedCornerShape(28.dp))
                     .background(MaterialTheme.colorScheme.surface)
                     .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)), RoundedCornerShape(28.dp))
@@ -292,7 +293,7 @@ private fun LoginScreenContent(
                         scaleY = 0.985f + 0.015f * progress
                     }
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = if (compact) 20.dp else 28.dp, vertical = 18.dp),
+                    .padding(horizontal = if (compact) 20.dp else if (tabletLayout) 40.dp else 28.dp, vertical = if (tabletLayout && !compact) 28.dp else 18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val welcomeTitle = when {

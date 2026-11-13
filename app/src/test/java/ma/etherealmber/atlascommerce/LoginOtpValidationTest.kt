@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce
 
 import ma.etherealmber.atlascommerce.ui.screens.login.LoginViewModel
+import ma.etherealmber.atlascommerce.core.session.isProfileRefreshCurrent
 import ma.etherealmber.atlascommerce.ui.screens.login.isValidOneTimeCode
 import ma.etherealmber.atlascommerce.ui.screens.login.authFailureMessage
 import ma.etherealmber.atlascommerce.ui.screens.login.AUTH_NETWORK_ERROR
@@ -61,6 +62,15 @@ class LoginOtpValidationTest {
             "Le contrôle de connexion est temporairement indisponible. Réessayez plus tard.",
             authFailureMessage("AUTH_LIMIT_UNAVAILABLE", 503, isOtp = false),
         )
+    }
+
+    @Test
+    fun profileRefreshCannotApplyAfterAccountServerOrTokenChanges() {
+        assertTrue(isProfileRefreshCurrent("server|alice|admin", "token-a", "server|alice|admin", "token-a"))
+        assertFalse(isProfileRefreshCurrent("server|alice|admin", "token-a", "server|bob|admin", "token-a"))
+        assertFalse(isProfileRefreshCurrent("server|alice|admin", "token-a", "other-server|alice|admin", "token-a"))
+        assertFalse(isProfileRefreshCurrent("server|alice|admin", "token-a", "server|alice|admin", "token-b"))
+        assertFalse(isProfileRefreshCurrent("server|alice|admin", "token-a", null, null))
     }
 
     @Test

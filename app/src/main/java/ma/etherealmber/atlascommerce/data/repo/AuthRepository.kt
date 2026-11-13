@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce.data.repo
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
+import ma.etherealmber.atlascommerce.data.model.ActionAckDto
 import ma.etherealmber.atlascommerce.data.model.LoginRequest
 import ma.etherealmber.atlascommerce.data.model.LoginResponse
 import ma.etherealmber.atlascommerce.data.model.MeDto
@@ -37,13 +38,9 @@ class AuthRepository @Inject constructor(
             )
         }
 
-    suspend fun logout(): ApiResult<Unit> {
-        val result = runner.status { apiProvider.api().logout() }
-        return when (result) {
-            is ApiResult.Failure -> result
-            is ApiResult.Success -> ApiResult.Success(Unit)
-        }
-    }
+    /** Returns whether the Worker actually marked the current device resumable. */
+    suspend fun logout(): ApiResult<ActionAckDto> =
+        runner.status { apiProvider.api().logout() }
 
     /** Verify an encrypted same-device session without installing it in the global token holder. */
     suspend fun validateStartupSession(serverUrl: String, savedBearerToken: String): ApiResult<MeDto> =

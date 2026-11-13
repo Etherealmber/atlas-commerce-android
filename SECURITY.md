@@ -1,6 +1,6 @@
 # Security Policy — Atlas Commerce (Android)
 
-© 2026 Etherealmber — MIT — current app baseline: **1.6.1** (versionCode 161); use the [Releases page](https://github.com/Etherealmber/atlas-commerce-android/releases) for the latest published build.
+© 2026 Etherealmber — MIT OR Apache-2.0 — current app baseline: **1.6.1** (versionCode 161); use the [Releases page](https://github.com/Etherealmber/atlas-commerce-android/releases) for the latest published build.
 
 This document covers the **Android client** in this repository. The server (Cloudflare Worker,
 D1, R2) has its own policy in
@@ -63,12 +63,30 @@ not supported for production use.
 - Declined or unavailable local authentication leaves manual password sign-in available and suppresses quick-unlock actions. The user can manage the setting in Profile settings.
 - The Android client does not implement passkey/WebAuthn login or registration. The web product's WebAuthn implementation is governed by the separate backend security policy.
 
-### Transport
+### Transport and self-hosted servers
 
 - Release builds set `android:usesCleartextTraffic="false"` and refuse `http://` server addresses.
 - `HttpLoggingInterceptor` is limited to `BASIC` and redacts `Authorization`, and only runs in
   debug builds.
-- TLS verification uses the platform trust store (no custom `TrustManager`, no hostname bypass).
+- TLS verification uses Android's normal platform trust and hostname verification (no custom
+  `TrustManager`, permissive hostname verifier, or certificate pinning).
+- Certificate pinning is intentionally omitted: users select their own self-hosted server, and
+  pinning would make independent certificate renewals or provider changes capable of blocking
+  access. The CodeQL missing-pinning findings for API/probe clients are accepted as **Won't fix by
+  design**. This does not waive HTTPS, platform certificate-chain validation, or hostname checks.
+- Self-hosted operators must serve the selected hostname with a certificate chain trusted by
+  Android's platform trust store. The app does not add user-installed CAs to production trust.
+
+See the [TLS compatibility decision](docs/android-certificate-pinning-policy.md) for the full
+review rule. Do not add `CertificatePinner`, a Network Security Config `<pin-set>`, or a custom
+trust bypass without an explicit change to this product security decision.
+
+### Embedded finance-report viewer
+
+- The report WebView is restricted to the selected report's origin and refuses mixed content and
+  unsafe URL schemes.
+- JavaScript, DOM storage, local-file access, and local-content-provider access are disabled.
+  Reports continue to load from the selected Atlas server; PDF export uses the app's report flow.
 
 ### Data stored on the device
 

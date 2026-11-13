@@ -158,6 +158,8 @@ data class LoginResponse(
 @JsonClass(generateAdapter = true)
 data class MeDto(
     val ok: Boolean = false,
+    /** Optional session rotation for compatible Workers; current Worker versions omit this field. */
+    val token: String? = null,
     val username: String? = null,
     val role: String? = null,
     @Json(name = "is_owner") val isOwner: Boolean = false,

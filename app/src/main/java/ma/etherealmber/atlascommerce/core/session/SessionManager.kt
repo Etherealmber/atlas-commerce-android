@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.net.ApiProvider
 import ma.etherealmber.atlascommerce.core.net.ApiResult
@@ -69,6 +71,19 @@ sealed interface LoginOutcome {
     data class OtpRequired(val message: String, val emailHint: String?) : LoginOutcome
 }
 
+/** Prevents an in-flight profile response from crossing an account/server/token switch. */
+internal fun isProfileRefreshCurrent(
+    expectedScopeIdentity: String,
+    expectedToken: String,
+    activeScopeIdentity: String?,
+    activeToken: String?,
+): Boolean = expectedScopeIdentity == activeScopeIdentity && expectedToken == activeToken
+
+private const val STARTUP_RETRY_INITIAL_DELAY_MS = 1_000L
+private const val STARTUP_RETRY_MAX_DELAY_MS = 30_000L
+private const val LOGOUT_RESUME_UNCONFIRMED_NOTICE =
+    "Déconnexion effectuée, mais le serveur n’a pas confirmé la reprise par mot de passe. Une vérification OTP peut être nécessaire."
+
 /** The Worker remains the sole authority on whether this password attempt needs OTP. */
 internal fun loginOtpRequirement(response: LoginResponse): LoginOutcome.OtpRequired? =
     if (response.needsOtp) {
@@ -103,6 +118,8 @@ class SessionManager @Inject constructor(
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
     private val startupCleanup = CompletableDeferred<Unit>()
+    /** Serializes active-session state and encrypted persistence across refresh/login/logout. */
+    private val sessionTransitionMutex = Mutex()
 
     private val _notices = MutableSharedFlow<String>(
         extraBufferCapacity = 8,
@@ -133,63 +150,7 @@ class SessionManager @Inject constructor(
     private suspend fun initializeFreshSession() {
         val startupGateStartedAt = SystemClock.elapsedRealtime()
         val outcome = FreshProcessStartup(
-            restorePreviousSession = {
-                preferences.migrateLegacyPreferencesAtRest()
-                serverConfig.loaded.filter { it }.first()
-                val stored = preferences.readSession()
-                val selectedServerUrl = serverConfig.normalizedSelection()
-                val restoreDisabled = preferences.isSessionRestoreDisabled()
-                var plan = StartupResumePreparation.createRequest(
-                    previousSession = stored,
-                    selectedServerUrl = selectedServerUrl,
-                    restoreDisabled = restoreDisabled,
-                    decryptToken = cryptoStore::decrypt,
-                )
-                if (plan.result == StartupResumeResult.UNDECRYPTABLE_TOKEN) {
-                    // Keystore access can fail transiently on some devices. Retry once, but
-                    // never discard an encrypted session solely because local decryption failed.
-                    kotlinx.coroutines.delay(350)
-                    plan = StartupResumePreparation.createRequest(
-                        previousSession = stored,
-                        selectedServerUrl = selectedServerUrl,
-                        restoreDisabled = restoreDisabled,
-                        decryptToken = cryptoStore::decrypt,
-                    )
-                }
-                val request = plan.request
-                if (request == null) {
-                    if (plan.result != StartupResumeResult.NO_SESSION) {
-                        ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
-                            tag = "AUTH",
-                            message = "Saved-session restore skipped (${plan.result})",
-                            level = "WARN",
-                        )
-                    }
-                    startupOutcomeForResumePreparation(plan.result)
-                        ?: FreshProcessSessionOutcome.REJECTED
-                } else {
-                    when (
-                        val verification = StartupResumePreparation.verifyWithRetry(
-                            request = request,
-                            validate = authRepository::validateStartupSession,
-                        )
-                    ) {
-                        is StartupSessionVerification.Valid -> {
-                            if (stored == null) {
-                                FreshProcessSessionOutcome.REJECTED
-                            } else {
-                                if (restoreVerifiedSession(request, stored, verification.profile)) {
-                                    FreshProcessSessionOutcome.RESTORED
-                                } else {
-                                    FreshProcessSessionOutcome.REJECTED
-                                }
-                            }
-                        }
-                        StartupSessionVerification.Rejected -> FreshProcessSessionOutcome.REJECTED
-                        StartupSessionVerification.Unavailable -> FreshProcessSessionOutcome.UNAVAILABLE
-                    }
-                }
-            },
+            restorePreviousSession = ::restoreSavedSession,
             clearStoredSession = preferences::clearSession,
             purgeActiveState = ::purgeInMemorySession,
             publishSignedOut = { _state.value = SessionState.SignedOut },
@@ -206,6 +167,86 @@ class SessionManager @Inject constructor(
             tag = "AUTH",
             message = "Cold-start session check completed ($outcome) in ${SystemClock.elapsedRealtime() - startupGateStartedAt} ms",
         )
+    }
+
+    /**
+     * Do not send a saved-token user to password/OTP because startup networking or Keystore
+     * access is temporarily unavailable. Retry the read-only /auth/me until it is verified or
+     * the server definitively rejects the token.
+     */
+    private suspend fun restoreSavedSession(): FreshProcessSessionOutcome {
+        preferences.migrateLegacyPreferencesAtRest()
+        serverConfig.loaded.filter { it }.first()
+        var stored = preferences.readSession()
+            ?: return FreshProcessSessionOutcome.NO_SESSION
+        var retryDelayMs = STARTUP_RETRY_INITIAL_DELAY_MS
+
+        while (true) {
+            if (preferences.isSessionRestoreDisabled()) return FreshProcessSessionOutcome.REJECTED
+            val selectedServerUrl = serverConfig.normalizedSelection()
+            val plan = StartupResumePreparation.createRequest(
+                previousSession = stored,
+                selectedServerUrl = selectedServerUrl,
+                restoreDisabled = false,
+                decryptToken = cryptoStore::decrypt,
+            )
+
+            if (plan.result == StartupResumeResult.UNDECRYPTABLE_TOKEN) {
+                kotlinx.coroutines.delay(retryDelayMs)
+                val latest = preferences.readSession()
+                if (latest == null) return FreshProcessSessionOutcome.NO_SESSION
+                if (latest.tokenCipher != stored.tokenCipher || preferences.isSessionRestoreDisabled()) {
+                    return FreshProcessSessionOutcome.UNAVAILABLE
+                }
+                stored = latest
+                retryDelayMs = (retryDelayMs * 2).coerceAtMost(STARTUP_RETRY_MAX_DELAY_MS)
+                continue
+            }
+
+            val request = plan.request
+            if (request == null) {
+                if (plan.result != StartupResumeResult.NO_SESSION) {
+                    ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+                        tag = "AUTH",
+                        message = "Saved-session restore skipped (${plan.result})",
+                        level = "WARN",
+                    )
+                }
+                return startupOutcomeForResumePreparation(plan.result)
+                    ?: FreshProcessSessionOutcome.REJECTED
+            }
+
+            when (
+                val verification = StartupResumePreparation.verifyWithRetry(
+                    request = request,
+                    validate = authRepository::validateStartupSession,
+                )
+            ) {
+                is StartupSessionVerification.Valid -> {
+                    return if (restoreVerifiedSession(request, stored, verification.profile)) {
+                        FreshProcessSessionOutcome.RESTORED
+                    } else {
+                        FreshProcessSessionOutcome.REJECTED
+                    }
+                }
+                StartupSessionVerification.Rejected -> return FreshProcessSessionOutcome.REJECTED
+                StartupSessionVerification.Unavailable -> {
+                    kotlinx.coroutines.delay(retryDelayMs)
+                    val latest = preferences.readSession()
+                    if (latest == null) return FreshProcessSessionOutcome.NO_SESSION
+                    if (latest.tokenCipher != stored.tokenCipher || preferences.isSessionRestoreDisabled()) {
+                        return FreshProcessSessionOutcome.UNAVAILABLE
+                    }
+                    val latestOrigin = ServerUrl.origin(serverConfig.normalizedSelection())
+                    val requestOrigin = ServerUrl.origin(request.serverUrl)
+                    if (latestOrigin == null || latestOrigin != requestOrigin) {
+                        return FreshProcessSessionOutcome.UNAVAILABLE
+                    }
+                    stored = latest
+                    retryDelayMs = (retryDelayMs * 2).coerceAtMost(STARTUP_RETRY_MAX_DELAY_MS)
+                }
+            }
+        }
     }
 
     private suspend fun restoreVerifiedSession(
@@ -225,23 +266,55 @@ class SessionManager @Inject constructor(
             avatarUrl = profile.avatarUrl?.takeIf { it.isNotBlank() } ?: stored.avatarUrl,
             serverUrl = request.serverUrl,
         )
-        purgeInMemorySession()
-        tokenHolder.set(request.bearerToken)
-        preferences.bindActiveScope(user.serverUrl, user.username)
-        offlineCache.bindScope(user.serverUrl, user.username)
-        runCatching {
-            preferences.writeSession(
-                serverUrl = user.serverUrl,
-                tokenCipher = cryptoStore.encrypt(request.bearerToken),
-                username = user.username,
-                role = user.role,
-                displayName = user.displayName,
-                email = user.email,
-                avatarUrl = user.avatarUrl,
-            )
+        val sessionToken = validatedSessionToken(profile.token, request.bearerToken)
+        return sessionTransitionMutex.withLock {
+            val latestStored = preferences.readSession()
+            val selectedOrigin = ServerUrl.origin(serverConfig.normalizedSelection())
+            val requestOrigin = ServerUrl.origin(request.serverUrl)
+            if (
+                preferences.isSessionRestoreDisabled() ||
+                latestStored?.tokenCipher != stored.tokenCipher ||
+                selectedOrigin == null || selectedOrigin != requestOrigin
+            ) {
+                return@withLock false
+            }
+            purgeInMemorySession()
+            tokenHolder.set(sessionToken)
+            preferences.bindActiveScope(user.serverUrl, user.username)
+            offlineCache.bindScope(user.serverUrl, user.username)
+            runCatching {
+                val encryptedToken = cryptoStore.encrypt(sessionToken)
+                preferences.writeSession(
+                    serverUrl = user.serverUrl,
+                    tokenCipher = encryptedToken,
+                    username = user.username,
+                    role = user.role,
+                    displayName = user.displayName,
+                    email = user.email,
+                    avatarUrl = user.avatarUrl,
+                )
+                val savedForServer = preferences.savedAccountsForServer(user.serverUrl).first()
+                val savedAccount = savedForServer.firstOrNull {
+                    it.username.equals(user.username, ignoreCase = true)
+                }
+                if (savedAccount != null) {
+                    val retainBiometricCipher = savedAccount.canUseDeviceUnlock && sessionToken == request.bearerToken
+                    preferences.upsertSavedAccount(
+                        savedAccount.copy(
+                            role = user.role,
+                            displayName = user.displayName,
+                            email = user.email,
+                            avatarUrl = user.avatarUrl,
+                            tokenCipher = if (retainBiometricCipher) savedAccount.tokenCipher else encryptedToken,
+                            deviceUnlockEnabled = retainBiometricCipher,
+                            deviceUnlockChoiceMade = retainBiometricCipher && savedAccount.deviceUnlockChoiceMade,
+                        ),
+                    )
+                }
+            }
+            _state.value = SessionState.Active(user)
+            true
         }
-        _state.value = SessionState.Active(user)
-        return true
     }
 
     private fun deviceIdentityUnavailableFailure() = ApiResult.Failure(
@@ -497,7 +570,21 @@ class SessionManager @Inject constructor(
             rememberAccount = rememberAccount,
             clearRestoreDisabledAfterPasswordLogin = true,
         )
-        runCatching { refreshProfile(rememberAccount = rememberAccount) }
+        // Do not make successful authentication wait for the follow-up profile read.
+        // The login response already supplied the essential session fields; a slow or
+        // temporarily unreachable /auth/me must not keep the sign-in form busy.
+        val expectedScope = (_state.value as? SessionState.Active)?.user?.scopeIdentity
+        if (expectedScope != null && tokenHolder.token == token) {
+            scope.launch {
+                val stillSameSession = isProfileRefreshCurrent(
+                    expectedScopeIdentity = expectedScope,
+                    expectedToken = token,
+                    activeScopeIdentity = (_state.value as? SessionState.Active)?.user?.scopeIdentity,
+                    activeToken = tokenHolder.token,
+                )
+                if (stillSameSession) runCatching { refreshProfile(rememberAccount = rememberAccount) }
+            }
+        }
         return ApiResult.Success(LoginOutcome.SignedIn)
     }
 
@@ -517,60 +604,72 @@ class SessionManager @Inject constructor(
         // A cold deep link can authenticate before startup cleanup finishes. Await cleanup
         // before writing the new active session so its final purge cannot erase this login.
         startupCleanup.await()
-        if (clearRestoreDisabledAfterPasswordLogin) {
-            // This only enables next-start preparation; startup still always publishes SignedOut.
-            runCatching { preferences.disableSessionRestore(disabled = false) }
-        }
-        purgeInMemorySession()
-        val cipher = cryptoStore.encrypt(token)
-        preferences.bindActiveScope(serverUrl, username)
-        offlineCache.bindScope(serverUrl, username)
-        tokenHolder.set(token)
-        runCatching {
-            preferences.markOnboardingDone()
-            preferences.writeSession(
-                serverUrl = serverUrl,
-                tokenCipher = cipher,
-                username = username,
-                role = role,
-                displayName = displayName,
-                email = email,
-                avatarUrl = avatarUrl,
-            )
-            if (rememberAccount) {
-                preferences.upsertSavedAccount(
-                    SavedAccountEntry(
-                        serverUrl = serverUrl,
-                        username = username,
-                        role = role,
-                        displayName = displayName,
-                        email = email,
-                        avatarUrl = avatarUrl,
-                        tokenCipher = savedAccountTokenCipher ?: cipher,
-                        deviceUnlockEnabled = savedAccountTokenCipher?.startsWith(DEVICE_UNLOCK_TOKEN_PREFIX) == true,
-                        deviceUnlockChoiceMade = savedAccountTokenCipher?.startsWith(DEVICE_UNLOCK_TOKEN_PREFIX) == true,
-                    ),
-                )
+        sessionTransitionMutex.withLock {
+            if (clearRestoreDisabledAfterPasswordLogin) {
+                runCatching { preferences.disableSessionRestore(disabled = false) }
             }
+            purgeInMemorySession()
+            val cipher = cryptoStore.encrypt(token)
+            preferences.bindActiveScope(serverUrl, username)
+            offlineCache.bindScope(serverUrl, username)
+            tokenHolder.set(token)
+            runCatching {
+                preferences.markOnboardingDone()
+                preferences.writeSession(
+                    serverUrl = serverUrl,
+                    tokenCipher = cipher,
+                    username = username,
+                    role = role,
+                    displayName = displayName,
+                    email = email,
+                    avatarUrl = avatarUrl,
+                )
+                if (rememberAccount) {
+                    preferences.upsertSavedAccount(
+                        SavedAccountEntry(
+                            serverUrl = serverUrl,
+                            username = username,
+                            role = role,
+                            displayName = displayName,
+                            email = email,
+                            avatarUrl = avatarUrl,
+                            tokenCipher = savedAccountTokenCipher ?: cipher,
+                            deviceUnlockEnabled = savedAccountTokenCipher?.startsWith(DEVICE_UNLOCK_TOKEN_PREFIX) == true,
+                            deviceUnlockChoiceMade = savedAccountTokenCipher?.startsWith(DEVICE_UNLOCK_TOKEN_PREFIX) == true,
+                        ),
+                    )
+                }
+            }
+            _state.value = SessionState.Active(
+                SessionUser(
+                    username = username,
+                    role = role,
+                    displayName = displayName,
+                    email = email,
+                    phone = phone,
+                    avatarUrl = avatarUrl,
+                    serverUrl = serverUrl,
+                ),
+            )
         }
-        _state.value = SessionState.Active(
-            SessionUser(
-                username = username,
-                role = role,
-                displayName = displayName,
-                email = email,
-                phone = phone,
-                avatarUrl = avatarUrl,
-                serverUrl = serverUrl,
-            ),
-        )
     }
 
-    /** Refresh display name, role, email and PFP (`avatar_url`) from `/api/auth/me`. */
+    /** Refresh profile and, when the Worker rotates it, the encrypted session token. */
     suspend fun refreshProfile(rememberAccount: Boolean? = null) {
         val current = (_state.value as? SessionState.Active)?.user ?: return
+        val tokenAtRequest = tokenHolder.token ?: return
         val result = authRepository.me()
-        if (result is ApiResult.Success) {
+        if (result !is ApiResult.Success) return
+
+        sessionTransitionMutex.withLock {
+            if (!isProfileRefreshCurrent(
+                    expectedScopeIdentity = current.scopeIdentity,
+                    expectedToken = tokenAtRequest,
+                    activeScopeIdentity = (_state.value as? SessionState.Active)?.user?.scopeIdentity,
+                    activeToken = tokenHolder.token,
+                )
+            ) return@withLock
+
             val me = result.data
             val updated = current.copy(
                 username = me.username?.takeIf { it.isNotBlank() } ?: current.username,
@@ -580,40 +679,41 @@ class SessionManager @Inject constructor(
                 phone = me.phone ?: current.phone,
                 avatarUrl = me.avatarUrl?.takeIf { it.isNotBlank() } ?: current.avatarUrl,
             )
+            val currentToken = validatedSessionToken(me.token, tokenAtRequest)
+            val tokenRotated = currentToken != tokenAtRequest
+            tokenHolder.set(currentToken)
             _state.value = SessionState.Active(updated)
-            val token = tokenHolder.token
-            if (!token.isNullOrBlank()) {
-                runCatching {
-                    val cipher = cryptoStore.encrypt(token)
-                    preferences.writeSession(
-                        serverUrl = updated.serverUrl,
-                        tokenCipher = cipher,
-                        username = updated.username,
-                        role = updated.role,
-                        displayName = updated.displayName,
-                        email = updated.email,
-                        avatarUrl = updated.avatarUrl,
+            runCatching {
+                val cipher = cryptoStore.encrypt(currentToken)
+                preferences.writeSession(
+                    serverUrl = updated.serverUrl,
+                    tokenCipher = cipher,
+                    username = updated.username,
+                    role = updated.role,
+                    displayName = updated.displayName,
+                    email = updated.email,
+                    avatarUrl = updated.avatarUrl,
+                )
+                val savedForServer = preferences.savedAccountsForServer(updated.serverUrl).first()
+                val existingSaved = savedForServer.firstOrNull {
+                    it.username.equals(updated.username, ignoreCase = true)
+                }
+                val shouldUpdateSaved = rememberAccount == true || existingSaved != null
+                if (shouldUpdateSaved) {
+                    preferences.upsertSavedAccount(
+                        SavedAccountEntry(
+                            serverUrl = updated.serverUrl,
+                            username = updated.username,
+                            role = updated.role,
+                            displayName = updated.displayName,
+                            email = updated.email,
+                            avatarUrl = updated.avatarUrl,
+                            tokenCipher = existingSaved?.takeIf { it.canUseDeviceUnlock && !tokenRotated }
+                                ?.tokenCipher ?: cipher,
+                            deviceUnlockEnabled = existingSaved?.canUseDeviceUnlock == true && !tokenRotated,
+                            deviceUnlockChoiceMade = existingSaved?.deviceUnlockChoiceMade == true && !tokenRotated,
+                        ),
                     )
-                    val savedForServer = preferences.savedAccountsForServer(updated.serverUrl).first()
-                    val existingSaved = savedForServer.firstOrNull {
-                        it.username.equals(updated.username, ignoreCase = true)
-                    }
-                    val shouldUpdateSaved = rememberAccount == true || existingSaved != null
-                    if (shouldUpdateSaved) {
-                        preferences.upsertSavedAccount(
-                            SavedAccountEntry(
-                                serverUrl = updated.serverUrl,
-                                username = updated.username,
-                                role = updated.role,
-                                displayName = updated.displayName,
-                                email = updated.email,
-                                avatarUrl = updated.avatarUrl,
-                                // /auth/me does not rotate the token; keep the authenticated
-                                // envelope instead of replacing it with an unprotected copy.
-                                tokenCipher = existingSaved?.takeIf { it.canUseDeviceUnlock }?.tokenCipher ?: cipher,
-                            ),
-                        )
-                    }
                 }
             }
         }
@@ -626,52 +726,72 @@ class SessionManager @Inject constructor(
         phone: String? = null,
         avatarUrl: String? = null,
     ): ApiResult<Unit> {
+        val startingUser = (_state.value as? SessionState.Active)?.user
+        val startingToken = tokenHolder.token
         val res = authRepository.updateProfile(
             displayName = displayName,
             email = email,
             phone = phone,
             avatarUrl = avatarUrl,
         )
-        if (res is ApiResult.Success) {
-            val current = (_state.value as? SessionState.Active)?.user
-            if (current != null) {
-                val updated = current.copy(
-                    displayName = displayName ?: current.displayName,
-                    email = email ?: current.email,
-                    phone = phone ?: current.phone,
-                    avatarUrl = avatarUrl ?: current.avatarUrl,
+        if (res is ApiResult.Success && startingUser != null && !startingToken.isNullOrBlank()) {
+            var stillCurrent = false
+            sessionTransitionMutex.withLock {
+                if (!isProfileRefreshCurrent(
+                        expectedScopeIdentity = startingUser.scopeIdentity,
+                        expectedToken = startingToken,
+                        activeScopeIdentity = (_state.value as? SessionState.Active)?.user?.scopeIdentity,
+                        activeToken = tokenHolder.token,
+                    )
+                ) return@withLock
+                val updated = startingUser.copy(
+                    displayName = displayName ?: startingUser.displayName,
+                    email = email ?: startingUser.email,
+                    phone = phone ?: startingUser.phone,
+                    avatarUrl = avatarUrl ?: startingUser.avatarUrl,
                 )
                 _state.value = SessionState.Active(updated)
-                val token = tokenHolder.token
-                if (!token.isNullOrBlank()) {
-                    runCatching {
-                        val cipher = cryptoStore.encrypt(token)
-                        preferences.writeSession(
-                            serverUrl = updated.serverUrl,
-                            tokenCipher = cipher,
-                            username = updated.username,
-                            role = updated.role,
-                            displayName = updated.displayName,
-                            email = updated.email,
-                            avatarUrl = updated.avatarUrl,
-                        )
-                    }
+                stillCurrent = true
+                runCatching {
+                    preferences.writeSession(
+                        serverUrl = updated.serverUrl,
+                        tokenCipher = cryptoStore.encrypt(startingToken),
+                        username = updated.username,
+                        role = updated.role,
+                        displayName = updated.displayName,
+                        email = updated.email,
+                        avatarUrl = updated.avatarUrl,
+                    )
                 }
             }
-            runCatching { refreshProfile() }
+            if (stillCurrent) runCatching { refreshProfile() }
         }
         return res
     }
 
     suspend fun signOut(reason: String? = null, notifyServer: Boolean = false) {
-        if (notifyServer && !authToken.isNullOrBlank()) {
-            runCatching { withTimeoutOrNull(1_500) { authRepository.logout() } }
+        var logoutNotice: String? = null
+        sessionTransitionMutex.withLock {
+            val tokenAtLogout = authToken
+            if (notifyServer && !tokenAtLogout.isNullOrBlank()) {
+                val result = try {
+                    withTimeoutOrNull(8_000L) { authRepository.logout() }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                }
+                val resumePrepared = (result as? ApiResult.Success)?.data?.resumePrepared == true
+                if (!resumePrepared) {
+                    logoutNotice = LOGOUT_RESUME_UNCONFIRMED_NOTICE
+                }
+            }
+            purgeInMemorySession()
+            runCatching { preferences.disableSessionRestore(disabled = true) }
+            runCatching { preferences.clearSession() }
+            _state.value = SessionState.SignedOut
         }
-        purgeInMemorySession()
-        runCatching { preferences.disableSessionRestore(disabled = true) }
-        runCatching { preferences.clearSession() }
-        _state.value = SessionState.SignedOut
-        if (!reason.isNullOrBlank()) _notices.tryEmit(reason)
+        (reason?.takeIf(String::isNotBlank) ?: logoutNotice)?.let(_notices::tryEmit)
     }
 
     private fun purgeInMemorySession() {

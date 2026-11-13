@@ -7,7 +7,7 @@
   <p><strong>Official Native Android Companion for <a href="https://github.com/Etherealmber/atlas-commerce">Atlas Commerce Web</a></strong><br/>Stock · POS &amp; Receipts · Invoicing · Barcode &amp; PC QR Scanner · Atlas Agent AI</p>
 
 ![Version](https://img.shields.io/github/v/release/Etherealmber/atlas-commerce-android?label=version)
-![License](https://img.shields.io/github/license/Etherealmber/atlas-commerce-android)
+![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)
 ![Kotlin](https://img.shields.io/badge/kotlin-2.3.0-7f52ff)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285f4)
 ![Min SDK](https://img.shields.io/badge/minSdk-30%20(Android%2011%2B)-3ddc84)
@@ -16,7 +16,8 @@
 **[Web Backend Repository (`Etherealmber/atlas-commerce`)](https://github.com/Etherealmber/atlas-commerce)** ·
 **[Download Latest APK](https://github.com/Etherealmber/atlas-commerce-android/releases)** ·
 **[Report a Bug](https://github.com/Etherealmber/atlas-commerce-android/issues/new)** ·
-**[Security Policy](SECURITY.md)**
+**[Security Policy](SECURITY.md)** ·
+**[Contributing](CONTRIBUTING.md)**
 
 </div>
 
@@ -46,6 +47,12 @@
    - If **« Mémoriser ce compte »** is enabled, Atlas asks once whether to allow future sign-ins with biometrics or your Android device PIN/password. The encrypted saved session is verified with the selected server; declining or unavailable device authentication leaves password sign-in available.
 
 ---
+
+## 🔒 Security and self-hosted servers
+
+Atlas Commerce is designed to connect to the server the user selects, including self-hosted domains. The Android app intentionally does not pin server certificates: pinning can break self-hosted deployments when operators renew certificates or change certificate providers. Release builds still require HTTPS and use Android's normal certificate-chain and hostname validation. Invalid certificates are not bypassed, and release builds do not permit cleartext HTTP.
+
+See the [Android security policy](SECURITY.md), the [TLS compatibility decision](docs/android-certificate-pinning-policy.md), and the [contribution guide](CONTRIBUTING.md) for the security rationale and review expectations.
 
 ## 🩺 Troubleshooting — If a Server, Website, or Feature Appears Unavailable
 
@@ -153,4 +160,4 @@ If Cloudflare Zone Bot Fight Mode challenges `POST /api/admin/android-release` f
 
 ## 📄 License
 
-Distributed under the **[MIT License](LICENSE)** — © 2026 Etherealmber / Atlas Commerce.
+The original Atlas Commerce Android source code is dual-licensed under **[MIT](LICENSE)** or **[Apache License 2.0](LICENSE-APACHE)**, at your option. Third-party components retain their own licenses; see the in-app License screen for acknowledgements. The Atlas Commerce Web backend remains separately licensed under its own [MIT license](https://github.com/Etherealmber/atlas-commerce/blob/main/LICENSE).

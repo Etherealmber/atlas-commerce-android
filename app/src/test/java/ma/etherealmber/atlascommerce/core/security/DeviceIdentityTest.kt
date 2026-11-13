@@ -41,6 +41,49 @@ class DeviceIdentityTest {
     }
 
     @Test
+    fun `new identity is durably encrypted before it is returned`() {
+        var stored: String? = null
+        var generated = 0
+        val firstLaunchIdentity = resolveDeviceInstallId(
+            stored = stored,
+            decryptAtRest = { null },
+            encryptAtRest = { "v2:$it" },
+            generate = { generated++; "stable-install-id" },
+            persist = { stored = it; true },
+        )
+        val nextLaunchIdentity = resolveDeviceInstallId(
+            stored = stored,
+            decryptAtRest = { it?.removePrefix("v2:") },
+            encryptAtRest = { error("existing identity must not be replaced") },
+            generate = { error("a persisted identity must be reused") },
+            persist = { error("a persisted identity must not be rewritten") },
+        )
+
+        assertEquals("stable-install-id", firstLaunchIdentity)
+        assertEquals(firstLaunchIdentity, nextLaunchIdentity)
+        assertEquals(1, generated)
+        assertEquals("v2:stable-install-id", stored)
+    }
+
+    @Test
+    fun `identity is unavailable rather than ephemeral when secure persistence fails`() {
+        var generated = 0
+        try {
+            resolveDeviceInstallId(
+                stored = null,
+                decryptAtRest = { null },
+                encryptAtRest = { "v2:$it" },
+                generate = { generated++; "not-persisted" },
+                persist = { false },
+            )
+            fail("must not return an install identity that will change on next process launch")
+        } catch (_: DeviceIdentityUnavailableException) {
+            // Fail closed so no login can be bound to an identity that was not stored.
+        }
+        assertEquals(1, generated)
+    }
+
+    @Test
     fun `decryption retry recovers the original install identity without caching failure`() {
         val ciphertext = "v2:iv:body"
         var decryptCalls = 0
@@ -53,7 +96,7 @@ class DeviceIdentityTest {
                 },
                 encryptAtRest = { "unused" },
                 generate = { error("must retain ciphertext") },
-                persist = {},
+                persist = { true },
             )
         }
 

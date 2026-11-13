@@ -266,7 +266,7 @@ class AppUpdateManager internal constructor(
                 appendLine("• Téléchargement multi-connexions adapté à la source : CDN 1 et GitHub Releases.")
                 appendLine("• Suivi direct de la dernière version publiée sur GitHub Releases & CDN 1.")
                 appendLine("• Journal complet des versions intégré dans Paramètres et notes JSON allégées.")
-                append("• Licence MIT © 2026 Etherealmber & navigation persistante entre sous-écrans.")
+                append("• Licence MIT ou Apache 2.0 © 2026 Etherealmber & navigation persistante entre sous-écrans.")
             },
             htmlUrl = "${BuildConfig.PROJECT_REPO.trimEnd('/')}/releases",
         ),

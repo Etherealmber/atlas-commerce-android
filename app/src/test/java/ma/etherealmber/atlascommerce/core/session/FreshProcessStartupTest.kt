@@ -231,7 +231,7 @@ class FreshProcessStartupTest {
     }
 
     @Test
-    fun `network failure preserves encrypted session for a later retry but does not trust it offline`() = runBlocking {
+    fun `temporary network failure preserves token and does not route to login`() = runBlocking {
         val events = mutableListOf<String>()
         val startup = FreshProcessStartup(
             restorePreviousSession = { FreshProcessSessionOutcome.UNAVAILABLE },
@@ -242,7 +242,7 @@ class FreshProcessStartupTest {
         )
 
         assertEquals(FreshProcessSessionOutcome.UNAVAILABLE, startup.run())
-        assertEquals(listOf("purge", "signed-out", "gate"), events)
+        assertEquals(listOf("purge", "gate"), events)
     }
 
     @Test
@@ -261,11 +261,11 @@ class FreshProcessStartupTest {
         } catch (_: CancellationException) {
             // Expected: cleanup runs in NonCancellable context and cancellation propagates.
         }
-        assertEquals(listOf("purge", "signed-out", "gate"), cleanup)
+        assertEquals(listOf("purge", "gate"), cleanup)
     }
 
     @Test
-    fun `cleanup failures do not prevent signed out publication or gate release`() = runBlocking {
+    fun `startup validation failure stays loading and still releases startup gate`() = runBlocking {
         val events = mutableListOf<String>()
         val startup = FreshProcessStartup(
             restorePreviousSession = { throw IllegalStateException("validation failed") },
@@ -276,7 +276,7 @@ class FreshProcessStartupTest {
         )
 
         assertEquals(FreshProcessSessionOutcome.UNAVAILABLE, startup.run())
-        assertEquals(listOf("purge", "signed-out", "gate"), events)
+        assertEquals(listOf("purge", "gate"), events)
     }
 
     @Test
@@ -284,6 +284,13 @@ class FreshProcessStartupTest {
         assertTrue(isStartupResumeExcludedInterceptor(SessionGuardInterceptor(SessionEvents())))
         val unrelated = Interceptor { chain -> chain.proceed(chain.request()) }
         assertFalse(isStartupResumeExcludedInterceptor(unrelated))
+    }
+
+    @Test
+    fun `validated session uses a nonblank rotated token and otherwise keeps saved token`() {
+        assertEquals("rotated-token", validatedSessionToken("rotated-token", "saved-token"))
+        assertEquals("saved-token", validatedSessionToken(null, "saved-token"))
+        assertEquals("saved-token", validatedSessionToken("  ", "saved-token"))
     }
 
     @Test
