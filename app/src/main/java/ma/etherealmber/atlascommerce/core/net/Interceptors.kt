@@ -222,6 +222,19 @@ internal fun diagnosticPath(encodedPath: String): String =
         "${match.groupValues[1]}[REDACTED]"
     }
 
+private val API_ERROR_FIELD = Regex("\\\"(code|error|message)\\\"\\s*:\\s*\\\"([^\\\"]{1,400})\\\"", RegexOption.IGNORE_CASE)
+
+/** Extract only short API error fields and redact any QR-session token before log ingestion. */
+internal fun diagnosticApiErrorDetails(responseBody: String): String =
+    API_ERROR_FIELD.findAll(responseBody)
+        .mapNotNull { match ->
+            val key = match.groupValues[1]
+            val value = diagnosticPath(match.groupValues[2].trim()).take(180)
+            value.takeIf(String::isNotBlank)?.let { "$key=$it" }
+        }
+        .take(3)
+        .joinToString("; ")
+
 private const val SLOW_NETWORK_EVENT_MS = 1_000L
 private const val SLOW_CALL_EVENT_MS = 3_000L
 
@@ -290,16 +303,7 @@ class AtlasHeaderInterceptor(
             val resp = chain.proceed(request)
             val ms = ((System.nanoTime() - startNs) / 1_000_000L).coerceAtLeast(1L)
             val apiError = if (resp.code >= 400) {
-                runCatching {
-                    API_ERROR_FIELD.findAll(resp.peekBody(2_048L).string())
-                        .mapNotNull { match ->
-                            val key = match.groupValues[1]
-                            val value = diagnosticPath(match.groupValues[2].trim()).take(180)
-                            value.takeIf(String::isNotBlank)?.let { "$key=$it" }
-                        }
-                        .take(3)
-                        .joinToString("; ")
-                }.getOrDefault("")
+                runCatching { diagnosticApiErrorDetails(resp.peekBody(2_048L).string()) }.getOrDefault("")
             } else ""
             ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
                 tag = "HTTP",
@@ -317,10 +321,6 @@ class AtlasHeaderInterceptor(
             )
             throw t
         }
-    }
-
-    private companion object {
-        val API_ERROR_FIELD = Regex("\\\"(code|error|message)\\\"\\s*:\\s*\\\"([^\\\"]{1,400})\\\"", RegexOption.IGNORE_CASE)
     }
 }
 

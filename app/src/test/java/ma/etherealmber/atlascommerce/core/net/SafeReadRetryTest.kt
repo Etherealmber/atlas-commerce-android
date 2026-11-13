@@ -84,6 +84,27 @@ class SafeReadRetryTest {
     }
 
     @Test
+    fun apiErrorDetailsRedactQrSessionTokensBeforeTheyCanReachDiagnostics() {
+        val secret = "opaqueSecret"
+        val details = diagnosticApiErrorDetails(
+            """{"message":"Unknown session /api/auth/qr/session/$secret"}""",
+        )
+
+        assertEquals("message=Unknown session /api/auth/qr/session/[REDACTED]", details)
+        assertFalse(details.contains(secret))
+    }
+
+    @Test
+    fun apiErrorDetailsKeepOnlyBoundedRecognizedFields() {
+        assertEquals(
+            "code=INVALID_SESSION; error=expired; message=Please sign in again",
+            diagnosticApiErrorDetails(
+                """{"code":"INVALID_SESSION","error":"expired","message":"Please sign in again","debug":"ignored"}""",
+            ),
+        )
+    }
+
+    @Test
     fun networkDiagnosticsClassifyDnsConnectTlsAndProtocolFailuresWithoutMessages() {
         assertEquals("dns", networkFailureCategory(UnknownHostException("private host detail")))
         assertEquals("timeout", networkFailureCategory(SocketTimeoutException("private address detail")))
