@@ -13,7 +13,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import ma.etherealmber.atlascommerce.BuildConfig
+import ma.etherealmber.atlascommerce.core.net.AtlasDiagnosticDns
 import ma.etherealmber.atlascommerce.core.net.AtlasHeaderInterceptor
+import ma.etherealmber.atlascommerce.core.net.AtlasNetworkEventListener
 import ma.etherealmber.atlascommerce.core.net.SessionEvents
 import ma.etherealmber.atlascommerce.core.net.SessionGuardInterceptor
 import ma.etherealmber.atlascommerce.core.net.SafeReadRetryInterceptor
@@ -74,6 +76,8 @@ object AppModule {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .callTimeout(45, TimeUnit.SECONDS)
+            .dns(AtlasDiagnosticDns())
+            .eventListenerFactory(AtlasNetworkEventListener.Factory)
             // Keep OkHttp's broad retries off because writes (login/OTP/mutations) must not
             // replay silently. SafeReadRetryInterceptor adds one bounded retry to GET/HEAD only.
             .retryOnConnectionFailure(false)
@@ -100,6 +104,8 @@ object AppModule {
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .callTimeout(20, TimeUnit.SECONDS)
+        .dns(AtlasDiagnosticDns())
+        .eventListenerFactory(AtlasNetworkEventListener.Factory)
         // The probe is a read-only GET; recover transparently from a transient virtual/LAN route flap.
         .retryOnConnectionFailure(true)
         .addInterceptor { chain ->
@@ -133,6 +139,8 @@ object AppModule {
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS)
         .callTimeout(0, TimeUnit.MILLISECONDS)
+        .dns(AtlasDiagnosticDns())
+        .eventListenerFactory(AtlasNetworkEventListener.Factory)
         .followRedirects(true)
         .followSslRedirects(true)
         .retryOnConnectionFailure(true)

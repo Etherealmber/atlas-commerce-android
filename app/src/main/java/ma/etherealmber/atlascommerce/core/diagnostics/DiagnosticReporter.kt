@@ -228,6 +228,25 @@ data class CompressedReportAttachment(
         }
 }
 
+internal fun diagnosticNetworkStatus(
+    hasWifi: Boolean,
+    hasCellular: Boolean,
+    hasEthernet: Boolean,
+    hasVpn: Boolean,
+    hasInternetCapability: Boolean,
+    isValidated: Boolean,
+    dnsServerCount: Int,
+): String {
+    val transports = buildList {
+        if (hasWifi) add("Wi-Fi")
+        if (hasCellular) add("Mobile")
+        if (hasEthernet) add("Ethernet")
+        if (hasVpn) add("VPN")
+    }.ifEmpty { listOf("Other") }
+    return "${transports.joinToString("+")} internet=${if (hasInternetCapability) "yes" else "no"}" +
+        " validated=${if (isValidated) "yes" else "no"} dns=${dnsServerCount.coerceAtLeast(0)}"
+}
+
 data class DeviceDiagnosticSnapshot(
     val reportId: String,
     val timestampUtc: String,
@@ -368,15 +387,20 @@ object DiagnosticReporter {
 
         val netLabel = runCatching {
             val cm = context.getSystemService(ConnectivityManager::class.java)
-            val caps = cm?.getNetworkCapabilities(cm.activeNetwork)
-            when {
-                caps == null -> "Hors ligne / Aucun réseau actif"
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi actif"
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Données mobiles (4G/5G)"
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
-                else -> "Connecté"
-            }
-        }.getOrDefault("Inconnu")
+                ?: return@runCatching "offline"
+            val activeNetwork = cm.activeNetwork ?: return@runCatching "offline"
+            val caps = cm.getNetworkCapabilities(activeNetwork) ?: return@runCatching "offline"
+            val dnsServerCount = cm.getLinkProperties(activeNetwork)?.dnsServers?.size ?: 0
+            diagnosticNetworkStatus(
+                hasWifi = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+                hasCellular = caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR),
+                hasEthernet = caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET),
+                hasVpn = caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN),
+                hasInternetCapability = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
+                isValidated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
+                dnsServerCount = dnsServerCount,
+            )
+        }.getOrDefault("unknown")
 
         val cleanShort = shortDeviceId.ifBlank { "anon" }
         val maskedFp = if (fullFingerprint.length >= 12) {

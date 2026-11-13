@@ -25,7 +25,7 @@ public final class LegacySourceQuarantine {
      */
     public static final Set<String> EXPECTED_APP_SRC_FILES = Collections.unmodifiableSet(
         new TreeSet<>(List.of(
-            "androidTest/java/ma/etherealmber/atlascommerce/Android9StartupSmokeTest.kt",
+            "androidTest/java/ma/etherealmber/atlascommerce/Android11StartupSmokeTest.kt",
             "debug/AndroidManifest.xml",
             "debug/res/xml/debug_network_security_config.xml",
             "main/AndroidManifest.xml",
@@ -49,10 +49,10 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/core/net/Interceptors.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/ServerProbe.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/ServerUrl.kt",
-            "main/java/ma/etherealmber/atlascommerce/core/net/VirtualNetworkGateway.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/SessionEvents.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/TokenHolder.kt",
             "main/java/ma/etherealmber/atlascommerce/core/net/VerifyLinkParser.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/net/VirtualNetworkGateway.kt",
             "main/java/ma/etherealmber/atlascommerce/core/persist/AtlasPreferences.kt",
             "main/java/ma/etherealmber/atlascommerce/core/security/CryptoStore.kt",
             "main/java/ma/etherealmber/atlascommerce/core/security/DeviceIdentity.kt",
@@ -73,6 +73,7 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/data/FinanceReportCache.kt",
             "main/java/ma/etherealmber/atlascommerce/data/OfflineCache.kt",
             "main/java/ma/etherealmber/atlascommerce/data/model/Models.kt",
+            "main/java/ma/etherealmber/atlascommerce/data/repo/AgentContextNeeds.kt",
             "main/java/ma/etherealmber/atlascommerce/data/repo/AgentPrompt.kt",
             "main/java/ma/etherealmber/atlascommerce/data/repo/AssistSseFrameParser.kt",
             "main/java/ma/etherealmber/atlascommerce/data/repo/AuthRepository.kt",
@@ -144,14 +145,9 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/ui/util/ActivityExt.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/util/Intents.kt",
             "main/res/drawable-nodpi/atlas_wordmark_mask.png",
-            "main/res/drawable/ic_launcher_background.xml",
+            "main/res/drawable/ic_launcher_direct.xml",
             "main/res/drawable/ic_launcher_foreground.xml",
-            "main/res/drawable/ic_launcher_monochrome.xml",
             "main/res/drawable/ic_stat_update.xml",
-            "main/res/mipmap-anydpi-v26/ic_launcher.xml",
-            "main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
-            "main/res/mipmap-anydpi-v33/ic_launcher.xml",
-            "main/res/mipmap-anydpi-v33/ic_launcher_round.xml",
             "main/res/values-ar/strings.xml",
             "main/res/values-en/strings.xml",
             "main/res/values-night/colors.xml",
@@ -180,13 +176,17 @@ public final class LegacySourceQuarantine {
             "test/java/ma/etherealmber/atlascommerce/core/diagnostics/CrashBreadcrumbPersistenceTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/diagnostics/CrashReportConsentTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/net/AtlasVersionHeadersTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/core/net/SafeReadRetryTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/core/security/DeviceIdentityTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/session/FreshProcessStartupTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/update/UpdateApkTrustTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/data/repo/AgentContextNeedsTest.kt",
             "test/java/ma/etherealmber/atlascommerce/data/repo/AssistSseFrameParserTest.kt",
             "test/java/ma/etherealmber/atlascommerce/push/PushNotificationContentTest.kt",
             "test/java/ma/etherealmber/atlascommerce/ui/root/AppResumeRefreshPolicyTest.kt",
             "test/java/ma/etherealmber/atlascommerce/ui/screens/agent/AgentStreamingTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/ui/screens/server/ServerSwitchPolicyTest.kt"
+            "test/java/ma/etherealmber/atlascommerce/ui/screens/server/ServerSwitchPolicyTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/ui/screens/settings/DeveloperDiagnosticsScreenTest.kt",
         ))
     );
 

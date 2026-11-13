@@ -69,6 +69,14 @@ sealed interface LoginOutcome {
     data class OtpRequired(val message: String, val emailHint: String?) : LoginOutcome
 }
 
+/** Prevents an in-flight profile response from crossing an account/server/token switch. */
+internal fun isProfileRefreshCurrent(
+    expectedScopeIdentity: String,
+    expectedToken: String,
+    activeScopeIdentity: String?,
+    activeToken: String?,
+): Boolean = expectedScopeIdentity == activeScopeIdentity && expectedToken == activeToken
+
 /** The Worker remains the sole authority on whether this password attempt needs OTP. */
 internal fun loginOtpRequirement(response: LoginResponse): LoginOutcome.OtpRequired? =
     if (response.needsOtp) {
@@ -497,7 +505,21 @@ class SessionManager @Inject constructor(
             rememberAccount = rememberAccount,
             clearRestoreDisabledAfterPasswordLogin = true,
         )
-        runCatching { refreshProfile(rememberAccount = rememberAccount) }
+        // Do not make successful authentication wait for the follow-up profile read.
+        // The login response already supplied the essential session fields; a slow or
+        // temporarily unreachable /auth/me must not keep the sign-in form busy.
+        val expectedScope = (_state.value as? SessionState.Active)?.user?.scopeIdentity
+        if (expectedScope != null && tokenHolder.token == token) {
+            scope.launch {
+                val stillSameSession = isProfileRefreshCurrent(
+                    expectedScopeIdentity = expectedScope,
+                    expectedToken = token,
+                    activeScopeIdentity = (_state.value as? SessionState.Active)?.user?.scopeIdentity,
+                    activeToken = tokenHolder.token,
+                )
+                if (stillSameSession) runCatching { refreshProfile(rememberAccount = rememberAccount) }
+            }
+        }
         return ApiResult.Success(LoginOutcome.SignedIn)
     }
 
@@ -569,8 +591,15 @@ class SessionManager @Inject constructor(
     /** Refresh display name, role, email and PFP (`avatar_url`) from `/api/auth/me`. */
     suspend fun refreshProfile(rememberAccount: Boolean? = null) {
         val current = (_state.value as? SessionState.Active)?.user ?: return
+        val tokenAtRequest = tokenHolder.token ?: return
         val result = authRepository.me()
-        if (result is ApiResult.Success) {
+        val stillSameSession = isProfileRefreshCurrent(
+            expectedScopeIdentity = current.scopeIdentity,
+            expectedToken = tokenAtRequest,
+            activeScopeIdentity = (_state.value as? SessionState.Active)?.user?.scopeIdentity,
+            activeToken = tokenHolder.token,
+        )
+        if (result is ApiResult.Success && stillSameSession) {
             val me = result.data
             val updated = current.copy(
                 username = me.username?.takeIf { it.isNotBlank() } ?: current.username,
@@ -580,40 +609,46 @@ class SessionManager @Inject constructor(
                 phone = me.phone ?: current.phone,
                 avatarUrl = me.avatarUrl?.takeIf { it.isNotBlank() } ?: current.avatarUrl,
             )
+            // A server/account switch may happen while /auth/me is in flight. Do not
+            // publish or persist a stale response into the newly active scope.
+            if (!isProfileRefreshCurrent(
+                expectedScopeIdentity = current.scopeIdentity,
+                expectedToken = tokenAtRequest,
+                activeScopeIdentity = (_state.value as? SessionState.Active)?.user?.scopeIdentity,
+                activeToken = tokenHolder.token,
+            )
+            ) return
             _state.value = SessionState.Active(updated)
-            val token = tokenHolder.token
-            if (!token.isNullOrBlank()) {
-                runCatching {
-                    val cipher = cryptoStore.encrypt(token)
-                    preferences.writeSession(
-                        serverUrl = updated.serverUrl,
-                        tokenCipher = cipher,
-                        username = updated.username,
-                        role = updated.role,
-                        displayName = updated.displayName,
-                        email = updated.email,
-                        avatarUrl = updated.avatarUrl,
+            runCatching {
+                val cipher = cryptoStore.encrypt(tokenAtRequest)
+                preferences.writeSession(
+                    serverUrl = updated.serverUrl,
+                    tokenCipher = cipher,
+                    username = updated.username,
+                    role = updated.role,
+                    displayName = updated.displayName,
+                    email = updated.email,
+                    avatarUrl = updated.avatarUrl,
+                )
+                val savedForServer = preferences.savedAccountsForServer(updated.serverUrl).first()
+                val existingSaved = savedForServer.firstOrNull {
+                    it.username.equals(updated.username, ignoreCase = true)
+                }
+                val shouldUpdateSaved = rememberAccount == true || existingSaved != null
+                if (shouldUpdateSaved) {
+                    preferences.upsertSavedAccount(
+                        SavedAccountEntry(
+                            serverUrl = updated.serverUrl,
+                            username = updated.username,
+                            role = updated.role,
+                            displayName = updated.displayName,
+                            email = updated.email,
+                            avatarUrl = updated.avatarUrl,
+                            // /auth/me does not rotate the token; keep the authenticated
+                            // envelope instead of replacing it with an unprotected copy.
+                            tokenCipher = existingSaved?.takeIf { it.canUseDeviceUnlock }?.tokenCipher ?: cipher,
+                        ),
                     )
-                    val savedForServer = preferences.savedAccountsForServer(updated.serverUrl).first()
-                    val existingSaved = savedForServer.firstOrNull {
-                        it.username.equals(updated.username, ignoreCase = true)
-                    }
-                    val shouldUpdateSaved = rememberAccount == true || existingSaved != null
-                    if (shouldUpdateSaved) {
-                        preferences.upsertSavedAccount(
-                            SavedAccountEntry(
-                                serverUrl = updated.serverUrl,
-                                username = updated.username,
-                                role = updated.role,
-                                displayName = updated.displayName,
-                                email = updated.email,
-                                avatarUrl = updated.avatarUrl,
-                                // /auth/me does not rotate the token; keep the authenticated
-                                // envelope instead of replacing it with an unprotected copy.
-                                tokenCipher = existingSaved?.takeIf { it.canUseDeviceUnlock }?.tokenCipher ?: cipher,
-                            ),
-                        )
-                    }
                 }
             }
         }
