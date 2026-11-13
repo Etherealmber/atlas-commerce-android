@@ -11,7 +11,6 @@
 ![Kotlin](https://img.shields.io/badge/kotlin-2.3.0-7f52ff)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285f4)
 ![Min SDK](https://img.shields.io/badge/minSdk-30%20(Android%2011%2B)-3ddc84)
-![Build](https://img.shields.io/github/actions/workflow/status/Etherealmber/atlas-commerce-android/android.yml?branch=main&label=CI)
 
 **[Web Backend Repository (`Etherealmber/atlas-commerce`)](https://github.com/Etherealmber/atlas-commerce)** ·
 **[Download Latest APK](https://github.com/Etherealmber/atlas-commerce-android/releases)** ·
