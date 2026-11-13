@@ -7,7 +7,7 @@
   <p><strong>Official Native Android Companion for <a href="https://github.com/Etherealmber/atlas-commerce">Atlas Commerce Web</a></strong><br/>Stock · POS &amp; Receipts · Invoicing · Barcode &amp; PC QR Scanner · Atlas Agent AI</p>
 
 ![Version](https://img.shields.io/github/v/release/Etherealmber/atlas-commerce-android?label=version)
-![License](https://img.shields.io/github/license/Etherealmber/atlas-commerce-android)
+![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)
 ![Kotlin](https://img.shields.io/badge/kotlin-2.3.0-7f52ff)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285f4)
 ![Min SDK](https://img.shields.io/badge/minSdk-30%20(Android%2011%2B)-3ddc84)
@@ -160,4 +160,4 @@ If Cloudflare Zone Bot Fight Mode challenges `POST /api/admin/android-release` f
 
 ## 📄 License
 
-Distributed under the **[MIT License](LICENSE)** — © 2026 Etherealmber / Atlas Commerce.
+The original Atlas Commerce Android source code is dual-licensed under **[MIT](LICENSE)** or **[Apache License 2.0](LICENSE-APACHE)**, at your option. Third-party components retain their own licenses; see the in-app License screen for acknowledgements. The Atlas Commerce Web backend remains separately licensed under its own [MIT license](https://github.com/Etherealmber/atlas-commerce/blob/main/LICENSE).

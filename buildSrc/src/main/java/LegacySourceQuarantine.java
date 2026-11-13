@@ -29,6 +29,7 @@ public final class LegacySourceQuarantine {
             "debug/AndroidManifest.xml",
             "debug/res/xml/debug_network_security_config.xml",
             "main/AndroidManifest.xml",
+            "main/assets/licenses/LICENSE-APACHE.txt",
             "main/assets/logo-dark.png",
             "main/assets/logo-dark.svg",
             "main/assets/logo-light.png",

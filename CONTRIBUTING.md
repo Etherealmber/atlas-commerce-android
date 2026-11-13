@@ -9,6 +9,7 @@ Thanks for helping improve Atlas Commerce. The Android app is designed to work w
 3. Add or update tests for behavior changes. Do not weaken authentication, OTP checks, TLS verification, tenant isolation, privacy, or localization to make a test pass.
 4. Do not commit credentials, tokens, production data, or generated build artifacts. Never include secrets in logs or diagnostic messages.
 5. Keep the app version unchanged except as part of an explicitly authorized release change.
+6. By submitting a contribution to Atlas Commerce Android, you agree that it may be distributed under both the MIT License and Apache License 2.0, allowing the combined project to be offered under either license. Submit only work you have the right to license this way.
 
 ## Build and test
 

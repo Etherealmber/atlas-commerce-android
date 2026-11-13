@@ -1932,7 +1932,7 @@ fun SettingsScreen(
             AtlasDivider(Modifier.padding(horizontal = 12.dp))
             SettingsRow(
                 icon = Icons.Outlined.Description,
-                title = atlasText("Licence MIT", "MIT license", "ترخيص MIT"),
+                title = atlasText("Licence MIT ou Apache 2.0", "MIT or Apache 2.0 license", "ترخيص MIT أو Apache 2.0"),
                 subtitle = atlasText("Sources et composants tiers", "Sources and third-party components", "المصادر والمكونات الخارجية"),
                 onClick = onOpenLicense,
             )
