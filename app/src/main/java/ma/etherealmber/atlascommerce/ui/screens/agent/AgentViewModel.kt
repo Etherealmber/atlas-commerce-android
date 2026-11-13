@@ -48,6 +48,9 @@ internal fun newestAgentThreadsFirst(threads: List<AgentThreadSummaryDto>): List
         )
         .map { it.value }
 
+internal fun firstSelectableAgentThread(threads: List<AgentThreadSummaryDto>): AgentThreadSummaryDto? =
+    threads.firstOrNull { it.id.isNotBlank() }
+
 /** The Worker’s done.reply is authoritative; never append it to already-rendered token fragments. */
 @Suppress("UNUSED_PARAMETER")
 internal fun replaceProvisionalReply(provisional: String, doneReply: String): String =
@@ -283,7 +286,7 @@ class AgentViewModel @Inject constructor(
             if (currentScope != requestedScope) return@launch
             val remoteThreads = newestAgentThreadsFirst((threadsRes as? ApiResult.Success)?.data.orEmpty())
             val selectedThread = if (loadLatestRemoteThread && _state.value.messages.isEmpty()) {
-                remoteThreads.firstOrNull()
+                firstSelectableAgentThread(remoteThreads)
             } else {
                 null
             }

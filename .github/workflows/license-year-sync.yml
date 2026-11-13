@@ -1,0 +1,84 @@
+name: Sync license copyright year
+
+on:
+  schedule:
+    # Check daily; only the annual change produces a commit.
+    - cron: '17 0 * * *'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: license-year-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Update MIT and Apache copyright notices
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate release-sync App credentials
+        env:
+          RELEASE_SYNC_CLIENT_ID: ${{ vars.RELEASE_SYNC_APP_CLIENT_ID || secrets.RELEASE_SYNC_APP_CLIENT_ID }}
+          RELEASE_SYNC_PRIVATE_KEY: ${{ secrets.RELEASE_SYNC_APP_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$RELEASE_SYNC_CLIENT_ID" ]]; then
+            echo "::error title=Missing release-sync Client ID::Set RELEASE_SYNC_APP_CLIENT_ID as a repository or organization Actions variable or secret."
+            exit 1
+          fi
+          if [[ -z "$RELEASE_SYNC_PRIVATE_KEY" ]]; then
+            echo "::error title=Missing release-sync private key::Set RELEASE_SYNC_APP_PRIVATE_KEY as a repository or organization Actions secret."
+            exit 1
+          fi
+
+      - name: Create release-sync App token
+        id: release-sync-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.RELEASE_SYNC_APP_CLIENT_ID || secrets.RELEASE_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_SYNC_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: atlas-commerce-android
+          permission-contents: write
+
+      - name: Resolve release-sync App bot identity
+        id: release-sync-bot
+        env:
+          GH_TOKEN: ${{ steps.release-sync-token.outputs.token }}
+          APP_SLUG: ${{ steps.release-sync-token.outputs.app-slug }}
+        run: |
+          user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          echo "user_id=${user_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 1
+          token: ${{ steps.release-sync-token.outputs.token }}
+
+      - name: Sync notices and commit with the release-sync App
+        env:
+          APP_SLUG: ${{ steps.release-sync-token.outputs.app-slug }}
+          APP_USER_ID: ${{ steps.release-sync-bot.outputs.user_id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/sync_license_copyright_year.py
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${APP_USER_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git add LICENSE LICENSE-APACHE app/src/main/assets/licenses/LICENSE-APACHE.txt
+          if git diff --cached --quiet; then
+            echo "License copyright notices are already current; no commit is needed."
+            exit 0
+          fi
+          YEAR="$(date -u +%Y)"
+          git commit -m "chore(license): sync copyright year to ${YEAR}"
+          if ! git push origin "HEAD:refs/heads/main"; then
+            echo "::error title=License sync push blocked::Confirm the release-sync App has Contents: write, is installed on this repository, and is an Always bypass actor on the Code scanning gate ruleset."
+            exit 1
+          fi
+          echo "Committed MIT and Apache copyright notices for ${YEAR} to main using the release-sync App."

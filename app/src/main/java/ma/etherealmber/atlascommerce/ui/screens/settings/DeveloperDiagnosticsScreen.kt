@@ -81,6 +81,9 @@ fun DeveloperDiagnosticsScreen(
     var pendingCacheAction by remember { mutableStateOf<DeveloperCacheAction?>(null) }
     var cacheActionInProgress by remember { mutableStateOf(false) }
     var exportingDiagnostics by remember { mutableStateOf(false) }
+    var deviceIdentityDiagnostics by remember(appViewModel) {
+        mutableStateOf(appViewModel.deviceIdentityDiagnostics())
+    }
     val activeRole = (session as? SessionState.Active)?.user?.role
     val language = LocalAtlasLanguage.current
     val diagnosticsRefreshed = atlasText("État actualisé.", "Diagnostics refreshed.", "تم تحديث التشخيصات.")
@@ -94,12 +97,12 @@ fun DeveloperDiagnosticsScreen(
     val updatePackageRemoved = atlasText("Fichier de mise à jour supprimé.", "Downloaded update removed.", "تم حذف ملف التحديث المُنزّل.")
     val updatePackageRemoveFailed = atlasText("Impossible de supprimer le fichier de mise à jour maintenant.", "Could not remove the downloaded update right now.", "تعذّر حذف التحديث المُنزّل الآن.")
     val scope = rememberCoroutineScope()
-    var diagnosticSnapshot by remember(activeRole) {
+    var diagnosticSnapshot by remember(activeRole, deviceIdentityDiagnostics) {
         mutableStateOf(
             DiagnosticReporter.collectSnapshot(
                 context = context,
-                shortDeviceId = appViewModel.deviceShortId,
-                fullFingerprint = appViewModel.deviceFingerprint,
+                shortDeviceId = deviceIdentityDiagnostics?.shortId.orEmpty(),
+                fullFingerprint = deviceIdentityDiagnostics?.fingerprint.orEmpty(),
                 role = activeRole,
                 screenOrigin = "Developer diagnostics",
             ),
@@ -179,10 +182,12 @@ fun DeveloperDiagnosticsScreen(
                     )
                     IconButton(
                         onClick = {
+                            val identity = appViewModel.deviceIdentityDiagnostics()
+                            deviceIdentityDiagnostics = identity
                             diagnosticSnapshot = DiagnosticReporter.collectSnapshot(
                                 context = context,
-                                shortDeviceId = appViewModel.deviceShortId,
-                                fullFingerprint = appViewModel.deviceFingerprint,
+                                shortDeviceId = identity?.shortId.orEmpty(),
+                                fullFingerprint = identity?.fingerprint.orEmpty(),
                                 role = activeRole,
                                 screenOrigin = "Developer diagnostics",
                             )
@@ -262,6 +267,32 @@ fun DeveloperDiagnosticsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (deviceIdentityDiagnostics == null) {
+                    Text(
+                        atlasText(
+                            "Empreinte de l'appareil indisponible; elle sera omise du rapport. Réessayez.",
+                            "Device identity is temporarily unavailable and will be omitted from the report. Retry.",
+                            "بصمة الجهاز غير متاحة مؤقتاً وستُحذف من التقرير. أعد المحاولة.",
+                        ),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    TextButton(
+                        onClick = {
+                            val identity = appViewModel.deviceIdentityDiagnostics()
+                            deviceIdentityDiagnostics = identity
+                            diagnosticSnapshot = DiagnosticReporter.collectSnapshot(
+                                context = context,
+                                shortDeviceId = identity?.shortId.orEmpty(),
+                                fullFingerprint = identity?.fingerprint.orEmpty(),
+                                role = activeRole,
+                                screenOrigin = "Developer diagnostics",
+                            )
+                        },
+                    ) {
+                        Text(atlasText("Réessayer", "Retry", "إعادة المحاولة"))
+                    }
+                }
                 AtlasInfoRow(
                     atlasText("Version", "Version", "الإصدار"),
                     "${AppDetails.VERSION_NAME} · ${AppDetails.VERSION_CODE}",
@@ -607,10 +638,11 @@ private suspend fun collectDeveloperDiagnosticExport(
     role: String?,
     apiReport: ProbeReport?,
 ): DeveloperDiagnosticExport {
+    val identity = appViewModel.deviceIdentityDiagnostics()
     val baseSnapshot = DiagnosticReporter.collectSnapshot(
         context = context,
-        shortDeviceId = appViewModel.deviceShortId,
-        fullFingerprint = appViewModel.deviceFingerprint,
+        shortDeviceId = identity?.shortId.orEmpty(),
+        fullFingerprint = identity?.fingerprint.orEmpty(),
         role = role,
         screenOrigin = "Developer diagnostics",
     )

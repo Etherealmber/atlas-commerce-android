@@ -41,6 +41,7 @@ import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
+import ma.etherealmber.atlascommerce.core.security.DeviceIdentityUnavailableException
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockSetupPrompt
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
@@ -86,6 +87,8 @@ internal fun roundUpTo50MiB(bytes: Long): Long {
 
 private fun File.directorySizeBytes(): Long =
     runCatching { walkTopDown().filter { it.isFile }.sumOf { it.length() } }.getOrDefault(0L)
+
+data class DeviceIdentityDiagnostics(val shortId: String, val fingerprint: String)
 
 /**
  * Root view model: appearance, motion & isolated per-user preferences, server choice,
@@ -144,8 +147,13 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    val deviceShortId: String get() = deviceIdentity.shortId()
-    val deviceFingerprint: String get() = deviceIdentity.fingerprint
+    /** Safe, optional identity for diagnostics; unavailable Keystore state must not crash UI. */
+    fun deviceIdentityDiagnostics(): DeviceIdentityDiagnostics? = try {
+        val fingerprint = deviceIdentity.fingerprint
+        DeviceIdentityDiagnostics(shortId = fingerprint.take(8), fingerprint = fingerprint)
+    } catch (_: DeviceIdentityUnavailableException) {
+        null
+    }
 
     val themeMode: StateFlow<ThemeMode> = preferences.themeMode
         .stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
@@ -548,7 +556,11 @@ class AppViewModel @Inject constructor(
     }
 
     fun isCurrentDevice(device: TrustedDeviceDto): Boolean {
-        val fingerprint = sessionManager.fingerprint
+        val fingerprint = try {
+            sessionManager.fingerprint
+        } catch (_: DeviceIdentityUnavailableException) {
+            return device.current
+        }
         val shortFingerprint = device.fingerprint.removeSuffix("…").removeSuffix("...")
         return device.current || device.full.equals(fingerprint, ignoreCase = true) ||
             (shortFingerprint.isNotBlank() && fingerprint.startsWith(shortFingerprint, ignoreCase = true))

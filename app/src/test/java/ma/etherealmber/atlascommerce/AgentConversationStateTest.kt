@@ -8,6 +8,7 @@ import ma.etherealmber.atlascommerce.ui.screens.agent.detectExplicitAgentNavigat
 import ma.etherealmber.atlascommerce.ui.screens.agent.mobileNavigationSuggestion
 import ma.etherealmber.atlascommerce.ui.screens.agent.clearSubmittedAgentDraft
 import ma.etherealmber.atlascommerce.ui.screens.agent.detectAgentNavigationSuggestion
+import ma.etherealmber.atlascommerce.ui.screens.agent.firstSelectableAgentThread
 import ma.etherealmber.atlascommerce.ui.screens.agent.newestAgentThreadsFirst
 import ma.etherealmber.atlascommerce.ui.screens.agent.shouldShowAgentChatSkeleton
 import org.junit.Assert.assertEquals
@@ -96,6 +97,17 @@ class AgentConversationStateTest {
         assertEquals(true, shouldShowAgentChatSkeleton(loadingThreadState))
         assertEquals(false, shouldShowAgentChatSkeleton(loadedConversationRefreshingContext))
         assertEquals(false, shouldShowAgentChatSkeleton(AgentViewModel.UiState()))
+    }
+
+    @Test
+    fun latestRemoteThreadWithBlankIdIsSkippedForAutomaticLoading() {
+        val threads = listOf(
+            AgentThreadSummaryDto(id = "", updatedAt = "2026-10-28T12:00:00Z"),
+            AgentThreadSummaryDto(id = "valid", updatedAt = "2026-10-27T12:00:00Z"),
+        )
+
+        assertEquals("valid", firstSelectableAgentThread(newestAgentThreadsFirst(threads))?.id)
+        assertEquals(null, firstSelectableAgentThread(listOf(AgentThreadSummaryDto(id = ""))))
     }
 
     @Test

@@ -303,7 +303,7 @@ class AtlasHeaderInterceptor(
             } else ""
             ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
                 tag = "HTTP",
-                message = "${request.method} ${request.url.encodedPath} -> ${resp.code} (${ms}ms)" +
+                message = "${request.method} ${diagnosticPath(request.url.encodedPath)} -> ${resp.code} (${ms}ms)" +
                     apiError.takeIf { it.isNotBlank() }?.let { "; $it" }.orEmpty(),
                 level = if (resp.code >= 400) "WARN" else "INFO",
             )
@@ -312,7 +312,7 @@ class AtlasHeaderInterceptor(
             val ms = ((System.nanoTime() - startNs) / 1_000_000L).coerceAtLeast(1L)
             ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
                 tag = "HTTP",
-                message = "${request.method} ${request.url.encodedPath} FAILED (${ms}ms): ${t.javaClass.simpleName}: ${t.message}",
+                message = "${request.method} ${diagnosticPath(request.url.encodedPath)} FAILED (${ms}ms): ${t.javaClass.simpleName}: ${t.message}",
                 level = "ERROR",
             )
             throw t
@@ -347,7 +347,7 @@ class SessionGuardInterceptor(
             if (expired || (response.code == 403 && revoked)) {
                 ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
                     tag = "AUTH",
-                    message = "Session guard received HTTP ${response.code} for ${request.url.encodedPath}; code=${code ?: "missing"}; ending the authenticated session",
+                    message = "Session guard received HTTP ${response.code} for ${diagnosticPath(request.url.encodedPath)}; code=${code ?: "missing"}; ending the authenticated session",
                     level = "WARN",
                 )
                 sessionEvents.notifyExpired(request.header("Authorization").orEmpty())

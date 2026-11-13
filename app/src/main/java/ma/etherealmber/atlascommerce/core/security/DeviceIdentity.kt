@@ -23,6 +23,11 @@ internal fun resolveDeviceInstallId(
             // than authenticating with a substitute fingerprint that invalidates the session.
             val decoded = runCatching { decryptAtRest(stored) }.getOrNull()?.takeIf(String::isNotBlank)
                 ?: throw DeviceIdentityUnavailableException()
+            // A failed SharedPreferences.commit() can still expose the value in memory.
+            // Confirm the ciphertext is durable before trusting an identity read from prefs.
+            if (!runCatching { persist(stored) }.getOrDefault(false)) {
+                throw DeviceIdentityUnavailableException()
+            }
             return decoded
         }
         // Migrate the UUID stored by older versions without changing this device's fingerprint.

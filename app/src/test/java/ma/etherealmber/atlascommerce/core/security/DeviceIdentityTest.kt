@@ -56,12 +56,47 @@ class DeviceIdentityTest {
             decryptAtRest = { it?.removePrefix("v2:") },
             encryptAtRest = { error("existing identity must not be replaced") },
             generate = { error("a persisted identity must be reused") },
-            persist = { error("a persisted identity must not be rewritten") },
+            persist = { true }, // Confirm that the encrypted identity remains durable before reuse.
         )
 
         assertEquals("stable-install-id", firstLaunchIdentity)
         assertEquals(firstLaunchIdentity, nextLaunchIdentity)
         assertEquals(1, generated)
+        assertEquals("v2:stable-install-id", stored)
+    }
+
+    @Test
+    fun `unconfirmed generated write is retried before using its in-memory ciphertext`() {
+        var stored: String? = null
+        var persistCalls = 0
+        val persist: (String) -> Boolean = { encrypted ->
+            stored = encrypted // SharedPreferences may expose this even when commit() fails.
+            persistCalls++ > 0
+        }
+
+        try {
+            resolveDeviceInstallId(
+                stored = stored,
+                decryptAtRest = { null },
+                encryptAtRest = { "v2:$it" },
+                generate = { "stable-install-id" },
+                persist = persist,
+            )
+            fail("identity must not be used before its disk write is confirmed")
+        } catch (_: DeviceIdentityUnavailableException) {
+            // Retry persistence of the same encrypted value on the next read.
+        }
+
+        val retried = resolveDeviceInstallId(
+            stored = stored,
+            decryptAtRest = { it?.removePrefix("v2:") },
+            encryptAtRest = { error("must retain existing encrypted identity") },
+            generate = { error("must not replace an unconfirmed identity") },
+            persist = persist,
+        )
+
+        assertEquals("stable-install-id", retried)
+        assertEquals(2, persistCalls)
         assertEquals("v2:stable-install-id", stored)
     }
 
