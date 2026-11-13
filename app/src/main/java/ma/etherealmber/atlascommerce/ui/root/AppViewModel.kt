@@ -125,7 +125,6 @@ class AppViewModel @Inject constructor(
     val crashReportsAvailabilityChecked: StateFlow<Boolean> = _crashReportsAvailabilityChecked.asStateFlow()
 
     init {
-        checkUpdatesOnceServerReady()
         viewModelScope.launch {
             sessionEvents.expired.collect { event ->
                 // An in-flight response from a previous account must not sign out the newly
@@ -222,6 +221,10 @@ class AppViewModel @Inject constructor(
 
     val autoCheckUpdates: StateFlow<Boolean> = preferences.autoCheckUpdates
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    init {
+        checkUpdatesOnceServerReady()
+    }
 
     val parallelUpdateDownload: StateFlow<Boolean> = preferences.parallelUpdateDownload
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
