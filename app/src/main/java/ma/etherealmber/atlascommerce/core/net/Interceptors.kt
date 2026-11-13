@@ -228,7 +228,7 @@ private val API_ERROR_FIELD = Regex("\\\"(code|error|message)\\\"\\s*:\\s*\\\"([
 
 /** Decode a JSON string value before applying path redaction so escaped slashes cannot bypass it. */
 private fun decodeDiagnosticJsonString(encodedValue: String): String? = runCatching {
-    JsonReader.of(Buffer().writeUtf8("$encodedValue")).nextString()
+    JsonReader.of(Buffer().writeUtf8("\"$encodedValue\"")).readJsonValue() as? String
 }.getOrNull()
 
 /** Extract only short API error fields and redact any QR-session token before log ingestion. */
