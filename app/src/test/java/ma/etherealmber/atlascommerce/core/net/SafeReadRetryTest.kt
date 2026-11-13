@@ -77,6 +77,10 @@ class SafeReadRetryTest {
             diagnosticPath("/api/auth/qr/session/opaque-session-token/claim"),
         )
         assertEquals("/api/auth/me", diagnosticPath("/api/auth/me"))
+        assertEquals(
+            "Unknown session /api/auth/qr/session/[REDACTED]",
+            diagnosticPath("Unknown session /api/auth/qr/session/opaqueSecret"),
+        )
     }
 
     @Test

@@ -294,7 +294,7 @@ class AtlasHeaderInterceptor(
                     API_ERROR_FIELD.findAll(resp.peekBody(2_048L).string())
                         .mapNotNull { match ->
                             val key = match.groupValues[1]
-                            val value = match.groupValues[2].trim().take(180)
+                            val value = diagnosticPath(match.groupValues[2].trim()).take(180)
                             value.takeIf(String::isNotBlank)?.let { "$key=$it" }
                         }
                         .take(3)
