@@ -70,8 +70,7 @@ class CrashReportConsentTest {
         val rules = java.io.File("proguard-rules.pro").takeIf { it.isFile } ?: java.io.File("app/proguard-rules.pro")
         assertTrue("R8 rules file must exist", rules.isFile)
         val content = rules.readText()
-        assertTrue(content.contains("-keep class * implements com.google.firebase.components.ComponentRegistrar"))
-        assertTrue(content.contains("<init>();"))
+        assertTrue(content.contains("-keep class * implements com.google.firebase.components.ComponentRegistrar {\n    *;\n}"))
     }
 
     @Test

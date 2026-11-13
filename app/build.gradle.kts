@@ -123,7 +123,7 @@ android {
 
     defaultConfig {
         applicationId = "ma.etherealmber.atlascommerce"
-        minSdk = 28
+        minSdk = 30
         targetSdk = 35
         val overrideVersionCode = (findProperty("overrideVersionCode") as? String)
             ?.trim()

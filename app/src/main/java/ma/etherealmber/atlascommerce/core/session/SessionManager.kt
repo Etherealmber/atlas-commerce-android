@@ -26,6 +26,7 @@ import ma.etherealmber.atlascommerce.core.persist.DEVICE_UNLOCK_TOKEN_PREFIX
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.security.CryptoStore
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
+import ma.etherealmber.atlascommerce.core.security.DeviceIdentityUnavailableException
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
@@ -136,12 +137,25 @@ class SessionManager @Inject constructor(
                 preferences.migrateLegacyPreferencesAtRest()
                 serverConfig.loaded.filter { it }.first()
                 val stored = preferences.readSession()
-                val plan = StartupResumePreparation.createRequest(
+                val selectedServerUrl = serverConfig.normalizedSelection()
+                val restoreDisabled = preferences.isSessionRestoreDisabled()
+                var plan = StartupResumePreparation.createRequest(
                     previousSession = stored,
-                    selectedServerUrl = serverConfig.normalizedSelection(),
-                    restoreDisabled = preferences.isSessionRestoreDisabled(),
+                    selectedServerUrl = selectedServerUrl,
+                    restoreDisabled = restoreDisabled,
                     decryptToken = cryptoStore::decrypt,
                 )
+                if (plan.result == StartupResumeResult.UNDECRYPTABLE_TOKEN) {
+                    // Keystore access can fail transiently on some devices. Retry once, but
+                    // never discard an encrypted session solely because local decryption failed.
+                    kotlinx.coroutines.delay(350)
+                    plan = StartupResumePreparation.createRequest(
+                        previousSession = stored,
+                        selectedServerUrl = selectedServerUrl,
+                        restoreDisabled = restoreDisabled,
+                        decryptToken = cryptoStore::decrypt,
+                    )
+                }
                 val request = plan.request
                 if (request == null) {
                     if (plan.result != StartupResumeResult.NO_SESSION) {
@@ -151,11 +165,8 @@ class SessionManager @Inject constructor(
                             level = "WARN",
                         )
                     }
-                    if (plan.result == StartupResumeResult.NO_SESSION) {
-                        FreshProcessSessionOutcome.NO_SESSION
-                    } else {
-                        FreshProcessSessionOutcome.REJECTED
-                    }
+                    startupOutcomeForResumePreparation(plan.result)
+                        ?: FreshProcessSessionOutcome.REJECTED
                 } else {
                     when (
                         val verification = StartupResumePreparation.verifyWithRetry(
@@ -233,6 +244,11 @@ class SessionManager @Inject constructor(
         return true
     }
 
+    private fun deviceIdentityUnavailableFailure() = ApiResult.Failure(
+        code = "DEVICE_IDENTITY_UNAVAILABLE",
+        message = "L'identité sécurisée de cet appareil est temporairement indisponible. Réessayez dans quelques instants.",
+    )
+
     suspend fun signIn(
         username: String,
         password: String,
@@ -245,11 +261,16 @@ class SessionManager @Inject constructor(
         if (password.isBlank()) {
             return ApiResult.Failure("VALIDATION", "Saisissez votre mot de passe.")
         }
+        val fingerprint = try {
+            deviceIdentity.fingerprint
+        } catch (_: DeviceIdentityUnavailableException) {
+            return deviceIdentityUnavailableFailure()
+        }
         return when (
             val result = authRepository.login(
                 username = normalizedUser,
                 password = password,
-                fingerprint = deviceIdentity.fingerprint,
+                fingerprint = fingerprint,
             )
         ) {
             is ApiResult.Failure -> result
@@ -268,12 +289,17 @@ class SessionManager @Inject constructor(
         if (code.length < 4) {
             return ApiResult.Failure("VALIDATION", "Saisissez le code complet reçu par e-mail.")
         }
+        val fingerprint = try {
+            deviceIdentity.fingerprint
+        } catch (_: DeviceIdentityUnavailableException) {
+            return deviceIdentityUnavailableFailure()
+        }
         return when (
             val result = authRepository.verifyOtp(
                 username = normalizedUser,
                 password = password,
                 otp = code,
-                fingerprint = deviceIdentity.fingerprint,
+                fingerprint = fingerprint,
             )
         ) {
             is ApiResult.Failure -> result
@@ -308,13 +334,18 @@ class SessionManager @Inject constructor(
             apiProvider.invalidate()
         }
 
+        val fingerprint = try {
+            deviceIdentity.fingerprint
+        } catch (_: DeviceIdentityUnavailableException) {
+            return deviceIdentityUnavailableFailure()
+        }
         return when (
             val result = authRepository.verifyLink(
                 username = normalizedUser,
                 otp = code,
                 sig = cleanSig,
                 exp = exp,
-                fingerprint = deviceIdentity.fingerprint,
+                fingerprint = fingerprint,
             )
         ) {
             is ApiResult.Failure -> result

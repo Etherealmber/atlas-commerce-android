@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -185,9 +186,10 @@ fun QrDeviceScreen(
         }
     }
 
+    // The ViewModel owns the guard: it survives Activity recreation, while a new instance
+    // after process death re-consumes the route token and restarts the approval flow.
     LaunchedEffect(initialToken, mode) {
-        viewModel.resetScan()
-        viewModel.consumeInitialToken(initialToken, mode)
+        viewModel.initializeRoute(initialToken, mode)
     }
 
     LaunchedEffect(Unit) {
@@ -205,6 +207,7 @@ fun QrDeviceScreen(
         if (mode == QrDeviceMode.SIGN_IN_PHONE &&
             state.step == QrDeviceViewModel.Step.COMPLETED && state.statusDto == null
         ) {
+            viewModel.clearInitializedRoute()
             onClose()
         }
     }
@@ -228,7 +231,10 @@ fun QrDeviceScreen(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onClose) {
+            IconButton(onClick = {
+                viewModel.clearInitializedRoute()
+                onClose()
+            }) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                     contentDescription = atlasText("Retour", "Back", "رجوع"),
@@ -281,7 +287,11 @@ fun QrDeviceScreen(
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .widthIn(max = 1000.dp)
+                .fillMaxWidth()
+                .weight(1f)
+                .align(Alignment.CenterHorizontally),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -356,12 +366,16 @@ fun QrDeviceScreen(
                     QrDeviceViewModel.Step.COMPLETED -> CompletedPairingCard(
                         message = statusMessage ?: atlasText("Appareil synchronisé avec succès.", "Device connected successfully.", "تم ربط الجهاز بنجاح."),
                         onScanAnother = viewModel::resetScan,
-                        onDone = onClose,
+                        onDone = {
+                            viewModel.clearInitializedRoute()
+                            onClose()
+                        },
                     )
 
                     QrDeviceViewModel.Step.IDLE -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(
                             modifier = Modifier
+                                .widthIn(max = if (shouldRunCamera) 440.dp else 560.dp)
                                 .fillMaxWidth(0.86f)
                                 .then(if (shouldRunCamera) Modifier.aspectRatio(1f) else Modifier)
                                 .align(Alignment.CenterHorizontally),

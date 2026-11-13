@@ -91,6 +91,7 @@ class QrDeviceViewModel @Inject constructor(
     val serverUrl: String? get() = serverConfig.selection.value?.baseUrl
 
     private var pollJob: Job? = null
+    private var initializedRoute: Pair<String?, QrDeviceMode>? = null
     private var devicesLoadGeneration = 0L
 
     init {
@@ -112,6 +113,19 @@ class QrDeviceViewModel @Inject constructor(
 
     fun onManualInputChange(value: String) {
         _state.update { it.copy(manualInput = value, error = null) }
+    }
+
+    /** Idempotent for a retained ViewModel; a new ViewModel after process death consumes again. */
+    fun clearInitializedRoute() {
+        initializedRoute = null
+    }
+
+    fun initializeRoute(token: String?, mode: QrDeviceMode) {
+        val route = token to mode
+        if (initializedRoute == route) return
+        initializedRoute = route
+        resetScan()
+        consumeInitialToken(token, mode)
     }
 
     fun consumeInitialToken(token: String?, mode: QrDeviceMode) {

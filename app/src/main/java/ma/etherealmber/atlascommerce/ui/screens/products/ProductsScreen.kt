@@ -24,6 +24,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -498,52 +499,54 @@ fun ProductsScreen(
             )
 
             else -> {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 320.dp),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = density.screenPadding, end = density.screenPadding, bottom = 24.dp + dockPadding),
-                    horizontalArrangement = Arrangement.spacedBy(density.itemGap),
-                    verticalArrangement = Arrangement.spacedBy(density.itemGap),
-                ) {
-                    if (!isAdmin) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            AtlasCard {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    AtlasChip(text = atlasRoleLabel(user.role), tone = AtlasTone.INFO)
-                                    Spacer(Modifier.width(8.dp))
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val wideLayout = maxWidth >= 760.dp
+                    LazyVerticalGrid(
+                        columns = if (wideLayout) GridCells.Fixed(1) else GridCells.Adaptive(minSize = 320.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = density.screenPadding, end = density.screenPadding, bottom = 24.dp + dockPadding),
+                        horizontalArrangement = Arrangement.spacedBy(density.itemGap),
+                        verticalArrangement = Arrangement.spacedBy(density.itemGap),
+                    ) {
+                        if (!isAdmin) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                AtlasCard {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        AtlasChip(text = atlasRoleLabel(user.role), tone = AtlasTone.INFO)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text = atlasText("Nouveaux produits soumis à validation Admin"),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                    }
+                                    Spacer(Modifier.height(4.dp))
                                     Text(
-                                        text = atlasText("Nouveaux produits soumis à validation Admin"),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.SemiBold,
+                                        text = Roles.scopeSummary(user.role),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = Roles.scopeSummary(user.role),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
                             }
                         }
-                    }
-                    gridItemsIndexed(state.visibleProducts, key = { _, product -> product.id }) { index, product ->
-                        StaggeredCatalogEntry(index = index) {
-                            ProductRow(
-                                product = product,
-                                currency = state.currency,
-                                serverBaseUrl = user.serverUrl,
-                                sharedTransitionScope = sharedTransitionScope,
-                                animatedVisibilityScope = animatedVisibilityScope,
-                                canSell = canSell,
-                                onOpen = {
-                                    if (canSell) historyTarget = product else selected = product
-                                },
-                                onAdd = {
-                                    if (canSell) {
-                                        viewModel.addToCart(product)
-                                    }
-                                },
-                            )
+                        gridItemsIndexed(state.visibleProducts, key = { _, product -> product.id }) { index, product ->
+                            StaggeredCatalogEntry(index = index) {
+                                ProductRow(
+                                    product = product,
+                                    currency = state.currency,
+                                    serverBaseUrl = user.serverUrl,
+                                    sharedTransitionScope = sharedTransitionScope,
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    canSell = canSell,
+                                    wideLayout = wideLayout,
+                                    onOpen = {
+                                        if (canSell) historyTarget = product else selected = product
+                                    },
+                                    onAdd = {
+                                        if (canSell) viewModel.addToCart(product)
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -812,6 +815,7 @@ private fun ProductRow(
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     canSell: Boolean,
+    wideLayout: Boolean,
     onOpen: () -> Unit,
     onAdd: () -> Unit,
 ) {
@@ -825,21 +829,23 @@ private fun ProductRow(
     } else {
         Modifier
     }
-    AtlasCard(onClick = onOpen, padding = 14.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+    AtlasCard(onClick = onOpen, padding = if (wideLayout) 16.dp else 14.dp) {
+        if (wideLayout) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 ProductArtwork(
                     imageUrl = product.imageUrl,
                     serverBaseUrl = serverBaseUrl,
                     label = product.name,
-                    modifier = Modifier.size(64.dp).then(sharedArtworkModifier),
+                    modifier = Modifier.size(68.dp).then(sharedArtworkModifier),
                 )
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(product.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(product.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (product.subtitle.isNotBlank()) {
                         Text(product.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
+                }
+                Box(Modifier.weight(1f, fill = false)) {
+                    ProductMetaChips(product, currency)
                 }
                 if (canSell) {
                     IconButton(onClick = onAdd) {
@@ -847,25 +853,56 @@ private fun ProductRow(
                     }
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AtlasChip(
-                    text = atlasText(
-                        "Stock ${productStockDisplay(product.stock, product.unit)}",
-                        "Stock ${productStockDisplay(product.stock, product.unit)}",
-                        "المخزون ${productStockDisplay(product.stock, product.unit)}",
-                    ),
-                    tone = productStockTone(product.stock, product.trackInventory),
-                )
-                if (product.neededQuantity > 0.0) {
-                    AtlasChip(text = atlasText("Manque ${atlasQuantity(product.neededQuantity)}", "Short by ${atlasQuantity(product.neededQuantity)}", "النقص ${atlasQuantity(product.neededQuantity)}"), tone = if (product.isOutOfStock) AtlasTone.DANGER else AtlasTone.WARNING)
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ProductArtwork(
+                        imageUrl = product.imageUrl,
+                        serverBaseUrl = serverBaseUrl,
+                        label = product.name,
+                        modifier = Modifier.size(64.dp).then(sharedArtworkModifier),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(product.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (product.subtitle.isNotBlank()) {
+                            Text(product.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    if (canSell) {
+                        IconButton(onClick = onAdd) {
+                            Icon(Icons.Outlined.AddShoppingCart, contentDescription = atlasText("Ajouter au panier"), tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                 }
-                AtlasChip(text = atlasMoney(product.price, currency))
+                ProductMetaChips(product, currency)
             }
         }
+    }
+}
+
+@Composable
+private fun ProductMetaChips(product: ProductDto, currency: String) {
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AtlasChip(
+            text = atlasText(
+                "Stock ${productStockDisplay(product.stock, product.unit)}",
+                "Stock ${productStockDisplay(product.stock, product.unit)}",
+                "المخزون ${productStockDisplay(product.stock, product.unit)}",
+            ),
+            tone = productStockTone(product.stock, product.trackInventory),
+        )
+        if (product.neededQuantity > 0.0) {
+            AtlasChip(
+                text = atlasText("Manque ${atlasQuantity(product.neededQuantity)}", "Short by ${atlasQuantity(product.neededQuantity)}", "النقص ${atlasQuantity(product.neededQuantity)}"),
+                tone = if (product.isOutOfStock) AtlasTone.DANGER else AtlasTone.WARNING,
+            )
+        }
+        AtlasChip(text = atlasMoney(product.price, currency))
     }
 }
 

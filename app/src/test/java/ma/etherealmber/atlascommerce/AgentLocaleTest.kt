@@ -80,8 +80,9 @@ class AgentLocaleTest {
         assertTrue(authFailureMessage("BAD_OTP", null, true).contains("Code invalide"))
         assertTrue(authFailureMessage("PASSWORD_REHASH_REQUIRED", 401, false).contains("administrateur"))
         assertTrue(authFailureMessage("NETWORK", null, false).contains("serveur"))
-        assertTrue(authFailureMessage("NETWORK", null, false).contains("Serveurs"))
-        assertTrue(authFailureMessage("NETWORK", null, false).contains("émulateur"))
+        val networkMessage = authFailureMessage("NETWORK", null, false)
+        assertTrue(networkMessage.contains("serveur configuré"))
+        assertTrue(networkMessage.contains("réseau de l'appareil"))
         assertTrue(authFailureMessage("TLS", null, false).contains("certificat HTTPS"))
     }
 

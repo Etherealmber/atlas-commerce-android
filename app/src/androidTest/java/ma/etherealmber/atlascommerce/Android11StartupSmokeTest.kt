@@ -12,9 +12,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Cold-start smoke test run on an API 28 (Android 9) emulator in CI. */
+/** Cold-start smoke test run on an API 30 (Android 11) emulator in CI. */
 @RunWith(AndroidJUnit4::class)
-class Android9StartupSmokeTest {
+class Android11StartupSmokeTest {
     @Test
     fun coldStartLeavesSplashAndDisplaysFirstRunScreen() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -46,9 +46,9 @@ class Android9StartupSmokeTest {
 
         ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
             scenario.onActivity { activity ->
-                Log.i("Android9StartupSmoke", "MainActivity resumed; package=${activity.packageName}")
+                Log.i("Android11StartupSmoke", "MainActivity resumed; package=${activity.packageName}")
             }
-            // API 28 CI cold starts can spend several minutes in dexopt before Compose
+            // API 30 CI cold starts can spend several minutes in dexopt before Compose
             // reaches the first-run screen. Recent runner diagnostics showed over five
             // minutes between launch and the activity's first displayed frame.
             val deadline = SystemClock.uptimeMillis() + 6 * 60_000L
@@ -58,17 +58,17 @@ class Android9StartupSmokeTest {
                 if (!reachedFirstRun) SystemClock.sleep(250L)
             }
             if (!reachedFirstRun) {
-                val hierarchy = java.io.File(context.cacheDir, "android9-window.xml")
+                val hierarchy = java.io.File(context.cacheDir, "android11-window.xml")
                 runCatching { device.dumpWindowHierarchy(hierarchy) }
                 val hierarchyText = runCatching { hierarchy.readText().take(6_000) }
                     .getOrDefault("<window hierarchy unavailable>")
                 Log.e(
-                    "Android9StartupSmoke",
+                    "Android11StartupSmoke",
                     "Timed out; currentPackage=${device.currentPackageName}; hierarchy=$hierarchyText",
                 )
             }
             assertTrue(
-                "Cold start never reached Atlas's first-run screen on Android 9 (API 28).",
+                "Cold start never reached Atlas's first-run screen on Android 11 (API 30).",
                 reachedFirstRun,
             )
         }

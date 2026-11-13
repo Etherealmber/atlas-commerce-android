@@ -10,7 +10,7 @@
 ![License](https://img.shields.io/github/license/Etherealmber/atlas-commerce-android)
 ![Kotlin](https://img.shields.io/badge/kotlin-2.3.0-7f52ff)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285f4)
-![Min SDK](https://img.shields.io/badge/minSdk-28%20(Android%209%2B)-3ddc84)
+![Min SDK](https://img.shields.io/badge/minSdk-30%20(Android%2011%2B)-3ddc84)
 ![Build](https://img.shields.io/github/actions/workflow/status/Etherealmber/atlas-commerce-android/android.yml?branch=main&label=CI)
 
 **[Web Backend Repository (`Etherealmber/atlas-commerce`)](https://github.com/Etherealmber/atlas-commerce)** ·
@@ -35,7 +35,7 @@
    - Follow the instructions in **[Etherealmber/atlas-commerce](https://github.com/Etherealmber/atlas-commerce)** to deploy your own Cloudflare Worker + D1 database + R2 storage bucket on your HTTPS domain (for example `https://erp.your-company.com`).
    - Open your web domain in a browser first and create your administrator account to make sure the web platform is live.
 2. **Step 2 — Install the Android App**:
-   - Download **`atlas-commerce.apk`** from **[GitHub Releases](https://github.com/Etherealmber/atlas-commerce-android/releases)** onto your Android 9+ phone or handheld scanner.
+   - Download **`atlas-commerce.apk`** from **[GitHub Releases](https://github.com/Etherealmber/atlas-commerce-android/releases)** onto your Android 11+ phone or handheld scanner.
 3. **Step 3 — Connect Your Server URL**:
    - On a new device, choose your server first, enter its **exact HTTPS address** (e.g. `https://erp.your-company.com`), and test the connection. The welcome tour follows; saved servers are reused on later sign-ins.
    - Tap **« Tester la connexion »** (`Test connection`) to verify `/api/health`, database (`D1`), and storage (`R2`) status before signing in.
@@ -57,6 +57,7 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
 2. **Verify Your Website Is Actually Online First 🌐**
    - Open the exact same URL directly inside Chrome on your phone (`https://your-domain.com/api/health`).
    - If it works, you will see `{"success":true,"data":{"ok":true,...}}`. If it does not load in Chrome either, deploy or restart your **[Atlas Commerce Web](https://github.com/Etherealmber/atlas-commerce)** worker first.
+   - A green `/api/health` result confirms only that health endpoint. If sign-in still shows a network error, use **Retry sign-in** once; if it repeats, collect a redacted diagnostic report and have the server operator check Cloudflare/Worker logs for `/api/auth/login` (and `/api/auth/verify-otp` when applicable). Credentials are never sent over HTTP and the app does not automatically replay sign-in/OTP requests.
 3. **Check Your User Role Permissions 🔐**
    - Features adapt dynamically to your assigned role on the server:
      - **Owner / Admin**: Full access, direct product creation, user/device approvals, unlimited Atlas Agent IA tokens.
@@ -70,7 +71,7 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
 6. **Quick device unlock is missing or unavailable 🔐**
    - Quick sign-in is opt-in per saved account and requires an enrolled biometric or secure Android screen lock. If it is disabled or unavailable, sign in with the account password; you can review device unlock in Profile settings. Android does not use WebAuthn passkeys.
 7. **Crash reports not appearing 🐞**
-   - Firebase is optional and automatic upload is off until the user opts in under Settings. Confirm the correct `google-services.json` is installed in the build, Crashlytics is enabled in Firebase Console, and the test install has opted in. See [Firebase setup](docs/SETUP.md#4-optional-push-notifications-and-automatic-crash-reports-firebase).
+   - Official release APKs are only publishable when CI includes a validated Firebase config for `ma.etherealmber.atlascommerce`. Local/validation builds may omit Firebase; automatic upload still requires Crashlytics enabled in Firebase Console and user opt-in under Settings. In a debug build, use **Developer diagnostics → Send non-fatal test event**, then reopen the app and check Firebase Crashlytics. If Developer diagnostics says Firebase is initialized but Crashlytics is unavailable, the installed variant is missing a working Crashlytics component; capture a redacted diagnostic report and check the release workflow summary. See [Firebase setup](docs/SETUP.md#4-optional-push-notifications-and-automatic-crash-reports-firebase).
 
 ---
 
@@ -99,7 +100,7 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
 
 ### Prerequisites
 - **Android Studio** current stable — JDK 17+ (CI uses JDK 21)
-- **Android SDK 35** (`minSdk = 28` / Android 9+)
+- **Android SDK 35** (`minSdk = 30` / Android 11+)
 
 ```bash
 git clone https://github.com/Etherealmber/atlas-commerce-android.git

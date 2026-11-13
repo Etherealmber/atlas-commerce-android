@@ -2,13 +2,48 @@ package ma.etherealmber.atlascommerce.core.net
 
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
+import ma.etherealmber.atlascommerce.core.security.DeviceIdentityUnavailableException
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
+import java.io.IOException
+import java.net.ProtocolException
+import javax.net.ssl.SSLException
 
 internal fun Request.Builder.addAtlasAppVersionHeaders(): Request.Builder =
     header("X-Atlas-App-Version-Code", AppDetails.VERSION_CODE.toString())
         .header("X-Atlas-App-Version-Name", AppDetails.VERSION_NAME)
+
+/** Convert a temporarily unavailable persisted identity into a recoverable network failure. */
+internal fun DeviceIdentity.fingerprintForRequest(): String = try {
+    fingerprint
+} catch (unavailable: DeviceIdentityUnavailableException) {
+    throw IOException("Saved device identity is temporarily unavailable", unavailable)
+}
+
+/** POSTs (especially login/OTP) are never automatically replayed; only safe read methods qualify. */
+internal fun shouldRetrySafeRead(method: String, failure: IOException): Boolean =
+    method.uppercase() in setOf("GET", "HEAD", "OPTIONS") &&
+        failure !is SSLException &&
+        failure !is ProtocolException
+
+/** One bounded retry for idempotent reads helps recover from a stale pooled socket or brief route flap. */
+class SafeReadRetryInterceptor : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        return try {
+            chain.proceed(request)
+        } catch (first: IOException) {
+            if (chain.call().isCanceled() || !shouldRetrySafeRead(request.method, first)) throw first
+            try {
+                chain.proceed(request)
+            } catch (second: IOException) {
+                second.addSuppressed(first)
+                throw second
+            }
+        }
+    }
+}
 
 /**
  * Adds the headers the worker expects.
@@ -28,7 +63,7 @@ class AtlasHeaderInterceptor(
             .header("Accept", "application/json")
             .header("X-Atlas-Client", "android")
             .addAtlasAppVersionHeaders()
-            .header("X-Device-Fingerprint", deviceIdentity.fingerprint)
+            .header("X-Device-Fingerprint", deviceIdentity.fingerprintForRequest())
             .header("User-Agent", deviceIdentity.userAgent)
             .apply {
                 tokenHolder.token?.takeIf { it.isNotBlank() }?.let {

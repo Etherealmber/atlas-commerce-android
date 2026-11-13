@@ -146,14 +146,19 @@ jobs:
             "$SDKM" "platforms;android-35" "build-tools;35.0.0" || true
           fi
 
-      - name: Configure Firebase Android client (optional)
+      - name: Configure Firebase Android client
         id: firebase_config
         env:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          REQUIRE_FIREBASE_CONFIG: ${{ github.event_name == 'push' || github.event.inputs.validation_only != 'true' }}
         run: |
           if [ -z "$GOOGLE_SERVICES_JSON_BASE64" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Firebase integrations disabled::GOOGLE_SERVICES_JSON_BASE64 is not configured; push registration and automatic Crashlytics reports are unavailable in this build."
+            if [ "$REQUIRE_FIREBASE_CONFIG" = "true" ]; then
+              echo "::error title=Firebase config required::Release publishing requires GOOGLE_SERVICES_JSON_BASE64 for Android package ma.etherealmber.atlascommerce. Add it as a repository Actions secret; validation-only builds may omit it."
+              exit 1
+            fi
+            echo "::warning title=Firebase integrations disabled::GOOGLE_SERVICES_JSON_BASE64 is not configured; this validation-only build has no push registration or automatic Crashlytics reports."
             exit 0
           fi
           python3 - <<'PY'
@@ -181,6 +186,7 @@ jobs:
               output.write("configured=true\n")
           print("::notice title=Firebase client config::Android Firebase config validated for this build.")
           PY
+          echo "Firebase Android config validated; FCM/Crashlytics components are included in this build." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1

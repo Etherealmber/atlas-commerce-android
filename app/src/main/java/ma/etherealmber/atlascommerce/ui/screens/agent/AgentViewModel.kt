@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.cancellation.CancellationException
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.data.repo.AGENT_MAX_QUESTION_LENGTH
@@ -84,6 +85,7 @@ class AgentViewModel @Inject constructor(
         val activeThreadTitle: String = "",
         val messages: List<ChatMessage> = emptyList(),
         val loadingThread: Boolean = false,
+        val loadingContext: Boolean = false,
         val input: String = "",
         val attachments: List<AgentAttachment> = emptyList(),
         val sensitiveConfirmation: Boolean = false,
@@ -108,6 +110,9 @@ class AgentViewModel @Inject constructor(
     )
     val notices: SharedFlow<String> = _notices.asSharedFlow()
 
+    private val _navigationRequests = MutableSharedFlow<AgentNavigationSuggestion>(extraBufferCapacity = 1)
+    val navigationRequests: SharedFlow<AgentNavigationSuggestion> = _navigationRequests.asSharedFlow()
+
     init {
         viewModelScope.launch {
             sessionManager.state
@@ -116,7 +121,10 @@ class AgentViewModel @Inject constructor(
                 .collect { identity ->
                     activeSendRequestId = null
                     activeThreadLoadId = null
-                    _state.value = UiState(activeThreadId = newWebCompatibleThreadId())
+                    _state.value = UiState(
+                        activeThreadId = newWebCompatibleThreadId(),
+                        loadingContext = identity != null,
+                    )
                     if (identity != null) {
                         refreshContext(loadLatestRemoteThread = true)
                     }
@@ -182,7 +190,8 @@ class AgentViewModel @Inject constructor(
         }
         viewModelScope.launch {
             val detail = try {
-                commerceRepository.getAgentThread(summary.id)
+                withTimeoutOrNull(6_000L) { commerceRepository.getAgentThread(summary.id) }
+                    ?: ApiResult.Failure("THREAD_LOAD_TIMEOUT", "Impossible de charger cette discussion à temps. Réessayez ou démarrez une nouvelle discussion.")
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -255,11 +264,16 @@ class AgentViewModel @Inject constructor(
 
     fun refreshContext(loadLatestRemoteThread: Boolean = false) {
         val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity ?: return
+        val current = _state.value
+        val showInitialLoader = current.status == null && current.policy == null && current.threads.isEmpty() && current.messages.isEmpty()
+        if (showInitialLoader) _state.update { it.copy(loadingContext = true) }
         viewModelScope.launch {
-            val statusDef = async { commerceRepository.assistStatus() }
-            val policyDef = async { commerceRepository.agentPolicy() }
-            val nextDef = async { commerceRepository.assistNextActions() }
-            val threadsDef = async { commerceRepository.listAgentThreads() }
+            // These independent boot requests run concurrently and each has a hard deadline.
+            // One stalled status/thread endpoint must not leave the entire Agent screen blank.
+            val statusDef = async { loadAgentContext { commerceRepository.assistStatus() } }
+            val policyDef = async { loadAgentContext { commerceRepository.agentPolicy() } }
+            val nextDef = async { loadAgentContext { commerceRepository.assistNextActions() } }
+            val threadsDef = async { loadAgentContext { commerceRepository.listAgentThreads() } }
 
             val statusRes = statusDef.await()
             val policyRes = policyDef.await()
@@ -274,7 +288,8 @@ class AgentViewModel @Inject constructor(
                     status = (statusRes as? ApiResult.Success)?.data ?: it.status,
                     policy = (policyRes as? ApiResult.Success)?.data ?: it.policy,
                     nextActions = (nextRes as? ApiResult.Success)?.data?.items ?: it.nextActions,
-                    threads = remoteThreads.ifEmpty { it.threads },
+                    threads = if (threadsRes is ApiResult.Success) remoteThreads else it.threads,
+                    loadingContext = false,
                 )
             }
 
@@ -282,6 +297,14 @@ class AgentViewModel @Inject constructor(
                 selectThread(remoteThreads.first())
             }
         }
+    }
+
+    private suspend fun <T> loadAgentContext(request: suspend () -> ApiResult<T>): ApiResult<T>? = try {
+        withTimeoutOrNull(4_000L) { request() }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
     }
 
     fun onInputChange(value: String) {
@@ -353,6 +376,34 @@ class AgentViewModel @Inject constructor(
             pendingSensitiveAttachments = attachments
             pendingSensitiveResponseLanguage = responseLanguage
             _state.update { it.copy(sensitiveConfirmation = true) }
+            return
+        }
+
+        // Explicit native navigation is safe and deterministic. Handle it locally instead of
+        // waiting for business-context requests and an LLM round-trip to perform a tab switch.
+        val localNavigation = if (attachments.isEmpty()) detectExplicitAgentNavigationRequest(clean) else null
+        if (localNavigation != null) {
+            activeSendRequestId = null
+            val localReply = when (responseLanguage) {
+                AppLanguage.FRENCH -> "J’ouvre la rubrique demandée."
+                AppLanguage.ENGLISH -> "Opening that section."
+                AppLanguage.ARABIC -> "جارٍ فتح القسم المطلوب."
+            }
+            _state.update { current ->
+                current.copy(
+                    input = clearSubmittedAgentDraft(current.input, typed),
+                    activeThreadTitle = current.activeThreadTitle.ifBlank { clean.take(48) },
+                    messages = current.messages +
+                        ChatMessage(fromUser = true, text = clean) +
+                        ChatMessage(fromUser = false, text = localReply),
+                    streamingReply = "",
+                    streamingTools = emptyList(),
+                    sending = false,
+                    error = null,
+                )
+            }
+            _navigationRequests.tryEmit(localNavigation)
+            AtlasLogBuffer.log("AGENT", "Handled explicit native navigation locally: ${localNavigation.destination}")
             return
         }
 

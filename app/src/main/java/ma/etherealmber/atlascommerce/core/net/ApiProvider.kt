@@ -95,7 +95,7 @@ private class StartupResumeHeadersInterceptor(
             .header("Accept", "application/json")
             .header("X-Atlas-Client", "android")
             .addAtlasAppVersionHeaders()
-            .header("X-Device-Fingerprint", deviceIdentity.fingerprint)
+            .header("X-Device-Fingerprint", deviceIdentity.fingerprintForRequest())
             .header("User-Agent", deviceIdentity.userAgent)
             .header("Authorization", "Bearer $bearerToken")
             .build()

@@ -424,6 +424,7 @@ fun MainShell(
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val useRail = maxWidth >= 600.dp
+    val useDesktopSidebar = maxWidth >= 1000.dp
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val floatingBarWidth by animateDpAsState(
         targetValue = maxWidth,
@@ -573,7 +574,85 @@ fun MainShell(
                 .background(MaterialTheme.colorScheme.background),
         ) {
         val showRail = useRail && tab !in BackStackTabs && !productHistoryActive
-        if (showRail) {
+        val sidebarWidth = if (useDesktopSidebar) 232.dp else 80.dp
+        if (showRail && useDesktopSidebar) {
+            Surface(
+                modifier = Modifier.align(Alignment.CenterStart).width(sidebarWidth).fillMaxHeight(),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                tonalElevation = 1.dp,
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            atlasText("ATLAS COMMERCE", "ATLAS COMMERCE", "أطلس للتجارة"),
+                            modifier = Modifier.padding(start = 14.dp, top = 8.dp, bottom = 14.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        roleTabs.forEach { item ->
+                            val selected = tab == item
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                                    .clickable { switchTab(item) }
+                                    .padding(horizontal = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                if (item == MainTab.SALE && cartCount > 0) {
+                                    BadgedBox(badge = { Badge { Text(cartCount.toString()) } }) {
+                                        AnimatedTabIcon(item.icon, item.localizedLabel(), selected)
+                                    }
+                                } else AnimatedTabIcon(item.icon, item.localizedLabel(), selected)
+                                Text(
+                                    item.localizedLabel(),
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { switchTab(MainTab.PROFILE) }.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        AtlasAvatar(
+                            avatarUrl = user.avatarUrl,
+                            label = user.displayName.ifBlank { user.username },
+                            size = 36.dp,
+                            serverBaseUrl = serverBaseUrl,
+                            borderColor = MaterialTheme.colorScheme.outlineVariant,
+                            onClick = { switchTab(MainTab.PROFILE) },
+                            onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAvatarSurprise = true },
+                            longClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(user.displayName.ifBlank { user.username }, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(user.role, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+            VerticalDivider(modifier = Modifier.align(Alignment.CenterStart).padding(start = sidebarWidth - 1.dp).fillMaxHeight(), color = MaterialTheme.colorScheme.outlineVariant)
+        } else if (showRail) {
             NavigationRail(modifier = Modifier.align(Alignment.CenterStart), containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
                 roleTabs.forEach { item ->
                     NavigationRailItem(
@@ -601,10 +680,10 @@ fun MainShell(
             // screens add end content-padding so their final items can still scroll clear of it.
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = if (showRail) 80.dp else 0.dp),
+                .padding(start = if (showRail) sidebarWidth else 0.dp),
         ) { currentTab ->
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                Box(Modifier.widthIn(max = if (useRail) 1200.dp else 840.dp).fillMaxSize()) {
+                Box(Modifier.widthIn(max = if (useRail) 1440.dp else 840.dp).fillMaxSize()) {
                 when (currentTab) {
                     MainTab.HOME -> HomeScreen(
                         user = user,
@@ -638,7 +717,7 @@ fun MainShell(
                         onToast = onToast,
                     )
 
-                    MainTab.EMPLOYEES -> EmployeesScreen(user = user)
+                    MainTab.EMPLOYEES -> EmployeesScreen(user = user, wideLayout = useDesktopSidebar)
 
                     MainTab.AGENT -> AgentScreen(
                         onToast = onToast,

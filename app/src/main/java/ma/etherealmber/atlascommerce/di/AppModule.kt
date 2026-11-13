@@ -16,6 +16,7 @@ import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.net.AtlasHeaderInterceptor
 import ma.etherealmber.atlascommerce.core.net.SessionEvents
 import ma.etherealmber.atlascommerce.core.net.SessionGuardInterceptor
+import ma.etherealmber.atlascommerce.core.net.SafeReadRetryInterceptor
 import ma.etherealmber.atlascommerce.core.net.TokenHolder
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
 import ma.etherealmber.atlascommerce.core.update.AndroidUpdateNotifier
@@ -73,11 +74,13 @@ object AppModule {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .callTimeout(45, TimeUnit.SECONDS)
-            // OkHttp would otherwise replay a request (including POSTs) after a
-            // stale pooled connection. Writes here must not happen twice, so
-            // automatic retries are off; the UI can retry deliberately.
+            // Keep OkHttp's broad retries off because writes (login/OTP/mutations) must not
+            // replay silently. SafeReadRetryInterceptor adds one bounded retry to GET/HEAD only.
             .retryOnConnectionFailure(false)
             .addInterceptor(AtlasHeaderInterceptor(tokenHolder, deviceIdentity))
+            // Retry the same fully-headered request once only for safe reads; POST credentials
+            // and mutations are never replayed, and TLS/protocol failures are not retried.
+            .addInterceptor(SafeReadRetryInterceptor())
             .addInterceptor(SessionGuardInterceptor(sessionEvents))
             .addInterceptor(logging)
             .build()

@@ -33,8 +33,8 @@ import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// du2 is bound to a per-operation strong biometric key. Older du1 envelopes (which used
-// a short auth-validity window on Android 9/10) intentionally fall back to account-password sign-in.
+// du2 is bound to a per-operation strong biometric key. Legacy du1 envelopes intentionally
+// fall back to account-password sign-in instead of being upgraded without fresh authentication.
 const val LEGACY_DEVICE_UNLOCK_TOKEN_PREFIX = "du1:"
 const val DEVICE_UNLOCK_TOKEN_PREFIX = "du2:"
 

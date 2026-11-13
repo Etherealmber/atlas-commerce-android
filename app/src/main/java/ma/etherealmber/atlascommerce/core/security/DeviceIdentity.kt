@@ -10,6 +10,36 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+internal fun resolveDeviceInstallId(
+    stored: String?,
+    decryptAtRest: (String?) -> String?,
+    encryptAtRest: (String) -> String,
+    generate: () -> String,
+    persist: (String) -> Unit,
+): String {
+    if (!stored.isNullOrBlank()) {
+        if (stored.startsWith("v2:")) {
+            // Keystore access can fail transiently. Keep this identity unavailable rather
+            // than authenticating with a substitute fingerprint that invalidates the session.
+            val decoded = runCatching { decryptAtRest(stored) }.getOrNull()?.takeIf(String::isNotBlank)
+                ?: throw DeviceIdentityUnavailableException()
+            return decoded
+        }
+        // Migrate the UUID stored by older versions without changing this device's fingerprint.
+        val migrated = runCatching { encryptAtRest(stored) }.getOrNull()
+        if (migrated != null) runCatching { persist(migrated) }
+        return stored
+    }
+    val generated = generate()
+    runCatching { persist(encryptAtRest(generated)) }
+    return generated
+}
+
+/** Raised when the persisted device identity cannot yet be decrypted. */
+internal class DeviceIdentityUnavailableException : IllegalStateException(
+    "Saved device identity is temporarily unavailable",
+)
+
 /**
  * Stable, privacy-preserving device identity.
  *
@@ -28,22 +58,13 @@ class DeviceIdentity @Inject constructor(
     private val installId: String by lazy {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val stored = prefs.getString(KEY_INSTALL_ID, null)
-        val existing = when {
-            stored.isNullOrBlank() -> null
-            stored.startsWith(AT_REST_PREFIX) -> cryptoStore.decryptAtRest(stored).also { decoded ->
-                if (decoded.isNullOrBlank()) prefs.edit().remove(KEY_INSTALL_ID).apply()
-            }
-            else -> stored // Migrate the UUID stored by older versions without changing this device's fingerprint.
-        }
-        existing?.takeIf { it.isNotBlank() }?.also { value ->
-            if (stored?.startsWith(AT_REST_PREFIX) != true) {
-                val migrated = runCatching { cryptoStore.encryptAtRest(value) }.getOrNull()
-                if (migrated != null) prefs.edit().putString(KEY_INSTALL_ID, migrated).apply()
-                else prefs.edit().remove(KEY_INSTALL_ID).apply()
-            }
-        } ?: UUID.randomUUID().toString().also { generated ->
-            runCatching { prefs.edit().putString(KEY_INSTALL_ID, cryptoStore.encryptAtRest(generated)).apply() }
-        }
+        resolveDeviceInstallId(
+            stored = stored,
+            decryptAtRest = cryptoStore::decryptAtRest,
+            encryptAtRest = cryptoStore::encryptAtRest,
+            generate = { UUID.randomUUID().toString() },
+            persist = { encrypted -> prefs.edit().putString(KEY_INSTALL_ID, encrypted).apply() },
+        )
     }
 
     val fingerprint: String by lazy {
@@ -72,6 +93,5 @@ class DeviceIdentity @Inject constructor(
     private companion object {
         const val PREFS = "atlas_device"
         const val KEY_INSTALL_ID = "install_id"
-        const val AT_REST_PREFIX = "v2:"
     }
 }

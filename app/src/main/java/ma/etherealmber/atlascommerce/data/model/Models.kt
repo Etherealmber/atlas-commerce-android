@@ -908,6 +908,7 @@ data class AssistProposalDto(
     val action: String? = null,
     val kind: String? = null,
     val type: String? = null,
+    val path: String? = null,
     @Json(name = "product_id") val productId: Long? = null,
     @Json(name = "product_name") val productName: String? = null,
     val sku: String? = null,
