@@ -23,7 +23,7 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
         "^(?:(?:please|kindly|can you|could you|would you|s'il te plait|s'il vous plait|merci de)\\s+)?" +
             "(?:check\\b|look\\b|search\\b|verify\\b|verifie\\b|verifier\\b|recherche\\b|chercher\\b|" +
             "change\\b|set\\b|switch\\b|use\\b|turn\\b|enable\\b|make\\b|put\\b|mets\\b|passe\\b|active\\b|" +
-            "تحقق\\b|غير\\b|بدل\\b|ارجع\\b)",
+            "تحقق|غير|بدل|ارجع)",
     ).containsMatchIn(normalized)
     if (!directRequest) return null
 
