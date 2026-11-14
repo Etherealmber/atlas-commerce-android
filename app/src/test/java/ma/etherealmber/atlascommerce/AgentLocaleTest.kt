@@ -26,9 +26,10 @@ class AgentLocaleTest {
         for (language in AppLanguage.entries) {
             val question = "س".repeat(AGENT_MAX_QUESTION_LENGTH)
             val result = composeAgentPrompt(question, "x".repeat(10_000), language)
-            assertTrue(result.contains(question))
-            assertTrue(result.contains(language.agentContextInstruction))
             assertTrue(result.length <= 2450)
+            assertTrue(result.contains(language.agentContextInstruction))
+            assertTrue(result.endsWith("x"))
+            assertTrue(result.startsWith(language.agentContextInstruction))
         }
     }
 
@@ -39,6 +40,7 @@ class AgentLocaleTest {
             assertTrue(result.contains("${language.agentQuestionLabel}: $question"))
             assertTrue(result.indexOf(question) < result.indexOf("[LIVE PRODUCTS]"))
             assertTrue(result.contains(language.agentContextInstruction))
+            assertTrue(result.length <= 2450)
         }
     }
 

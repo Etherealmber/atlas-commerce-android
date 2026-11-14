@@ -82,4 +82,16 @@ class AgentContextNeedsTest {
         assertFalse(needs.actions)
         assertFalse(needs.alerts)
     }
+
+    @Test
+    fun writingAndNavigationAdviceDoesNotFetchBusinessContext() {
+        assertTrue(agentContextNeeds("Help me improve this email").isEmpty)
+        assertTrue(agentContextNeeds("Suggest a better way to navigate the app").isEmpty)
+    }
+
+    @Test
+    fun businessImprovementAdviceStillSelectsPermittedContext() {
+        assertTrue(agentContextNeeds("How can I improve my business?").dashboard)
+        assertTrue(agentContextNeeds("How can I improve sales?").finance)
+    }
 }

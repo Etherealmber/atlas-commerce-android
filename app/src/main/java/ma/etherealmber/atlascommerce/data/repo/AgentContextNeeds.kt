@@ -50,13 +50,14 @@ internal fun agentContextNeeds(question: String): AgentContextNeeds {
         "improve", "improvement", "recommend", "recommendation", "suggest", "suggestion", "opportunity",
         "optimise", "optimize", "améliorer", "ameliorer", "amélioration", "amelioration", "conseil", "اقتراح", "تحسين",
     )
-    val businessWords = specific || improvementAdvice || has(
+    val businessWords = specific || has(
         "business", "company", "enterprise", "commerce", "entreprise", "activite", "أعمال", "شركة",
     )
     val knownNonBusiness = has(
         "hello", "hi", "hey", "good morning", "good evening", "bonjour", "bonsoir", "coucou", "salam", "salut", "merci", "thanks", "thank you", "شكرا", "مرحبا",
         "joke", "poem", "story", "translate", "translation", "rewrite", "rephrase", "grammar", "write an email",
         "settings", "setting", "profile", "account", "screen", "page", "menu", "navigation", "navigate", "button",
+        "email", "write", "writing", "draft", "website", "app",
         "parametre", "parametres", "reglage", "profil", "compte", "صفحة", "إعدادات",
     )
     if (!businessWords && knownNonBusiness) return AgentContextNeeds()

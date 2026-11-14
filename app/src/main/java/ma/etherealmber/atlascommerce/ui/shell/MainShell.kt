@@ -192,7 +192,7 @@ internal fun MainTab.localizedLabel(): String = when (this) {
     MainTab.NOTIFICATIONS -> atlasText("Notifications", "Notifications", "الإشعارات")
 }
 
-private val BackStackTabs = setOf(MainTab.AGENT, MainTab.SALE, MainTab.PROFILE, MainTab.SETTINGS)
+private val BackStackTabs = setOf(MainTab.AGENT, MainTab.SALE, MainTab.PROFILE, MainTab.SETTINGS, MainTab.NOTIFICATIONS)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -532,14 +532,6 @@ fun MainShell(
                                     contentDescription = atlasText("Quota IA", "AI quota", "حصة الذكاء الاصطناعي"),
                                 )
                             }
-                        } else if (!useRail) {
-                            IconButton(onClick = { switchTab(MainTab.AGENT) }) {
-                                Icon(
-                                    imageVector = MainTab.AGENT.icon,
-                                    contentDescription = atlasText("Ouvrir Atlas Agent", "Open Atlas Agent", "فتح مساعد Atlas"),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
                         }
                         when (tab) {
                             MainTab.AGENT, MainTab.SALE, MainTab.SETTINGS -> Unit
@@ -652,14 +644,24 @@ fun MainShell(
                 Column(Modifier.widthIn(max = if (useRail) 1440.dp else 840.dp).fillMaxSize()) {
                     if (useRail && currentTab != MainTab.NOTIFICATIONS) {
                         Text(
-                            currentTab.localizedLabel(),
+                            if (showDataCacheManagerDialog) {
+                                atlasText("Données et cache", "Data & cache", "البيانات والذاكرة المؤقتة")
+                            } else currentTab.localizedLabel(),
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                     }
-                    Box(Modifier.fillMaxSize().weight(1f)) {
+                    if (useRail && showDataCacheManagerDialog) {
+                        DataCacheManagerDialog(
+                            onDismiss = { showDataCacheManagerDialog = false },
+                            onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+                            appViewModel = appViewModel,
+                            tabletSidebarWidth = 0.dp,
+                        )
+                    } else {
+                        Box(Modifier.fillMaxSize().weight(1f)) {
                 when (currentTab) {
                     MainTab.HOME -> HomeScreen(
                         user = user,
@@ -750,19 +752,12 @@ fun MainShell(
                     )
                 }
                     }
+                    }
                 }
             }
         }
         }
         }
-    }
-    if (showDataCacheManagerDialog && useRail) {
-        DataCacheManagerDialog(
-            onDismiss = { showDataCacheManagerDialog = false },
-            onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
-            appViewModel = appViewModel,
-            tabletSidebarWidth = sidebarWidth,
-        )
     }
 
     if (showAgentQuotaDialog && tab == MainTab.AGENT) {

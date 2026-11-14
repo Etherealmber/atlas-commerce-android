@@ -37,6 +37,14 @@ class AgentConversationStateTest {
     }
 
     @Test
+    fun storageNavigationWinsOverTheFrenchStockSubstring() {
+        assertEquals(
+            AgentNavigationDestination.DATA_STORAGE,
+            detectAgentNavigationSuggestion("Open gestion du stockage")?.destination,
+        )
+    }
+
+    @Test
     fun explicitRequestCanOpenDataStorageArea() {
         assertEquals(
             AgentNavigationDestination.DATA_STORAGE,
@@ -79,12 +87,15 @@ class AgentConversationStateTest {
         assertEquals(AgentLocalAction.SetTheme(ThemeMode.DARK), detectExplicitAgentLocalAction("Switch to dark mode"))
         assertEquals(AgentLocalAction.SetTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Set theme to light"))
         assertEquals(AgentLocalAction.SetTheme(ThemeMode.SYSTEM), detectExplicitAgentLocalAction("Use the system theme"))
+        assertEquals(AgentLocalAction.SetTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Switch to light mode from dark mode"))
+        assertEquals(AgentLocalAction.SetTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Change theme from dark to light"))
     }
 
     @Test
     fun themeDiscussionAloneDoesNotChangeTheTheme() {
         assertEquals(null, detectExplicitAgentLocalAction("I like the dark theme"))
         assertEquals(null, detectExplicitAgentLocalAction("What is the theme setting?"))
+        assertEquals(null, detectExplicitAgentLocalAction("How do I change the theme to dark?"))
         assertEquals(null, detectExplicitAgentLocalAction("Don't change the theme to dark"))
     }
 
@@ -92,6 +103,7 @@ class AgentConversationStateTest {
     fun explicitUpdateCheckIsRecognizedButGeneralUpdateDiscussionIsNot() {
         assertEquals(AgentLocalAction.CheckForUpdate, detectExplicitAgentLocalAction("Please check for updates"))
         assertEquals(null, detectExplicitAgentLocalAction("Tell me how app updates work"))
+        assertEquals(null, detectExplicitAgentLocalAction("How do I check for updates?"))
     }
 
     @Test

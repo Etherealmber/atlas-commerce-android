@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce.ui.screens.settings
 import android.content.Intent
 import android.provider.Settings
 import android.text.format.Formatter
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -155,8 +156,7 @@ fun DataCacheManagerDialog(
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding(),
+                .then(if (tabletSidebarWidth == null) Modifier.statusBarsPadding().navigationBarsPadding() else Modifier),
             shape = if (tabletSidebarWidth != null) {
                 RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp)
             } else {
@@ -430,6 +430,7 @@ fun DataCacheManagerDialog(
             managerPanel()
         }
     } else {
+        BackHandler(onBack = onDismiss)
         Box(Modifier.fillMaxSize().padding(start = tabletSidebarWidth)) {
             managerPanel()
         }

@@ -424,7 +424,9 @@ class AgentViewModel @Inject constructor(
                         messages = messagesToPersist.map { message ->
                             AgentThreadMessageDto(
                                 role = if (message.fromUser) "user" else "assistant",
-                                text = message.text,
+                                text = if (message.fromUser && message.attachmentNames.isNotEmpty()) {
+                                    "${message.text}\n\n📎 ${message.attachmentNames.joinToString()}"
+                                } else message.text,
                                 ms = message.ms,
                             )
                         },

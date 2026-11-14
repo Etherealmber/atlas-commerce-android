@@ -194,13 +194,13 @@ internal fun detectAgentNavigationSuggestion(prompt: String): AgentNavigationSug
     }
     if (!asksLocation) return null
     val destination = when {
+        listOf("storage", "cache", "local data", "stockage", "mémoire", "memoire", "الذاكرة", "التخزين").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.DATA_STORAGE
         listOf("product", "products", "item", "items", "stock", "inventory", "catalogue", "catalog", "article", "articles", "produit", "produits", "inventaire", "مخزون", "منتج").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.PRODUCTS
         listOf("sale", "sales", "invoice", "invoices", "vente", "ventes", "facture", "الفاتورة", "مبيعات").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.SALES
         listOf("balance", "report", "reports", "rapport", "bilan", "finance", "finances", "الرصيد").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.BALANCE_REPORT
         listOf("employee", "employees", "staff", "employe", "employes", "personnel", "موظف", "الموظفين").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.EMPLOYEES
         listOf("scan", "scanner", "barcode", "qr", "code-barre", "مسح").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.SCAN
         listOf("notification", "notifications", "alerte", "alertes", "تنبيه").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.NOTIFICATIONS
-        listOf("storage", "cache", "local data", "stockage", "mémoire", "memoire", "الذاكرة", "التخزين").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.DATA_STORAGE
         listOf("setting", "settings", "parametre", "parametres", "réglage", "إعدادات").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.SETTINGS
         listOf("profile", "account", "profil", "compte", "الحساب").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.PROFILE
         listOf("home", "dashboard", "accueil", "الرئيسية").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.HOME
