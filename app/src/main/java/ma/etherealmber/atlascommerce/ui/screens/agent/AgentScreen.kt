@@ -125,7 +125,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.text.Normalizer
 
-enum class AgentNavigationDestination { HOME, PRODUCTS, SALES, BALANCE_REPORT, EMPLOYEES, SCAN, NOTIFICATIONS, SETTINGS, PROFILE }
+enum class AgentNavigationDestination { HOME, PRODUCTS, SALES, BALANCE_REPORT, EMPLOYEES, SCAN, NOTIFICATIONS, SETTINGS, PROFILE, DATA_STORAGE }
 
 data class AgentNavigationSuggestion(
     val destination: AgentNavigationDestination,
@@ -200,6 +200,7 @@ internal fun detectAgentNavigationSuggestion(prompt: String): AgentNavigationSug
         listOf("employee", "employees", "staff", "employe", "employes", "personnel", "موظف", "الموظفين").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.EMPLOYEES
         listOf("scan", "scanner", "barcode", "qr", "code-barre", "مسح").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.SCAN
         listOf("notification", "notifications", "alerte", "alertes", "تنبيه").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.NOTIFICATIONS
+        listOf("storage", "cache", "local data", "stockage", "mémoire", "memoire", "الذاكرة", "التخزين").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.DATA_STORAGE
         listOf("setting", "settings", "parametre", "parametres", "réglage", "إعدادات").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.SETTINGS
         listOf("profile", "account", "profil", "compte", "الحساب").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.PROFILE
         listOf("home", "dashboard", "accueil", "الرئيسية").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.HOME
@@ -237,6 +238,7 @@ internal fun mobileNavigationSuggestion(proposal: AssistProposalDto): AgentNavig
         "/m/scan" -> AgentNavigationDestination.SCAN
         "/m/inbox", "/m/notifications" -> AgentNavigationDestination.NOTIFICATIONS
         "/m/settings" -> AgentNavigationDestination.SETTINGS
+        "/m/storage", "/m/cache", "/m/settings/storage" -> AgentNavigationDestination.DATA_STORAGE
         "/m/profile" -> AgentNavigationDestination.PROFILE
         else -> return null
     }
@@ -573,6 +575,7 @@ fun AgentScreen(
                                 AgentNavigationDestination.NOTIFICATIONS -> atlasText("Notifications", "Notifications", "الإشعارات")
                                 AgentNavigationDestination.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
                                 AgentNavigationDestination.PROFILE -> atlasText("Profil", "Profile", "الملف الشخصي")
+                                AgentNavigationDestination.DATA_STORAGE -> atlasText("Stockage des données", "Data storage", "تخزين البيانات")
                             }
                             val dateRange = if (suggestion.fromDate != null && suggestion.toDate != null) {
                                 " · ${suggestion.fromDate} → ${suggestion.toDate}"
@@ -1211,6 +1214,7 @@ private fun ChatBubbleRow(
                                 AgentNavigationDestination.NOTIFICATIONS -> atlasText("Notifications", "Notifications", "الإشعارات")
                                 AgentNavigationDestination.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
                                 AgentNavigationDestination.PROFILE -> atlasText("Profil", "Profile", "الملف الشخصي")
+                                AgentNavigationDestination.DATA_STORAGE -> atlasText("Stockage des données", "Data storage", "تخزين البيانات")
                                 null -> ""
                             }
                             val proposalDetails = proposal.summary?.takeIf { it.isNotBlank() } ?: buildList {

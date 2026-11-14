@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Refresh
@@ -152,16 +151,12 @@ fun DataCacheManagerDialog(
         }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
+    val managerPanel: @Composable () -> Unit = {
         Surface(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .navigationBarsPadding()
-                .padding(start = tabletSidebarWidth ?: 0.dp),
+                .navigationBarsPadding(),
             shape = if (tabletSidebarWidth != null) {
                 RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp)
             } else {
@@ -178,8 +173,6 @@ fun DataCacheManagerDialog(
                         IconButton(onClick = onDismiss) {
                             Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
                         }
-                    } else {
-                        Spacer(Modifier.width(16.dp))
                     }
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -198,11 +191,6 @@ fun DataCacheManagerDialog(
                         appViewModel.refreshCachedProductCount()
                     }) {
                         Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser le stockage", "Refresh storage", "تحديث التخزين"))
-                    }
-                    if (tabletSidebarWidth != null) {
-                        IconButton(onClick = onDismiss) {
-                            Icon(Icons.Outlined.Close, contentDescription = atlasText("Fermer", "Close", "إغلاق"))
-                        }
                     }
                 }
                 AtlasDivider()
@@ -432,6 +420,18 @@ fun DataCacheManagerDialog(
                     }
                 }
             }
+        }
+    }
+    if (tabletSidebarWidth == null) {
+        Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            managerPanel()
+        }
+    } else {
+        Box(Modifier.fillMaxSize().padding(start = tabletSidebarWidth)) {
+            managerPanel()
         }
     }
 

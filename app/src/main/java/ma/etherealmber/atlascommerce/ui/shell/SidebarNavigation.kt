@@ -65,6 +65,7 @@ internal fun AtlasSidebarContent(
     onUpdateClick: () -> Unit,
     expanded: Boolean,
     onOpenDataStorageManager: () -> Unit,
+    dataStorageSelected: Boolean,
     canCollapse: Boolean,
     onToggleCollapse: () -> Unit,
     onNavigate: (MainTab) -> Unit,
@@ -150,12 +151,19 @@ internal fun AtlasSidebarContent(
                     onClick = { onNavigate(item) },
                 )
             }
+            SidebarNavigationItem(
+                icon = MainTab.AGENT.icon,
+                label = MainTab.AGENT.localizedLabel(),
+                isSelected = selectedTab == MainTab.AGENT,
+                expanded = expanded,
+                onClick = { onNavigate(MainTab.AGENT) },
+            )
 
             HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
             SidebarNavigationItem(
                 icon = Icons.Outlined.Notifications,
                 label = atlasText("Notifications", "Notifications", "الإشعارات"),
-                isSelected = false,
+                isSelected = selectedTab == MainTab.NOTIFICATIONS,
                 expanded = expanded,
                 badgeCount = notificationCount,
                 onClick = onOpenNotifications,
@@ -180,7 +188,7 @@ internal fun AtlasSidebarContent(
             SidebarNavigationItem(
                 icon = Icons.Outlined.Inventory2,
                 label = atlasText("Stockage des données", "Data storage", "تخزين البيانات"),
-                isSelected = false,
+                isSelected = dataStorageSelected,
                 expanded = expanded,
                 onClick = onOpenDataStorageManager,
             )
@@ -265,20 +273,23 @@ private fun SidebarUpdateStatus(
     expanded: Boolean,
     onClick: () -> Unit,
 ) {
+    val checking = state == UpdateState.Checking
     val downloading = state as? UpdateState.Downloading
     val ready = state as? UpdateState.ReadyToInstall
     val available = state as? UpdateState.Available
-    if (downloading == null && ready == null && available == null) return
+    if (!checking && downloading == null && ready == null && available == null) return
 
     val status = when {
+        checking -> atlasText("Vérification en cours…", "Checking for updates…", "جارٍ التحقق من التحديثات…")
         downloading != null -> downloading.percent?.let { "${it}% · ${downloading.progressSummary}" }
             ?: downloading.progressSummary
         ready != null -> atlasText("Prête à installer", "Ready to install", "جاهز للتثبيت")
         else -> atlasText("Mise à jour disponible", "Update available", "التحديث متاح")
     }
     val title = when {
+        checking -> atlasText("Vérification", "Checking", "التحقق")
         downloading != null -> atlasText("Téléchargement", "Downloading", "جارٍ التنزيل")
-        ready != null -> atlasText("Installée", "Downloaded", "تم التنزيل")
+        ready != null -> atlasText("Prête à installer", "Ready to install", "جاهز للتثبيت")
         else -> atlasText("Mise à jour", "Update", "التحديث")
     }
     Surface(
@@ -307,17 +318,22 @@ private fun SidebarUpdateStatus(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                downloading?.let {
-                    LinearProgressIndicator(
-                        progress = { it.progressFraction ?: 0f },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                if (checking) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    downloading?.let {
+                        LinearProgressIndicator(
+                            progress = { it.progressFraction ?: 0f },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
         } else {
             Box(Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                if (downloading != null) {
-                    CircularProgressIndicator(
+                when {
+                    checking -> CircularProgressIndicator(modifier = Modifier.size(30.dp), strokeWidth = 2.dp)
+                    downloading != null -> CircularProgressIndicator(
                         progress = { downloading.progressFraction ?: 0f },
                         modifier = Modifier.size(30.dp),
                         strokeWidth = 2.dp,

@@ -12,12 +12,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.cancellation.CancellationException
 import ma.etherealmber.atlascommerce.core.AppLanguage
+import ma.etherealmber.atlascommerce.core.ThemeMode
+import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
+import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
+import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.data.repo.AGENT_MAX_QUESTION_LENGTH
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
@@ -60,6 +65,8 @@ internal fun replaceProvisionalReply(provisional: String, doneReply: String): St
 class AgentViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
     private val sessionManager: SessionManager,
+    private val preferences: AtlasPreferences,
+    private val appUpdateManager: AppUpdateManager,
 ) : ViewModel() {
 
     data class AgentAttachment(
@@ -315,6 +322,155 @@ class AgentViewModel @Inject constructor(
         }
     }
 
+    private fun executeLocalAction(
+        prompt: String,
+        typedDraft: String,
+        action: AgentLocalAction,
+        responseLanguage: AppLanguage,
+        snapshot: UiState,
+    ) {
+        val activeId = snapshot.activeThreadId
+        val requestScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity ?: return
+        val requestId = UUID.randomUUID().toString()
+        val resolvedTitle = snapshot.activeThreadTitle.ifBlank { prompt.take(48) }
+        val userMessage = ChatMessage(fromUser = true, text = prompt)
+        activeSendRequestId = requestId
+        _state.update { current ->
+            if (current.activeThreadId != activeId) current
+            else current.copy(
+                input = clearSubmittedAgentDraft(current.input, typedDraft),
+                activeThreadTitle = resolvedTitle,
+                sending = true,
+                streamingReply = "",
+                streamingTools = emptyList(),
+                error = null,
+                messages = current.messages + userMessage,
+            )
+        }
+
+        viewModelScope.launch {
+            val reply = when (action) {
+                is AgentLocalAction.SetTheme -> {
+                    val saved = try {
+                        preferences.setThemeMode(action.mode)
+                        true
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        false
+                    }
+                    if (!saved) {
+                        when (responseLanguage) {
+                            AppLanguage.FRENCH -> "Je n’ai pas pu enregistrer ce thème. Vous pouvez réessayer dans Profil et personnalisation."
+                            AppLanguage.ENGLISH -> "I couldn't save that theme. You can try again in Profile & Personalization."
+                            AppLanguage.ARABIC -> "تعذّر حفظ هذا المظهر. يمكنك إعادة المحاولة من الملف الشخصي والتخصيص."
+                        }
+                    } else when (responseLanguage) {
+                        AppLanguage.FRENCH -> when (action.mode) {
+                            ThemeMode.SYSTEM -> "D’accord, le thème suit maintenant les réglages du système."
+                            ThemeMode.LIGHT -> "C’est fait : le thème clair est activé."
+                            ThemeMode.DARK -> "C’est fait : le thème sombre est activé."
+                        }
+                        AppLanguage.ENGLISH -> when (action.mode) {
+                            ThemeMode.SYSTEM -> "Done. Atlas now follows your system theme."
+                            ThemeMode.LIGHT -> "Done. The light theme is on."
+                            ThemeMode.DARK -> "Done. The dark theme is on."
+                        }
+                        AppLanguage.ARABIC -> when (action.mode) {
+                            ThemeMode.SYSTEM -> "تم. سيتبع Atlas الآن مظهر النظام."
+                            ThemeMode.LIGHT -> "تم تفعيل المظهر الفاتح."
+                            ThemeMode.DARK -> "تم تفعيل المظهر الداكن."
+                        }
+                    }
+                }
+                AgentLocalAction.CheckForUpdate -> {
+                    appUpdateManager.checkForUpdate(manual = true)
+                    val result = withTimeoutOrNull(20_000L) {
+                        appUpdateManager.state.first { it !is UpdateState.Checking }
+                    }
+                    localUpdateReply(result, responseLanguage)
+                }
+            }
+            val assistantMessage = ChatMessage(fromUser = false, text = reply)
+            val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (currentScope != requestScope || activeSendRequestId != requestId) return@launch
+            activeSendRequestId = null
+            _state.update { current ->
+                if (current.activeThreadId != activeId) current
+                else {
+                    val allMessages = current.messages + assistantMessage
+                    val summary = AgentThreadSummaryDto(
+                        id = activeId,
+                        title = resolvedTitle,
+                        messageCount = allMessages.size,
+                    )
+                    current.copy(
+                        activeThreadTitle = resolvedTitle,
+                        messages = allMessages,
+                        threads = listOf(summary) + current.threads.filterNot { it.id == activeId },
+                        sending = false,
+                        streamingReply = "",
+                        streamingTools = emptyList(),
+                        error = null,
+                    )
+                }
+            }
+            val messagesToPersist = _state.value.messages.takeIf { _state.value.activeThreadId == activeId }
+            if (messagesToPersist != null) {
+                try {
+                    commerceRepository.putAgentThread(
+                        id = activeId,
+                        title = resolvedTitle,
+                        messages = messagesToPersist.map { message ->
+                            AgentThreadMessageDto(
+                                role = if (message.fromUser) "user" else "assistant",
+                                text = message.text,
+                                ms = message.ms,
+                            )
+                        },
+                    )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    AtlasLogBuffer.log("AGENT", "Could not persist the local action reply", "WARN")
+                }
+            }
+        }
+    }
+
+    private fun localUpdateReply(state: UpdateState?, language: AppLanguage): String = when (state) {
+        is UpdateState.Available -> when (language) {
+            AppLanguage.FRENCH -> "Une mise à jour ${state.info.displayVersion} est disponible. Vous pouvez consulter les détails et lancer le téléchargement depuis la bannière ou Paramètres."
+            AppLanguage.ENGLISH -> "Update ${state.info.displayVersion} is available. You can review it and start the download from the update banner or Settings."
+            AppLanguage.ARABIC -> "يتوفر التحديث ${state.info.displayVersion}. يمكنك مراجعة التفاصيل وبدء التنزيل من إشعار التحديث أو الإعدادات."
+        }
+        is UpdateState.UpToDate -> when (language) {
+            AppLanguage.FRENCH -> "Atlas est à jour."
+            AppLanguage.ENGLISH -> "Atlas is up to date."
+            AppLanguage.ARABIC -> "تطبيق Atlas محدّث."
+        }
+        is UpdateState.Downloading -> when (language) {
+            AppLanguage.FRENCH -> "Le téléchargement de la mise à jour est en cours${state.percent?.let { " : $it %" }.orEmpty()}. Sa progression reste visible dans le menu latéral."
+            AppLanguage.ENGLISH -> "The update is downloading${state.percent?.let { ": $it%" }.orEmpty()}. Its progress remains visible in the sidebar."
+            AppLanguage.ARABIC -> "جارٍ تنزيل التحديث${state.percent?.let { " بنسبة $it٪" }.orEmpty()}. ستبقى نسبة التقدم ظاهرة في القائمة الجانبية."
+        }
+        is UpdateState.ReadyToInstall -> when (language) {
+            AppLanguage.FRENCH -> "La mise à jour ${state.info.displayVersion} est téléchargée et prête à installer."
+            AppLanguage.ENGLISH -> "Update ${state.info.displayVersion} is downloaded and ready to install."
+            AppLanguage.ARABIC -> "تم تنزيل التحديث ${state.info.displayVersion} وأصبح جاهزاً للتثبيت."
+        }
+        is UpdateState.Error -> when (language) {
+            AppLanguage.FRENCH -> "Je n’ai pas pu vérifier la mise à jour. Réessayez depuis Paramètres lorsque la connexion sera disponible."
+            AppLanguage.ENGLISH -> "I couldn’t check for an update. Try again from Settings when you’re connected."
+            AppLanguage.ARABIC -> "تعذّر التحقق من التحديث. أعد المحاولة من الإعدادات عند توفر الاتصال."
+        }
+        UpdateState.Idle, UpdateState.Checking, null -> when (language) {
+            AppLanguage.FRENCH -> "La vérification prend plus de temps que prévu. Le statut apparaîtra dans le menu latéral dès qu’il sera disponible."
+            AppLanguage.ENGLISH -> "The check is taking longer than expected. Its status will appear in the sidebar when available."
+            AppLanguage.ARABIC -> "يستغرق التحقق وقتاً أطول من المتوقع. ستظهر حالته في القائمة الجانبية عند توفرها."
+        }
+    }
+
     private suspend fun <T> loadAgentContext(request: suspend () -> ApiResult<T>): ApiResult<T>? = try {
         withTimeoutOrNull(4_000L) { request() }
     } catch (cancelled: CancellationException) {
@@ -397,6 +553,12 @@ class AgentViewModel @Inject constructor(
 
         // Explicit native navigation is safe and deterministic. Handle it locally instead of
         // waiting for business-context requests and an LLM round-trip to perform a tab switch.
+        val localAction = if (attachments.isEmpty()) detectExplicitAgentLocalAction(clean) else null
+        if (localAction != null) {
+            executeLocalAction(clean, typed, localAction, responseLanguage, snapshot)
+            return
+        }
+
         val localNavigation = if (attachments.isEmpty()) detectExplicitAgentNavigationRequest(clean) else null
         if (localNavigation != null) {
             activeSendRequestId = null

@@ -17,12 +17,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.AlertDialog
@@ -271,6 +268,7 @@ private fun AtlasGate(
 ) {
     val context = LocalContext.current
     val atlasLanguage = LocalAtlasLanguage.current
+    val tabletWindow = LocalConfiguration.current.screenWidthDp >= 600
     val lifecycleOwner = LocalLifecycleOwner.current
     val session by viewModel.session.collectAsStateWithLifecycle()
     val server by viewModel.server.collectAsStateWithLifecycle()
@@ -398,7 +396,12 @@ private fun AtlasGate(
 
     LaunchedEffect(openNotificationsRequested, session) {
         if (openNotificationsRequested && session is SessionState.Active) {
-            overlay = Overlay.NOTIFICATIONS
+            if (tabletWindow) {
+                overlay = null
+                requestedTab = MainTab.NOTIFICATIONS.name
+            } else {
+                overlay = Overlay.NOTIFICATIONS
+            }
             onOpenNotificationsConsumed()
         }
     }
@@ -632,7 +635,12 @@ private fun AtlasGate(
                                 },
                                 onOpenNotifications = {
                                     requestNotificationPermissionIfNeeded()
-                                    overlay = Overlay.NOTIFICATIONS
+                                    if (tabletWindow) {
+                                        overlay = null
+                                        requestedTab = MainTab.NOTIFICATIONS.name
+                                    } else {
+                                        overlay = Overlay.NOTIFICATIONS
+                                    }
                                 },
                                 onOpenLicense = { overlay = Overlay.LICENSE },
                                 onOpenSecurity = { overlay = Overlay.SECURITY },
@@ -670,11 +678,6 @@ private fun AtlasGate(
             } else {
                 0.dp
             }
-            val notificationTopInset = if (notificationRailInset > 0.dp) {
-                WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 55.dp
-            } else {
-                0.dp
-            }
             AnimatedVisibility(
                 visible = bootSplashFinished && onboardingDone && !loadingBackend && overlay != null,
                 enter = slideInHorizontally(initialOffsetX = { it / 6 }) + fadeIn(),
@@ -682,7 +685,7 @@ private fun AtlasGate(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Surface(
-                    modifier = Modifier.fillMaxSize().padding(start = notificationRailInset, top = notificationTopInset),
+                    modifier = Modifier.fillMaxSize().padding(start = notificationRailInset),
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     when (visibleOverlay) {

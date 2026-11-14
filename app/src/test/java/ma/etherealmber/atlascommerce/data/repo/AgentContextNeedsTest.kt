@@ -54,6 +54,18 @@ class AgentContextNeedsTest {
     }
 
     @Test
+    fun improvementRequestGetsCompactLiveDashboardContext() {
+        val needs = agentContextNeeds("What should I improve?")
+
+        assertTrue(needs.dashboard)
+        assertTrue(needs.finance)
+        assertTrue(needs.products)
+        assertTrue(needs.clients)
+        assertTrue(needs.actions)
+        assertTrue(needs.alerts)
+    }
+
+    @Test
     fun nonBusinessAndUnclassifiedQuestionsDoNotTriggerExpensiveBroadSnapshot() {
         assertEquals(AgentContextNeeds(), agentContextNeeds("Tell me a short joke"))
         assertEquals(AgentContextNeeds(), agentContextNeeds("How are you?"))
