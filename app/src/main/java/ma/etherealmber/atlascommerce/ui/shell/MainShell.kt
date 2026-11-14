@@ -659,6 +659,7 @@ fun MainShell(
                             onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
                             appViewModel = appViewModel,
                             tabletSidebarWidth = 0.dp,
+                            isForeground = isForeground,
                         )
                     } else {
                         Box(Modifier.fillMaxSize().weight(1f)) {
@@ -716,6 +717,7 @@ fun MainShell(
                         onSignOut = onSignOut,
                         onToast = onToast,
                         isForeground = isForeground,
+                        dialogCenterOffset = if (useRail) sidebarWidth / 2 else 0.dp,
                     )
 
                     MainTab.BALANCE -> BalanceScreen(
@@ -725,7 +727,7 @@ fun MainShell(
                     )
 
                     MainTab.NOTIFICATIONS -> NotificationsScreen(
-                        embeddedInTabletPane = true,
+                        embeddedInTabletPane = useRail,
                         onBack = { switchTab(MainTab.HOME) },
                         onNavigateHref = { href ->
                             val route = href.orEmpty().lowercase()
@@ -751,6 +753,7 @@ fun MainShell(
                         onSignOut = onSignOut,
                         onStartUpdateDownload = onStartUpdateDownload,
                         onToast = onToast,
+                        dialogCenterOffset = if (useRail) sidebarWidth / 2 else 0.dp,
                     )
                 }
                     }

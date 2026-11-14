@@ -86,10 +86,12 @@ jobs:
           INPUT_REPO_URL: ${{ github.event.inputs.repo_url || '' }}
           INPUT_CDN_URL: ${{ github.event.inputs.cdn_url || '' }}
           INPUT_DOWNLOAD_URL: ${{ github.event.inputs.download_url || '' }}
+          INPUT_VALIDATION_ONLY: ${{ github.event.inputs.validation_only || 'false' }}
           DEFAULT_CDN_VAR: ${{ vars.CDN1_PUBLIC_BASE_URL || 'https://cdn1.afmarbre.com/app-updates/android' }}
         run: |
           python3 - <<'PY'
           import json, os, re, sys
+          from scripts.android_release_policy import parse_release_version
 
           text = open("app/build.gradle.kts", encoding="utf-8").read()
           default_code = re.search(r'versionCode\s*=\s*(?:overrideVersionCode\s*\?:\s*)?(\d+)', text).group(1)
@@ -104,8 +106,13 @@ jobs:
           if not re.fullmatch(r"\d+", final_code) or int(final_code) <= 0:
               sys.stderr.write(f"ERROR: version_code '{final_code}' must be a positive integer (e.g. 109).\n")
               sys.exit(1)
-          if not re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[A-Za-z0-9._-]+)?", final_name):
-              sys.stderr.write(f"ERROR: version_name '{final_name}' must look like 1.0.8 or 1.0.9.\n")
+          try:
+              parsed_version = parse_release_version(final_name)
+          except ValueError as error:
+              sys.stderr.write(f"ERROR: {error}; use MAJOR.MINOR.PATCH SemVer.\n")
+              sys.exit(1)
+          if not parsed_version.is_stable and os.environ.get("INPUT_VALIDATION_ONLY", "false").lower() != "true":
+              sys.stderr.write("ERROR: prerelease versions are validation-build only; they cannot replace the stable APK/update manifest.\n")
               sys.exit(1)
 
           gh_repo = os.environ.get("GITHUB_REPOSITORY", "Etherealmber/atlas-commerce-android").strip()
@@ -395,6 +402,7 @@ jobs:
           CDN1_LATEST_URL="$CDN1_LATEST_URL" GITHUB_VERSIONED_URL="$GITHUB_VERSIONED_URL" \
           PRIMARY_APK_URL="$PRIMARY_APK_URL" PUBLISHED_AT="$PUBLISHED_AT" python3 - <<'PYEOF'
           import base64, json, os, re, subprocess
+          from scripts.release_notes import format_in_app_notes, group_release_commits
 
           version_name = os.environ["VERSION_NAME"].strip()
           version_code = int(os.environ["VERSION_CODE"])
@@ -444,62 +452,16 @@ jobs:
           if not raw_log:
               raw_log = sh("git", "log", "-n", "5", "--no-merges", "--format=%H%x1f%s%x1f%b%x1e")
 
-          NOISE_RES = [
-              r"^ci:\s*build log",
-              r"^ci:\s*android 14 smoke log",
-              r"^chore\(release\):\s*set version",
-              r"^update readme\.md$",
-              r"^merge (branch|pull request)",
-              r"^co-authored-by:",
-          ]
+          release_groups = group_release_commits(raw_log)
+          visible_groups = {name: values for name, values in release_groups.items() if values}
 
-          commit_items = []
-          seen = set()
-
-          def clean_line(text):
-              t = re.sub(r"`([^`]+)`", r"\1", text)
-              t = re.sub(r"\*\*([^*]+)\*\*", r"\1", t)
-              t = re.sub(r"\s+", " ", t).strip().strip("-*• ").strip()
-              return t
-
-          def accept_item(target_list, text):
-              t = clean_line(text)
-              if not t or len(t) < 6 or is_bare_version(t) or t.endswith(":"):
-                  return
-              for pat in NOISE_RES:
-                  if re.search(pat, t, re.IGNORECASE):
-                      return
-              key = re.sub(r"[^a-z0-9]+", "", t.lower())[:72]
-              if not key or key in seen:
-                  return
-              seen.add(key)
-              target_list.append(t)
-
-          for entry in raw_log.split("\x1e"):
-              entry = entry.strip()
-              if not entry or "\x1f" not in entry:
-                  continue
-              _, subj, _ = (entry.split("\x1f") + ["", ""])[:3]
-              subj = subj.strip()
-              cleaned_subj = re.sub(
-                  r"^(feat|fix|perf|refactor|chore|ci|ui|ux|security|docs)(\([^)]+\))?:\s*",
-                  "",
-                  subj,
-                  flags=re.IGNORECASE,
-              )
-              cleaned_subj = re.sub(r"\s*\(#\d+\)\s*$", "", cleaned_subj).strip()
-              if cleaned_subj:
-                  cleaned_subj = cleaned_subj[0].upper() + cleaned_subj[1:]
-              accept_item(commit_items, cleaned_subj)
-
-          if not commit_items:
-              commit_items = [f"Mise à jour {tag} — améliorations et correctifs."]
-
+          generated_notes = format_in_app_notes(visible_groups)
           if custom_raw:
               first_line = custom_raw.splitlines()[0].strip()
-              in_app_notes = first_line if len(first_line) <= 96 else (first_line[:93].rstrip() + "…")
+              combined_notes = f"{first_line} | {generated_notes}"
+              in_app_notes = combined_notes if len(combined_notes) <= 480 else (combined_notes[:477].rstrip() + "…")
           else:
-              in_app_notes = f"Mise à jour {tag} — optimisations et correctifs."
+              in_app_notes = generated_notes
 
           gh_lines = [
               f"## ✨ Atlas Commerce `{tag}` (build `{version_code}`)",
@@ -507,9 +469,12 @@ jobs:
           ]
           if custom_raw:
               gh_lines += [f"{custom_raw}", ""]
-          else:
-              for item in commit_items[:5]:
-                  gh_lines.append(f"- {item}")
+          if not visible_groups:
+              gh_lines += ["No categorized commit details were available in this checkout; use the comparison link below for the full source history.", ""]
+          for category, items in visible_groups.items():
+              gh_lines.append(f"### {category}")
+              for item in items:
+                  gh_lines.append(f"- {item.markdown(repo_base_url)}")
               gh_lines.append("")
           gh_lines += [
               "### 📦 Paquet signé (`APK`)",
@@ -894,11 +859,17 @@ jobs:
           import re
           import sys
           from pathlib import Path
+          from scripts.android_release_policy import is_newer_stable, parse_release_version
 
           version, version_code, update_app_version = sys.argv[1:]
           update_app_version = update_app_version.lower() == "true"
-          if not re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[A-Za-z0-9._-]+)?", version):
-              raise SystemExit(f"Not a valid Atlas release version: {version!r}")
+          try:
+              parsed_version = parse_release_version(version)
+          except ValueError as error:
+              raise SystemExit(str(error))
+          if not parsed_version.is_stable:
+              print(f"{version} is a prerelease; prereleases do not update supported-version metadata.")
+              raise SystemExit(0)
           if not version_code.isdecimal() or int(version_code) <= 0:
               raise SystemExit(f"Not a valid Android versionCode: {version_code!r}")
 
@@ -915,6 +886,12 @@ jobs:
 
           security_path = Path("SECURITY.md")
           security = security_path.read_text(encoding="utf-8")
+          baseline_match = re.search(r"current app baseline: \*\*([^*]+)\*\*", security)
+          if not baseline_match:
+              raise SystemExit("Couldn't read the current app baseline from SECURITY.md")
+          if is_newer_stable(baseline_match.group(1), version):
+              print(f"Release {version} is older than supported baseline {baseline_match.group(1)}; leaving metadata unchanged.")
+              raise SystemExit(0)
           security_pattern = re.compile(
               r"(?m)^(© \d{4} Etherealmber — MIT(?: OR Apache-2\.0)? — current app baseline: \*\*)"
               r"[^*]+(\*\* \(versionCode )\d+(\); use the \[Releases page\].*)$"
@@ -926,6 +903,16 @@ jobs:
           )
           if security_count != 1:
               raise SystemExit("Couldn't find the app baseline/versionCode line in SECURITY.md")
+          support_pattern = re.compile(
+              r"(?m)^\| Latest stable minor line `[^`]+` \(line starts at `[^`]+`\) \| :white_check_mark: \|$"
+          )
+          security_updated, support_count = support_pattern.subn(
+              f"| Latest stable minor line `{parsed_version.supported_series}` (line starts at `{parsed_version.supported_floor}`) | :white_check_mark: |",
+              security_updated,
+              count=1,
+          )
+          if support_count != 1:
+              raise SystemExit("Couldn't find the stable minor-line support row in SECURITY.md")
 
           if readme_updated != readme:
               readme_path.write_text(readme_updated, encoding="utf-8")

@@ -87,6 +87,7 @@ class AgentConversationStateTest {
         assertEquals(AgentLocalAction.SetTheme(ThemeMode.DARK), detectExplicitAgentLocalAction("Switch to dark mode"))
         assertEquals(AgentLocalAction.SetTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Set theme to light"))
         assertEquals(AgentLocalAction.SetTheme(ThemeMode.SYSTEM), detectExplicitAgentLocalAction("Use the system theme"))
+        assertEquals(AgentLocalAction.SetTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Use the light theme"))
         assertEquals(AgentLocalAction.SetTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Switch to light mode from dark mode"))
         assertEquals(AgentLocalAction.SetTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Change theme from dark to light"))
     }
@@ -102,6 +103,7 @@ class AgentConversationStateTest {
     @Test
     fun explicitUpdateCheckIsRecognizedButGeneralUpdateDiscussionIsNot() {
         assertEquals(AgentLocalAction.CheckForUpdate, detectExplicitAgentLocalAction("Please check for updates"))
+        assertEquals(AgentLocalAction.CheckForUpdate, detectExplicitAgentLocalAction("تحقق من التحديثات"))
         assertEquals(null, detectExplicitAgentLocalAction("Tell me how app updates work"))
         assertEquals(null, detectExplicitAgentLocalAction("How do I check for updates?"))
     }

@@ -91,6 +91,7 @@ fun DataCacheManagerDialog(
     onToast: (String) -> Unit = {},
     appViewModel: AppViewModel = hiltViewModel(),
     tabletSidebarWidth: Dp? = null,
+    isForeground: Boolean = true,
 ) {
     val context = LocalContext.current
     val savedServers by appViewModel.savedServers.collectAsStateWithLifecycle()
@@ -430,7 +431,7 @@ fun DataCacheManagerDialog(
             managerPanel()
         }
     } else {
-        BackHandler(onBack = onDismiss)
+        BackHandler(enabled = isForeground, onBack = onDismiss)
         Box(Modifier.fillMaxSize().padding(start = tabletSidebarWidth)) {
             managerPanel()
         }

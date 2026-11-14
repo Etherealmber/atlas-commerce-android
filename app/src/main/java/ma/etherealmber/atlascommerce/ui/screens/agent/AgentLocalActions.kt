@@ -23,7 +23,7 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
         "^(?:(?:please|kindly|can you|could you|would you|s'il te plait|s'il vous plait|merci de)\\s+)?" +
             "(?:check\\b|look\\b|search\\b|verify\\b|verifie\\b|verifier\\b|recherche\\b|chercher\\b|" +
             "change\\b|set\\b|switch\\b|use\\b|turn\\b|enable\\b|make\\b|put\\b|mets\\b|passe\\b|active\\b|" +
-            "غير\\b|بدل\\b|ارجع\\b)",
+            "تحقق\\b|غير\\b|بدل\\b|ارجع\\b)",
     ).containsMatchIn(normalized)
     if (!directRequest) return null
 
@@ -43,7 +43,8 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
     val asksToChangeTheme = listOf(
         "change theme", "change the theme", "set theme", "set the theme", "switch theme",
         "switch to dark", "switch to light", "switch to system", "use dark mode", "use light mode",
-        "use system theme", "use the system theme", "turn on dark mode", "turn on light mode",
+        "use system theme", "use the system theme", "use the light theme", "use the dark theme",
+        "turn on dark mode", "turn on light mode",
         "enable dark mode", "enable light mode", "make it dark", "make it light",
         "put it in dark mode", "put it in light mode", "change le theme", "mets le theme",
         "passe en mode sombre", "passe en mode clair", "active le mode sombre", "active le mode clair",

@@ -549,6 +549,7 @@ private fun AtlasGate(
                         crashReportsEnabled = crashReportsEnabled,
                         updateState = updateState,
                         onCheckUpdates = { viewModel.checkForUpdate(manual = true) },
+                        onThemeSelected = viewModel::setThemeMode,
                         onApplySetup = viewModel::completeWelcomeSetup,
                         onComplete = { viewModel.completeOnboarding() },
                     )

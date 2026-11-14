@@ -141,6 +141,7 @@ fun AtlasWelcomeOnboardingScreen(
     crashReportsEnabled: Boolean = false,
     updateState: UpdateState = UpdateState.Idle,
     onCheckUpdates: () -> Unit = {},
+    onThemeSelected: (ThemeMode) -> Unit = {},
     onApplySetup: (ThemeMode, DensityMode, Boolean?) -> Unit = { _, _, _ -> },
     onComplete: () -> Unit,
 ) {
@@ -257,7 +258,10 @@ fun AtlasWelcomeOnboardingScreen(
                     crashReportsAvailabilityChecked = crashReportsAvailabilityChecked,
                     crashReportsEnabled = selectedCrashReports,
                     updateState = updateState,
-                    onThemeSelected = { selectedThemeKey = it.storageKey },
+                    onThemeSelected = {
+                        selectedThemeKey = it.storageKey
+                        onThemeSelected(it)
+                    },
                     onDensitySelected = { selectedDensityKey = it.storageKey },
                     onCrashReportsChanged = {
                         selectedCrashReports = it
@@ -385,6 +389,40 @@ fun AtlasWelcomeOnboardingScreen(
 }
 
 @Composable
+private fun ThemePreferenceChoices(
+    themeMode: ThemeMode,
+    compactLayout: Boolean,
+    onThemeSelected: (ThemeMode) -> Unit,
+) {
+    val choices: @Composable (ThemeMode, Modifier) -> Unit = { mode, modifier ->
+        WelcomePreferenceChoice(
+            title = when (mode) {
+                ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
+                ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
+                ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+            },
+            detail = when (mode) {
+                ThemeMode.SYSTEM -> atlasText("Suit l'appareil", "Follows device", "حسب الجهاز")
+                ThemeMode.LIGHT -> atlasText("Lumineux", "Bright", "مشرق")
+                ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+            },
+            selected = themeMode == mode,
+            modifier = modifier,
+            onClick = { onThemeSelected(mode) },
+        )
+    }
+    if (compactLayout) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ThemeMode.entries.forEach { mode -> choices(mode, Modifier.fillMaxWidth()) }
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ThemeMode.entries.forEach { mode -> choices(mode, Modifier.weight(1f)) }
+        }
+    }
+}
+
+@Composable
 private fun WelcomePreferencesContent(
     themeMode: ThemeMode,
     densityMode: DensityMode,
@@ -400,6 +438,7 @@ private fun WelcomePreferencesContent(
 ) {
     BoxWithConstraints(modifier) {
         val wideLayout = maxWidth >= 720.dp
+        val compactLayout = maxWidth < 420.dp
         Column(
             modifier = Modifier
                 .widthIn(max = 1_040.dp)
@@ -442,25 +481,11 @@ private fun WelcomePreferencesContent(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ThemeMode.entries.forEach { mode ->
-                            WelcomePreferenceChoice(
-                                title = when (mode) {
-                                    ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
-                                    ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
-                                    ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
-                                },
-                                detail = when (mode) {
-                                    ThemeMode.SYSTEM -> atlasText("Suit l'appareil", "Follows device", "حسب الجهاز")
-                                    ThemeMode.LIGHT -> atlasText("Lumineux", "Bright", "مشرق")
-                                    ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
-                                },
-                                selected = themeMode == mode,
-                                modifier = Modifier.weight(1f),
-                                onClick = { onThemeSelected(mode) },
-                            )
-                        }
-                    }
+                    ThemePreferenceChoices(
+                        themeMode = themeMode,
+                        compactLayout = compactLayout,
+                        onThemeSelected = onThemeSelected,
+                    )
                 }
 
                 WelcomePreferenceCard {
