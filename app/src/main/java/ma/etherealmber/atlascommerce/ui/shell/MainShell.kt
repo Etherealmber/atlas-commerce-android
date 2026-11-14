@@ -25,6 +25,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.calculateLeftPadding
+import androidx.compose.foundation.layout.calculateRightPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -91,6 +93,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
@@ -504,7 +508,7 @@ fun MainShell(
                             )
                         }
                         if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
-                        if (tab == MainTab.AGENT && !useRail) {
+                        if (tab == MainTab.AGENT) {
                             IconButton(onClick = { agentHistoryRequested = true }) {
                                 Icon(
                                     imageVector = Icons.Outlined.History,
@@ -593,9 +597,20 @@ fun MainShell(
                 .background(MaterialTheme.colorScheme.background),
         ) {
         val showRail = useRail
+        val layoutDirection = LocalLayoutDirection.current
+        val sidebarStartInset = if (layoutDirection == LayoutDirection.Ltr) {
+            padding.calculateLeftPadding(layoutDirection)
+        } else {
+            padding.calculateRightPadding(layoutDirection)
+        }
+        val sidebarEdgeOffset = if (layoutDirection == LayoutDirection.Ltr) -sidebarStartInset else sidebarStartInset
         if (showRail) {
             Surface(
-                modifier = Modifier.align(Alignment.CenterStart).width(sidebarWidth).fillMaxHeight(),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset(x = sidebarEdgeOffset)
+                    .width(sidebarWidth + sidebarStartInset)
+                    .fillMaxHeight(),
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 tonalElevation = 1.dp,
             ) {
@@ -622,7 +637,11 @@ fun MainShell(
                 )
             }
             VerticalDivider(
-                modifier = Modifier.align(Alignment.CenterStart).padding(start = sidebarWidth - 1.dp).fillMaxHeight(),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset(x = sidebarEdgeOffset)
+                    .padding(start = sidebarWidth - 1.dp)
+                    .fillMaxHeight(),
                 color = MaterialTheme.colorScheme.outlineVariant,
             )
         }
