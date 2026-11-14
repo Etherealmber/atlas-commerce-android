@@ -986,6 +986,7 @@ fun <S> AtlasPageTransition(
     indexSelector: (S) -> Int = { 0 },
     modifier: Modifier = Modifier,
     label: String = "atlas_page",
+    tabletMode: Boolean = false,
     content: @Composable (S) -> Unit,
 ) {
     val enabled = LocalAtlasAnimationsEnabled.current
@@ -1000,6 +1001,17 @@ fun <S> AtlasPageTransition(
                 val initialOrder = indexSelector(initialState)
                 val targetOrder = indexSelector(targetState)
                 when {
+                    tabletMode && initialOrder < 100 && targetOrder < 100 && targetOrder != initialOrder -> {
+                        val direction = if (targetOrder > initialOrder) 1 else -1
+                        (
+                            fadeIn(tween(210, easing = FastOutSlowInEasing)) +
+                                slideInHorizontally(tween(240, easing = FastOutSlowInEasing)) { direction * (it / 26) }
+                            ) togetherWith (
+                            fadeOut(tween(150, easing = FastOutSlowInEasing)) +
+                                slideOutHorizontally(tween(190, easing = FastOutSlowInEasing)) { -direction * (it / 34) }
+                            )
+                    }
+
                     // Overlay / Settings pushed vertically
                     targetOrder >= 100 && initialOrder < 100 -> {
                         (

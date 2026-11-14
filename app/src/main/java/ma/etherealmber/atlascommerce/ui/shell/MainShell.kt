@@ -18,6 +18,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
@@ -97,6 +99,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -476,7 +479,7 @@ fun MainShell(
                         }
                         listOf(thread, status).filter { it.isNotBlank() }.joinToString(" · ")
                     },
-                    titleLeading = if (tab == MainTab.AGENT) {
+                    titleLeading = if (tab == MainTab.AGENT && !useRail) {
                         {
                             AtlasAgentMascot(
                                 modifier = Modifier.size(32.dp).combinedClickable(
@@ -652,13 +655,20 @@ fun MainShell(
         AtlasPageTransition(
             targetState = tab,
             indexSelector = { it.ordinal },
+            tabletMode = useRail,
             // The dock floats over the page so content can scroll beneath it. Main scrollable
             // screens add end content-padding so their final items can still scroll clear of it.
             modifier = Modifier
                 .fillMaxSize()
                 .padding(start = if (showRail) sidebarWidth else 0.dp),
         ) { currentTab ->
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (useRail) Modifier.background(MaterialTheme.colorScheme.background) else Modifier)
+                    .then(if (useRail) Modifier.zIndex(if (currentTab == tab) 1f else 0f) else Modifier),
+                contentAlignment = Alignment.TopCenter,
+            ) {
                 Column(Modifier.widthIn(max = if (useRail) 1440.dp else 840.dp).fillMaxSize()) {
                     if (useRail && currentTab != MainTab.NOTIFICATIONS && currentTab != MainTab.AGENT) {
                         Text(
@@ -911,19 +921,60 @@ private fun AtlasFloatingBottomBar(
             tonalElevation = 0.dp,
             shadowElevation = 4.dp,
         ) {
-            Row(
-                modifier = Modifier.fillMaxSize().padding(horizontal = if (compactWidth) 2.dp else 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                    leftTabs.forEach { item ->
-                        FloatingBottomBarItem(item, selected == item, motionEnabled, compactWidth, Modifier.weight(1f)) { onSelect(item) }
-                    }
+            val innerHorizontalPadding = if (compactWidth) 2.dp else 6.dp
+            val centerGap = if (centerTab != null) if (compactWidth) 52.dp else 64.dp else 0.dp
+            val groupWidth = (dockWidth - innerHorizontalPadding * 2 - centerGap) / 2
+            val selectedInLeft = leftTabs.indexOf(selected)
+            val selectedInRight = rightTabs.indexOf(selected)
+            val markerWidth = when {
+                selectedInLeft >= 0 && leftTabs.isNotEmpty() -> groupWidth / leftTabs.size
+                selectedInRight >= 0 && rightTabs.isNotEmpty() -> groupWidth / rightTabs.size
+                else -> 0.dp
+            }
+            val markerLogicalX = when {
+                selectedInLeft >= 0 && leftTabs.isNotEmpty() -> innerHorizontalPadding + markerWidth * selectedInLeft
+                selectedInRight >= 0 && rightTabs.isNotEmpty() -> innerHorizontalPadding + groupWidth + centerGap + markerWidth * selectedInRight
+                else -> 0.dp
+            }
+            val layoutDirection = LocalLayoutDirection.current
+            val markerOffset = if (layoutDirection == LayoutDirection.Ltr) markerLogicalX else -markerLogicalX
+            val animatedMarkerX by animateDpAsState(
+                targetValue = markerOffset,
+                animationSpec = if (motionEnabled) spring(dampingRatio = 0.78f, stiffness = 420f) else tween(0),
+                label = "nav-selected-marker-x",
+            )
+            val animatedMarkerWidth by animateDpAsState(
+                targetValue = markerWidth,
+                animationSpec = if (motionEnabled) spring(dampingRatio = 0.82f, stiffness = 460f) else tween(0),
+                label = "nav-selected-marker-width",
+            )
+            Box(Modifier.fillMaxSize()) {
+                if (markerWidth > 0.dp) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .offset(x = animatedMarkerX)
+                            .width(animatedMarkerWidth)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(17.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        tonalElevation = 1.dp,
+                    ) {}
                 }
-                if (centerTab != null) Spacer(Modifier.width(if (compactWidth) 52.dp else 64.dp))
-                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                    rightTabs.forEach { item ->
-                        FloatingBottomBarItem(item, selected == item, motionEnabled, compactWidth, Modifier.weight(1f)) { onSelect(item) }
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = innerHorizontalPadding),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        leftTabs.forEach { item ->
+                            FloatingBottomBarItem(item, selected == item, motionEnabled, compactWidth, Modifier.weight(1f)) { onSelect(item) }
+                        }
+                    }
+                    if (centerTab != null) Spacer(Modifier.width(centerGap))
+                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        rightTabs.forEach { item ->
+                            FloatingBottomBarItem(item, selected == item, motionEnabled, compactWidth, Modifier.weight(1f)) { onSelect(item) }
+                        }
                     }
                 }
             }
@@ -1002,31 +1053,22 @@ private fun FloatingBottomBarItem(
         animationSpec = if (motionEnabled) spring(dampingRatio = 0.72f, stiffness = 520f) else tween(0),
         label = "nav-icon-offset-${item.name}",
     )
+    val interactionSource = remember(item) { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed && motionEnabled) 0.9f else 1f,
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.66f, stiffness = 620f) else tween(0),
+        label = "nav-icon-press-${item.name}",
+    )
     BoxWithConstraints(
         modifier = modifier
             .fillMaxHeight()
             .clip(RoundedCornerShape(18.dp))
             .semantics { this.selected = selected }
-            .clickable(role = Role.Tab, onClick = onClick)
+            .clickable(interactionSource = interactionSource, indication = null, role = Role.Tab, onClick = onClick)
             .padding(horizontal = if (compactWidth) 1.dp else 2.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        val pillWidth by animateDpAsState(
-            targetValue = if (selected) maxWidth else 0.dp,
-            animationSpec = if (motionEnabled) spring(dampingRatio = 0.74f, stiffness = 430f) else tween(0),
-            label = "nav-selected-pill-${item.name}",
-        )
-        val pillHeight by animateDpAsState(
-            targetValue = if (selected) 48.dp else 0.dp,
-            animationSpec = if (motionEnabled) spring(dampingRatio = 0.76f, stiffness = 460f) else tween(0),
-            label = "nav-selected-pill-height-${item.name}",
-        )
-        Surface(
-            modifier = Modifier.width(pillWidth).height(pillHeight),
-            shape = RoundedCornerShape(17.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            tonalElevation = if (selected) 1.dp else 0.dp,
-        ) {}
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -1040,8 +1082,8 @@ private fun FloatingBottomBarItem(
                         .offset(y = iconOffset)
                         .size(20.dp)
                         .graphicsLayer {
-                            scaleX = if (motionEnabled) iconScale else 1f
-                            scaleY = if (motionEnabled) iconScale else 1f
+                            scaleX = (if (motionEnabled) iconScale else 1f) * pressScale
+                            scaleY = (if (motionEnabled) iconScale else 1f) * pressScale
                         },
                 )
             }
