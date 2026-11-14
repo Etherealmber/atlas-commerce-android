@@ -129,6 +129,15 @@ class AgentViewModel @Inject constructor(
     private val _navigationRequests = MutableSharedFlow<AgentNavigationSuggestion>(extraBufferCapacity = 1)
     val navigationRequests: SharedFlow<AgentNavigationSuggestion> = _navigationRequests.asSharedFlow()
 
+    private val _themeChooserRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val themeChooserRequests: SharedFlow<Unit> = _themeChooserRequests.asSharedFlow()
+
+    private val _deviceUnlockRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val deviceUnlockRequests: SharedFlow<Unit> = _deviceUnlockRequests.asSharedFlow()
+
+    private val _workStatusRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val workStatusRequests: SharedFlow<Unit> = _workStatusRequests.asSharedFlow()
+
     init {
         viewModelScope.launch {
             sessionManager.state
@@ -392,6 +401,30 @@ class AgentViewModel @Inject constructor(
 
         viewModelScope.launch {
             val reply = when (action) {
+                AgentLocalAction.ShowWorkStatus -> {
+                    _workStatusRequests.tryEmit(Unit)
+                    when (responseLanguage) {
+                        AppLanguage.FRENCH -> "J’ouvre votre activité dans ce panneau."
+                        AppLanguage.ENGLISH -> "Opening your work status in this panel."
+                        AppLanguage.ARABIC -> "أفتح حالة أعمالك في هذه اللوحة."
+                    }
+                }
+                AgentLocalAction.ChooseTheme -> {
+                    _themeChooserRequests.tryEmit(Unit)
+                    when (responseLanguage) {
+                        AppLanguage.FRENCH -> "Choisissez le thème à appliquer ici."
+                        AppLanguage.ENGLISH -> "Choose the theme to apply here."
+                        AppLanguage.ARABIC -> "اختر المظهر الذي تريد تطبيقه هنا."
+                    }
+                }
+                AgentLocalAction.ConfigureDeviceUnlock -> {
+                    _deviceUnlockRequests.tryEmit(Unit)
+                    when (responseLanguage) {
+                        AppLanguage.FRENCH -> "J’ai ouvert les réglages du déverrouillage ici. Activez-le pour lancer la configuration biométrique."
+                        AppLanguage.ENGLISH -> "I opened device unlock settings here. Turn it on to start biometric setup."
+                        AppLanguage.ARABIC -> "فتحت إعدادات إلغاء القفل هنا. فعّله لبدء إعداد البصمة."
+                    }
+                }
                 is AgentLocalAction.SetTheme -> {
                     val saved = try {
                         preferences.setThemeMode(action.mode)

@@ -7,6 +7,9 @@ import ma.etherealmber.atlascommerce.core.ThemeMode
 /** Small native actions that are safe to execute directly from an explicit user request. */
 internal sealed interface AgentLocalAction {
     data object CheckForUpdate : AgentLocalAction
+    data object ShowWorkStatus : AgentLocalAction
+    data object ChooseTheme : AgentLocalAction
+    data object ConfigureDeviceUnlock : AgentLocalAction
     data class SetTheme(val mode: ThemeMode) : AgentLocalAction
 }
 
@@ -20,10 +23,11 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
         .lowercase(Locale.ROOT)
         .trim()
     val directRequest = Regex(
-        "^(?:(?:please|kindly|can you|could you|would you|s'il te plait|s'il vous plait|merci de)\\s+)?" +
+        "^(?:(?:please|kindly|can you|can u|could you|would you|i want to|i want you to|i would like to|i'd like to|" +
+            "s'il te plait|s'il vous plait|je veux|j'aimerais|merci de)\\s+)?" +
             "(?:check\\b|look\\b|search\\b|verify\\b|verifie\\b|verifier\\b|recherche\\b|chercher\\b|" +
-            "change\\b|set\\b|switch\\b|use\\b|turn\\b|enable\\b|make\\b|put\\b|mets\\b|passe\\b|active\\b|" +
-            "تحقق|غير|بدل|ارجع)",
+            "show\\b|open\\b|view\\b|configure\\b|change\\b|set\\b|switch\\b|use\\b|turn\\b|enable\\b|make\\b|put\\b|" +
+            "mets\\b|passe\\b|active\\b|تحقق|غير|بدل|ارجع|أظهر|اظهر|افتح|فعّل|فعل)",
     ).containsMatchIn(normalized)
     if (!directRequest) return null
 
@@ -39,6 +43,18 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
         "recherche les mises a jour", "chercher les mises a jour", "تحقق من التحديث", "تحقق من التحديثات",
     ).any(normalized::contains)
     if (asksToCheckUpdates) return AgentLocalAction.CheckForUpdate
+
+    val asksForDeviceUnlock = listOf(
+        "device unlock", "biometric sign-in", "biometric sign in", "fingerprint sign-in", "fingerprint sign in",
+        "unlock with biometrics", "فتح القفل بالبصمة", "بصمة الجهاز",
+    ).any(normalized::contains)
+    if (asksForDeviceUnlock) return AgentLocalAction.ConfigureDeviceUnlock
+
+    val asksForWorkStatus = listOf(
+        "my work status", "work status", "my work", "my requests", "my reported issues", "my reports",
+        "mes demandes", "mon activité", "mes signalements", "حالة أعمالي", "طلباتي",
+    ).any(normalized::contains)
+    if (asksForWorkStatus) return AgentLocalAction.ShowWorkStatus
 
     val asksToChangeTheme = listOf(
         "change theme", "change the theme", "set theme", "set the theme", "switch theme",
@@ -65,7 +81,7 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
         listOf("system", "automatic", "auto", "systeme", "automatique", "تلقائي").any(targetPhrase::contains) -> ThemeMode.SYSTEM
         listOf("dark", "sombre", "noir", "داكن", "مظلم").any(targetPhrase::contains) -> ThemeMode.DARK
         listOf("light", "clair", "blanc", "فاتح").any(targetPhrase::contains) -> ThemeMode.LIGHT
-        else -> return null
+        else -> return AgentLocalAction.ChooseTheme
     }
     return AgentLocalAction.SetTheme(mode)
 }

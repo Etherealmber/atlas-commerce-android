@@ -145,7 +145,7 @@ internal fun AtlasSidebarContent(
                 SidebarNavigationItem(
                     icon = item.icon,
                     label = item.localizedLabel(),
-                    isSelected = selectedTab == item,
+                    isSelected = selectedTab == item && !dataStorageSelected,
                     expanded = expanded,
                     badgeCount = if (item == MainTab.SALE) cartCount else 0,
                     onClick = { onNavigate(item) },
@@ -154,7 +154,7 @@ internal fun AtlasSidebarContent(
             SidebarNavigationItem(
                 icon = MainTab.AGENT.icon,
                 label = MainTab.AGENT.localizedLabel(),
-                isSelected = selectedTab == MainTab.AGENT,
+                isSelected = selectedTab == MainTab.AGENT && !dataStorageSelected,
                 expanded = expanded,
                 onClick = { onNavigate(MainTab.AGENT) },
             )
@@ -163,7 +163,7 @@ internal fun AtlasSidebarContent(
             SidebarNavigationItem(
                 icon = Icons.Outlined.Notifications,
                 label = atlasText("Notifications", "Notifications", "الإشعارات"),
-                isSelected = selectedTab == MainTab.NOTIFICATIONS,
+                isSelected = selectedTab == MainTab.NOTIFICATIONS && !dataStorageSelected,
                 expanded = expanded,
                 badgeCount = notificationCount,
                 onClick = onOpenNotifications,
@@ -172,7 +172,7 @@ internal fun AtlasSidebarContent(
                 SidebarNavigationItem(
                     icon = Icons.Outlined.ShoppingCart,
                     label = atlasText("Nouvelle vente", "New sale", "بيع جديد"),
-                    isSelected = selectedTab == MainTab.SALE,
+                    isSelected = selectedTab == MainTab.SALE && !dataStorageSelected,
                     expanded = expanded,
                     badgeCount = cartCount,
                     onClick = { onNavigate(MainTab.SALE) },
@@ -181,7 +181,7 @@ internal fun AtlasSidebarContent(
             SidebarNavigationItem(
                 icon = MainTab.SETTINGS.icon,
                 label = MainTab.SETTINGS.localizedLabel(),
-                isSelected = selectedTab == MainTab.SETTINGS,
+                isSelected = selectedTab == MainTab.SETTINGS && !dataStorageSelected,
                 expanded = expanded,
                 onClick = { onNavigate(MainTab.SETTINGS) },
             )

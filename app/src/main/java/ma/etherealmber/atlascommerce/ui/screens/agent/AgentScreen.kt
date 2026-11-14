@@ -67,6 +67,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -99,6 +100,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
+import ma.etherealmber.atlascommerce.core.ThemeMode
+import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.data.model.AssistProposalDto
@@ -261,6 +264,11 @@ fun AgentScreen(
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val themeMode by appViewModel.themeMode.collectAsStateWithLifecycle()
+    val savedAccounts by appViewModel.allSavedAccounts.collectAsStateWithLifecycle()
+    val savedAccount = savedAccounts.firstOrNull {
+        it.serverUrl.equals(user.serverUrl, ignoreCase = true) && it.username.equals(user.username, ignoreCase = true)
+    }
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val isImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
@@ -299,6 +307,8 @@ fun AgentScreen(
     val scope = rememberCoroutineScope()
     var showHistoryDialog by remember { mutableStateOf(false) }
     var showWorkStatusDialog by remember { mutableStateOf(false) }
+    var showThemeChooser by remember { mutableStateOf(false) }
+    var showDeviceUnlockDialog by remember { mutableStateOf(false) }
     LaunchedEffect(historyRequested) {
         if (historyRequested) { showHistoryDialog = true; onHistoryHandled() }
     }
@@ -310,6 +320,18 @@ fun AgentScreen(
 
     LaunchedEffect(Unit) {
         viewModel.notices.collect { msg -> onToast(msg) }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.themeChooserRequests.collect { showThemeChooser = true }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.deviceUnlockRequests.collect { showDeviceUnlockDialog = true }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.workStatusRequests.collect {
+            showWorkStatusDialog = true
+            viewModel.loadWorkStatus()
+        }
     }
     val currentOnNavigate by rememberUpdatedState(onNavigate)
     LaunchedEffect(viewModel) {
@@ -389,6 +411,92 @@ fun AgentScreen(
     LaunchedEffect(isActive, state.streamingReply.length) {
         if (!isActive || state.streamingReply.isBlank() || userScrolledUp) return@LaunchedEffect
         conversationListState.scrollToConversationEnd()
+    }
+
+    if (showThemeChooser) {
+        AlertDialog(
+            onDismissRequest = { showThemeChooser = false },
+            title = { Text(atlasText("Thème", "Theme", "المظهر")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ThemeMode.entries.forEach { mode ->
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !state.sending,
+                            onClick = {
+                                showThemeChooser = false
+                                viewModel.sendPrompt(
+                                    prompt = when (mode) {
+                                        ThemeMode.SYSTEM -> "Use the system theme"
+                                        ThemeMode.LIGHT -> "Use the light theme"
+                                        ThemeMode.DARK -> "Use the dark theme"
+                                    },
+                                    responseLanguage = selectedAppLanguage,
+                                )
+                            },
+                        ) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = when (mode) {
+                                            ThemeMode.SYSTEM -> atlasText("Suivre le système", "Follow system", "اتباع النظام")
+                                            ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
+                                            ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+                                        },
+                                        color = if (themeMode == mode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = if (themeMode == mode) FontWeight.SemiBold else FontWeight.Normal,
+                                    )
+                                }
+                                if (themeMode == mode) {
+                                    Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showThemeChooser = false }) {
+                    Text(atlasText("Fermer", "Close", "إغلاق"))
+                }
+            },
+        )
+    }
+
+    if (showDeviceUnlockDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeviceUnlockDialog = false },
+            title = { Text(atlasText("Déverrouillage de l’appareil", "Device unlock", "إلغاء قفل الجهاز")) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = when {
+                                savedAccount == null -> atlasText("Enregistrez ce compte pour activer le déverrouillage biométrique.", "Save this account to enable biometric unlock.", "احفظ هذا الحساب لتفعيل إلغاء القفل بالبصمة.")
+                                savedAccount.canUseDeviceUnlock -> atlasText("Activé — une biométrie forte est requise.", "On — a strong biometric is required.", "مفعّل — يلزم استخدام بصمة قوية.")
+                                else -> atlasText("Désactivé — votre mot de passe reste requis.", "Off — your account password is still required.", "متوقف — ستظل كلمة مرور الحساب مطلوبة.")
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    Switch(
+                        checked = savedAccount?.canUseDeviceUnlock == true,
+                        enabled = savedAccount != null && DeviceUnlockAuthenticator.isPlatformSupported(),
+                        onCheckedChange = { enabled ->
+                            savedAccount?.let { account ->
+                                if (enabled) appViewModel.requestDeviceUnlockSetupForCurrentAccount()
+                                else appViewModel.setSavedAccountDeviceUnlock(account.serverUrl, account.username, false)
+                            }
+                        },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDeviceUnlockDialog = false }) {
+                    Text(atlasText("Fermer", "Close", "إغلاق"))
+                }
+            },
+        )
     }
 
     if (showWorkStatusDialog) {
@@ -543,6 +651,7 @@ fun AgentScreen(
         // Keep the composer full-width and thumb-friendly across phone and tablet panes.
         val isTabletLayout = maxWidth >= 600.dp
         val compactComposer = maxHeight < 600.dp
+        val showThinkingIndicator = state.sending && state.streamingReply.isBlank() && state.streamingTools.isEmpty()
         val composerSidePadding = if (isTabletLayout) 20.dp else density.screenPadding
         val composerSendTarget = if (isTabletLayout) 56.dp else 48.dp
         Column(Modifier.fillMaxSize()) {
@@ -560,7 +669,11 @@ fun AgentScreen(
                         start = density.screenPadding,
                         end = density.screenPadding,
                         top = density.cardMargin,
-                        bottom = if (compactComposer) 8.dp else 16.dp,
+                        bottom = when {
+                            showThinkingIndicator -> 88.dp
+                            compactComposer -> 8.dp
+                            else -> 16.dp
+                        },
                     ),
                     verticalArrangement = Arrangement.spacedBy(density.itemGap),
                 ) {
@@ -569,43 +682,23 @@ fun AgentScreen(
                             AgentStartupLoadingCard()
                         }
                     }
-                    item(key = "work_status_entry") {
-                        AtlasCard(
-                            onClick = {
-                                showWorkStatusDialog = true
-                                if (state.mobileWorkStatus == null) viewModel.loadWorkStatus()
-                            },
-                            padding = 12.dp,
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        atlasText("Mon activité", "My work status", "حالة أعمالي"),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                    Text(
-                                        atlasText("Suivre mes demandes et signalements", "Check your requests and reported issues", "تابع طلباتي وبلاغاتي"),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Icon(Icons.Outlined.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                    }
-                    if (!state.loadingContext && !state.loadingThread && !quotaLocked) {
+                    if (!isTabletLayout && state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && !quotaLocked) {
                         item(key = "agent_quick_controls") {
                             AgentInlineActions(
                                 user = user,
                                 appViewModel = appViewModel,
                                 onSendPrompt = { prompt -> viewModel.sendPrompt(prompt, responseLanguage = selectedAppLanguage) },
                                 onNavigate = onNavigate,
+                                onOpenWorkStatus = {
+                                    showWorkStatusDialog = true
+                                    viewModel.loadWorkStatus()
+                                },
+                                onOpenDeviceUnlock = { showDeviceUnlockDialog = true },
                                 onToast = onToast,
                             )
                         }
                     }
-                    if (state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && !quotaLocked) {
+                    if (!isTabletLayout && state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && !quotaLocked) {
                         item(key = "agent_quick_prompts") {
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 quickPrompts.forEach { prompt ->
@@ -615,7 +708,7 @@ fun AgentScreen(
                         }
                     }
 
-                    if (state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && visibleNextActions.isNotEmpty() && !quotaLocked) {
+                    if (!isTabletLayout && state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && visibleNextActions.isNotEmpty() && !quotaLocked) {
                         item(key = "agent_suggestions_hdr") {
                             AtlasSectionHeader(title = atlasText("Actions suggérées par l'IA", "AI suggestions", "اقتراحات الذكاء الاصطناعي"))
                         }
@@ -717,15 +810,6 @@ fun AgentScreen(
                         }
                     }
 
-                    if (state.sending && state.streamingReply.isBlank() && state.streamingTools.isEmpty()) {
-                        item(key = "agent_typing") {
-                            AgentTypingIndicator(
-                                label = agentLoadingLabel,
-                                elapsedLabel = agentElapsedLabel,
-                            )
-                        }
-                    }
-
                     if (!state.error.isNullOrBlank()) {
                         item(key = "agent_err") {
                             AtlasErrorCard(
@@ -750,7 +834,17 @@ fun AgentScreen(
                         }
                     }
                 }
-                if (userScrolledUp && conversationListState.canScrollForward && state.messages.isNotEmpty()) {
+                if (showThinkingIndicator) {
+                    AgentTypingIndicator(
+                        label = agentLoadingLabel,
+                        elapsedLabel = agentElapsedLabel,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(horizontal = if (isTabletLayout) 0.dp else 10.dp, vertical = 8.dp),
+                    )
+                }
+                if (!showThinkingIndicator && userScrolledUp && conversationListState.canScrollForward && state.messages.isNotEmpty()) {
                     SmallFloatingActionButton(
                         onClick = {
                             scope.launch {
@@ -1540,55 +1634,42 @@ private fun AgentStartupLoadingCard() {
 }
 
 @Composable
-private fun AgentTypingIndicator(label: String, elapsedLabel: String?) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
+private fun AgentTypingIndicator(
+    label: String,
+    elapsedLabel: String?,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 4.dp,
+        shadowElevation = 9.dp,
     ) {
-        AtlasAgentMascot(Modifier.size(32.dp), isThinking = true)
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AtlasAgentMascot(Modifier.size(30.dp), isThinking = true)
+            Spacer(Modifier.width(12.dp))
+            AtlasTypingDots()
+            Spacer(Modifier.width(12.dp))
             Text(
-                text = atlasText("Assistant Atlas", "Atlas Assistant", "مساعد Atlas"),
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
+                text = label,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AtlasTypingDots()
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = label,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (elapsedLabel != null) {
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = elapsedLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+            if (elapsedLabel != null) {
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = elapsedLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            LinearProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth(0.34f)
-                    .padding(start = 4.dp, top = 5.dp),
-                color = MaterialTheme.colorScheme.primary,
-            )
         }
     }
 }

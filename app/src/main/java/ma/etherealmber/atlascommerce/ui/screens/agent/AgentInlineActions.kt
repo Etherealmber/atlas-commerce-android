@@ -54,6 +54,8 @@ internal fun AgentInlineActions(
     appViewModel: AppViewModel,
     onSendPrompt: (String) -> Unit,
     onNavigate: (AgentNavigationSuggestion) -> Unit,
+    onOpenWorkStatus: () -> Unit,
+    onOpenDeviceUnlock: () -> Unit,
     onToast: (String) -> Unit,
 ) {
     val productsViewModel: ProductsViewModel = hiltViewModel()
@@ -80,23 +82,7 @@ internal fun AgentInlineActions(
         productsViewModel.messages.collect { message -> onToast(message) }
     }
 
-    AtlasCard(padding = 12.dp) {
-        Text(
-            atlasText("Résumé et actions", "Summary and actions", "ملخص وإجراءات"),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            atlasText(
-                "Les actions restent ici. Les changements de stock et de produit respectent votre rôle.",
-                "Actions stay in this chat. Product and stock changes follow your role.",
-                "تبقى الإجراءات هنا. تتبع تغييرات المنتجات والمخزون دورك.",
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(8.dp))
+    AtlasCard(padding = 8.dp) {
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -114,6 +100,8 @@ internal fun AgentInlineActions(
             AgentActionChip(atlasText("Thème système", "System theme", "مظهر النظام")) {
                 onSendPrompt("Use the system theme")
             }
+            AgentActionChip(atlasText("Mon activité", "My work status", "حالة أعمالي"), onClick = onOpenWorkStatus)
+            AgentActionChip(atlasText("Déverrouillage", "Device unlock", "إلغاء القفل"), onClick = onOpenDeviceUnlock)
             AgentActionChip(atlasText("Langue", "Language", "اللغة")) { showLanguagePicker = true }
             AgentActionChip(atlasText("Vider le cache", "Clear cache", "مسح ذاكرة التخزين")) { showClearCacheConfirm = true }
             AgentActionChip(atlasText("Modifier mon profil", "Edit my profile", "تعديل ملفي")) { showProfileEditor = true }

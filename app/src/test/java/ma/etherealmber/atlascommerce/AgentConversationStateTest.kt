@@ -93,6 +93,14 @@ class AgentConversationStateTest {
     }
 
     @Test
+    fun directThemeAndSettingsRequestsOpenNativeControls() {
+        assertEquals(AgentLocalAction.SetTheme(ThemeMode.DARK), detectExplicitAgentLocalAction("I want to change the theme to dark"))
+        assertEquals(AgentLocalAction.ChooseTheme, detectExplicitAgentLocalAction("Can u change theme"))
+        assertEquals(AgentLocalAction.ConfigureDeviceUnlock, detectExplicitAgentLocalAction("Show device unlock"))
+        assertEquals(AgentLocalAction.ShowWorkStatus, detectExplicitAgentLocalAction("Show my work status"))
+    }
+
+    @Test
     fun themeDiscussionAloneDoesNotChangeTheTheme() {
         assertEquals(null, detectExplicitAgentLocalAction("I like the dark theme"))
         assertEquals(null, detectExplicitAgentLocalAction("What is the theme setting?"))

@@ -262,6 +262,12 @@ class AppViewModel @Inject constructor(
 
     val deviceUnlockSetupRequests = deviceUnlockSetupPrompt.events
 
+    /** Open the existing secure opt-in prompt without navigating away from the current screen. */
+    fun requestDeviceUnlockSetupForCurrentAccount() {
+        val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return
+        deviceUnlockSetupPrompt.request(user.serverUrl, user.username)
+    }
+
     fun setSavedAccountDeviceUnlock(
         serverUrl: String,
         username: String,
