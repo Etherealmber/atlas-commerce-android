@@ -542,6 +542,7 @@ fun ProfileScreen(
             }
             SettingsChoiceRow(
                 icon = Icons.Outlined.Language,
+                dialogCenterOffset = dialogCenterOffset,
                 title = atlasText("Langue", "Language", "اللغة"),
                 value = if (appLanguageFollowsSystem) {
                     atlasText("Système · ${AppLanguage.fromSystemLocale().nativeLabel}", "System · ${AppLanguage.fromSystemLocale().nativeLabel}", "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}")
@@ -556,6 +557,7 @@ fun ProfileScreen(
             )
             SettingsChoiceRow(
                 icon = Icons.Outlined.Tune,
+                dialogCenterOffset = dialogCenterOffset,
                 title = atlasText("Densité d'affichage", "Display density", "كثافة العرض"),
                 value = when (densityMode) {
                     DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
@@ -572,6 +574,7 @@ fun ProfileScreen(
             )
             SettingsChoiceRow(
                 icon = Icons.Outlined.Home,
+                dialogCenterOffset = dialogCenterOffset,
                 title = atlasText("Onglet d'ouverture au lancement", "Tab to open at launch", "علامة التبويب عند التشغيل"),
                 value = settingsTabLabel(selectedLaunchTab),
                 selectedKey = selectedLaunchTab.name,
@@ -1320,6 +1323,7 @@ private fun ThemePreviewCard(
 @Composable
 private fun SettingsChoiceRow(
     icon: ImageVector,
+    dialogCenterOffset: Dp = 0.dp,
     title: String,
     value: String,
     selectedKey: String,

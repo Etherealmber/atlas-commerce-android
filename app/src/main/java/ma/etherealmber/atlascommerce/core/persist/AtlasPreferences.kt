@@ -16,6 +16,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
@@ -405,8 +406,8 @@ class AtlasPreferences @Inject constructor(
         }
     }
 
-    suspend fun setThemeMode(mode: ThemeMode) {
-        safeEdit { prefs -> prefs.putClean(Keys.THEME, mode.storageKey) }
+    suspend fun setThemeMode(mode: ThemeMode): Boolean = safeEditResult { prefs ->
+        prefs.putClean(Keys.THEME, mode.storageKey)
     }
 
     suspend fun setAppLanguage(language: AppLanguage) {
@@ -575,6 +576,19 @@ class AtlasPreferences @Inject constructor(
                 encryptPreferences(editable)
             }
         }
+    }
+
+    private suspend fun safeEditResult(block: (MutablePreferences) -> Unit): Boolean = try {
+        store.updateData { persisted ->
+            val editable = decryptPersistedPreferences(persisted)
+            block(editable)
+            encryptPreferences(editable)
+        }
+        true
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        false
     }
 
     /** Older releases wrote the typed Preferences map directly; newer releases keep one AES-GCM blob. */

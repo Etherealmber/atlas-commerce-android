@@ -353,7 +353,6 @@ class AgentViewModel @Inject constructor(
                 is AgentLocalAction.SetTheme -> {
                     val saved = try {
                         preferences.setThemeMode(action.mode)
-                        true
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Exception) {
