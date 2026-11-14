@@ -97,6 +97,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
+import ma.etherealmber.atlascommerce.core.session.SessionUser
+import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.data.model.AssistProposalDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChatSkeleton
@@ -247,6 +249,8 @@ internal fun mobileNavigationSuggestion(proposal: AssistProposalDto): AgentNavig
 
 @Composable
 fun AgentScreen(
+    user: SessionUser,
+    appViewModel: AppViewModel,
     onToast: (String) -> Unit,
     onNavigate: (AgentNavigationSuggestion) -> Unit = {},
     isActive: Boolean = true,
@@ -509,38 +513,13 @@ fun AgentScreen(
                     }
                     if (state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && !quotaLocked) {
                         item(key = "agent_quick_controls") {
-                            AtlasCard(padding = 12.dp) {
-                                Text(
-                                    atlasText("Résumé et commandes rapides", "Summary and quick controls", "ملخص وأوامر سريعة"),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    AssistChip(
-                                        modifier = Modifier.weight(1f),
-                                        onClick = { viewModel.sendPrompt("Please check for updates", responseLanguage = selectedAppLanguage) },
-                                        label = { Text(atlasText("Vérifier les mises à jour", "Check updates", "تحقق من التحديثات"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                    )
-                                    AssistChip(
-                                        modifier = Modifier.weight(1f),
-                                        onClick = { viewModel.sendPrompt("Use the light theme", responseLanguage = selectedAppLanguage) },
-                                        label = { Text(atlasText("Thème clair", "Light theme", "المظهر الفاتح"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                    )
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    AssistChip(
-                                        modifier = Modifier.weight(1f),
-                                        onClick = { viewModel.sendPrompt("Use dark mode", responseLanguage = selectedAppLanguage) },
-                                        label = { Text(atlasText("Thème sombre", "Dark theme", "المظهر الداكن"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                    )
-                                    AssistChip(
-                                        modifier = Modifier.weight(1f),
-                                        onClick = { viewModel.sendPrompt("Use the system theme", responseLanguage = selectedAppLanguage) },
-                                        label = { Text(atlasText("Thème système", "System theme", "مظهر النظام"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                    )
-                                }
-                            }
+                            AgentInlineActions(
+                                user = user,
+                                appViewModel = appViewModel,
+                                onSendPrompt = { prompt -> viewModel.sendPrompt(prompt, responseLanguage = selectedAppLanguage) },
+                                onNavigate = onNavigate,
+                                onToast = onToast,
+                            )
                         }
                         item(key = "agent_quick_prompts") {
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

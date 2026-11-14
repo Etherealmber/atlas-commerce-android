@@ -8,9 +8,10 @@ internal const val AGENT_MAX_PROMPT_LENGTH = 2450
 /** Keep the accepted question and language instruction, then fit useful live data in the same budget. */
 internal fun composeAgentPrompt(question: String, snapshot: String, language: AppLanguage): String {
     val guidance = buildString {
-        appendLine("[REPORT] Use live data; never invent figures or custom-date reports.")
-        appendLine("[MOBILE] Use role-authorized APIs/routes only (Home, Products, Scan, Sales, Reports/Admin, Employees/Admin, Notifications, Settings, Profile, Data storage). No Projects route/API.")
-        append("[INSIGHTS] Ground up to three practical suggestions in permitted live data.")
+        appendLine("[REPORT] Live data only; no invented figures or custom ranges.")
+        appendLine("[MOBILE] Role-authorized routes only: Home, Products, Scan, Sales, Reports/Admin, Employees/Admin, Notifications, Settings, Profile, Data. No Projects API/route.")
+        appendLine("[ISSUES] No Linear/code-ticket data; never invent status.")
+        append("[INSIGHTS] Ground up to three suggestions in permitted data.")
     }
     val fixedPrefix = "${language.agentContextInstruction}\n${language.agentQuestionLabel}: "
     val questionBudget = (AGENT_MAX_PROMPT_LENGTH - fixedPrefix.length - 1 - guidance.length - 1)

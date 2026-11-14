@@ -699,6 +699,8 @@ fun MainShell(
                     MainTab.EMPLOYEES -> EmployeesScreen(user = user, wideLayout = useDesktopSidebar)
 
                     MainTab.AGENT -> AgentScreen(
+                        user = user,
+                        appViewModel = appViewModel,
                         onToast = onToast,
                         onNavigate = navigateFromAgent,
                         historyRequested = agentHistoryRequested,
