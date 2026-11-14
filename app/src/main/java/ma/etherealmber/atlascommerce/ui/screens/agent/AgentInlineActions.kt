@@ -66,7 +66,6 @@ internal fun AgentInlineActions(
     val savingProfile by appViewModel.savingProfile.collectAsStateWithLifecycle()
 
     var showLanguagePicker by remember { mutableStateOf(false) }
-    var showClearCacheConfirm by remember { mutableStateOf(false) }
     var showProfileEditor by remember { mutableStateOf(false) }
     var showProductForm by remember { mutableStateOf(false) }
     var showStockEditor by remember { mutableStateOf(false) }
@@ -103,7 +102,6 @@ internal fun AgentInlineActions(
             AgentActionChip(atlasText("Mon activité", "My work status", "حالة أعمالي"), onClick = onOpenWorkStatus)
             AgentActionChip(atlasText("Déverrouillage", "Device unlock", "إلغاء القفل"), onClick = onOpenDeviceUnlock)
             AgentActionChip(atlasText("Langue", "Language", "اللغة")) { showLanguagePicker = true }
-            AgentActionChip(atlasText("Vider le cache", "Clear cache", "مسح ذاكرة التخزين")) { showClearCacheConfirm = true }
             AgentActionChip(atlasText("Modifier mon profil", "Edit my profile", "تعديل ملفي")) { showProfileEditor = true }
             AgentActionChip(
                 if (uploadingAvatar) atlasText("Envoi de la photo…", "Uploading photo…", "جارٍ رفع الصورة…")
@@ -153,26 +151,6 @@ internal fun AgentInlineActions(
         )
     }
 
-    if (showClearCacheConfirm) {
-        AlertDialog(
-            onDismissRequest = { showClearCacheConfirm = false },
-            title = { Text(atlasText("Vider le cache local ?", "Clear local cache?", "مسح ذاكرة التخزين المحلية؟")) },
-            text = {
-                Text(atlasText(
-                    "Seul le cache hors ligne de ce compte sur cet appareil sera supprimé. Les données du serveur ne seront pas modifiées.",
-                    "Only this account’s offline cache on this device will be removed. Server data will not change.",
-                    "سيتم مسح ذاكرة هذا الحساب المحلية على هذا الجهاز فقط. لن تتغير بيانات الخادم.",
-                ))
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showClearCacheConfirm = false
-                    appViewModel.clearOfflineCache(onToast)
-                }) { Text(atlasText("Vider le cache", "Clear cache", "مسح الذاكرة")) }
-            },
-            dismissButton = { TextButton(onClick = { showClearCacheConfirm = false }) { Text(atlasText("Annuler", "Cancel", "إلغاء")) } },
-        )
-    }
 
     if (showProfileEditor) {
         AlertDialog(

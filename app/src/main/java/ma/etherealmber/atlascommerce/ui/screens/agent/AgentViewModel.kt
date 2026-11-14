@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -22,7 +21,6 @@ import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
-import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.data.repo.AGENT_MAX_QUESTION_LENGTH
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
@@ -110,6 +108,8 @@ class AgentViewModel @Inject constructor(
         val sending: Boolean = false,
         val approvingId: String? = null,
         val error: String? = null,
+        val updateConversationActive: Boolean = false,
+        val updateCheckApprovalPending: Boolean = false,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -155,6 +155,11 @@ class AgentViewModel @Inject constructor(
                     }
                 }
         }
+    }
+
+    fun approveUpdateCheck() {
+        _state.update { it.copy(updateCheckApprovalPending = false) }
+        appUpdateManager.checkForUpdate(manual = true)
     }
 
     /** Opens and pages the read-only work-status endpoint without retaining data across accounts. */
@@ -205,6 +210,8 @@ class AgentViewModel @Inject constructor(
                 activeThreadId = freshId,
                 activeThreadTitle = "",
                 messages = emptyList(),
+                updateConversationActive = false,
+                updateCheckApprovalPending = false,
                 attachments = emptyList(),
                 streamingReply = "",
                 streamingTools = emptyList(),
@@ -216,17 +223,6 @@ class AgentViewModel @Inject constructor(
         }
     }
 
-    fun clearConversation() {
-        val currentId = _state.value.activeThreadId
-        val existedRemotely = _state.value.threads.any { it.id == currentId }
-        startNewConversation()
-        if (existedRemotely) {
-            viewModelScope.launch {
-                runCatching { commerceRepository.deleteAgentThread(currentId) }
-                _state.update { st -> st.copy(threads = st.threads.filterNot { it.id == currentId }) }
-            }
-        }
-    }
 
     fun selectThread(summary: AgentThreadSummaryDto) {
         if (summary.id.isBlank()) return
@@ -240,6 +236,8 @@ class AgentViewModel @Inject constructor(
                 activeThreadId = summary.id,
                 activeThreadTitle = summary.title,
                 messages = emptyList(),
+                updateConversationActive = false,
+                updateCheckApprovalPending = false,
                 loadingThread = true,
                 sending = false,
                 attachments = emptyList(),
@@ -295,33 +293,6 @@ class AgentViewModel @Inject constructor(
         }
     }
 
-    fun deleteThread(threadId: String) {
-        if (threadId.isBlank()) return
-        val deletingActive = _state.value.activeThreadId == threadId
-        val replacementThreadId = if (deletingActive) newWebCompatibleThreadId() else null
-        if (deletingActive) {
-            activeSendRequestId = null
-            activeThreadLoadId = null
-            _state.update { current ->
-                if (current.activeThreadId != threadId) current
-                else current.copy(
-                    activeThreadId = replacementThreadId.orEmpty(),
-                    activeThreadTitle = "",
-                    messages = emptyList(),
-                    sending = false,
-                    loadingThread = false,
-                    streamingReply = "",
-                    streamingTools = emptyList(),
-                    error = null,
-                )
-            }
-        }
-        viewModelScope.launch {
-            commerceRepository.deleteAgentThread(threadId)
-            _state.update { current -> current.copy(threads = current.threads.filterNot { it.id == threadId }) }
-            _notices.tryEmit("Discussion supprimée.")
-        }
-    }
 
     fun refreshContext(loadLatestRemoteThread: Boolean = false) {
         val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity ?: return
@@ -457,12 +428,10 @@ class AgentViewModel @Inject constructor(
                         }
                     }
                 }
-                AgentLocalAction.CheckForUpdate -> {
-                    appUpdateManager.checkForUpdate(manual = true)
-                    val result = withTimeoutOrNull(20_000L) {
-                        appUpdateManager.state.first { it !is UpdateState.Checking }
-                    }
-                    localUpdateReply(result, responseLanguage)
+                AgentLocalAction.CheckForUpdate -> when (responseLanguage) {
+                    AppLanguage.FRENCH -> "Je peux vérifier les mises à jour ici. Confirmez avant de démarrer la vérification."
+                    AppLanguage.ENGLISH -> "I can check for updates here. Confirm to start the check."
+                    AppLanguage.ARABIC -> "يمكنني التحقق من التحديثات هنا. أكّد لبدء التحقق."
                 }
             }
             val assistantMessage = ChatMessage(fromUser = false, text = reply)
@@ -481,6 +450,8 @@ class AgentViewModel @Inject constructor(
                     current.copy(
                         activeThreadTitle = resolvedTitle,
                         messages = allMessages,
+                        updateConversationActive = action == AgentLocalAction.CheckForUpdate || current.updateConversationActive,
+                        updateCheckApprovalPending = action == AgentLocalAction.CheckForUpdate || current.updateCheckApprovalPending,
                         threads = listOf(summary) + current.threads.filterNot { it.id == activeId },
                         sending = false,
                         streamingReply = "",
@@ -514,38 +485,6 @@ class AgentViewModel @Inject constructor(
         }
     }
 
-    private fun localUpdateReply(state: UpdateState?, language: AppLanguage): String = when (state) {
-        is UpdateState.Available -> when (language) {
-            AppLanguage.FRENCH -> "Une mise à jour ${state.info.displayVersion} est disponible. Vous pouvez consulter les détails et lancer le téléchargement depuis la bannière ou Paramètres."
-            AppLanguage.ENGLISH -> "Update ${state.info.displayVersion} is available. You can review it and start the download from the update banner or Settings."
-            AppLanguage.ARABIC -> "يتوفر التحديث ${state.info.displayVersion}. يمكنك مراجعة التفاصيل وبدء التنزيل من إشعار التحديث أو الإعدادات."
-        }
-        is UpdateState.UpToDate -> when (language) {
-            AppLanguage.FRENCH -> "Atlas est à jour."
-            AppLanguage.ENGLISH -> "Atlas is up to date."
-            AppLanguage.ARABIC -> "تطبيق Atlas محدّث."
-        }
-        is UpdateState.Downloading -> when (language) {
-            AppLanguage.FRENCH -> "Le téléchargement de la mise à jour est en cours${state.percent?.let { " : $it %" }.orEmpty()}. Sa progression reste visible dans le menu latéral."
-            AppLanguage.ENGLISH -> "The update is downloading${state.percent?.let { ": $it%" }.orEmpty()}. Its progress remains visible in the sidebar."
-            AppLanguage.ARABIC -> "جارٍ تنزيل التحديث${state.percent?.let { " بنسبة $it٪" }.orEmpty()}. ستبقى نسبة التقدم ظاهرة في القائمة الجانبية."
-        }
-        is UpdateState.ReadyToInstall -> when (language) {
-            AppLanguage.FRENCH -> "La mise à jour ${state.info.displayVersion} est téléchargée et prête à installer."
-            AppLanguage.ENGLISH -> "Update ${state.info.displayVersion} is downloaded and ready to install."
-            AppLanguage.ARABIC -> "تم تنزيل التحديث ${state.info.displayVersion} وأصبح جاهزاً للتثبيت."
-        }
-        is UpdateState.Error -> when (language) {
-            AppLanguage.FRENCH -> "Je n’ai pas pu vérifier la mise à jour. Réessayez depuis Paramètres lorsque la connexion sera disponible."
-            AppLanguage.ENGLISH -> "I couldn’t check for an update. Try again from Settings when you’re connected."
-            AppLanguage.ARABIC -> "تعذّر التحقق من التحديث. أعد المحاولة من الإعدادات عند توفر الاتصال."
-        }
-        UpdateState.Idle, UpdateState.Checking, null -> when (language) {
-            AppLanguage.FRENCH -> "La vérification prend plus de temps que prévu. Le statut apparaîtra dans le menu latéral dès qu’il sera disponible."
-            AppLanguage.ENGLISH -> "The check is taking longer than expected. Its status will appear in the sidebar when available."
-            AppLanguage.ARABIC -> "يستغرق التحقق وقتاً أطول من المتوقع. ستظهر حالته في القائمة الجانبية عند توفرها."
-        }
-    }
 
     private suspend fun <T> loadAgentContext(request: suspend () -> ApiResult<T>): ApiResult<T>? = try {
         withTimeoutOrNull(4_000L) { request() }
@@ -624,6 +563,22 @@ class AgentViewModel @Inject constructor(
             pendingSensitiveAttachments = attachments
             pendingSensitiveResponseLanguage = responseLanguage
             _state.update { it.copy(sensitiveConfirmation = true) }
+            return
+        }
+
+        if (isForbiddenAgentRequest(clean)) {
+            val refusal = when (responseLanguage) {
+                AppLanguage.FRENCH -> "Je ne peux pas accéder aux données locales ou au cache, supprimer des éléments ou des serveurs, ni fermer votre session."
+                AppLanguage.ENGLISH -> "I can’t access local data or cache, delete items or servers, or sign you out."
+                AppLanguage.ARABIC -> "لا يمكنني الوصول إلى البيانات المحلية أو ذاكرة التخزين المؤقت، أو حذف العناصر أو الخوادم، أو تسجيل خروجك."
+            }
+            activeSendRequestId = null
+            _state.update { current -> current.copy(
+                input = clearSubmittedAgentDraft(current.input, typed),
+                messages = current.messages + ChatMessage(fromUser = true, text = clean) + ChatMessage(fromUser = false, text = refusal),
+                sending = false,
+                error = null,
+            ) }
             return
         }
 
@@ -868,6 +823,17 @@ class AgentViewModel @Inject constructor(
 
     fun approveProposal(messageId: String, proposalId: String) {
         if (proposalId.isBlank() || _state.value.approvingId != null) return
+        val proposal = _state.value.messages
+            .firstOrNull { it.id == messageId }?.proposals
+            ?.firstOrNull { it.proposalId == proposalId }
+        if (proposal == null) {
+            _notices.tryEmit("Cette action ne peut pas être vérifiée et n’a pas été exécutée.")
+            return
+        }
+        if (isForbiddenAgentProposal(proposal)) {
+            _notices.tryEmit("Cette action n’est pas autorisée dans Atlas Agent.")
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(approvingId = proposalId) }
             when (val res = commerceRepository.assistApprove(proposalId)) {

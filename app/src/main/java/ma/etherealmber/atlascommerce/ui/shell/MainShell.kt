@@ -497,14 +497,14 @@ fun MainShell(
                             is UpdateState.ReadyToInstall -> state.dismissedBanner && !state.info.mandatory
                             else -> false
                         }
-                        if (isForeground && !useRail) {
+                        if (isForeground && !useRail && tab != MainTab.AGENT) {
                             UpdateMiniProgressBall(
                                 state = updateState,
                                 onClick = onShowUpdateProgress,
                             )
                         }
                         if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
-                        if (tab == MainTab.AGENT) {
+                        if (tab == MainTab.AGENT && !useRail) {
                             IconButton(onClick = { agentHistoryRequested = true }) {
                                 Icon(
                                     imageVector = Icons.Outlined.History,
@@ -607,7 +607,6 @@ fun MainShell(
                     cartCount = cartCount,
                     notificationCount = notificationCount,
                     updateState = updateState,
-                    onUpdateClick = onShowUpdateProgress,
                     expanded = sidebarExpanded,
                     onOpenDataStorageManager = { showDataCacheManagerDialog = true },
                     dataStorageSelected = showDataCacheManagerDialog,

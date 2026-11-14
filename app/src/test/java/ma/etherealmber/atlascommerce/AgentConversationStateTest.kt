@@ -6,6 +6,8 @@ import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationDestination
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentLocalAction
 import ma.etherealmber.atlascommerce.ui.screens.agent.detectExplicitAgentLocalAction
+import ma.etherealmber.atlascommerce.ui.screens.agent.isForbiddenAgentRequest
+import ma.etherealmber.atlascommerce.ui.screens.agent.isForbiddenAgentProposal
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentViewModel
 import ma.etherealmber.atlascommerce.ui.screens.agent.detectExplicitAgentNavigationRequest
 import ma.etherealmber.atlascommerce.ui.screens.agent.mobileNavigationSuggestion
@@ -37,19 +39,23 @@ class AgentConversationStateTest {
     }
 
     @Test
-    fun storageNavigationWinsOverTheFrenchStockSubstring() {
-        assertEquals(
-            AgentNavigationDestination.DATA_STORAGE,
-            detectAgentNavigationSuggestion("Open gestion du stockage")?.destination,
-        )
+    fun agentDoesNotOfferDataStorageNavigation() {
+        assertEquals(null, detectAgentNavigationSuggestion("Open gestion du stockage"))
     }
 
     @Test
-    fun explicitRequestCanOpenDataStorageArea() {
-        assertEquals(
-            AgentNavigationDestination.DATA_STORAGE,
-            detectExplicitAgentNavigationRequest("Open the data storage manager")?.destination,
-        )
+    fun explicitRequestCannotOpenDataStorageArea() {
+        assertEquals(null, detectExplicitAgentNavigationRequest("Open the data storage manager"))
+    }
+
+    @Test
+    fun agentRejectsForbiddenLocalAndDestructiveRequests() {
+        assertEquals(true, isForbiddenAgentRequest("Open the cache"))
+        assertEquals(true, isForbiddenAgentRequest("Delete the server"))
+        assertEquals(true, isForbiddenAgentRequest("Sign out"))
+        assertEquals(false, isForbiddenAgentRequest("Check for updates"))
+        assertEquals(true, isForbiddenAgentProposal(AssistProposalDto(action = "delete_server", type = "server")))
+        assertEquals(true, isForbiddenAgentProposal(AssistProposalDto(action = "clear_cache")))
     }
 
     @Test

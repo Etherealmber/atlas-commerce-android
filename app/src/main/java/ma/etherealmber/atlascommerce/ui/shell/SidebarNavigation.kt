@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Notifications
@@ -62,7 +61,6 @@ internal fun AtlasSidebarContent(
     cartCount: Int,
     notificationCount: Int,
     updateState: UpdateState,
-    onUpdateClick: () -> Unit,
     expanded: Boolean,
     onOpenDataStorageManager: () -> Unit,
     dataStorageSelected: Boolean,
@@ -197,7 +195,6 @@ internal fun AtlasSidebarContent(
         SidebarUpdateStatus(
             state = updateState,
             expanded = expanded,
-            onClick = onUpdateClick,
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         if (expanded) {
@@ -271,29 +268,10 @@ internal fun AtlasSidebarContent(
 private fun SidebarUpdateStatus(
     state: UpdateState,
     expanded: Boolean,
-    onClick: () -> Unit,
 ) {
-    val checking = state == UpdateState.Checking
-    val downloading = state as? UpdateState.Downloading
-    val ready = state as? UpdateState.ReadyToInstall
-    val available = state as? UpdateState.Available
-    if (!checking && downloading == null && ready == null && available == null) return
-
-    val status = when {
-        checking -> atlasText("Vérification en cours…", "Checking for updates…", "جارٍ التحقق من التحديثات…")
-        downloading != null -> downloading.percent?.let { "${it}% · ${downloading.progressSummary}" }
-            ?: downloading.progressSummary
-        ready != null -> atlasText("Prête à installer", "Ready to install", "جاهز للتثبيت")
-        else -> atlasText("Mise à jour disponible", "Update available", "التحديث متاح")
-    }
-    val title = when {
-        checking -> atlasText("Vérification", "Checking", "التحقق")
-        downloading != null -> atlasText("Téléchargement", "Downloading", "جارٍ التنزيل")
-        ready != null -> atlasText("Prête à installer", "Ready to install", "جاهز للتثبيت")
-        else -> atlasText("Mise à jour", "Update", "التحديث")
-    }
+    if (state != UpdateState.Checking) return
     Surface(
-        onClick = onClick,
+        onClick = {},
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -305,46 +283,17 @@ private fun SidebarUpdateStatus(
                 verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Icon(
-                    imageVector = if (ready != null) Icons.Outlined.CheckCircle else Icons.Outlined.SystemUpdateAlt,
-                    contentDescription = null,
+                    imageVector = Icons.Outlined.SystemUpdateAlt,
+                    contentDescription = atlasText("Vérification des mises à jour", "Checking for updates", "التحقق من التحديثات"),
                     tint = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier.size(22.dp),
                 )
-                Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                Text(
-                    status,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (checking) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                } else {
-                    downloading?.let {
-                        LinearProgressIndicator(
-                            progress = { it.progressFraction ?: 0f },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
+                Text(atlasText("Vérification", "Checking", "التحقق"), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         } else {
             Box(Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                when {
-                    checking -> CircularProgressIndicator(modifier = Modifier.size(30.dp), strokeWidth = 2.dp)
-                    downloading != null -> CircularProgressIndicator(
-                        progress = { downloading.progressFraction ?: 0f },
-                        modifier = Modifier.size(30.dp),
-                        strokeWidth = 2.dp,
-                    )
-                }
-                Icon(
-                    imageVector = if (ready != null) Icons.Outlined.CheckCircle else Icons.Outlined.SystemUpdateAlt,
-                    contentDescription = "$title: $status",
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(20.dp),
-                )
+                CircularProgressIndicator(modifier = Modifier.size(30.dp), strokeWidth = 2.dp)
             }
         }
     }

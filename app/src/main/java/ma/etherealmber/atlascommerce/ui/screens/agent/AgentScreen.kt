@@ -103,6 +103,7 @@ import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.session.SessionUser
+import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.data.model.AssistProposalDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
@@ -213,7 +214,8 @@ internal fun detectAgentNavigationSuggestion(prompt: String): AgentNavigationSug
         listOf("home", "dashboard", "accueil", "الرئيسية").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.HOME
         else -> null
     }
-    return destination?.let { AgentNavigationSuggestion(destination = it) }
+    return destination?.takeUnless { it == AgentNavigationDestination.DATA_STORAGE }
+        ?.let { AgentNavigationSuggestion(destination = it) }
 }
 
 /** Direct, explicitly requested navigation is local and does not need a slow LLM round-trip. */
@@ -245,7 +247,6 @@ internal fun mobileNavigationSuggestion(proposal: AssistProposalDto): AgentNavig
         "/m/scan" -> AgentNavigationDestination.SCAN
         "/m/inbox", "/m/notifications" -> AgentNavigationDestination.NOTIFICATIONS
         "/m/settings" -> AgentNavigationDestination.SETTINGS
-        "/m/storage", "/m/cache", "/m/settings/storage" -> AgentNavigationDestination.DATA_STORAGE
         "/m/profile" -> AgentNavigationDestination.PROFILE
         else -> return null
     }
@@ -265,6 +266,7 @@ fun AgentScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val themeMode by appViewModel.themeMode.collectAsStateWithLifecycle()
+    val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val savedAccounts by appViewModel.allSavedAccounts.collectAsStateWithLifecycle()
     val savedAccount = savedAccounts.firstOrNull {
         it.serverUrl.equals(user.serverUrl, ignoreCase = true) && it.username.equals(user.username, ignoreCase = true)
@@ -595,13 +597,6 @@ fun AgentScreen(
                                             color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
-                                    IconButton(onClick = { viewModel.deleteThread(thread.id) }) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Close,
-                                            contentDescription = atlasText("Supprimer", "Delete", "حذف"),
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -754,6 +749,17 @@ fun AgentScreen(
                             onApprove = { proposalId -> viewModel.approveProposal(msg.id, proposalId) },
                             onNavigate = onNavigate,
                         )
+                    }
+                    if (state.updateConversationActive) {
+                        item(key = "agent_update_controls") {
+                            AgentUpdateControls(
+                                state = updateState,
+                                checkApprovalPending = state.updateCheckApprovalPending,
+                                onCheck = { viewModel.approveUpdateCheck() },
+                                onDownload = { info -> appViewModel.startUpdateDownload(overrideInfo = info) },
+                                onInstall = { appViewModel.installDownloadedUpdate(context) },
+                            )
+                        }
                     }
 
                     navigationSuggestion?.let { suggestion ->
@@ -1364,6 +1370,75 @@ private fun WorkStatusSection(
 }
 
 @Composable
+private fun AgentUpdateControls(
+    state: UpdateState,
+    checkApprovalPending: Boolean,
+    onCheck: () -> Unit,
+    onDownload: (ma.etherealmber.atlascommerce.core.update.UpdateInfo) -> Unit,
+    onInstall: () -> Unit,
+) {
+    val title: String
+    val detail: String
+    when (state) {
+        UpdateState.Idle -> {
+            title = atlasText("Mises à jour", "App updates", "تحديثات التطبيق")
+            detail = atlasText("Aucune vérification en cours.", "No update check is running.", "لا يوجد تحقق جارٍ.")
+        }
+        UpdateState.Checking -> {
+            title = atlasText("Vérification en cours", "Checking for updates", "جارٍ التحقق من التحديثات")
+            detail = atlasText("Recherche des dernières versions…", "Looking for the latest version…", "جارٍ البحث عن أحدث إصدار…")
+        }
+        is UpdateState.UpToDate -> {
+            title = atlasText("Atlas est à jour", "Atlas is up to date", "تطبيق Atlas محدّث")
+            detail = atlasText("Aucune mise à jour n’est nécessaire.", "No update is needed.", "لا حاجة إلى تحديث.")
+        }
+        is UpdateState.Available -> {
+            title = atlasText("Mise à jour ${state.info.displayVersion} disponible", "Update ${state.info.displayVersion} available", "التحديث ${state.info.displayVersion} متاح")
+            detail = state.info.effectiveNotes.ifBlank { atlasText("Vous pouvez télécharger cette version.", "This version is ready to download.", "هذا الإصدار جاهز للتنزيل.") }
+        }
+        is UpdateState.Downloading -> {
+            title = atlasText("Téléchargement en cours", "Download in progress", "جارٍ التنزيل")
+            detail = state.percent?.let { "$it% · ${state.info.displayVersion}" } ?: state.info.displayVersion
+        }
+        is UpdateState.ReadyToInstall -> {
+            title = atlasText("Prête à installer", "Ready to install", "جاهز للتثبيت")
+            detail = if (state.awaitingInstallPermission) {
+                atlasText(
+                    "Autorisez l’installation de l’application dans les réglages Android, puis revenez ici et approuvez à nouveau.",
+                    "Allow app installation in Android settings, then return here and approve again.",
+                    "اسمح بتثبيت التطبيق في إعدادات Android، ثم عد إلى هنا ووافق مرة أخرى.",
+                )
+            } else {
+                atlasText("La version ${state.info.displayVersion} est téléchargée.", "Version ${state.info.displayVersion} has downloaded.", "تم تنزيل الإصدار ${state.info.displayVersion}.")
+            }
+        }
+        is UpdateState.Error -> {
+            title = atlasText("Échec de la vérification", "Update check failed", "فشل التحقق من التحديث")
+            detail = state.message
+        }
+    }
+    AtlasCard(padding = 12.dp) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(4.dp))
+        Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (checkApprovalPending) {
+            TextButton(onClick = onCheck) { Text(atlasText("Approuver la vérification", "Approve update check", "الموافقة على التحقق")) }
+        } else when (state) {
+            UpdateState.Idle -> TextButton(onClick = onCheck) { Text(atlasText("Vérifier maintenant", "Check now", "تحقق الآن")) }
+            UpdateState.Checking -> LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+            is UpdateState.Available -> TextButton(onClick = { onDownload(state.info) }) { Text(atlasText("Approuver et télécharger", "Approve and download", "الموافقة والتنزيل")) }
+            is UpdateState.Downloading -> LinearProgressIndicator(
+                progress = { state.progressFraction ?: 0f },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+            is UpdateState.ReadyToInstall -> TextButton(onClick = onInstall) { Text(atlasText("Approuver l’installation", "Approve installation", "الموافقة على التثبيت")) }
+            is UpdateState.Error -> TextButton(onClick = onCheck) { Text(atlasText("Réessayer", "Try again", "أعد المحاولة")) }
+            is UpdateState.UpToDate -> Unit
+        }
+    }
+}
+
+@Composable
 private fun ChatBubbleRow(
     message: AgentViewModel.ChatMessage,
     approvingId: String?,
@@ -1454,7 +1529,8 @@ private fun ChatBubbleRow(
 
                         message.proposals.forEach { proposal ->
                             val proposalId = proposal.proposalId.orEmpty()
-                            val mobileNavigation = mobileNavigationSuggestion(proposal)
+                            val forbiddenProposal = isForbiddenAgentProposal(proposal)
+                            val mobileNavigation = mobileNavigationSuggestion(proposal)?.takeUnless { it.destination == AgentNavigationDestination.DATA_STORAGE }
                             val isMobileUiAction = (proposal.type ?: proposal.kind).equals("mobile_ui", ignoreCase = true)
                             val isInventoryAdjustment = proposal.type == "inventory_adjustment" || proposal.kind == "inventory_adjustment"
                             val proposalTitle = proposal.title ?: when {
@@ -1500,6 +1576,15 @@ private fun ChatBubbleRow(
                                 }
                                 Spacer(Modifier.height(6.dp))
                                 when {
+                                    forbiddenProposal -> Text(
+                                        atlasText(
+                                            "Cette action n’est pas autorisée dans Atlas Agent; elle ne peut pas être exécutée.",
+                                            "This action is not allowed in Atlas Agent and cannot be executed.",
+                                            "هذا الإجراء غير مسموح به في Atlas Agent ولا يمكن تنفيذه.",
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
                                     mobileNavigation != null -> TextButton(onClick = { onNavigate(mobileNavigation) }) {
                                         Text(atlasText("Ouvrir $mobileNavigationLabel", "Open $mobileNavigationLabel", "افتح $mobileNavigationLabel"))
                                     }

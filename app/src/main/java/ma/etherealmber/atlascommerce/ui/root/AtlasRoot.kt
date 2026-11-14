@@ -745,7 +745,8 @@ private fun AtlasGate(
             }
 
             if (bootSplashFinished && onboardingDone && serverLoaded && !mandatoryBlocking) {
-                if ((baseStage != RootStage.SHELL || overlay != null) &&
+                val agentIsForeground = baseStage == RootStage.SHELL && overlay == null && savedShellTab == MainTab.AGENT.name
+                if (!agentIsForeground && (baseStage != RootStage.SHELL || overlay != null) &&
                     !(baseStage == RootStage.SHELL && savedShellTab == MainTab.SETTINGS.name) &&
                     !(baseStage == RootStage.LOGIN && overlay == null)
                 ) {
@@ -758,7 +759,7 @@ private fun AtlasGate(
                             .padding(top = 12.dp, end = 14.dp),
                     )
                 }
-                if (!(baseStage == RootStage.SHELL && savedShellTab == MainTab.SETTINGS.name)) AppUpdateBanner(
+                if (!agentIsForeground && !(baseStage == RootStage.SHELL && savedShellTab == MainTab.SETTINGS.name)) AppUpdateBanner(
                     state = updateState,
                     onDownload = startDownloadWithNotificationPermission,
                     onInstall = triggerInstall,

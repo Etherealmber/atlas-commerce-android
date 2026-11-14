@@ -85,3 +85,31 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
     }
     return AgentLocalAction.SetTheme(mode)
 }
+
+/** Requests in this category are intentionally unsupported by Atlas Agent. */
+internal fun isForbiddenAgentRequest(prompt: String): Boolean {
+    val normalized = Normalizer.normalize(prompt, Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .lowercase(Locale.ROOT)
+    val destructive = Regex("\\b(delete|remove|clear|erase|wipe|destroy|supprimer|effacer|vider|detruire)\\b|حذف|امسح|احذف|افرغ")
+    val storage = Regex("\\b(cache|cached|local data|data storage|storage|donnees locales|stockage|memoire)\\b|الذاكرة|التخزين|البيانات")
+    val access = Regex("\\b(access|open|view|inspect|read|browse|clean|clear|purge|manage|navigate|go to|show me|accesser|ouvrir|voir|consulter|nettoyer)\\b|ادخل|افتح|اعرض|اقرأ|امسح")
+    val signOut = Regex("\\b(sign out|signout|log out|logout|log off|disconnect|deconnecter|deconnexion)\\b|تسجيل الخروج|اخرج")
+    val server = Regex("\\b(server|serveur|serveurs|servers)\\b|الخادم|السيرفر")
+    return destructive.containsMatchIn(normalized) ||
+        (storage.containsMatchIn(normalized) && access.containsMatchIn(normalized)) ||
+        signOut.containsMatchIn(normalized) ||
+        (destructive.containsMatchIn(normalized) && server.containsMatchIn(normalized))
+}
+
+internal fun isForbiddenAgentProposal(proposal: ma.etherealmber.atlascommerce.data.model.AssistProposalDto): Boolean {
+    val description = listOfNotNull(
+        proposal.title, proposal.summary, proposal.action, proposal.kind, proposal.type, proposal.path,
+    ).joinToString(" ").replace('_', ' ').replace('-', ' ')
+    val normalized = Normalizer.normalize(description, Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .lowercase(Locale.ROOT)
+    return isForbiddenAgentRequest(normalized) ||
+        Regex("\\b(server|servers|serveur|serveurs|logout|sign out|log out|cache|storage|local data)\\b|الذاكرة|التخزين|الخادم|السيرفر")
+            .containsMatchIn(normalized)
+}
