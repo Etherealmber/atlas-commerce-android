@@ -29,6 +29,9 @@ import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
+import ma.etherealmber.atlascommerce.data.model.MobileWorkStatusDto
+import ma.etherealmber.atlascommerce.data.model.WorkStatusSourceDto
+import ma.etherealmber.atlascommerce.data.model.WorkStatusTrackersDto
 import ma.etherealmber.atlascommerce.data.model.AgentThreadMessageDto
 import ma.etherealmber.atlascommerce.data.model.AgentThreadSummaryDto
 import ma.etherealmber.atlascommerce.data.model.AssistNextActionItemDto
@@ -88,6 +91,9 @@ class AgentViewModel @Inject constructor(
 
     data class UiState(
         val status: AssistStatusDto? = null,
+        val mobileWorkStatus: MobileWorkStatusDto? = null,
+        val workStatusLoading: Boolean = false,
+        val workStatusError: String? = null,
         val policy: AgentPolicyDto? = null,
         val nextActions: List<AssistNextActionItemDto> = emptyList(),
         val threads: List<AgentThreadSummaryDto> = emptyList(),
@@ -141,6 +147,42 @@ class AgentViewModel @Inject constructor(
                 }
         }
     }
+
+    /** Opens and pages the read-only work-status endpoint without retaining data across accounts. */
+    fun loadWorkStatus(loadMore: Boolean = false) {
+        val scope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity ?: return
+        val current = _state.value.mobileWorkStatus
+        if (loadMore && current == null) return
+        val inCursor = if (loadMore) current?.inApp?.nextCursor else null
+        val github = if (loadMore) current?.trackers?.get("github") else null
+        if (loadMore && inCursor == null && github?.nextCursor == null) return
+        _state.update { it.copy(workStatusLoading = true, workStatusError = null) }
+        viewModelScope.launch {
+            when (val result = commerceRepository.mobileWorkStatus(inCursor, github?.nextCursor)) {
+                is ApiResult.Success -> {
+                    if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != scope) return@launch
+                    val page = result.data
+                    val previous = if (loadMore) _state.value.mobileWorkStatus else null
+                    val merged = if (previous == null) page else page.copy(
+                        inApp = appendWorkStatusPage(previous.inApp, page.inApp),
+                        trackers = WorkStatusTrackersDto(
+                            github = if (previous.trackers.github != null || page.trackers.github != null) {
+                                appendWorkStatusPage(previous.trackers.github ?: WorkStatusSourceDto(), page.trackers.github ?: WorkStatusSourceDto())
+                            } else null,
+                        ),
+                    )
+                    _state.update { it.copy(mobileWorkStatus = merged, workStatusLoading = false, workStatusError = null) }
+                }
+                is ApiResult.Failure -> {
+                    if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != scope) return@launch
+                    _state.update { it.copy(workStatusLoading = false, workStatusError = result.message) }
+                }
+            }
+        }
+    }
+
+    private fun appendWorkStatusPage(old: WorkStatusSourceDto, page: WorkStatusSourceDto): WorkStatusSourceDto =
+        page.copy(items = (old.items + page.items).distinctBy { it.id })
 
     /** Starts a fresh conversation using the exact web `t-<base36>` thread ID format. */
     fun startNewConversation() {

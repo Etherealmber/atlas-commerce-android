@@ -1019,3 +1019,39 @@ data class CreatedInvoiceDto(
     val status: String? = null,
     @Json(name = "client_name") val clientName: String? = null,
 )
+
+
+// ---------------------------------------------------------------------------
+// Authenticated mobile work status (read-only)
+// ---------------------------------------------------------------------------
+
+@JsonClass(generateAdapter = true)
+data class WorkStatusItemDto(
+    val source: String = "",
+    val id: String = "",
+    val title: String? = null,
+    val status: String = "",
+    @Json(name = "updated_at") val updatedAt: String? = null,
+    val url: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class WorkStatusSourceDto(
+    val availability: String = "unavailable",
+    @Json(name = "synced_at") val syncedAt: String? = null,
+    val items: List<WorkStatusItemDto> = emptyList(),
+    @Json(name = "next_cursor") val nextCursor: String? = null,
+    val error: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class WorkStatusTrackersDto(
+    val github: WorkStatusSourceDto? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class MobileWorkStatusDto(
+    val success: Boolean = false,
+    @Json(name = "in_app") val inApp: WorkStatusSourceDto = WorkStatusSourceDto(),
+    val trackers: WorkStatusTrackersDto = WorkStatusTrackersDto(),
+)

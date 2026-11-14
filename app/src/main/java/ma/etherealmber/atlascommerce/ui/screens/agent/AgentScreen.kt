@@ -33,6 +33,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -296,6 +298,7 @@ fun AgentScreen(
     val density = Atlas.density
     val scope = rememberCoroutineScope()
     var showHistoryDialog by remember { mutableStateOf(false) }
+    var showWorkStatusDialog by remember { mutableStateOf(false) }
     LaunchedEffect(historyRequested) {
         if (historyRequested) { showHistoryDialog = true; onHistoryHandled() }
     }
@@ -386,6 +389,60 @@ fun AgentScreen(
     LaunchedEffect(isActive, state.streamingReply.length) {
         if (!isActive || state.streamingReply.isBlank() || userScrolledUp) return@LaunchedEffect
         conversationListState.scrollToConversationEnd()
+    }
+
+    if (showWorkStatusDialog) {
+        val work = state.mobileWorkStatus
+        AlertDialog(
+            onDismissRequest = { showWorkStatusDialog = false },
+            title = { Text(atlasText("Mon activité", "My work status", "حالة أعمالي")) },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (state.workStatusLoading && work == null) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    } else if (state.workStatusError != null && work == null) {
+                        Text(state.workStatusError, color = MaterialTheme.colorScheme.error)
+                    }
+                    work?.let { snapshot ->
+                        WorkStatusSection(
+                            title = atlasText("Demandes de stock", "In-app stock requests", "طلبات المخزون"),
+                            source = snapshot.inApp,
+                            loading = state.workStatusLoading,
+                            onLoadMore = { viewModel.loadWorkStatus(loadMore = true) },
+                        )
+                        val github = snapshot.trackers.github
+                        if (github != null) {
+                            WorkStatusSection(
+                                title = atlasText("Problèmes signalés", "Reported issues", "البلاغات المرسلة"),
+                                source = github,
+                                loading = state.workStatusLoading,
+                                onLoadMore = { viewModel.loadWorkStatus(loadMore = true) },
+                            )
+                        }
+                    }
+                    if (state.workStatusError != null && work != null) {
+                        Text(state.workStatusError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                    if (work == null && !state.workStatusLoading && state.workStatusError == null) {
+                        Text(atlasText("Aucune donnée chargée.", "No status has been loaded yet.", "لم يتم تحميل الحالة بعد."))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.loadWorkStatus() },
+                    enabled = !state.workStatusLoading,
+                ) { Text(atlasText("Actualiser", "Refresh", "تحديث")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWorkStatusDialog = false }) {
+                    Text(atlasText("Fermer", "Close", "إغلاق"))
+                }
+            },
+        )
     }
 
     if (showHistoryDialog) {
@@ -509,6 +566,31 @@ fun AgentScreen(
                     if (shouldShowAgentChatSkeleton(state)) {
                         item(key = "agent_loading") {
                             AgentStartupLoadingCard()
+                        }
+                    }
+                    item(key = "work_status_entry") {
+                        AtlasCard(
+                            onClick = {
+                                showWorkStatusDialog = true
+                                if (state.mobileWorkStatus == null) viewModel.loadWorkStatus()
+                            },
+                            padding = 12.dp,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        atlasText("Mon activité", "My work status", "حالة أعمالي"),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        atlasText("Suivre mes demandes et signalements", "Check your requests and reported issues", "تابع طلباتي وبلاغاتي"),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Icon(Icons.Outlined.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            }
                         }
                     }
                     if (!state.loadingContext && !state.loadingThread && !quotaLocked) {
@@ -1137,6 +1219,52 @@ private fun formatQuotaWait(iso: String?, fallback: String): String {
         )
     } else {
         atlasText("dans ${remainder} min ($stamp)", "in ${remainder} min ($stamp)", "خلال ${remainder} د ($stamp)")
+    }
+}
+
+@Composable
+private fun WorkStatusSection(
+    title: String,
+    source: ma.etherealmber.atlascommerce.data.model.WorkStatusSourceDto,
+    loading: Boolean,
+    onLoadMore: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        if (source.availability != "available") {
+            Text(
+                atlasText("Cette source n'est pas disponible. Cela ne signifie pas qu'il n'y a aucun travail.", "This source is unavailable; that does not mean there is no work.", "هذا المصدر غير متاح، ولا يعني ذلك عدم وجود أعمال."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else if (source.items.isEmpty()) {
+            Text(
+                atlasText("Aucun élément visible sur cette page.", "No visible items on this page.", "لا توجد عناصر ظاهرة في هذه الصفحة."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            source.items.forEach { item ->
+                AtlasCard(padding = 9.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(item.title?.takeIf { it.isNotBlank() } ?: atlasText("Sans titre", "Untitled", "بلا عنوان"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            text = buildString {
+                                append(item.status)
+                                if (item.updatedAt != null) append(" · ").append(item.updatedAt)
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+        if (source.nextCursor != null) {
+            TextButton(onClick = onLoadMore, enabled = !loading) {
+                Text(atlasText("Charger la suite", "Load more", "تحميل المزيد"))
+            }
+        }
     }
 }
 
