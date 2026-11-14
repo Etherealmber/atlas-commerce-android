@@ -460,7 +460,7 @@ fun MainShell(
         topBar = {
             if (isForeground && !productHistoryActive && tab != MainTab.NOTIFICATIONS) {
                 AtlasTopBar(
-                    title = if (useRail) "" else tab.localizedLabel(),
+                    title = if (!useRail || tab == MainTab.AGENT) tab.localizedLabel() else "",
                     subtitle = agentState?.let { state ->
                         val thread = state.activeThreadTitle.takeIf(String::isNotBlank)?.let { localizedAgentText(it, atlasLanguage) }
                             ?: atlasText("Sans titre", "Untitled", "بلا عنوان")
@@ -472,7 +472,7 @@ fun MainShell(
                         }
                         listOf(thread, status).filter { it.isNotBlank() }.joinToString(" · ")
                     },
-                    titleLeading = if (tab == MainTab.AGENT && !useRail) {
+                    titleLeading = if (tab == MainTab.AGENT) {
                         {
                             AtlasAgentMascot(
                                 modifier = Modifier.size(32.dp).combinedClickable(
@@ -642,7 +642,7 @@ fun MainShell(
         ) { currentTab ->
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 Column(Modifier.widthIn(max = if (useRail) 1440.dp else 840.dp).fillMaxSize()) {
-                    if (useRail && currentTab != MainTab.NOTIFICATIONS) {
+                    if (useRail && currentTab != MainTab.NOTIFICATIONS && currentTab != MainTab.AGENT) {
                         Text(
                             if (showDataCacheManagerDialog) {
                                 atlasText("Données et cache", "Data & cache", "البيانات والذاكرة المؤقتة")

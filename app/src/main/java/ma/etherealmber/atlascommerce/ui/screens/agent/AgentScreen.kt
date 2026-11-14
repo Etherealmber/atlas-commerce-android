@@ -478,9 +478,11 @@ fun AgentScreen(
             .fillMaxSize()
             .imePadding(),
     ) {
-        // Compact the composer when the remaining phone viewport is short,
-        // especially while the keyboard is open.
+        // Keep the composer full-width and thumb-friendly across phone and tablet panes.
+        val isTabletLayout = maxWidth >= 600.dp
         val compactComposer = maxHeight < 600.dp
+        val composerSidePadding = if (isTabletLayout) 20.dp else density.screenPadding
+        val composerSendTarget = if (isTabletLayout) 56.dp else 48.dp
         Column(Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
@@ -506,6 +508,40 @@ fun AgentScreen(
                         }
                     }
                     if (state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && !quotaLocked) {
+                        item(key = "agent_quick_controls") {
+                            AtlasCard(padding = 12.dp) {
+                                Text(
+                                    atlasText("Résumé et commandes rapides", "Summary and quick controls", "ملخص وأوامر سريعة"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    AssistChip(
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { viewModel.sendPrompt("Please check for updates", responseLanguage = selectedAppLanguage) },
+                                        label = { Text(atlasText("Vérifier les mises à jour", "Check updates", "تحقق من التحديثات"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    )
+                                    AssistChip(
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { viewModel.sendPrompt("Use the light theme", responseLanguage = selectedAppLanguage) },
+                                        label = { Text(atlasText("Thème clair", "Light theme", "المظهر الفاتح"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    AssistChip(
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { viewModel.sendPrompt("Use dark mode", responseLanguage = selectedAppLanguage) },
+                                        label = { Text(atlasText("Thème sombre", "Dark theme", "المظهر الداكن"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    )
+                                    AssistChip(
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { viewModel.sendPrompt("Use the system theme", responseLanguage = selectedAppLanguage) },
+                                        label = { Text(atlasText("Thème système", "System theme", "مظهر النظام"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    )
+                                }
+                            }
+                        }
                         item(key = "agent_quick_prompts") {
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 quickPrompts.forEach { prompt ->
@@ -665,7 +701,7 @@ fun AgentScreen(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(
-                        horizontal = density.screenPadding,
+                        horizontal = composerSidePadding,
                         vertical = if (compactComposer) 4.dp else 8.dp,
                     ),
                     verticalAlignment = Alignment.CenterVertically,
@@ -687,7 +723,10 @@ fun AgentScreen(
                         clearFocusOnSend = false,
                         singleLine = false,
                         modifier = Modifier.weight(1f)
-                            .heightIn(min = 58.dp, max = if (compactComposer) 92.dp else 132.dp)
+                            .heightIn(
+                                min = if (isTabletLayout) 64.dp else 56.dp,
+                                max = if (compactComposer) 92.dp else if (isTabletLayout) 168.dp else 132.dp,
+                            )
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && event.key == Key.Enter && !event.isShiftPressed) {
                                     if (state.input.isNotBlank() && !state.sending && !state.loadingThread && !quotaLocked) {
@@ -702,6 +741,7 @@ fun AgentScreen(
                     Spacer(Modifier.width(6.dp))
                     IconButton(
                         onClick = { viewModel.sendPrompt(responseLanguage = selectedAppLanguage) },
+                        modifier = Modifier.size(composerSendTarget),
                         enabled = state.input.isNotBlank() && !state.sending && !state.loadingThread && !quotaLocked,
                     ) {
                         Icon(
