@@ -1001,15 +1001,16 @@ fun <S> AtlasPageTransition(
                 val initialOrder = indexSelector(initialState)
                 val targetOrder = indexSelector(targetState)
                 when {
-                    tabletMode && initialOrder < 100 && targetOrder < 100 && targetOrder != initialOrder -> {
-                        val direction = if (targetOrder > initialOrder) 1 else -1
+                    tabletMode && initialOrder < 100 && targetOrder < 100 -> {
+                        // Exit the previous tablet page before the next one appears. This avoids
+                        // two navigation/page surfaces being visible together during a fast tap.
                         (
-                            fadeIn(tween(210, easing = FastOutSlowInEasing)) +
-                                slideInHorizontally(tween(240, easing = FastOutSlowInEasing)) { direction * (it / 26) }
-                            ) togetherWith (
-                            fadeOut(tween(150, easing = FastOutSlowInEasing)) +
-                                slideOutHorizontally(tween(190, easing = FastOutSlowInEasing)) { -direction * (it / 34) }
-                            )
+                            fadeIn(tween(190, delayMillis = 165, easing = FastOutSlowInEasing)) +
+                                scaleIn(
+                                    tween(190, delayMillis = 165, easing = FastOutSlowInEasing),
+                                    initialScale = 0.985f,
+                                )
+                            ) togetherWith fadeOut(tween(155, easing = FastOutSlowInEasing))
                     }
 
                     // Overlay / Settings pushed vertically
