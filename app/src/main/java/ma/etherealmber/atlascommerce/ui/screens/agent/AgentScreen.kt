@@ -511,7 +511,7 @@ fun AgentScreen(
                             AgentStartupLoadingCard()
                         }
                     }
-                    if (state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && !quotaLocked) {
+                    if (!state.loadingContext && !state.loadingThread && !quotaLocked) {
                         item(key = "agent_quick_controls") {
                             AgentInlineActions(
                                 user = user,
@@ -521,6 +521,8 @@ fun AgentScreen(
                                 onToast = onToast,
                             )
                         }
+                    }
+                    if (state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && !quotaLocked) {
                         item(key = "agent_quick_prompts") {
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 quickPrompts.forEach { prompt ->
