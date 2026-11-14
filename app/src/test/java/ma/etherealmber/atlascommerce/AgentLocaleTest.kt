@@ -27,6 +27,7 @@ class AgentLocaleTest {
             val question = "س".repeat(AGENT_MAX_QUESTION_LENGTH)
             val result = composeAgentPrompt(question, "x".repeat(10_000), language)
             assertTrue(result.length <= 2450)
+            assertTrue(result.contains(question))
             assertTrue(result.contains(language.agentContextInstruction))
             assertTrue(result.endsWith("x"))
             assertTrue(result.startsWith(language.agentContextInstruction))
