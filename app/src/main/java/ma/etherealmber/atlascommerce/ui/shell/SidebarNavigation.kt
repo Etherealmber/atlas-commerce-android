@@ -18,15 +18,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.ShoppingCart
+import androidx.compose.material.icons.outlined.SystemUpdateAlt
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.session.SessionUser
+import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
 import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
@@ -56,8 +61,11 @@ internal fun AtlasSidebarContent(
     selectedTab: MainTab,
     cartCount: Int,
     notificationCount: Int,
+    updateState: UpdateState,
+    onUpdateClick: () -> Unit,
     expanded: Boolean,
     onOpenDataStorageManager: () -> Unit,
+    dataStorageSelected: Boolean,
     canCollapse: Boolean,
     onToggleCollapse: () -> Unit,
     onNavigate: (MainTab) -> Unit,
@@ -83,36 +91,49 @@ internal fun AtlasSidebarContent(
         modifier = modifier.fillMaxSize().padding(horizontal = if (expanded) 12.dp else 8.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AtlasMark(
-                modifier = if (canCollapse) {
-                    Modifier
-                        .combinedClickable(
-                            onClick = {},
-                            onDoubleClick = onToggleCollapse,
-                        )
-                        .semantics { contentDescription = logoDescription }
-                } else {
-                    Modifier
-                },
-                size = if (expanded) 46.dp else 32.dp,
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-            if (expanded) {
-                Spacer(Modifier.width(10.dp))
+        if (expanded) {
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AtlasMark(
+                    modifier = if (canCollapse) {
+                        Modifier
+                            .combinedClickable(onClick = {}, onDoubleClick = onToggleCollapse)
+                            .semantics { contentDescription = logoDescription }
+                    } else {
+                        Modifier
+                    },
+                    size = 42.dp,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.width(9.dp))
                 Text(
                     "Atlas Commerce",
-                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
+                    softWrap = false,
                     overflow = TextOverflow.Ellipsis,
                 )
-            } else {
-                Spacer(Modifier.weight(1f))
+            }
+        } else {
+            Box(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                AtlasMark(
+                    modifier = if (canCollapse) {
+                        Modifier
+                            .combinedClickable(onClick = {}, onDoubleClick = onToggleCollapse)
+                            .semantics { contentDescription = logoDescription }
+                    } else {
+                        Modifier
+                    },
+                    size = 32.dp,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
 
@@ -130,12 +151,19 @@ internal fun AtlasSidebarContent(
                     onClick = { onNavigate(item) },
                 )
             }
+            SidebarNavigationItem(
+                icon = MainTab.AGENT.icon,
+                label = MainTab.AGENT.localizedLabel(),
+                isSelected = selectedTab == MainTab.AGENT,
+                expanded = expanded,
+                onClick = { onNavigate(MainTab.AGENT) },
+            )
 
             HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
             SidebarNavigationItem(
                 icon = Icons.Outlined.Notifications,
                 label = atlasText("Notifications", "Notifications", "الإشعارات"),
-                isSelected = false,
+                isSelected = selectedTab == MainTab.NOTIFICATIONS,
                 expanded = expanded,
                 badgeCount = notificationCount,
                 onClick = onOpenNotifications,
@@ -160,12 +188,17 @@ internal fun AtlasSidebarContent(
             SidebarNavigationItem(
                 icon = Icons.Outlined.Inventory2,
                 label = atlasText("Stockage des données", "Data storage", "تخزين البيانات"),
-                isSelected = false,
+                isSelected = dataStorageSelected,
                 expanded = expanded,
                 onClick = onOpenDataStorageManager,
             )
         }
 
+        SidebarUpdateStatus(
+            state = updateState,
+            expanded = expanded,
+            onClick = onUpdateClick,
+        )
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         if (expanded) {
             Row(
@@ -229,6 +262,89 @@ internal fun AtlasSidebarContent(
                         tint = MaterialTheme.colorScheme.error,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SidebarUpdateStatus(
+    state: UpdateState,
+    expanded: Boolean,
+    onClick: () -> Unit,
+) {
+    val checking = state == UpdateState.Checking
+    val downloading = state as? UpdateState.Downloading
+    val ready = state as? UpdateState.ReadyToInstall
+    val available = state as? UpdateState.Available
+    if (!checking && downloading == null && ready == null && available == null) return
+
+    val status = when {
+        checking -> atlasText("Vérification en cours…", "Checking for updates…", "جارٍ التحقق من التحديثات…")
+        downloading != null -> downloading.percent?.let { "${it}% · ${downloading.progressSummary}" }
+            ?: downloading.progressSummary
+        ready != null -> atlasText("Prête à installer", "Ready to install", "جاهز للتثبيت")
+        else -> atlasText("Mise à jour disponible", "Update available", "التحديث متاح")
+    }
+    val title = when {
+        checking -> atlasText("Vérification", "Checking", "التحقق")
+        downloading != null -> atlasText("Téléchargement", "Downloading", "جارٍ التنزيل")
+        ready != null -> atlasText("Prête à installer", "Ready to install", "جاهز للتثبيت")
+        else -> atlasText("Mise à jour", "Update", "التحديث")
+    }
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        if (expanded) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Icon(
+                    imageVector = if (ready != null) Icons.Outlined.CheckCircle else Icons.Outlined.SystemUpdateAlt,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(22.dp),
+                )
+                Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                Text(
+                    status,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (checking) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    downloading?.let {
+                        LinearProgressIndicator(
+                            progress = { it.progressFraction ?: 0f },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        } else {
+            Box(Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                when {
+                    checking -> CircularProgressIndicator(modifier = Modifier.size(30.dp), strokeWidth = 2.dp)
+                    downloading != null -> CircularProgressIndicator(
+                        progress = { downloading.progressFraction ?: 0f },
+                        modifier = Modifier.size(30.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
+                Icon(
+                    imageVector = if (ready != null) Icons.Outlined.CheckCircle else Icons.Outlined.SystemUpdateAlt,
+                    contentDescription = "$title: $status",
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(20.dp),
+                )
             }
         }
     }

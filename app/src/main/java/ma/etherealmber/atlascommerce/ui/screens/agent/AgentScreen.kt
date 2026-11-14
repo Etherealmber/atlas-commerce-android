@@ -33,6 +33,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -97,6 +99,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
+import ma.etherealmber.atlascommerce.core.session.SessionUser
+import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.data.model.AssistProposalDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChatSkeleton
@@ -125,7 +129,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.text.Normalizer
 
-enum class AgentNavigationDestination { HOME, PRODUCTS, SALES, BALANCE_REPORT, EMPLOYEES, SCAN, NOTIFICATIONS, SETTINGS, PROFILE }
+enum class AgentNavigationDestination { HOME, PRODUCTS, SALES, BALANCE_REPORT, EMPLOYEES, SCAN, NOTIFICATIONS, SETTINGS, PROFILE, DATA_STORAGE }
 
 data class AgentNavigationSuggestion(
     val destination: AgentNavigationDestination,
@@ -194,6 +198,7 @@ internal fun detectAgentNavigationSuggestion(prompt: String): AgentNavigationSug
     }
     if (!asksLocation) return null
     val destination = when {
+        listOf("storage", "cache", "local data", "stockage", "mémoire", "memoire", "الذاكرة", "التخزين").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.DATA_STORAGE
         listOf("product", "products", "item", "items", "stock", "inventory", "catalogue", "catalog", "article", "articles", "produit", "produits", "inventaire", "مخزون", "منتج").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.PRODUCTS
         listOf("sale", "sales", "invoice", "invoices", "vente", "ventes", "facture", "الفاتورة", "مبيعات").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.SALES
         listOf("balance", "report", "reports", "rapport", "bilan", "finance", "finances", "الرصيد").any { phrase -> normalized.contains(phrase) } -> AgentNavigationDestination.BALANCE_REPORT
@@ -237,6 +242,7 @@ internal fun mobileNavigationSuggestion(proposal: AssistProposalDto): AgentNavig
         "/m/scan" -> AgentNavigationDestination.SCAN
         "/m/inbox", "/m/notifications" -> AgentNavigationDestination.NOTIFICATIONS
         "/m/settings" -> AgentNavigationDestination.SETTINGS
+        "/m/storage", "/m/cache", "/m/settings/storage" -> AgentNavigationDestination.DATA_STORAGE
         "/m/profile" -> AgentNavigationDestination.PROFILE
         else -> return null
     }
@@ -245,6 +251,8 @@ internal fun mobileNavigationSuggestion(proposal: AssistProposalDto): AgentNavig
 
 @Composable
 fun AgentScreen(
+    user: SessionUser,
+    appViewModel: AppViewModel,
     onToast: (String) -> Unit,
     onNavigate: (AgentNavigationSuggestion) -> Unit = {},
     isActive: Boolean = true,
@@ -290,6 +298,7 @@ fun AgentScreen(
     val density = Atlas.density
     val scope = rememberCoroutineScope()
     var showHistoryDialog by remember { mutableStateOf(false) }
+    var showWorkStatusDialog by remember { mutableStateOf(false) }
     LaunchedEffect(historyRequested) {
         if (historyRequested) { showHistoryDialog = true; onHistoryHandled() }
     }
@@ -380,6 +389,61 @@ fun AgentScreen(
     LaunchedEffect(isActive, state.streamingReply.length) {
         if (!isActive || state.streamingReply.isBlank() || userScrolledUp) return@LaunchedEffect
         conversationListState.scrollToConversationEnd()
+    }
+
+    if (showWorkStatusDialog) {
+        val work = state.mobileWorkStatus
+        AlertDialog(
+            onDismissRequest = { showWorkStatusDialog = false },
+            title = { Text(atlasText("Mon activité", "My work status", "حالة أعمالي")) },
+            text = {
+                val workStatusError = state.workStatusError
+                Column(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (state.workStatusLoading && work == null) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    } else if (workStatusError != null && work == null) {
+                        Text(workStatusError, color = MaterialTheme.colorScheme.error)
+                    }
+                    work?.let { snapshot ->
+                        WorkStatusSection(
+                            title = atlasText("Demandes de stock", "In-app stock requests", "طلبات المخزون"),
+                            source = snapshot.inApp,
+                            loading = state.workStatusLoading,
+                            onLoadMore = { viewModel.loadWorkStatus(loadMore = true) },
+                        )
+                        val github = snapshot.trackers.github
+                        if (github != null) {
+                            WorkStatusSection(
+                                title = atlasText("Problèmes signalés", "Reported issues", "البلاغات المرسلة"),
+                                source = github,
+                                loading = state.workStatusLoading,
+                                onLoadMore = { viewModel.loadWorkStatus(loadMore = true) },
+                            )
+                        }
+                    }
+                    if (workStatusError != null && work != null) {
+                        Text(workStatusError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                    if (work == null && !state.workStatusLoading && state.workStatusError == null) {
+                        Text(atlasText("Aucune donnée chargée.", "No status has been loaded yet.", "لم يتم تحميل الحالة بعد."))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.loadWorkStatus() },
+                    enabled = !state.workStatusLoading,
+                ) { Text(atlasText("Actualiser", "Refresh", "تحديث")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWorkStatusDialog = false }) {
+                    Text(atlasText("Fermer", "Close", "إغلاق"))
+                }
+            },
+        )
     }
 
     if (showHistoryDialog) {
@@ -476,9 +540,11 @@ fun AgentScreen(
             .fillMaxSize()
             .imePadding(),
     ) {
-        // Compact the composer when the remaining phone viewport is short,
-        // especially while the keyboard is open.
+        // Keep the composer full-width and thumb-friendly across phone and tablet panes.
+        val isTabletLayout = maxWidth >= 600.dp
         val compactComposer = maxHeight < 600.dp
+        val composerSidePadding = if (isTabletLayout) 20.dp else density.screenPadding
+        val composerSendTarget = if (isTabletLayout) 56.dp else 48.dp
         Column(Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
@@ -501,6 +567,42 @@ fun AgentScreen(
                     if (shouldShowAgentChatSkeleton(state)) {
                         item(key = "agent_loading") {
                             AgentStartupLoadingCard()
+                        }
+                    }
+                    item(key = "work_status_entry") {
+                        AtlasCard(
+                            onClick = {
+                                showWorkStatusDialog = true
+                                if (state.mobileWorkStatus == null) viewModel.loadWorkStatus()
+                            },
+                            padding = 12.dp,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        atlasText("Mon activité", "My work status", "حالة أعمالي"),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        atlasText("Suivre mes demandes et signalements", "Check your requests and reported issues", "تابع طلباتي وبلاغاتي"),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Icon(Icons.Outlined.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                    if (!state.loadingContext && !state.loadingThread && !quotaLocked) {
+                        item(key = "agent_quick_controls") {
+                            AgentInlineActions(
+                                user = user,
+                                appViewModel = appViewModel,
+                                onSendPrompt = { prompt -> viewModel.sendPrompt(prompt, responseLanguage = selectedAppLanguage) },
+                                onNavigate = onNavigate,
+                                onToast = onToast,
+                            )
                         }
                     }
                     if (state.messages.isEmpty() && !state.loadingContext && !state.loadingThread && !quotaLocked) {
@@ -573,6 +675,7 @@ fun AgentScreen(
                                 AgentNavigationDestination.NOTIFICATIONS -> atlasText("Notifications", "Notifications", "الإشعارات")
                                 AgentNavigationDestination.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
                                 AgentNavigationDestination.PROFILE -> atlasText("Profil", "Profile", "الملف الشخصي")
+                                AgentNavigationDestination.DATA_STORAGE -> atlasText("Stockage des données", "Data storage", "تخزين البيانات")
                             }
                             val dateRange = if (suggestion.fromDate != null && suggestion.toDate != null) {
                                 " · ${suggestion.fromDate} → ${suggestion.toDate}"
@@ -631,6 +734,21 @@ fun AgentScreen(
                             )
                         }
                     }
+
+                    if (!state.loadingContext && !state.loadingThread && !quotaLocked) {
+                        item(key = "agent_ai_disclaimer") {
+                            Text(
+                                text = atlasText(
+                                    "Atlas Agent est une IA et peut se tromper. Vérifiez les informations importantes.",
+                                    "Atlas Agent is AI and can make mistakes. Verify important information.",
+                                    "مساعد Atlas ذكاء اصطناعي وقد يخطئ. تحقّق من المعلومات المهمة.",
+                                ),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                            )
+                        }
+                    }
                 }
                 if (userScrolledUp && conversationListState.canScrollForward && state.messages.isNotEmpty()) {
                     SmallFloatingActionButton(
@@ -662,7 +780,7 @@ fun AgentScreen(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(
-                        horizontal = density.screenPadding,
+                        horizontal = composerSidePadding,
                         vertical = if (compactComposer) 4.dp else 8.dp,
                     ),
                     verticalAlignment = Alignment.CenterVertically,
@@ -684,7 +802,10 @@ fun AgentScreen(
                         clearFocusOnSend = false,
                         singleLine = false,
                         modifier = Modifier.weight(1f)
-                            .heightIn(min = 58.dp, max = if (compactComposer) 92.dp else 132.dp)
+                            .heightIn(
+                                min = if (isTabletLayout) 64.dp else 56.dp,
+                                max = if (compactComposer) 92.dp else if (isTabletLayout) 168.dp else 132.dp,
+                            )
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && event.key == Key.Enter && !event.isShiftPressed) {
                                     if (state.input.isNotBlank() && !state.sending && !state.loadingThread && !quotaLocked) {
@@ -699,6 +820,7 @@ fun AgentScreen(
                     Spacer(Modifier.width(6.dp))
                     IconButton(
                         onClick = { viewModel.sendPrompt(responseLanguage = selectedAppLanguage) },
+                        modifier = Modifier.size(composerSendTarget),
                         enabled = state.input.isNotBlank() && !state.sending && !state.loadingThread && !quotaLocked,
                     ) {
                         Icon(
@@ -1102,6 +1224,52 @@ private fun formatQuotaWait(iso: String?, fallback: String): String {
 }
 
 @Composable
+private fun WorkStatusSection(
+    title: String,
+    source: ma.etherealmber.atlascommerce.data.model.WorkStatusSourceDto,
+    loading: Boolean,
+    onLoadMore: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        if (source.availability != "available") {
+            Text(
+                atlasText("Cette source n'est pas disponible. Cela ne signifie pas qu'il n'y a aucun travail.", "This source is unavailable; that does not mean there is no work.", "هذا المصدر غير متاح، ولا يعني ذلك عدم وجود أعمال."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else if (source.items.isEmpty()) {
+            Text(
+                atlasText("Aucun élément visible sur cette page.", "No visible items on this page.", "لا توجد عناصر ظاهرة في هذه الصفحة."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            source.items.forEach { item ->
+                AtlasCard(padding = 9.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(item.title?.takeIf { it.isNotBlank() } ?: atlasText("Sans titre", "Untitled", "بلا عنوان"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            text = buildString {
+                                append(item.status)
+                                if (item.updatedAt != null) append(" · ").append(item.updatedAt)
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+        if (source.nextCursor != null) {
+            TextButton(onClick = onLoadMore, enabled = !loading) {
+                Text(atlasText("Charger la suite", "Load more", "تحميل المزيد"))
+            }
+        }
+    }
+}
+
+@Composable
 private fun ChatBubbleRow(
     message: AgentViewModel.ChatMessage,
     approvingId: String?,
@@ -1211,6 +1379,7 @@ private fun ChatBubbleRow(
                                 AgentNavigationDestination.NOTIFICATIONS -> atlasText("Notifications", "Notifications", "الإشعارات")
                                 AgentNavigationDestination.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
                                 AgentNavigationDestination.PROFILE -> atlasText("Profil", "Profile", "الملف الشخصي")
+                                AgentNavigationDestination.DATA_STORAGE -> atlasText("Stockage des données", "Data storage", "تخزين البيانات")
                                 null -> ""
                             }
                             val proposalDetails = proposal.summary?.takeIf { it.isNotBlank() } ?: buildList {

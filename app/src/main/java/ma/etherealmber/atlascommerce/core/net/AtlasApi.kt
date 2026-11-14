@@ -33,6 +33,7 @@ import ma.etherealmber.atlascommerce.data.model.LoginResponse
 import ma.etherealmber.atlascommerce.data.model.MeDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionStatsDto
+import ma.etherealmber.atlascommerce.data.model.MobileWorkStatusDto
 import ma.etherealmber.atlascommerce.data.model.OtpRequest
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
@@ -98,6 +99,13 @@ interface AtlasApi {
 
     @GET("api/auth/me")
     suspend fun me(): ApiEnvelope<MeDto>
+
+    /** Read-only status for the signed-in account; no tracker credentials are sent by the app. */
+    @GET("api/mobile/work-status")
+    suspend fun mobileWorkStatus(
+        @Query("in_app_cursor") inAppCursor: String? = null,
+        @Query("github_cursor") githubCursor: String? = null,
+    ): MobileWorkStatusDto
 
     /** Authenticated user report; GitHub delivery is handled by the Worker (never by the app). */
     @POST("api/reports")

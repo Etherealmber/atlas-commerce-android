@@ -54,6 +54,18 @@ class AgentContextNeedsTest {
     }
 
     @Test
+    fun improvementRequestGetsCompactLiveDashboardContext() {
+        val needs = agentContextNeeds("What should I improve?")
+
+        assertTrue(needs.dashboard)
+        assertTrue(needs.finance)
+        assertTrue(needs.products)
+        assertTrue(needs.clients)
+        assertTrue(needs.actions)
+        assertTrue(needs.alerts)
+    }
+
+    @Test
     fun nonBusinessAndUnclassifiedQuestionsDoNotTriggerExpensiveBroadSnapshot() {
         assertEquals(AgentContextNeeds(), agentContextNeeds("Tell me a short joke"))
         assertEquals(AgentContextNeeds(), agentContextNeeds("How are you?"))
@@ -69,5 +81,17 @@ class AgentContextNeedsTest {
         assertFalse(needs.finance)
         assertFalse(needs.actions)
         assertFalse(needs.alerts)
+    }
+
+    @Test
+    fun writingAndNavigationAdviceDoesNotFetchBusinessContext() {
+        assertTrue(agentContextNeeds("Help me improve this email").isEmpty)
+        assertTrue(agentContextNeeds("Suggest a better way to navigate the app").isEmpty)
+    }
+
+    @Test
+    fun businessImprovementAdviceStillSelectsPermittedContext() {
+        assertTrue(agentContextNeeds("How can I improve my business?").dashboard)
+        assertTrue(agentContextNeeds("How can I improve sales?").finance)
     }
 }

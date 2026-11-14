@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce.ui.screens.settings
 import android.content.Intent
 import android.provider.Settings
 import android.text.format.Formatter
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -88,6 +90,8 @@ fun DataCacheManagerDialog(
     onDismiss: () -> Unit,
     onToast: (String) -> Unit = {},
     appViewModel: AppViewModel = hiltViewModel(),
+    tabletSidebarWidth: Dp? = null,
+    isForeground: Boolean = true,
 ) {
     val context = LocalContext.current
     val savedServers by appViewModel.savedServers.collectAsStateWithLifecycle()
@@ -149,13 +153,16 @@ fun DataCacheManagerDialog(
         }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
+    val managerPanel: @Composable () -> Unit = {
         Surface(
-            modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
-            shape = RoundedCornerShape(0.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (tabletSidebarWidth == null) Modifier.statusBarsPadding().navigationBarsPadding() else Modifier),
+            shape = if (tabletSidebarWidth != null) {
+                RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp)
+            } else {
+                RoundedCornerShape(0.dp)
+            },
             color = MaterialTheme.colorScheme.background,
         ) {
             Column(Modifier.fillMaxSize()) {
@@ -163,8 +170,10 @@ fun DataCacheManagerDialog(
                     modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 10.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
+                    if (tabletSidebarWidth == null) {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
+                        }
                     }
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -412,6 +421,19 @@ fun DataCacheManagerDialog(
                     }
                 }
             }
+        }
+    }
+    if (tabletSidebarWidth == null) {
+        Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            managerPanel()
+        }
+    } else {
+        BackHandler(enabled = isForeground, onBack = onDismiss)
+        Box(Modifier.fillMaxSize().padding(start = tabletSidebarWidth)) {
+            managerPanel()
         }
     }
 

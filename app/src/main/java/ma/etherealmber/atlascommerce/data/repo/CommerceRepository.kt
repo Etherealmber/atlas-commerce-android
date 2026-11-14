@@ -50,6 +50,7 @@ import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionMetaDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionStatsDto
+import ma.etherealmber.atlascommerce.data.model.MobileWorkStatusDto
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.ProductImageDto
@@ -81,6 +82,20 @@ class CommerceRepository @Inject constructor(
 
     suspend fun dashboard(): ApiResult<DashboardDto> =
         runner.envelope { apiProvider.api().dashboard() }
+
+    /** Fetches only the authenticated user's work page. This endpoint is not cached offline. */
+    suspend fun mobileWorkStatus(
+        inAppCursor: String? = null,
+        githubCursor: String? = null,
+    ): ApiResult<MobileWorkStatusDto> = try {
+        val response = apiProvider.api().mobileWorkStatus(inAppCursor, githubCursor)
+        if (response.success) ApiResult.Success(response)
+        else ApiResult.Failure("WORK_STATUS_UNAVAILABLE", "Work status is temporarily unavailable.")
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Throwable) {
+        ApiResult.Failure("WORK_STATUS_UNAVAILABLE", "Work status is temporarily unavailable. Please try again.")
+    }
 
     suspend fun settings(): ApiResult<CompanySettingsDto> =
         runner.envelope { apiProvider.api().settings() }

@@ -109,7 +109,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.offset
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ma.etherealmber.atlascommerce.core.AppDetails
@@ -196,6 +198,7 @@ fun ProfileScreen(
     onToast: (String) -> Unit,
     isForeground: Boolean = true,
     appViewModel: AppViewModel = hiltViewModel(),
+    dialogCenterOffset: Dp = 0.dp,
 ) {
     val context = LocalContext.current
     val density = Atlas.density
@@ -532,12 +535,14 @@ fun ProfileScreen(
                 ThemeSwitcherDialog(
                     currentMode = themeMode,
                     animationsEnabled = animationsEnabled,
+                    dialogCenterOffset = dialogCenterOffset,
                     onDismiss = { showThemeSwitcher = false },
                     onApply = { appViewModel.setThemeMode(it) },
                 )
             }
             SettingsChoiceRow(
                 icon = Icons.Outlined.Language,
+                dialogCenterOffset = dialogCenterOffset,
                 title = atlasText("Langue", "Language", "اللغة"),
                 value = if (appLanguageFollowsSystem) {
                     atlasText("Système · ${AppLanguage.fromSystemLocale().nativeLabel}", "System · ${AppLanguage.fromSystemLocale().nativeLabel}", "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}")
@@ -552,6 +557,7 @@ fun ProfileScreen(
             )
             SettingsChoiceRow(
                 icon = Icons.Outlined.Tune,
+                dialogCenterOffset = dialogCenterOffset,
                 title = atlasText("Densité d'affichage", "Display density", "كثافة العرض"),
                 value = when (densityMode) {
                     DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
@@ -568,6 +574,7 @@ fun ProfileScreen(
             )
             SettingsChoiceRow(
                 icon = Icons.Outlined.Home,
+                dialogCenterOffset = dialogCenterOffset,
                 title = atlasText("Onglet d'ouverture au lancement", "Tab to open at launch", "علامة التبويب عند التشغيل"),
                 value = settingsTabLabel(selectedLaunchTab),
                 selectedKey = selectedLaunchTab.name,
@@ -714,7 +721,7 @@ fun ProfileScreen(
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Surface(
-                modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
+                modifier = Modifier.fillMaxSize().padding(start = dialogCenterOffset * 2).statusBarsPadding().navigationBarsPadding(),
                 shape = RoundedCornerShape(0.dp),
                 color = MaterialTheme.colorScheme.background,
             ) {
@@ -851,7 +858,7 @@ fun ProfileScreen(
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Surface(
-                modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding(),
+                modifier = Modifier.fillMaxSize().padding(start = dialogCenterOffset * 2).statusBarsPadding().navigationBarsPadding().imePadding(),
                 shape = RoundedCornerShape(0.dp),
                 color = MaterialTheme.colorScheme.background,
             ) {
@@ -955,6 +962,7 @@ fun ProfileScreen(
 
     if (confirmSignOut) {
         AlertDialog(
+            modifier = Modifier.offset(x = dialogCenterOffset),
             onDismissRequest = { confirmSignOut = false; addAccountAfterSignOut = false },
             title = {
                 Text(
@@ -1034,11 +1042,11 @@ private fun ThemeSettingRow(
 private fun ThemeSwitcherDialog(
     currentMode: ThemeMode,
     animationsEnabled: Boolean,
+    dialogCenterOffset: Dp = 0.dp,
     onDismiss: () -> Unit,
     onApply: (ThemeMode) -> Unit,
 ) {
     var selectedMode by remember(currentMode) { mutableStateOf(currentMode) }
-    var applyAfterClose by remember { mutableStateOf(false) }
     var hasEntered by remember { mutableStateOf(false) }
     val visibility = remember { MutableTransitionState(false) }
 
@@ -1048,15 +1056,11 @@ private fun ThemeSwitcherDialog(
     LaunchedEffect(visibility.currentState, visibility.targetState, visibility.isIdle, hasEntered) {
         if (visibility.currentState) hasEntered = true
         if (hasEntered && visibility.isIdle && !visibility.currentState && !visibility.targetState) {
-            if (applyAfterClose) onApply(selectedMode)
             onDismiss()
         }
     }
-    fun close(apply: Boolean) {
-        if (visibility.targetState) {
-            applyAfterClose = apply
-            visibility.targetState = false
-        }
+    fun close() {
+        if (visibility.targetState) visibility.targetState = false
     }
 
     val enter = if (animationsEnabled) {
@@ -1076,13 +1080,14 @@ private fun ThemeSwitcherDialog(
     val dialogMaxHeight = (configuration.screenHeightDp.dp - 32.dp).coerceAtLeast(300.dp)
 
     Dialog(
-        onDismissRequest = { close(apply = false) },
+        onDismissRequest = { close() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         AnimatedVisibility(visibleState = visibility, enter = enter, exit = exit) {
             Surface(
                 modifier = Modifier
-                    .widthIn(max = 520.dp)
+                    .offset(x = dialogCenterOffset)
+                    .widthIn(max = 600.dp)
                     .fillMaxWidth(0.94f)
                     .heightIn(max = dialogMaxHeight),
                 shape = RoundedCornerShape(28.dp),
@@ -1106,9 +1111,9 @@ private fun ThemeSwitcherDialog(
                         )
                         Text(
                             atlasText(
-                                "Choisissez une ambiance. Le thème ne changera qu'après la fermeture de cette fenêtre.",
-                                "Pick a look. Your theme changes only after this dialog closes.",
-                                "اختر المظهر. لن يتغير التطبيق إلا بعد إغلاق هذه النافذة.",
+                                "Choisissez une ambiance ; votre choix est appliqué immédiatement.",
+                                "Pick a look; your choice is applied immediately.",
+                                "اختر المظهر؛ يُطبّق اختيارك فوراً.",
                             ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1121,7 +1126,11 @@ private fun ThemeSwitcherDialog(
                                     mode = mode,
                                     selected = selectedMode == mode,
                                     enabled = visibility.targetState,
-                                    onClick = { selectedMode = mode },
+                                    onClick = {
+                                        selectedMode = mode
+                                        onApply(mode)
+                                        close()
+                                    },
                                 )
                             }
                         }
@@ -1134,7 +1143,11 @@ private fun ThemeSwitcherDialog(
                                     enabled = visibility.targetState,
                                     animationsEnabled = animationsEnabled,
                                     modifier = Modifier.weight(1f),
-                                    onClick = { selectedMode = mode },
+                                    onClick = {
+                                        selectedMode = mode
+                                        onApply(mode)
+                                        close()
+                                    },
                                 )
                             }
                         }
@@ -1144,15 +1157,9 @@ private fun ThemeSwitcherDialog(
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        TextButton(onClick = { close(apply = false) }, enabled = visibility.targetState) {
-                            Text(atlasText("Annuler", "Cancel", "إلغاء"))
+                        TextButton(onClick = { close() }, enabled = visibility.targetState) {
+                            Text(atlasText("Terminé", "Done", "تم"))
                         }
-                        Spacer(Modifier.width(8.dp))
-                        AtlasButton(
-                            text = atlasText("Appliquer le thème", "Apply theme", "تطبيق المظهر"),
-                            onClick = { close(apply = true) },
-                            enabled = visibility.targetState,
-                        )
                     }
                 }
             }
@@ -1316,6 +1323,7 @@ private fun ThemePreviewCard(
 @Composable
 private fun SettingsChoiceRow(
     icon: ImageVector,
+    dialogCenterOffset: Dp = 0.dp,
     title: String,
     value: String,
     selectedKey: String,
@@ -1348,7 +1356,7 @@ private fun SettingsChoiceRow(
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Surface(
-                modifier = Modifier.widthIn(max = 460.dp).fillMaxWidth(0.92f).heightIn(max = maxHeight),
+                modifier = Modifier.offset(x = dialogCenterOffset).widthIn(max = 460.dp).fillMaxWidth(0.92f).heightIn(max = maxHeight),
                 shape = RoundedCornerShape(26.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 6.dp,
@@ -1412,6 +1420,7 @@ fun SettingsScreen(
     onToast: (String) -> Unit,
     onStartUpdateDownload: () -> Unit = {},
     appViewModel: AppViewModel = hiltViewModel(),
+    dialogCenterOffset: Dp = 0.dp,
 ) {
     val context = LocalContext.current
     val density = Atlas.density
@@ -1481,6 +1490,7 @@ fun SettingsScreen(
 
     if (showReleaseHistoryDialog) {
         AlertDialog(
+            modifier = Modifier.offset(x = dialogCenterOffset),
             onDismissRequest = { showReleaseHistoryDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1546,6 +1556,7 @@ fun SettingsScreen(
         val updatePackageClearedMessage = atlasText("Fichier de mise à jour supprimé.", "Downloaded update removed.", "تم حذف ملف التحديث.")
         val updatePackageBusyMessage = atlasText("Impossible de supprimer le fichier. Si un téléchargement est actif, attendez sa fin puis réessayez.", "Could not remove the downloaded update. If a download is active, wait for it to finish and try again.", "تعذّر حذف الملف. إذا كان هناك تنزيل نشط، انتظر حتى يكتمل ثم أعد المحاولة.")
         AlertDialog(
+            modifier = Modifier.offset(x = dialogCenterOffset),
             onDismissRequest = { confirmClearUpdatePackage = false },
             title = { Text(atlasText("Supprimer le fichier téléchargé ?", "Delete downloaded update?", "حذف ملف التحديث المُنزّل؟")) },
             text = {
@@ -2060,6 +2071,7 @@ private fun settingsTabLabel(tab: MainTab): String = when (tab) {
     MainTab.AGENT -> atlasText("Atlas Agent", "Atlas Agent", "مساعد Atlas")
     MainTab.PROFILE -> atlasText("Mon profil", "My profile", "ملفي الشخصي")
     MainTab.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
+    MainTab.NOTIFICATIONS -> atlasText("Notifications", "Notifications", "الإشعارات")
 }
 
 @Composable

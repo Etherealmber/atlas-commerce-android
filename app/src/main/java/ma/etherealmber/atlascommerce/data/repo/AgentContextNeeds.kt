@@ -46,14 +46,31 @@ internal fun agentContextNeeds(question: String): AgentContextNeeds {
     val dashboard = has("dashboard", "overview", "summary", "summarize", "total", "overall", "today", "resume", "apercu", "tableau de bord", "ملخص", "اليوم")
 
     val specific = products || clients || finance || actions || alerts
-    val businessWords = specific || has("business", "company", "enterprise", "commerce", "entreprise", "activite", "أعمال", "شركة")
+    val improvementAdvice = has(
+        "improve", "improvement", "recommend", "recommendation", "suggest", "suggestion", "opportunity",
+        "optimise", "optimize", "améliorer", "ameliorer", "amélioration", "amelioration", "conseil", "اقتراح", "تحسين",
+    )
+    val businessWords = specific || has(
+        "business", "company", "enterprise", "commerce", "entreprise", "activite", "أعمال", "شركة",
+    )
     val knownNonBusiness = has(
         "hello", "hi", "hey", "good morning", "good evening", "bonjour", "bonsoir", "coucou", "salam", "salut", "merci", "thanks", "thank you", "شكرا", "مرحبا",
         "joke", "poem", "story", "translate", "translation", "rewrite", "rephrase", "grammar", "write an email",
         "settings", "setting", "profile", "account", "screen", "page", "menu", "navigation", "navigate", "button",
+        "email", "write", "writing", "draft", "website", "app",
         "parametre", "parametres", "reglage", "profil", "compte", "صفحة", "إعدادات",
     )
     if (!businessWords && knownNonBusiness) return AgentContextNeeds()
+    if (!specific && improvementAdvice) {
+        return AgentContextNeeds(
+            dashboard = true,
+            finance = true,
+            products = true,
+            clients = true,
+            actions = true,
+            alerts = true,
+        )
+    }
     if (!specific && businessWords) return AgentContextNeeds(dashboard = true)
     if (!specific) return AgentContextNeeds()
 

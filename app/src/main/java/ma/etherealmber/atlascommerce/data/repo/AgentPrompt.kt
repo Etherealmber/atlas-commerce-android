@@ -3,14 +3,22 @@ package ma.etherealmber.atlascommerce.data.repo
 import ma.etherealmber.atlascommerce.core.AppLanguage
 
 internal const val AGENT_MAX_QUESTION_LENGTH = 1800
-private const val AGENT_MAX_PROMPT_LENGTH = 2450
+internal const val AGENT_MAX_PROMPT_LENGTH = 2450
 
-/** Preserve the question and language instruction before adding bounded optional context. */
+/** Keep the accepted question and language instruction, then fit useful live data in the same budget. */
 internal fun composeAgentPrompt(question: String, snapshot: String, language: AppLanguage): String {
-    val prefix = buildString {
-        appendLine(language.agentContextInstruction)
-        appendLine("${language.agentQuestionLabel}: $question")
-        appendLine("[REPORT SCOPE] Live data is not a custom date-range report. Do not invent figures; direct the user to the server-generated report if authorized.")
+    val guidance = buildString {
+        appendLine("[DATA] Supplied, role-authorized facts only; don't invent.")
+        appendLine("[ROUTES] Implemented mobile routes only; no Projects.")
+        appendLine("[STATUS] No tracker feed; never invent issue IDs/status.")
+        appendLine("[RELEASE] Group feature/improvement/fix/issue; cite supplied refs.")
+        append("[IDEAS] Three max, data-grounded.")
     }
-    return prefix + snapshot.take((AGENT_MAX_PROMPT_LENGTH - prefix.length).coerceAtLeast(0))
+    val fixedPrefix = "${language.agentContextInstruction}\n${language.agentQuestionLabel}: "
+    val questionBudget = (AGENT_MAX_PROMPT_LENGTH - fixedPrefix.length - 1 - guidance.length - 1)
+        .coerceAtLeast(0)
+    val boundedQuestion = question.take(minOf(AGENT_MAX_QUESTION_LENGTH, questionBudget))
+    val prefix = "$fixedPrefix$boundedQuestion\n$guidance\n"
+    val snapshotBudget = (AGENT_MAX_PROMPT_LENGTH - prefix.length).coerceAtLeast(0)
+    return prefix + snapshot.take(snapshotBudget)
 }

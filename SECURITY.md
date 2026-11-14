@@ -1,6 +1,6 @@
 # Security Policy — Atlas Commerce (Android)
 
-© 2026 Etherealmber — MIT OR Apache-2.0 — current app baseline: **1.6.9** (versionCode 169); use the [Releases page](https://github.com/Etherealmber/atlas-commerce-android/releases) for the latest published build.
+© 2026 Etherealmber — MIT OR Apache-2.0 — current app baseline: **1.7.0** (versionCode 170); use the [Releases page](https://github.com/Etherealmber/atlas-commerce-android/releases) for the latest published build.
 
 This document covers the **Android client** in this repository. The server (Cloudflare Worker,
 D1, R2) has its own policy in
@@ -13,13 +13,15 @@ current builds; security and troubleshooting steps below describe Android 11+ be
 
 | Android app version | Supported |
 | --- | --- |
-| Latest stable `1.x` release (support starts at `1.0.0`) | :white_check_mark: |
-| Older `1.x` releases | :x: |
-| Pre-`1.0.0` (`0.x`), prerelease and unreleased builds | :x: |
+| Latest stable minor line `1.7.x` (line starts at `1.7.0`) | :white_check_mark: |
+| Older stable minor lines | :x: |
+| Prerelease and unreleased builds | :x: |
 
-Only the latest published stable `1.x` release receives Android-client security fixes; issues in an
-older client build must be reproduced on the current supported release. This cutoff applies only to
-the Android client. Backend/Worker errors and vulnerabilities are handled under the separate
+The latest published stable `MAJOR.MINOR.x` line is supported: patch releases in that line remain
+supported, and the cutoff advances only when the next stable minor or major line is published.
+Prereleases never advance the supported line. Issues from older minor lines should be reproduced on
+the latest stable patch in the current line; security fixes are delivered in that latest patch. This
+cutoff applies only to the Android client. Backend/Worker errors and vulnerabilities are handled under the separate
 [backend security policy](https://github.com/Etherealmber/atlas-commerce/blob/main/SECURITY.md),
 regardless of which Android version reported them. Debug builds are development artifacts and are
 not supported for production use.
