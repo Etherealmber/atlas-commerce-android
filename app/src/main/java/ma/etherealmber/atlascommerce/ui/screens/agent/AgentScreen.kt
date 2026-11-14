@@ -397,14 +397,15 @@ fun AgentScreen(
             onDismissRequest = { showWorkStatusDialog = false },
             title = { Text(atlasText("Mon activité", "My work status", "حالة أعمالي")) },
             text = {
+                val workStatusError = state.workStatusError
                 Column(
                     modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (state.workStatusLoading && work == null) {
                         LinearProgressIndicator(Modifier.fillMaxWidth())
-                    } else if (state.workStatusError != null && work == null) {
-                        Text(state.workStatusError, color = MaterialTheme.colorScheme.error)
+                    } else if (workStatusError != null && work == null) {
+                        Text(workStatusError, color = MaterialTheme.colorScheme.error)
                     }
                     work?.let { snapshot ->
                         WorkStatusSection(
@@ -423,8 +424,8 @@ fun AgentScreen(
                             )
                         }
                     }
-                    if (state.workStatusError != null && work != null) {
-                        Text(state.workStatusError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    if (workStatusError != null && work != null) {
+                        Text(workStatusError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
                     if (work == null && !state.workStatusLoading && state.workStatusError == null) {
                         Text(atlasText("Aucune donnée chargée.", "No status has been loaded yet.", "لم يتم تحميل الحالة بعد."))

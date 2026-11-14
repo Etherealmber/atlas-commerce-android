@@ -154,7 +154,7 @@ class AgentViewModel @Inject constructor(
         val current = _state.value.mobileWorkStatus
         if (loadMore && current == null) return
         val inCursor = if (loadMore) current?.inApp?.nextCursor else null
-        val github = if (loadMore) current?.trackers?.get("github") else null
+        val github = if (loadMore) current?.trackers?.github else null
         if (loadMore && inCursor == null && github?.nextCursor == null) return
         _state.update { it.copy(workStatusLoading = true, workStatusError = null) }
         viewModelScope.launch {
