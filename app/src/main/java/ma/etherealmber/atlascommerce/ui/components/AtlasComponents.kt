@@ -606,6 +606,7 @@ fun AtlasTopBar(
     onBack: (() -> Unit)? = null,
     titleLeading: (@Composable () -> Unit)? = null,
     windowInsets: WindowInsets? = null,
+    containerColor: Color = MaterialTheme.colorScheme.background,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
@@ -645,7 +646,7 @@ fun AtlasTopBar(
         actions = actions,
         windowInsets = windowInsets ?: TopAppBarDefaults.windowInsets,
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = containerColor,
             titleContentColor = MaterialTheme.colorScheme.onBackground,
         ),
     )

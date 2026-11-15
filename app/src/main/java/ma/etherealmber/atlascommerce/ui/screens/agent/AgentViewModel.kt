@@ -132,6 +132,9 @@ class AgentViewModel @Inject constructor(
     private val _themeChooserRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val themeChooserRequests: SharedFlow<Unit> = _themeChooserRequests.asSharedFlow()
 
+    private val _settingsPanelRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val settingsPanelRequests: SharedFlow<Unit> = _settingsPanelRequests.asSharedFlow()
+
     private val _deviceUnlockRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val deviceUnlockRequests: SharedFlow<Unit> = _deviceUnlockRequests.asSharedFlow()
 
@@ -386,6 +389,14 @@ class AgentViewModel @Inject constructor(
                         AppLanguage.FRENCH -> "Choisissez le thème à appliquer ici."
                         AppLanguage.ENGLISH -> "Choose the theme to apply here."
                         AppLanguage.ARABIC -> "اختر المظهر الذي تريد تطبيقه هنا."
+                    }
+                }
+                AgentLocalAction.ShowSettingsPanel -> {
+                    _settingsPanelRequests.tryEmit(Unit)
+                    when (responseLanguage) {
+                        AppLanguage.FRENCH -> "Voici les réglages disponibles dans Atlas. Vous pouvez modifier vos préférences ici."
+                        AppLanguage.ENGLISH -> "Here are the available app settings. You can change your preferences here."
+                        AppLanguage.ARABIC -> "إليك إعدادات التطبيق المتاحة. يمكنك تغيير تفضيلاتك هنا."
                     }
                 }
                 AgentLocalAction.ConfigureDeviceUnlock -> {

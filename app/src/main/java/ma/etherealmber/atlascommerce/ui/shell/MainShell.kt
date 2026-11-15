@@ -436,6 +436,7 @@ fun MainShell(
         onSignOut()
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
+    val shellMaxHeight = maxHeight
     val useRail = maxWidth >= 600.dp
     val useDesktopSidebar = maxWidth >= 1000.dp
     val pageTarget = ShellPageTarget(tab = tab, isDataStorage = useRail && showDataCacheManagerDialog)
@@ -481,6 +482,7 @@ fun MainShell(
                         }
                         listOf(thread, status).filter { it.isNotBlank() }.joinToString(" · ")
                     },
+                    containerColor = if (useRail) Color.Transparent else MaterialTheme.colorScheme.background,
                     titleLeading = if (tab == MainTab.AGENT) {
                         {
                             AtlasAgentMascot(
@@ -609,7 +611,20 @@ fun MainShell(
             padding.calculateRightPadding(layoutDirection)
         }
         val sidebarEdgeOffset = if (layoutDirection == LayoutDirection.Ltr) -sidebarStartInset else sidebarStartInset
+        val sidebarTopInset = padding.calculateTopPadding()
+        val sidebarBottomInset = padding.calculateBottomPadding()
+        val sidebarHeight = (shellMaxHeight - sidebarBottomInset).coerceAtLeast(0.dp)
         if (showRail) {
+            // Extend only the rail background behind the top bar; keep its contents
+            // positioned in the Scaffold body, below the top bar as usual.
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset(x = sidebarEdgeOffset, y = -sidebarTopInset)
+                    .width(sidebarWidth + sidebarStartInset)
+                    .height(sidebarHeight),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+            ) {}
             Surface(
                 modifier = Modifier
                     .align(Alignment.CenterStart)

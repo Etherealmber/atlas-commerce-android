@@ -5,10 +5,19 @@ import java.util.Locale
 import ma.etherealmber.atlascommerce.core.ThemeMode
 
 /** Small native actions that are safe to execute directly from an explicit user request. */
+internal enum class IssueTrackerSetupState { AVAILABLE, NOT_CONFIGURED, UNKNOWN }
+
+internal fun issueTrackerSetupState(availability: String?): IssueTrackerSetupState = when (availability?.trim()?.lowercase(Locale.ROOT)) {
+    "available" -> IssueTrackerSetupState.AVAILABLE
+    "unconfigured", "not_configured", "not configured", "not-configured" -> IssueTrackerSetupState.NOT_CONFIGURED
+    else -> IssueTrackerSetupState.UNKNOWN
+}
+
 internal sealed interface AgentLocalAction {
     data object CheckForUpdate : AgentLocalAction
     data object ShowWorkStatus : AgentLocalAction
     data object ChooseTheme : AgentLocalAction
+    data object ShowSettingsPanel : AgentLocalAction
     data object ConfigureDeviceUnlock : AgentLocalAction
     data class SetTheme(val mode: ThemeMode) : AgentLocalAction
 }
@@ -22,10 +31,23 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
         .replace(Regex("\\p{Mn}+"), "")
         .lowercase(Locale.ROOT)
         .trim()
+    val trackerInquiry = normalized.removePrefix("hey, ").removePrefix("hey ").removePrefix("hi, ").removePrefix("hi ")
+    val asksForTrackerSetupStatus =
+        listOf("issue tracker", "github issue", "github tracker", "reported issues").any(trackerInquiry::contains) &&
+            listOf("configured", "set up", "setup", "connected", "status", "available", "working").any(trackerInquiry::contains) &&
+            listOf("is ", "are ", "where ", "what is ", "show ", "check ", "tell me ", "do we have ", "i want to know ", "can you tell me ", "issue tracker status", "issue tracker setup", "github tracker status", "github issue status")
+                .any(trackerInquiry::startsWith)
+    if (asksForTrackerSetupStatus) return AgentLocalAction.ShowWorkStatus
+    val standaloneSettingsRequest = trackerInquiry.trim().trimEnd('.', '!', '?')
+    if (standaloneSettingsRequest in setOf("settings", "app settings", "all settings", "all app settings", "appearance settings")) {
+        return AgentLocalAction.ShowSettingsPanel
+    }
+
     val directRequest = Regex(
-        "^(?:(?:please|kindly|can you|can u|could you|would you|i want to|i want you to|i would like to|i'd like to|" +
+        "^(?:(?:hey|hi|hello|bonjour|salut)[,!]?\\s+)?" +
+            "(?:(?:please|kindly|can you|can u|could you|would you|i want to|i want you to|i would like to|i'd like to|" +
             "s'il te plait|s'il vous plait|je veux|j'aimerais|merci de)\\s+)?" +
-            "(?:check\\b|look\\b|search\\b|verify\\b|verifie\\b|verifier\\b|recherche\\b|chercher\\b|" +
+            "(?:theme\\s+change\\b|theme\\s+settings\\b|check\\b|look\\b|search\\b|verify\\b|verifie\\b|verifier\\b|recherche\\b|chercher\\b|" +
             "show\\b|open\\b|view\\b|configure\\b|change\\b|set\\b|switch\\b|use\\b|turn\\b|enable\\b|make\\b|put\\b|" +
             "mets\\b|passe\\b|active\\b|تحقق|غير|بدل|ارجع|أظهر|اظهر|افتح|فعّل|فعل)",
     ).containsMatchIn(normalized)
@@ -56,8 +78,21 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
     ).any(normalized::contains)
     if (asksForWorkStatus) return AgentLocalAction.ShowWorkStatus
 
+    val asksForAppearanceSettings = listOf(
+        "change app appearance", "change the app appearance", "change my app appearance", "change my app's appearance",
+        "change appearance", "change the appearance", "change app appaerence", "change the app appaerence", "app appaerence",
+        "show appearance settings", "show me appearance settings", "show all appearance settings",
+        "open appearance settings", "open the appearance settings", "appearance settings", "app appearance",
+        "show settings", "show me settings", "show all settings", "show me all the settings", "show all those settings",
+        "open settings", "open app settings", "app settings", "all app settings", "all the app settings",
+        "change app settings", "change the app settings", "customize settings",
+        "customize appearance", "customize the app appearance", "change how the app looks",
+    ).any(normalized::contains)
+    if (asksForAppearanceSettings) return AgentLocalAction.ShowSettingsPanel
+
     val asksToChangeTheme = listOf(
-        "change theme", "change the theme", "set theme", "set the theme", "switch theme",
+        "change theme", "change my theme", "change the theme", "change app theme", "change the app theme", "theme change",
+        "set theme", "set the theme", "switch theme", "theme settings",
         "switch to dark", "switch to light", "switch to system", "use dark mode", "use light mode",
         "use system theme", "use the system theme", "use the light theme", "use the dark theme",
         "turn on dark mode", "turn on light mode",
