@@ -825,20 +825,6 @@ fun AgentScreen(
                         }
                     }
 
-                    if (!state.loadingContext && !state.loadingThread && !quotaLocked) {
-                        item(key = "agent_ai_disclaimer") {
-                            Text(
-                                text = atlasText(
-                                    "Atlas Agent est une IA et peut se tromper. Vérifiez les informations importantes.",
-                                    "Atlas Agent is AI and can make mistakes. Verify important information.",
-                                    "مساعد Atlas ذكاء اصطناعي وقد يخطئ. تحقّق من المعلومات المهمة.",
-                                ),
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                            )
-                        }
-                    }
                 }
                 if (showThinkingIndicator) {
                     AgentTypingIndicator(
@@ -871,6 +857,17 @@ fun AgentScreen(
                     }
                 }
             }
+
+            Text(
+                text = atlasText(
+                    "Atlas Agent est une IA et peut se tromper. Vérifiez les informations importantes.",
+                    "Atlas Agent is AI and can make mistakes. Verify important information.",
+                    "مساعد Atlas ذكاء اصطناعي وقد يخطئ. تحقّق من المعلومات المهمة.",
+                ),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+            )
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
