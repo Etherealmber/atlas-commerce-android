@@ -64,8 +64,59 @@ internal fun firstSelectableAgentThread(threads: List<AgentThreadSummaryDto>): A
 internal fun replaceProvisionalReply(provisional: String, doneReply: String): String =
     doneReply.ifBlank { "Analyse terminée." }
 
-internal fun isAgentThemeChoicePrompt(text: String): Boolean =
-    text.trim() in setOf(
+internal fun agentThemeChoiceReply(mode: ThemeMode?, language: AppLanguage): String {
+    val themeName = when (language) {
+        AppLanguage.FRENCH -> when (mode) {
+            ThemeMode.SYSTEM -> "système"
+            ThemeMode.LIGHT -> "clair"
+            ThemeMode.DARK -> "sombre"
+            null -> ""
+        }
+        AppLanguage.ENGLISH -> when (mode) {
+            ThemeMode.SYSTEM -> "system"
+            ThemeMode.LIGHT -> "light"
+            ThemeMode.DARK -> "dark"
+            null -> ""
+        }
+        AppLanguage.ARABIC -> when (mode) {
+            ThemeMode.SYSTEM -> "النظام"
+            ThemeMode.LIGHT -> "الفاتح"
+            ThemeMode.DARK -> "الداكن"
+            null -> ""
+        }
+    }
+    return when (language) {
+        AppLanguage.FRENCH -> if (mode == null) {
+            "Quel thème souhaitez-vous ? Choisissez une option ci-dessous. Aucun changement ne sera appliqué avant votre choix."
+        } else {
+            "Vous avez demandé le thème $themeName. Confirmez ci-dessous pour l’appliquer, ou choisissez-en un autre."
+        }
+        AppLanguage.ENGLISH -> if (mode == null) {
+            "Which theme would you like? Choose one below. Nothing changes until you confirm."
+        } else {
+            "You asked for the $themeName theme. Confirm below to apply it, or choose another theme."
+        }
+        AppLanguage.ARABIC -> if (mode == null) {
+            "ما المظهر الذي تفضله؟ اختر أحد الخيارات أدناه. لن يتغير المظهر حتى تؤكد اختيارك."
+        } else {
+            "طلبت المظهر $themeName. أكّد أدناه لتطبيقه أو اختر مظهراً آخر."
+        }
+    }
+}
+
+internal fun agentThemeChoiceMode(text: String): ThemeMode? {
+    val clean = text.trim()
+    return ThemeMode.entries.firstOrNull { mode ->
+        AppLanguage.entries.any { language -> agentThemeChoiceReply(mode, language) == clean }
+    }
+}
+
+internal fun isAgentThemeChoicePrompt(text: String): Boolean {
+    val clean = text.trim()
+    return agentThemeChoiceMode(clean) != null || clean in setOf(
+        "Quel thème souhaitez-vous ? Choisissez une option ci-dessous. Aucun changement ne sera appliqué avant votre choix.",
+        "Which theme would you like? Choose one below. Nothing changes until you confirm.",
+        "ما المظهر الذي تفضله؟ اختر أحد الخيارات أدناه. لن يتغير المظهر حتى تؤكد اختيارك.",
         "Quel thème souhaitez-vous ? Choisissez une option ci-dessous.",
         "Which theme would you like? Choose one below.",
         "ما المظهر الذي تفضله؟ اختر أحد الخيارات أدناه.",
@@ -73,6 +124,7 @@ internal fun isAgentThemeChoicePrompt(text: String): Boolean =
         "Choose the theme to apply here.",
         "اختر المظهر الذي تريد تطبيقه هنا.",
     )
+}
 
 @HiltViewModel
 class AgentViewModel @Inject constructor(
@@ -98,6 +150,7 @@ class AgentViewModel @Inject constructor(
         val proposals: List<AssistProposalDto> = emptyList(),
         val approvedIds: Set<String> = emptySet(),
         val showThemeOptions: Boolean = false,
+        val suggestedThemeMode: ThemeMode? = null,
     )
 
     data class UiState(
@@ -290,6 +343,7 @@ class AgentViewModel @Inject constructor(
                                 text = message.text,
                                 ms = message.ms,
                                 showThemeOptions = message.role == "assistant" && isAgentThemeChoicePrompt(message.text),
+                                suggestedThemeMode = if (message.role == "assistant") agentThemeChoiceMode(message.text) else null,
                             )
                         }
                     _state.update { current ->
@@ -402,11 +456,7 @@ class AgentViewModel @Inject constructor(
                         AppLanguage.ARABIC -> "أفتح حالة أعمالك في هذه اللوحة."
                     }
                 }
-                AgentLocalAction.ChooseTheme -> when (responseLanguage) {
-                    AppLanguage.FRENCH -> "Quel thème souhaitez-vous ? Choisissez une option ci-dessous."
-                    AppLanguage.ENGLISH -> "Which theme would you like? Choose one below."
-                    AppLanguage.ARABIC -> "ما المظهر الذي تفضله؟ اختر أحد الخيارات أدناه."
-                }
+                is AgentLocalAction.ChooseTheme -> agentThemeChoiceReply(action.requestedMode, responseLanguage)
                 AgentLocalAction.ShowSettingsPanel -> when (responseLanguage) {
                     AppLanguage.FRENCH -> "Dites-moi quel réglage vous souhaitez modifier et je le ferai ici."
                     AppLanguage.ENGLISH -> "Tell me which preference you want to change and I’ll handle it here."
@@ -420,38 +470,6 @@ class AgentViewModel @Inject constructor(
                         AppLanguage.ARABIC -> "فتحت إعدادات إلغاء القفل هنا. فعّله لبدء إعداد البصمة."
                     }
                 }
-                is AgentLocalAction.SetTheme -> {
-                    val saved = try {
-                        preferences.setThemeMode(action.mode)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        false
-                    }
-                    if (!saved) {
-                        when (responseLanguage) {
-                            AppLanguage.FRENCH -> "Je n’ai pas pu enregistrer ce thème. Vous pouvez réessayer dans Profil et personnalisation."
-                            AppLanguage.ENGLISH -> "I couldn't save that theme. You can try again in Profile & Personalization."
-                            AppLanguage.ARABIC -> "تعذّر حفظ هذا المظهر. يمكنك إعادة المحاولة من الملف الشخصي والتخصيص."
-                        }
-                    } else when (responseLanguage) {
-                        AppLanguage.FRENCH -> when (action.mode) {
-                            ThemeMode.SYSTEM -> "D’accord, le thème suit maintenant les réglages du système."
-                            ThemeMode.LIGHT -> "C’est fait : le thème clair est activé."
-                            ThemeMode.DARK -> "C’est fait : le thème sombre est activé."
-                        }
-                        AppLanguage.ENGLISH -> when (action.mode) {
-                            ThemeMode.SYSTEM -> "Done. Atlas now follows your system theme."
-                            ThemeMode.LIGHT -> "Done. The light theme is on."
-                            ThemeMode.DARK -> "Done. The dark theme is on."
-                        }
-                        AppLanguage.ARABIC -> when (action.mode) {
-                            ThemeMode.SYSTEM -> "تم. سيتبع Atlas الآن مظهر النظام."
-                            ThemeMode.LIGHT -> "تم تفعيل المظهر الفاتح."
-                            ThemeMode.DARK -> "تم تفعيل المظهر الداكن."
-                        }
-                    }
-                }
                 AgentLocalAction.CheckForUpdate -> when (responseLanguage) {
                     AppLanguage.FRENCH -> "Je peux vérifier les mises à jour ici. Confirmez avant de démarrer la vérification."
                     AppLanguage.ENGLISH -> "I can check for updates here. Confirm to start the check."
@@ -461,7 +479,8 @@ class AgentViewModel @Inject constructor(
             val assistantMessage = ChatMessage(
                 fromUser = false,
                 text = reply,
-                showThemeOptions = action == AgentLocalAction.ChooseTheme,
+                showThemeOptions = action is AgentLocalAction.ChooseTheme,
+                suggestedThemeMode = (action as? AgentLocalAction.ChooseTheme)?.requestedMode,
             )
             val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
             if (currentScope != requestScope || activeSendRequestId != requestId) return@launch
@@ -545,7 +564,9 @@ class AgentViewModel @Inject constructor(
                     if (state.messages.none { it.id == messageId && it.showThemeOptions }) state
                     else state.copy(
                         messages = state.messages.map { message ->
-                            if (message.id == messageId) message.copy(text = confirmation, showThemeOptions = false) else message
+                            if (message.id == messageId) {
+                                message.copy(text = confirmation, showThemeOptions = false, suggestedThemeMode = null)
+                            } else message
                         },
                     )
                 }

@@ -9,9 +9,9 @@ import org.junit.Test
 
 class AgentLocalActionsTest {
     @Test
-    fun `explicit theme request from tablet feedback is handled locally`() {
+    fun `specific theme requests produce an inline confirmation instead of applying`() {
         assertEquals(
-            AgentLocalAction.SetTheme(ThemeMode.DARK),
+            AgentLocalAction.ChooseTheme(ThemeMode.DARK),
             detectExplicitAgentLocalAction("change theme to dark"),
         )
     }
@@ -19,7 +19,7 @@ class AgentLocalActionsTest {
     @Test
     fun `theme request without a target opens the in-agent chooser`() {
         assertEquals(
-            AgentLocalAction.ChooseTheme,
+            AgentLocalAction.ChooseTheme(),
             detectExplicitAgentLocalAction("change the theme"),
         )
     }
@@ -27,16 +27,16 @@ class AgentLocalActionsTest {
     @Test
     fun `appearance requests offer inline theme choices instead of opening settings`() {
         assertEquals(
-            AgentLocalAction.ChooseTheme,
+            AgentLocalAction.ChooseTheme(),
             detectExplicitAgentLocalAction("Hey, I want to change the app appearance"),
         )
         assertEquals(
-            AgentLocalAction.ChooseTheme,
+            AgentLocalAction.ChooseTheme(),
             detectExplicitAgentLocalAction("Can I change the app appearance?"),
         )
-        assertEquals(AgentLocalAction.ChooseTheme, detectExplicitAgentLocalAction("app appearance"))
+        assertEquals(AgentLocalAction.ChooseTheme(), detectExplicitAgentLocalAction("app appearance"))
         assertEquals(
-            AgentLocalAction.ChooseTheme,
+            AgentLocalAction.ChooseTheme(),
             detectExplicitAgentLocalAction("change the app appaerence"),
         )
         assertEquals(AgentLocalAction.ShowSettingsPanel, detectExplicitAgentLocalAction("show all settings"))
@@ -46,7 +46,7 @@ class AgentLocalActionsTest {
     @Test
     fun `theme-only request does not open unrelated appearance settings`() {
         assertEquals(
-            AgentLocalAction.ChooseTheme,
+            AgentLocalAction.ChooseTheme(),
             detectExplicitAgentLocalAction("change the app theme"),
         )
     }

@@ -16,15 +16,14 @@ internal fun issueTrackerSetupState(availability: String?): IssueTrackerSetupSta
 internal sealed interface AgentLocalAction {
     data object CheckForUpdate : AgentLocalAction
     data object ShowWorkStatus : AgentLocalAction
-    data object ChooseTheme : AgentLocalAction
+    data class ChooseTheme(val requestedMode: ThemeMode? = null) : AgentLocalAction
     data object ShowSettingsPanel : AgentLocalAction
     data object ConfigureDeviceUnlock : AgentLocalAction
-    data class SetTheme(val mode: ThemeMode) : AgentLocalAction
 }
 
 /**
- * Recognize safe native requests locally. Appearance questions may offer in-chat choices, but no
- * preference changes until the user explicitly selects a theme or names one in their request.
+ * Recognize safe native requests locally. Appearance requests offer in-chat choices; no
+ * preference changes until the user explicitly selects one of those options.
  */
 internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
     val normalized = Normalizer.normalize(prompt, Normalizer.Form.NFD)
@@ -40,7 +39,7 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
     if (asksForTrackerSetupStatus) return AgentLocalAction.ShowWorkStatus
     val standaloneSettingsRequest = trackerInquiry.trim().trimEnd('.', '!', '?')
     if (standaloneSettingsRequest in setOf("appearance", "app appearance", "the app appearance", "appearance settings")) {
-        return AgentLocalAction.ChooseTheme
+        return AgentLocalAction.ChooseTheme()
     }
     if (standaloneSettingsRequest in setOf("settings", "app settings", "all settings", "all app settings")) {
         return AgentLocalAction.ShowSettingsPanel
@@ -56,7 +55,7 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
         "can i", "can i change", "how do i", "how can i", "is it possible", "i want to", "i want ",
         "i'd like to", "could you", "change", "customize", "show", "open",
     ).any(normalized::contains)
-    if (asksHowToChangeAppearance) return AgentLocalAction.ChooseTheme
+    if (asksHowToChangeAppearance) return AgentLocalAction.ChooseTheme()
 
 
     val directRequest = Regex(
@@ -127,9 +126,9 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
         listOf("system", "automatic", "auto", "systeme", "automatique", "تلقائي").any(targetPhrase::contains) -> ThemeMode.SYSTEM
         listOf("dark", "sombre", "noir", "داكن", "مظلم").any(targetPhrase::contains) -> ThemeMode.DARK
         listOf("light", "clair", "blanc", "فاتح").any(targetPhrase::contains) -> ThemeMode.LIGHT
-        else -> return AgentLocalAction.ChooseTheme
+        else -> return AgentLocalAction.ChooseTheme()
     }
-    return AgentLocalAction.SetTheme(mode)
+    return AgentLocalAction.ChooseTheme(mode)
 }
 
 /** Requests in this category are intentionally unsupported by Atlas Agent. */

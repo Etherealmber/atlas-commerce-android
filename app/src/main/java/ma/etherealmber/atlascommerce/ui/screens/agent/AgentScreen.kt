@@ -1507,18 +1507,17 @@ private fun ChatBubbleRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 ThemeMode.entries.forEach { mode ->
+                                    val themeLabel = when (mode) {
+                                        ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
+                                        ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
+                                        ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+                                    }
+                                    val actionLabel = if (message.suggestedThemeMode == mode) {
+                                        atlasText("Confirmer $themeLabel", "Confirm $themeLabel", "تأكيد $themeLabel")
+                                    } else themeLabel
                                     AssistChip(
                                         onClick = { onThemeChoice(message.id, mode) },
-                                        label = {
-                                            Text(
-                                                when (mode) {
-                                                    ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
-                                                    ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
-                                                    ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
-                                                },
-                                                maxLines = 1,
-                                            )
-                                        },
+                                        label = { Text(actionLabel, maxLines = 1) },
                                     )
                                 }
                             }
