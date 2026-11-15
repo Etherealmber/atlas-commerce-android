@@ -986,6 +986,7 @@ fun <S> AtlasPageTransition(
     indexSelector: (S) -> Int = { 0 },
     modifier: Modifier = Modifier,
     label: String = "atlas_page",
+    tabletMode: Boolean = false,
     content: @Composable (S) -> Unit,
 ) {
     val enabled = LocalAtlasAnimationsEnabled.current
@@ -1000,6 +1001,18 @@ fun <S> AtlasPageTransition(
                 val initialOrder = indexSelector(initialState)
                 val targetOrder = indexSelector(targetState)
                 when {
+                    tabletMode && initialOrder < 100 && targetOrder < 100 -> {
+                        // Exit the previous tablet page before the next one appears. This avoids
+                        // two navigation/page surfaces being visible together during a fast tap.
+                        (
+                            fadeIn(tween(190, delayMillis = 165, easing = FastOutSlowInEasing)) +
+                                scaleIn(
+                                    tween(190, delayMillis = 165, easing = FastOutSlowInEasing),
+                                    initialScale = 0.985f,
+                                )
+                            ) togetherWith fadeOut(tween(155, easing = FastOutSlowInEasing))
+                    }
+
                     // Overlay / Settings pushed vertically
                     targetOrder >= 100 && initialOrder < 100 -> {
                         (

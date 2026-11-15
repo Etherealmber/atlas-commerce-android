@@ -1,7 +1,13 @@
 package ma.etherealmber.atlascommerce.ui.shell
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Notifications
@@ -35,8 +40,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -49,6 +57,7 @@ import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
@@ -62,7 +71,6 @@ internal fun AtlasSidebarContent(
     cartCount: Int,
     notificationCount: Int,
     updateState: UpdateState,
-    onUpdateClick: () -> Unit,
     expanded: Boolean,
     onOpenDataStorageManager: () -> Unit,
     dataStorageSelected: Boolean,
@@ -145,7 +153,7 @@ internal fun AtlasSidebarContent(
                 SidebarNavigationItem(
                     icon = item.icon,
                     label = item.localizedLabel(),
-                    isSelected = selectedTab == item,
+                    isSelected = selectedTab == item && !dataStorageSelected,
                     expanded = expanded,
                     badgeCount = if (item == MainTab.SALE) cartCount else 0,
                     onClick = { onNavigate(item) },
@@ -154,7 +162,7 @@ internal fun AtlasSidebarContent(
             SidebarNavigationItem(
                 icon = MainTab.AGENT.icon,
                 label = MainTab.AGENT.localizedLabel(),
-                isSelected = selectedTab == MainTab.AGENT,
+                isSelected = selectedTab == MainTab.AGENT && !dataStorageSelected,
                 expanded = expanded,
                 onClick = { onNavigate(MainTab.AGENT) },
             )
@@ -163,7 +171,7 @@ internal fun AtlasSidebarContent(
             SidebarNavigationItem(
                 icon = Icons.Outlined.Notifications,
                 label = atlasText("Notifications", "Notifications", "الإشعارات"),
-                isSelected = selectedTab == MainTab.NOTIFICATIONS,
+                isSelected = selectedTab == MainTab.NOTIFICATIONS && !dataStorageSelected,
                 expanded = expanded,
                 badgeCount = notificationCount,
                 onClick = onOpenNotifications,
@@ -172,7 +180,7 @@ internal fun AtlasSidebarContent(
                 SidebarNavigationItem(
                     icon = Icons.Outlined.ShoppingCart,
                     label = atlasText("Nouvelle vente", "New sale", "بيع جديد"),
-                    isSelected = selectedTab == MainTab.SALE,
+                    isSelected = selectedTab == MainTab.SALE && !dataStorageSelected,
                     expanded = expanded,
                     badgeCount = cartCount,
                     onClick = { onNavigate(MainTab.SALE) },
@@ -181,7 +189,7 @@ internal fun AtlasSidebarContent(
             SidebarNavigationItem(
                 icon = MainTab.SETTINGS.icon,
                 label = MainTab.SETTINGS.localizedLabel(),
-                isSelected = selectedTab == MainTab.SETTINGS,
+                isSelected = selectedTab == MainTab.SETTINGS && !dataStorageSelected,
                 expanded = expanded,
                 onClick = { onNavigate(MainTab.SETTINGS) },
             )
@@ -197,7 +205,6 @@ internal fun AtlasSidebarContent(
         SidebarUpdateStatus(
             state = updateState,
             expanded = expanded,
-            onClick = onUpdateClick,
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         if (expanded) {
@@ -271,29 +278,10 @@ internal fun AtlasSidebarContent(
 private fun SidebarUpdateStatus(
     state: UpdateState,
     expanded: Boolean,
-    onClick: () -> Unit,
 ) {
-    val checking = state == UpdateState.Checking
-    val downloading = state as? UpdateState.Downloading
-    val ready = state as? UpdateState.ReadyToInstall
-    val available = state as? UpdateState.Available
-    if (!checking && downloading == null && ready == null && available == null) return
-
-    val status = when {
-        checking -> atlasText("Vérification en cours…", "Checking for updates…", "جارٍ التحقق من التحديثات…")
-        downloading != null -> downloading.percent?.let { "${it}% · ${downloading.progressSummary}" }
-            ?: downloading.progressSummary
-        ready != null -> atlasText("Prête à installer", "Ready to install", "جاهز للتثبيت")
-        else -> atlasText("Mise à jour disponible", "Update available", "التحديث متاح")
-    }
-    val title = when {
-        checking -> atlasText("Vérification", "Checking", "التحقق")
-        downloading != null -> atlasText("Téléchargement", "Downloading", "جارٍ التنزيل")
-        ready != null -> atlasText("Prête à installer", "Ready to install", "جاهز للتثبيت")
-        else -> atlasText("Mise à jour", "Update", "التحديث")
-    }
+    if (state != UpdateState.Checking) return
     Surface(
-        onClick = onClick,
+        onClick = {},
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -305,46 +293,17 @@ private fun SidebarUpdateStatus(
                 verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Icon(
-                    imageVector = if (ready != null) Icons.Outlined.CheckCircle else Icons.Outlined.SystemUpdateAlt,
-                    contentDescription = null,
+                    imageVector = Icons.Outlined.SystemUpdateAlt,
+                    contentDescription = atlasText("Vérification des mises à jour", "Checking for updates", "التحقق من التحديثات"),
                     tint = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier.size(22.dp),
                 )
-                Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                Text(
-                    status,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (checking) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                } else {
-                    downloading?.let {
-                        LinearProgressIndicator(
-                            progress = { it.progressFraction ?: 0f },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
+                Text(atlasText("Vérification", "Checking", "التحقق"), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         } else {
             Box(Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                when {
-                    checking -> CircularProgressIndicator(modifier = Modifier.size(30.dp), strokeWidth = 2.dp)
-                    downloading != null -> CircularProgressIndicator(
-                        progress = { downloading.progressFraction ?: 0f },
-                        modifier = Modifier.size(30.dp),
-                        strokeWidth = 2.dp,
-                    )
-                }
-                Icon(
-                    imageVector = if (ready != null) Icons.Outlined.CheckCircle else Icons.Outlined.SystemUpdateAlt,
-                    contentDescription = "$title: $status",
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(20.dp),
-                )
+                CircularProgressIndicator(modifier = Modifier.size(30.dp), strokeWidth = 2.dp)
             }
         }
     }
@@ -359,12 +318,34 @@ private fun SidebarNavigationItem(
     badgeCount: Int = 0,
     onClick: () -> Unit,
 ) {
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val backgroundColor by animateColorAsState(
+        targetValue = when {
+            isSelected -> MaterialTheme.colorScheme.primaryContainer
+            pressed -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+            else -> androidx.compose.ui.graphics.Color.Transparent
+        },
+        animationSpec = tween(if (motionEnabled) 150 else 0),
+        label = "sidebar-item-color-$label",
+    )
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.96f else 1f,
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.72f, stiffness = 620f) else tween(0),
+        label = "sidebar-item-press-$label",
+    )
     Surface(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { selected = isSelected },
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .semantics { selected = isSelected }
+            .graphicsLayer { scaleX = pressScale; scaleY = pressScale },
         shape = RoundedCornerShape(14.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
+        color = backgroundColor,
         border = null,
+        interactionSource = interactionSource,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = if (expanded) 14.dp else 0.dp, vertical = 11.dp),
@@ -383,13 +364,13 @@ private fun SidebarNavigationItem(
                         Surface(
                             modifier = Modifier.size(30.dp),
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.13f),
                         ) {}
                     }
                     Icon(
                         imageVector = icon,
                         contentDescription = if (expanded) null else label,
-                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(21.dp),
                     )
                 }
@@ -400,7 +381,7 @@ private fun SidebarNavigationItem(
                     label,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

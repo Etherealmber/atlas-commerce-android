@@ -18,6 +18,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
@@ -91,8 +93,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -177,6 +182,8 @@ enum class MainTab(val label: String, val icon: ImageVector) {
 
     }
 }
+
+private data class ShellPageTarget(val tab: MainTab, val isDataStorage: Boolean = false)
 
 @Composable
 internal fun MainTab.localizedLabel(): String = when (this) {
@@ -417,6 +424,7 @@ fun MainShell(
 
     BackHandler(enabled = isForeground && tab != MainTab.HOME && !productHistoryActive) {
         AtlasLogBuffer.log("NAVIGATION", "System Back handled by shell on tab=${tab.name}")
+        showDataCacheManagerDialog = false
         when (tab) {
             MainTab.SETTINGS -> setTabName(MainTab.PROFILE.name)
             MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> setTabName(lastBottomTabName)
@@ -430,6 +438,7 @@ fun MainShell(
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val useRail = maxWidth >= 600.dp
     val useDesktopSidebar = maxWidth >= 1000.dp
+    val pageTarget = ShellPageTarget(tab = tab, isDataStorage = useRail && showDataCacheManagerDialog)
     val sidebarExpanded = !sidebarCollapsed
     val sidebarWidth by animateDpAsState(
         targetValue = if (!useRail) 0.dp else if (sidebarExpanded) 264.dp else 76.dp,
@@ -497,7 +506,7 @@ fun MainShell(
                             is UpdateState.ReadyToInstall -> state.dismissedBanner && !state.info.mandatory
                             else -> false
                         }
-                        if (isForeground && !useRail) {
+                        if (isForeground && !useRail && tab != MainTab.AGENT) {
                             UpdateMiniProgressBall(
                                 state = updateState,
                                 onClick = onShowUpdateProgress,
@@ -593,9 +602,20 @@ fun MainShell(
                 .background(MaterialTheme.colorScheme.background),
         ) {
         val showRail = useRail
+        val layoutDirection = LocalLayoutDirection.current
+        val sidebarStartInset = if (layoutDirection == LayoutDirection.Ltr) {
+            padding.calculateLeftPadding(layoutDirection)
+        } else {
+            padding.calculateRightPadding(layoutDirection)
+        }
+        val sidebarEdgeOffset = if (layoutDirection == LayoutDirection.Ltr) -sidebarStartInset else sidebarStartInset
         if (showRail) {
             Surface(
-                modifier = Modifier.align(Alignment.CenterStart).width(sidebarWidth).fillMaxHeight(),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset(x = sidebarEdgeOffset)
+                    .width(sidebarWidth + sidebarStartInset)
+                    .fillMaxHeight(),
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 tonalElevation = 1.dp,
             ) {
@@ -607,7 +627,6 @@ fun MainShell(
                     cartCount = cartCount,
                     notificationCount = notificationCount,
                     updateState = updateState,
-                    onUpdateClick = onShowUpdateProgress,
                     expanded = sidebarExpanded,
                     onOpenDataStorageManager = { showDataCacheManagerDialog = true },
                     dataStorageSelected = showDataCacheManagerDialog,
@@ -623,7 +642,11 @@ fun MainShell(
                 )
             }
             VerticalDivider(
-                modifier = Modifier.align(Alignment.CenterStart).padding(start = sidebarWidth - 1.dp).fillMaxHeight(),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset(x = sidebarEdgeOffset)
+                    .padding(start = sidebarWidth - 1.dp)
+                    .fillMaxHeight(),
                 color = MaterialTheme.colorScheme.outlineVariant,
             )
         }
@@ -632,19 +655,27 @@ fun MainShell(
             LocalAtlasFloatingDockPadding provides if (!useRail && tab !in BackStackTabs && !productHistoryActive) 96.dp + navigationInset else 0.dp,
         ) {
         AtlasPageTransition(
-            targetState = tab,
-            indexSelector = { it.ordinal },
+            targetState = pageTarget,
+            indexSelector = { it.tab.ordinal },
+            tabletMode = useRail,
             // The dock floats over the page so content can scroll beneath it. Main scrollable
             // screens add end content-padding so their final items can still scroll clear of it.
             modifier = Modifier
                 .fillMaxSize()
                 .padding(start = if (showRail) sidebarWidth else 0.dp),
-        ) { currentTab ->
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        ) { currentPage ->
+            val currentTab = currentPage.tab
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (useRail) Modifier.background(MaterialTheme.colorScheme.background) else Modifier)
+                    .then(if (useRail) Modifier.zIndex(if (currentPage == pageTarget) 1f else 0f) else Modifier),
+                contentAlignment = Alignment.TopCenter,
+            ) {
                 Column(Modifier.widthIn(max = if (useRail) 1440.dp else 840.dp).fillMaxSize()) {
                     if (useRail && currentTab != MainTab.NOTIFICATIONS && currentTab != MainTab.AGENT) {
                         Text(
-                            if (showDataCacheManagerDialog) {
+                            if (currentPage.isDataStorage) {
                                 atlasText("Données et cache", "Data & cache", "البيانات والذاكرة المؤقتة")
                             } else currentTab.localizedLabel(),
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp),
@@ -653,7 +684,7 @@ fun MainShell(
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                     }
-                    if (useRail && showDataCacheManagerDialog) {
+                    if (useRail && currentPage.isDataStorage) {
                         DataCacheManagerDialog(
                             onDismiss = { showDataCacheManagerDialog = false },
                             onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
@@ -984,27 +1015,42 @@ private fun FloatingBottomBarItem(
         animationSpec = if (motionEnabled) spring(dampingRatio = 0.72f, stiffness = 520f) else tween(0),
         label = "nav-icon-offset-${item.name}",
     )
+    val interactionSource = remember(item) { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed && motionEnabled) 0.9f else 1f,
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.66f, stiffness = 620f) else tween(0),
+        label = "nav-icon-press-${item.name}",
+    )
+    val pillScale by animateFloatAsState(
+        targetValue = if (selected && motionEnabled) 1f else 0.94f,
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.76f, stiffness = 480f) else tween(0),
+        label = "nav-pill-scale-${item.name}",
+    )
     BoxWithConstraints(
         modifier = modifier
             .fillMaxHeight()
             .clip(RoundedCornerShape(18.dp))
             .semantics { this.selected = selected }
-            .clickable(role = Role.Tab, onClick = onClick)
+            .clickable(interactionSource = interactionSource, indication = null, role = Role.Tab, onClick = onClick)
             .padding(horizontal = if (compactWidth) 1.dp else 2.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
         val pillWidth by animateDpAsState(
             targetValue = if (selected) maxWidth else 0.dp,
-            animationSpec = if (motionEnabled) spring(dampingRatio = 0.74f, stiffness = 430f) else tween(0),
+            animationSpec = if (motionEnabled) spring(dampingRatio = 0.78f, stiffness = 440f) else tween(0),
             label = "nav-selected-pill-${item.name}",
         )
         val pillHeight by animateDpAsState(
             targetValue = if (selected) 48.dp else 0.dp,
-            animationSpec = if (motionEnabled) spring(dampingRatio = 0.76f, stiffness = 460f) else tween(0),
+            animationSpec = if (motionEnabled) spring(dampingRatio = 0.78f, stiffness = 480f) else tween(0),
             label = "nav-selected-pill-height-${item.name}",
         )
         Surface(
-            modifier = Modifier.width(pillWidth).height(pillHeight),
+            modifier = Modifier
+                .width(pillWidth)
+                .height(pillHeight)
+                .graphicsLayer { scaleX = pillScale; scaleY = pillScale },
             shape = RoundedCornerShape(17.dp),
             color = MaterialTheme.colorScheme.primaryContainer,
             tonalElevation = if (selected) 1.dp else 0.dp,
@@ -1022,8 +1068,8 @@ private fun FloatingBottomBarItem(
                         .offset(y = iconOffset)
                         .size(20.dp)
                         .graphicsLayer {
-                            scaleX = if (motionEnabled) iconScale else 1f
-                            scaleY = if (motionEnabled) iconScale else 1f
+                            scaleX = (if (motionEnabled) iconScale else 1f) * pressScale
+                            scaleY = (if (motionEnabled) iconScale else 1f) * pressScale
                         },
                 )
             }

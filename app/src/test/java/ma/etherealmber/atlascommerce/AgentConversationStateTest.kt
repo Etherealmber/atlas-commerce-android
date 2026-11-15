@@ -6,6 +6,8 @@ import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationDestination
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentLocalAction
 import ma.etherealmber.atlascommerce.ui.screens.agent.detectExplicitAgentLocalAction
+import ma.etherealmber.atlascommerce.ui.screens.agent.isForbiddenAgentRequest
+import ma.etherealmber.atlascommerce.ui.screens.agent.isForbiddenAgentProposal
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentViewModel
 import ma.etherealmber.atlascommerce.ui.screens.agent.detectExplicitAgentNavigationRequest
 import ma.etherealmber.atlascommerce.ui.screens.agent.mobileNavigationSuggestion
@@ -37,19 +39,23 @@ class AgentConversationStateTest {
     }
 
     @Test
-    fun storageNavigationWinsOverTheFrenchStockSubstring() {
-        assertEquals(
-            AgentNavigationDestination.DATA_STORAGE,
-            detectAgentNavigationSuggestion("Open gestion du stockage")?.destination,
-        )
+    fun agentDoesNotOfferDataStorageNavigation() {
+        assertEquals(null, detectAgentNavigationSuggestion("Open gestion du stockage"))
     }
 
     @Test
-    fun explicitRequestCanOpenDataStorageArea() {
-        assertEquals(
-            AgentNavigationDestination.DATA_STORAGE,
-            detectExplicitAgentNavigationRequest("Open the data storage manager")?.destination,
-        )
+    fun explicitRequestCannotOpenDataStorageArea() {
+        assertEquals(null, detectExplicitAgentNavigationRequest("Open the data storage manager"))
+    }
+
+    @Test
+    fun agentRejectsForbiddenLocalAndDestructiveRequests() {
+        assertEquals(true, isForbiddenAgentRequest("Open the cache"))
+        assertEquals(true, isForbiddenAgentRequest("Delete the server"))
+        assertEquals(true, isForbiddenAgentRequest("Sign out"))
+        assertEquals(false, isForbiddenAgentRequest("Check for updates"))
+        assertEquals(true, isForbiddenAgentProposal(AssistProposalDto(action = "delete_server", type = "server")))
+        assertEquals(true, isForbiddenAgentProposal(AssistProposalDto(action = "clear_cache")))
     }
 
     @Test
@@ -93,6 +99,14 @@ class AgentConversationStateTest {
     }
 
     @Test
+    fun directThemeAndSettingsRequestsOpenNativeControls() {
+        assertEquals(AgentLocalAction.SetTheme(ThemeMode.DARK), detectExplicitAgentLocalAction("I want to change the theme to dark"))
+        assertEquals(AgentLocalAction.ChooseTheme, detectExplicitAgentLocalAction("Can u change theme"))
+        assertEquals(AgentLocalAction.ConfigureDeviceUnlock, detectExplicitAgentLocalAction("Show device unlock"))
+        assertEquals(AgentLocalAction.ShowWorkStatus, detectExplicitAgentLocalAction("Show my work status"))
+    }
+
+    @Test
     fun themeDiscussionAloneDoesNotChangeTheTheme() {
         assertEquals(null, detectExplicitAgentLocalAction("I like the dark theme"))
         assertEquals(null, detectExplicitAgentLocalAction("What is the theme setting?"))
@@ -116,8 +130,8 @@ class AgentConversationStateTest {
 
         assertEquals(AgentNavigationDestination.SETTINGS, action?.destination)
         assertEquals(
-            AgentNavigationDestination.DATA_STORAGE,
-            mobileNavigationSuggestion(AssistProposalDto(type = "mobile_ui", action = "navigate", path = "/m/storage"))?.destination,
+            null,
+            mobileNavigationSuggestion(AssistProposalDto(type = "mobile_ui", action = "navigate", path = "/m/storage")),
         )
         assertEquals(
             null,
