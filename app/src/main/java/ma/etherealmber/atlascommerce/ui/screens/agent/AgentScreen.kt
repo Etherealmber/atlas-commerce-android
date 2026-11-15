@@ -466,6 +466,8 @@ fun AgentScreen(
         conversationListState.scrollToConversationEnd()
     }
 
+    val defaultClientNameSavedNotice = atlasText("Client par défaut enregistré.", "Default customer saved.", "تم حفظ العميل الافتراضي.")
+    val crashReportSettingFailureNotice = atlasText("Impossible de modifier ce réglage.", "Could not update this setting.", "تعذر تحديث هذا الإعداد.")
     val reportedIssueTrackerSource = state.mobileWorkStatus?.trackers?.github
     val issueTrackerSettingLabel = when {
         state.workStatusLoading && state.mobileWorkStatus == null -> atlasText("Vérification…", "Checking…", "جارٍ التحقق…")
@@ -605,7 +607,7 @@ fun AgentScreen(
                                     imeAction = ImeAction.Done,
                                     onDone = {
                                         appViewModel.setDefaultClientName(defaultClientNameDraft)
-                                        onToast(atlasText("Client par défaut enregistré.", "Default customer saved.", "تم حفظ العميل الافتراضي."))
+                                        onToast(defaultClientNameSavedNotice)
                                     },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
@@ -613,7 +615,7 @@ fun AgentScreen(
                                 TextButton(
                                     onClick = {
                                         appViewModel.setDefaultClientName(defaultClientNameDraft)
-                                        onToast(atlasText("Client par défaut enregistré.", "Default customer saved.", "تم حفظ العميل الافتراضي."))
+                                        onToast(defaultClientNameSavedNotice)
                                     },
                                     modifier = Modifier.align(Alignment.End),
                                 ) { Text(atlasText("Enregistrer", "Save", "حفظ")) }
@@ -684,7 +686,7 @@ fun AgentScreen(
                                     checked = automaticCrashReportsEnabled,
                                     onCheckedChange = { enabled ->
                                         appViewModel.setAutomaticCrashReportsEnabled(enabled) { succeeded ->
-                                            if (!succeeded) onToast(atlasText("Impossible de modifier ce réglage.", "Could not update this setting.", "تعذر تحديث هذا الإعداد."))
+                                            if (!succeeded) onToast(crashReportSettingFailureNotice)
                                         }
                                     },
                                 )

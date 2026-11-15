@@ -436,6 +436,7 @@ fun MainShell(
         onSignOut()
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
+    val shellMaxHeight = maxHeight
     val useRail = maxWidth >= 600.dp
     val useDesktopSidebar = maxWidth >= 1000.dp
     val pageTarget = ShellPageTarget(tab = tab, isDataStorage = useRail && showDataCacheManagerDialog)
@@ -612,7 +613,7 @@ fun MainShell(
         val sidebarEdgeOffset = if (layoutDirection == LayoutDirection.Ltr) -sidebarStartInset else sidebarStartInset
         val sidebarTopInset = padding.calculateTopPadding()
         val sidebarBottomInset = padding.calculateBottomPadding()
-        val sidebarHeight = (maxHeight - sidebarBottomInset).coerceAtLeast(0.dp)
+        val sidebarHeight = (shellMaxHeight - sidebarBottomInset).coerceAtLeast(0.dp)
         if (showRail) {
             // Extend only the rail background behind the top bar; keep its contents
             // positioned in the Scaffold body, below the top bar as usual.
