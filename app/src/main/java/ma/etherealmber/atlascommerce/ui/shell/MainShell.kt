@@ -564,15 +564,16 @@ fun MainShell(
                             }
 
                             else -> {
-                                TopBarQuickActionsMenu(
-                                    notificationCount = notificationCount,
-                                    showSale = Roles.canCreateDocuments(user.role),
-                                    onOpenNotifications = openNotificationsForLayout,
-                                    onOpenSale = { switchTab(MainTab.SALE) },
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                // The full-width sidebar owns the account avatar on tablets.
+                                // Tablet navigation is in the sidebar; keep its notifications,
+                                // sale, and account actions out of the top-bar dropdown.
                                 if (!useRail) {
+                                    TopBarQuickActionsMenu(
+                                        notificationCount = notificationCount,
+                                        showSale = Roles.canCreateDocuments(user.role),
+                                        onOpenNotifications = openNotificationsForLayout,
+                                        onOpenSale = { switchTab(MainTab.SALE) },
+                                    )
+                                    Spacer(Modifier.width(6.dp))
                                     AtlasAvatar(
                                         avatarUrl = user.avatarUrl,
                                         label = user.displayName.ifBlank { user.username },
@@ -588,8 +589,8 @@ fun MainShell(
                                         onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAvatarSurprise = true },
                                         longClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
                                     )
+                                    Spacer(Modifier.width(10.dp))
                                 }
-                                Spacer(Modifier.width(10.dp))
                             }
                         }
                     },

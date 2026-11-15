@@ -211,32 +211,45 @@ internal fun AtlasSidebarContent(
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                AtlasAvatar(
-                    avatarUrl = user.avatarUrl,
-                    label = user.displayName.ifBlank { user.username },
-                    size = 40.dp,
-                    serverBaseUrl = serverBaseUrl,
-                    borderColor = MaterialTheme.colorScheme.outlineVariant,
+                Surface(
                     onClick = { onNavigate(MainTab.PROFILE) },
-                    onLongClick = onAvatarSurprise,
-                    longClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
-                )
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        user.displayName.ifBlank { user.username },
-                        style = MaterialTheme.typography.labelLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        atlasRoleLabel(user.role),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        AtlasAvatar(
+                            avatarUrl = user.avatarUrl,
+                            label = user.displayName.ifBlank { user.username },
+                            size = 40.dp,
+                            serverBaseUrl = serverBaseUrl,
+                            borderColor = MaterialTheme.colorScheme.outlineVariant,
+                            onClick = { onNavigate(MainTab.PROFILE) },
+                            onLongClick = onAvatarSurprise,
+                            longClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                user.displayName.ifBlank { user.username },
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                atlasRoleLabel(user.role),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
                 IconButton(onClick = onRequestSignOut) {
                     Icon(
@@ -252,16 +265,25 @@ internal fun AtlasSidebarContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                AtlasAvatar(
-                    avatarUrl = user.avatarUrl,
-                    label = user.displayName.ifBlank { user.username },
-                    size = 40.dp,
-                    serverBaseUrl = serverBaseUrl,
-                    borderColor = MaterialTheme.colorScheme.outlineVariant,
+                Surface(
                     onClick = { onNavigate(MainTab.PROFILE) },
-                    onLongClick = onAvatarSurprise,
-                    longClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
-                )
+                    modifier = Modifier.size(56.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        AtlasAvatar(
+                            avatarUrl = user.avatarUrl,
+                            label = user.displayName.ifBlank { user.username },
+                            size = 40.dp,
+                            serverBaseUrl = serverBaseUrl,
+                            borderColor = MaterialTheme.colorScheme.outlineVariant,
+                            onClick = { onNavigate(MainTab.PROFILE) },
+                            onLongClick = onAvatarSurprise,
+                            longClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
+                        )
+                    }
+                }
                 IconButton(onClick = onRequestSignOut) {
                     Icon(
                         Icons.Outlined.Logout,
