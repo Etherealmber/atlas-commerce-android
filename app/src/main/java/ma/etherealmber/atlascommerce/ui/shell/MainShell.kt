@@ -651,7 +651,10 @@ fun MainShell(
                     .align(Alignment.CenterStart)
                     .offset(x = sidebarEdgeOffset)
                     .width(sidebarWidth + sidebarStartInset)
-                    .fillMaxHeight(),
+                    .fillMaxHeight()
+                    // Keep the rail (including its brand row) above full-screen destinations
+                    // such as the embedded Notifications scaffold.
+                    .zIndex(2f),
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 tonalElevation = 1.dp,
             ) {
