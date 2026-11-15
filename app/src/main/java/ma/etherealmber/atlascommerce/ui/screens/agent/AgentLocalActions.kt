@@ -9,6 +9,7 @@ internal sealed interface AgentLocalAction {
     data object CheckForUpdate : AgentLocalAction
     data object ShowWorkStatus : AgentLocalAction
     data object ChooseTheme : AgentLocalAction
+    data object ShowAppearanceSettings : AgentLocalAction
     data object ConfigureDeviceUnlock : AgentLocalAction
     data class SetTheme(val mode: ThemeMode) : AgentLocalAction
 }
@@ -23,9 +24,10 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
         .lowercase(Locale.ROOT)
         .trim()
     val directRequest = Regex(
-        "^(?:(?:please|kindly|can you|can u|could you|would you|i want to|i want you to|i would like to|i'd like to|" +
+        "^(?:(?:hey|hi|hello|bonjour|salut)[,!]?\\s+)?" +
+            "(?:(?:please|kindly|can you|can u|could you|would you|i want to|i want you to|i would like to|i'd like to|" +
             "s'il te plait|s'il vous plait|je veux|j'aimerais|merci de)\\s+)?" +
-            "(?:check\\b|look\\b|search\\b|verify\\b|verifie\\b|verifier\\b|recherche\\b|chercher\\b|" +
+            "(?:theme\\s+change\\b|theme\\s+settings\\b|check\\b|look\\b|search\\b|verify\\b|verifie\\b|verifier\\b|recherche\\b|chercher\\b|" +
             "show\\b|open\\b|view\\b|configure\\b|change\\b|set\\b|switch\\b|use\\b|turn\\b|enable\\b|make\\b|put\\b|" +
             "mets\\b|passe\\b|active\\b|تحقق|غير|بدل|ارجع|أظهر|اظهر|افتح|فعّل|فعل)",
     ).containsMatchIn(normalized)
@@ -56,8 +58,18 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
     ).any(normalized::contains)
     if (asksForWorkStatus) return AgentLocalAction.ShowWorkStatus
 
+    val asksForAppearanceSettings = listOf(
+        "change app appearance", "change the app appearance", "change my app appearance", "change my app's appearance",
+        "change appearance", "change the appearance", "change app appaerence", "change the app appaerence", "app appaerence",
+        "show appearance settings", "show me appearance settings", "show all appearance settings",
+        "open appearance settings", "open the appearance settings", "appearance settings", "app appearance",
+        "customize appearance", "customize the app appearance", "change how the app looks",
+    ).any(normalized::contains)
+    if (asksForAppearanceSettings) return AgentLocalAction.ShowAppearanceSettings
+
     val asksToChangeTheme = listOf(
-        "change theme", "change the theme", "set theme", "set the theme", "switch theme",
+        "change theme", "change my theme", "change the theme", "change app theme", "change the app theme", "theme change",
+        "set theme", "set the theme", "switch theme", "theme settings",
         "switch to dark", "switch to light", "switch to system", "use dark mode", "use light mode",
         "use system theme", "use the system theme", "use the light theme", "use the dark theme",
         "turn on dark mode", "turn on light mode",

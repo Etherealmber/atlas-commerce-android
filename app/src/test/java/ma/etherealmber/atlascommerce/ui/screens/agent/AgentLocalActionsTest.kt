@@ -23,7 +23,27 @@ class AgentLocalActionsTest {
     }
 
     @Test
-    fun `question about theme does not change app preferences`() {
-        assertNull(detectExplicitAgentLocalAction("Would you change the theme to dark?"))
+    fun `broad appearance request opens the in-agent appearance settings`() {
+        assertEquals(
+            AgentLocalAction.ShowAppearanceSettings,
+            detectExplicitAgentLocalAction("Hey, I want to change the app appearance"),
+        )
+        assertEquals(
+            AgentLocalAction.ShowAppearanceSettings,
+            detectExplicitAgentLocalAction("change the app appaerence"),
+        )
+    }
+
+    @Test
+    fun `theme-only request does not open unrelated appearance settings`() {
+        assertEquals(
+            AgentLocalAction.ChooseTheme,
+            detectExplicitAgentLocalAction("change the app theme"),
+        )
+    }
+
+    @Test
+    fun `question about current theme does not change app preferences`() {
+        assertNull(detectExplicitAgentLocalAction("What theme is the app using?"))
     }
 }

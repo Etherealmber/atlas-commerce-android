@@ -132,6 +132,9 @@ class AgentViewModel @Inject constructor(
     private val _themeChooserRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val themeChooserRequests: SharedFlow<Unit> = _themeChooserRequests.asSharedFlow()
 
+    private val _appearanceSettingsRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val appearanceSettingsRequests: SharedFlow<Unit> = _appearanceSettingsRequests.asSharedFlow()
+
     private val _deviceUnlockRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val deviceUnlockRequests: SharedFlow<Unit> = _deviceUnlockRequests.asSharedFlow()
 
@@ -386,6 +389,14 @@ class AgentViewModel @Inject constructor(
                         AppLanguage.FRENCH -> "Choisissez le thème à appliquer ici."
                         AppLanguage.ENGLISH -> "Choose the theme to apply here."
                         AppLanguage.ARABIC -> "اختر المظهر الذي تريد تطبيقه هنا."
+                    }
+                }
+                AgentLocalAction.ShowAppearanceSettings -> {
+                    _appearanceSettingsRequests.tryEmit(Unit)
+                    when (responseLanguage) {
+                        AppLanguage.FRENCH -> "Voici les réglages d’apparence, de navigation et d’animations. Vous pouvez les modifier ici."
+                        AppLanguage.ENGLISH -> "Here are the appearance, navigation, and animation settings. You can change them here."
+                        AppLanguage.ARABIC -> "إليك إعدادات المظهر والتنقل والحركات. يمكنك تغييرها هنا."
                     }
                 }
                 AgentLocalAction.ConfigureDeviceUnlock -> {

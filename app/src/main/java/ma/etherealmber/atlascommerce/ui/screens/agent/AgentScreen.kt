@@ -42,6 +42,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.input.key.Key
@@ -58,6 +59,10 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.HourglassBottom
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -100,11 +105,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
+import ma.etherealmber.atlascommerce.core.AppLanguage
+import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
+import ma.etherealmber.atlascommerce.ui.shell.MainTab
+import ma.etherealmber.atlascommerce.ui.shell.localizedLabel
 import ma.etherealmber.atlascommerce.data.model.AssistProposalDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChatSkeleton
@@ -134,6 +143,8 @@ import java.util.Locale
 import java.text.Normalizer
 
 enum class AgentNavigationDestination { HOME, PRODUCTS, SALES, BALANCE_REPORT, EMPLOYEES, SCAN, NOTIFICATIONS, SETTINGS, PROFILE, DATA_STORAGE }
+
+private enum class AgentAppearanceChoice { THEME, LANGUAGE, DENSITY, START_TAB }
 
 data class AgentNavigationSuggestion(
     val destination: AgentNavigationDestination,
@@ -266,6 +277,11 @@ fun AgentScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val themeMode by appViewModel.themeMode.collectAsStateWithLifecycle()
+    val appLanguage by appViewModel.appLanguage.collectAsStateWithLifecycle()
+    val appLanguageFollowsSystem by appViewModel.appLanguageFollowsSystem.collectAsStateWithLifecycle()
+    val densityMode by appViewModel.densityMode.collectAsStateWithLifecycle()
+    val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
+    val defaultStartTab by appViewModel.defaultStartTab.collectAsStateWithLifecycle()
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val savedAccounts by appViewModel.allSavedAccounts.collectAsStateWithLifecycle()
     val savedAccount = savedAccounts.firstOrNull {
@@ -309,7 +325,9 @@ fun AgentScreen(
     val scope = rememberCoroutineScope()
     var showHistoryDialog by remember { mutableStateOf(false) }
     var showWorkStatusDialog by remember { mutableStateOf(false) }
-    var showThemeChooser by remember { mutableStateOf(false) }
+    var showAppearanceDialog by remember { mutableStateOf(false) }
+    var appearanceChoice by remember { mutableStateOf<AgentAppearanceChoice?>(null) }
+    var returnToAppearanceOverview by remember { mutableStateOf(false) }
     var showDeviceUnlockDialog by remember { mutableStateOf(false) }
     LaunchedEffect(historyRequested) {
         if (historyRequested) { showHistoryDialog = true; onHistoryHandled() }
@@ -324,7 +342,18 @@ fun AgentScreen(
         viewModel.notices.collect { msg -> onToast(msg) }
     }
     LaunchedEffect(viewModel) {
-        viewModel.themeChooserRequests.collect { showThemeChooser = true }
+        viewModel.themeChooserRequests.collect {
+            appearanceChoice = AgentAppearanceChoice.THEME
+            returnToAppearanceOverview = false
+            showAppearanceDialog = true
+        }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.appearanceSettingsRequests.collect {
+            appearanceChoice = null
+            returnToAppearanceOverview = true
+            showAppearanceDialog = true
+        }
     }
     LaunchedEffect(viewModel) {
         viewModel.deviceUnlockRequests.collect { showDeviceUnlockDialog = true }
@@ -415,51 +444,184 @@ fun AgentScreen(
         conversationListState.scrollToConversationEnd()
     }
 
-    if (showThemeChooser) {
+    val roleAllowedLaunchTabs = MainTab.bottomTabsForRole(user.role)
+    val selectedLaunchTab = roleAllowedLaunchTabs.firstOrNull { it.name == defaultStartTab }
+        ?: roleAllowedLaunchTabs.firstOrNull { it == MainTab.HOME }
+        ?: roleAllowedLaunchTabs.first()
+    val languagePreferenceLabel = if (appLanguageFollowsSystem) {
+        atlasText(
+            "Système · ${AppLanguage.fromSystemLocale().nativeLabel}",
+            "System · ${AppLanguage.fromSystemLocale().nativeLabel}",
+            "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}",
+        )
+    } else appLanguage.nativeLabel
+    val finishAppearanceChoice: () -> Unit = {
+        if (returnToAppearanceOverview) {
+            appearanceChoice = null
+        } else {
+            showAppearanceDialog = false
+            appearanceChoice = null
+        }
+    }
+    if (showAppearanceDialog) {
         AlertDialog(
-            onDismissRequest = { showThemeChooser = false },
-            title = { Text(atlasText("Thème", "Theme", "المظهر")) },
+            onDismissRequest = {
+                showAppearanceDialog = false
+                appearanceChoice = null
+            },
+            title = {
+                Text(
+                    when (appearanceChoice) {
+                        null -> atlasText("Apparence, navigation & animations", "Appearance, navigation & animations", "المظهر والتنقل والحركات")
+                        AgentAppearanceChoice.THEME -> atlasText("Thème", "Theme", "المظهر")
+                        AgentAppearanceChoice.LANGUAGE -> atlasText("Langue", "Language", "اللغة")
+                        AgentAppearanceChoice.DENSITY -> atlasText("Densité d'affichage", "Display density", "كثافة العرض")
+                        AgentAppearanceChoice.START_TAB -> atlasText("Onglet d'ouverture au lancement", "Tab to open at launch", "علامة التبويب عند التشغيل")
+                    },
+                )
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ThemeMode.entries.forEach { mode ->
-                        TextButton(
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = !state.sending,
-                            onClick = {
-                                showThemeChooser = false
-                                viewModel.sendPrompt(
-                                    prompt = when (mode) {
-                                        ThemeMode.SYSTEM -> "Use the system theme"
-                                        ThemeMode.LIGHT -> "Use the light theme"
-                                        ThemeMode.DARK -> "Use the dark theme"
-                                    },
-                                    responseLanguage = selectedAppLanguage,
-                                )
-                            },
-                        ) {
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    when (appearanceChoice) {
+                        null -> {
+                            AgentAppearanceActionRow(
+                                icon = Icons.Outlined.Palette,
+                                title = atlasText("Thème", "Theme", "المظهر"),
+                                value = when (themeMode) {
+                                    ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
+                                    ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
+                                    ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+                                },
+                                actionLabel = atlasText("Personnaliser", "Customize", "تخصيص"),
+                                onClick = { appearanceChoice = AgentAppearanceChoice.THEME },
+                            )
+                            AgentAppearanceActionRow(
+                                icon = Icons.Outlined.Language,
+                                title = atlasText("Langue", "Language", "اللغة"),
+                                value = languagePreferenceLabel,
+                                actionLabel = atlasText("Modifier", "Change", "تغيير"),
+                                onClick = { appearanceChoice = AgentAppearanceChoice.LANGUAGE },
+                            )
+                            AgentAppearanceActionRow(
+                                icon = Icons.Outlined.Tune,
+                                title = atlasText("Densité d'affichage", "Display density", "كثافة العرض"),
+                                value = when (densityMode) {
+                                    DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
+                                    DensityMode.COMFORT -> atlasText("Confort", "Comfort", "مريح")
+                                },
+                                actionLabel = atlasText("Modifier", "Change", "تغيير"),
+                                onClick = { appearanceChoice = AgentAppearanceChoice.DENSITY },
+                            )
+                            AgentAppearanceActionRow(
+                                icon = Icons.Outlined.Home,
+                                title = atlasText("Onglet d'ouverture au lancement", "Tab to open at launch", "علامة التبويب عند التشغيل"),
+                                value = selectedLaunchTab.localizedLabel(),
+                                actionLabel = atlasText("Modifier", "Change", "تغيير"),
+                                onClick = { appearanceChoice = AgentAppearanceChoice.START_TAB },
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Column(Modifier.weight(1f)) {
+                                    Text(atlasText("Animations fluides", "Smooth animations", "حركات سلسة"), style = MaterialTheme.typography.bodyMedium)
                                     Text(
-                                        text = when (mode) {
-                                            ThemeMode.SYSTEM -> atlasText("Suivre le système", "Follow system", "اتباع النظام")
-                                            ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
-                                            ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
-                                        },
-                                        color = if (themeMode == mode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                        fontWeight = if (themeMode == mode) FontWeight.SemiBold else FontWeight.Normal,
+                                        text = if (animationsEnabled) atlasText("Activées", "On", "مفعّلة") else atlasText("Désactivées", "Off", "متوقفة"),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                if (themeMode == mode) {
-                                    Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                }
+                                Switch(
+                                    checked = animationsEnabled,
+                                    onCheckedChange = appViewModel::setAnimationsEnabled,
+                                )
                             }
+                        }
+                        AgentAppearanceChoice.THEME -> ThemeMode.entries.forEach { mode ->
+                            AgentAppearanceOptionRow(
+                                label = when (mode) {
+                                    ThemeMode.SYSTEM -> atlasText("Suivre le système", "Follow system", "اتباع النظام")
+                                    ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
+                                    ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+                                },
+                                selected = themeMode == mode,
+                                onClick = {
+                                    appViewModel.setThemeMode(mode)
+                                    finishAppearanceChoice()
+                                },
+                            )
+                        }
+                        AgentAppearanceChoice.LANGUAGE -> {
+                            AgentAppearanceOptionRow(
+                                label = atlasText(
+                                    "Système · ${AppLanguage.fromSystemLocale().nativeLabel}",
+                                    "System · ${AppLanguage.fromSystemLocale().nativeLabel}",
+                                    "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}",
+                                ),
+                                selected = appLanguageFollowsSystem,
+                                onClick = {
+                                    appViewModel.followSystemAppLanguage()
+                                    finishAppearanceChoice()
+                                },
+                            )
+                            AppLanguage.entries.forEach { language ->
+                                AgentAppearanceOptionRow(
+                                    label = language.nativeLabel,
+                                    selected = !appLanguageFollowsSystem && appLanguage == language,
+                                    onClick = {
+                                        appViewModel.setAppLanguage(language)
+                                        finishAppearanceChoice()
+                                    },
+                                )
+                            }
+                        }
+                        AgentAppearanceChoice.DENSITY -> DensityMode.entries.forEach { mode ->
+                            AgentAppearanceOptionRow(
+                                label = when (mode) {
+                                    DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
+                                    DensityMode.COMFORT -> atlasText("Confort", "Comfort", "مريح")
+                                },
+                                selected = densityMode == mode,
+                                onClick = {
+                                    appViewModel.setDensityMode(mode)
+                                    finishAppearanceChoice()
+                                },
+                            )
+                        }
+                        AgentAppearanceChoice.START_TAB -> roleAllowedLaunchTabs.forEach { tab ->
+                            AgentAppearanceOptionRow(
+                                label = tab.localizedLabel(),
+                                selected = selectedLaunchTab == tab,
+                                onClick = {
+                                    appViewModel.setDefaultStartTab(tab.name)
+                                    finishAppearanceChoice()
+                                },
+                            )
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showThemeChooser = false }) {
-                    Text(atlasText("Fermer", "Close", "إغلاق"))
+                TextButton(
+                    onClick = {
+                        if (appearanceChoice != null && returnToAppearanceOverview) {
+                            appearanceChoice = null
+                        } else {
+                            showAppearanceDialog = false
+                            appearanceChoice = null
+                        }
+                    },
+                ) {
+                    Text(
+                        if (appearanceChoice != null && returnToAppearanceOverview) {
+                            atlasText("Retour", "Back", "رجوع")
+                        } else {
+                            atlasText("Fermer", "Close", "إغلاق")
+                        },
+                    )
                 }
             },
         )
@@ -928,6 +1090,46 @@ fun AgentScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AgentAppearanceActionRow(
+    icon: ImageVector,
+    title: String,
+    value: String,
+    actionLabel: String,
+    onClick: () -> Unit,
+) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            }
+            Text(actionLabel, style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+@Composable
+private fun AgentAppearanceOptionRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            )
+            if (selected) Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         }
     }
 }
