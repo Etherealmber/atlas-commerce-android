@@ -132,8 +132,8 @@ class AgentViewModel @Inject constructor(
     private val _themeChooserRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val themeChooserRequests: SharedFlow<Unit> = _themeChooserRequests.asSharedFlow()
 
-    private val _appearanceSettingsRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val appearanceSettingsRequests: SharedFlow<Unit> = _appearanceSettingsRequests.asSharedFlow()
+    private val _settingsPanelRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val settingsPanelRequests: SharedFlow<Unit> = _settingsPanelRequests.asSharedFlow()
 
     private val _deviceUnlockRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val deviceUnlockRequests: SharedFlow<Unit> = _deviceUnlockRequests.asSharedFlow()
@@ -391,12 +391,12 @@ class AgentViewModel @Inject constructor(
                         AppLanguage.ARABIC -> "اختر المظهر الذي تريد تطبيقه هنا."
                     }
                 }
-                AgentLocalAction.ShowAppearanceSettings -> {
-                    _appearanceSettingsRequests.tryEmit(Unit)
+                AgentLocalAction.ShowSettingsPanel -> {
+                    _settingsPanelRequests.tryEmit(Unit)
                     when (responseLanguage) {
-                        AppLanguage.FRENCH -> "Voici les réglages d’apparence, de navigation et d’animations. Vous pouvez les modifier ici."
-                        AppLanguage.ENGLISH -> "Here are the appearance, navigation, and animation settings. You can change them here."
-                        AppLanguage.ARABIC -> "إليك إعدادات المظهر والتنقل والحركات. يمكنك تغييرها هنا."
+                        AppLanguage.FRENCH -> "Voici les réglages disponibles dans Atlas. Vous pouvez modifier vos préférences ici."
+                        AppLanguage.ENGLISH -> "Here are the available app settings. You can change your preferences here."
+                        AppLanguage.ARABIC -> "إليك إعدادات التطبيق المتاحة. يمكنك تغيير تفضيلاتك هنا."
                     }
                 }
                 AgentLocalAction.ConfigureDeviceUnlock -> {

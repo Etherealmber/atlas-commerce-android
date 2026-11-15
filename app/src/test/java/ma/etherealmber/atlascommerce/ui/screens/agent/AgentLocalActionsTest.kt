@@ -23,15 +23,20 @@ class AgentLocalActionsTest {
     }
 
     @Test
-    fun `broad appearance request opens the in-agent appearance settings`() {
+    fun `broad settings request opens the in-agent settings panel`() {
         assertEquals(
-            AgentLocalAction.ShowAppearanceSettings,
+            AgentLocalAction.ShowSettingsPanel,
             detectExplicitAgentLocalAction("Hey, I want to change the app appearance"),
         )
         assertEquals(
-            AgentLocalAction.ShowAppearanceSettings,
+            AgentLocalAction.ShowSettingsPanel,
             detectExplicitAgentLocalAction("change the app appaerence"),
         )
+        assertEquals(
+            AgentLocalAction.ShowSettingsPanel,
+            detectExplicitAgentLocalAction("show all settings"),
+        )
+        assertEquals(AgentLocalAction.ShowSettingsPanel, detectExplicitAgentLocalAction("settings"))
     }
 
     @Test
@@ -40,6 +45,22 @@ class AgentLocalActionsTest {
             AgentLocalAction.ChooseTheme,
             detectExplicitAgentLocalAction("change the app theme"),
         )
+    }
+
+    @Test
+    fun `issue tracker setup questions open verified work status`() {
+        assertEquals(
+            AgentLocalAction.ShowWorkStatus,
+            detectExplicitAgentLocalAction("Is the issue tracker set up or not?"),
+        )
+    }
+
+    @Test
+    fun `tracker status only states what server availability confirms`() {
+        assertEquals(IssueTrackerSetupState.AVAILABLE, issueTrackerSetupState("available"))
+        assertEquals(IssueTrackerSetupState.NOT_CONFIGURED, issueTrackerSetupState("not_configured"))
+        assertEquals(IssueTrackerSetupState.UNKNOWN, issueTrackerSetupState("unavailable"))
+        assertEquals(IssueTrackerSetupState.UNKNOWN, issueTrackerSetupState(null))
     }
 
     @Test

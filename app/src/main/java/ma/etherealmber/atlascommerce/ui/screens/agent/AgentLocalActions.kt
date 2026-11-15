@@ -5,11 +5,19 @@ import java.util.Locale
 import ma.etherealmber.atlascommerce.core.ThemeMode
 
 /** Small native actions that are safe to execute directly from an explicit user request. */
+internal enum class IssueTrackerSetupState { AVAILABLE, NOT_CONFIGURED, UNKNOWN }
+
+internal fun issueTrackerSetupState(availability: String?): IssueTrackerSetupState = when (availability?.trim()?.lowercase(Locale.ROOT)) {
+    "available" -> IssueTrackerSetupState.AVAILABLE
+    "unconfigured", "not_configured", "not configured", "not-configured" -> IssueTrackerSetupState.NOT_CONFIGURED
+    else -> IssueTrackerSetupState.UNKNOWN
+}
+
 internal sealed interface AgentLocalAction {
     data object CheckForUpdate : AgentLocalAction
     data object ShowWorkStatus : AgentLocalAction
     data object ChooseTheme : AgentLocalAction
-    data object ShowAppearanceSettings : AgentLocalAction
+    data object ShowSettingsPanel : AgentLocalAction
     data object ConfigureDeviceUnlock : AgentLocalAction
     data class SetTheme(val mode: ThemeMode) : AgentLocalAction
 }
@@ -23,6 +31,18 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
         .replace(Regex("\\p{Mn}+"), "")
         .lowercase(Locale.ROOT)
         .trim()
+    val trackerInquiry = normalized.removePrefix("hey, ").removePrefix("hey ").removePrefix("hi, ").removePrefix("hi ")
+    val asksForTrackerSetupStatus =
+        listOf("issue tracker", "github issue", "github tracker", "reported issues").any(trackerInquiry::contains) &&
+            listOf("configured", "set up", "setup", "connected", "status", "available", "working").any(trackerInquiry::contains) &&
+            listOf("is ", "are ", "where ", "what is ", "show ", "check ", "tell me ", "do we have ", "i want to know ", "can you tell me ", "issue tracker status", "issue tracker setup", "github tracker status", "github issue status")
+                .any(trackerInquiry::startsWith)
+    if (asksForTrackerSetupStatus) return AgentLocalAction.ShowWorkStatus
+    val standaloneSettingsRequest = trackerInquiry.trim().trimEnd('.', '!', '?')
+    if (standaloneSettingsRequest in setOf("settings", "app settings", "all settings", "all app settings", "appearance settings")) {
+        return AgentLocalAction.ShowSettingsPanel
+    }
+
     val directRequest = Regex(
         "^(?:(?:hey|hi|hello|bonjour|salut)[,!]?\\s+)?" +
             "(?:(?:please|kindly|can you|can u|could you|would you|i want to|i want you to|i would like to|i'd like to|" +
@@ -63,9 +83,12 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
         "change appearance", "change the appearance", "change app appaerence", "change the app appaerence", "app appaerence",
         "show appearance settings", "show me appearance settings", "show all appearance settings",
         "open appearance settings", "open the appearance settings", "appearance settings", "app appearance",
+        "show settings", "show me settings", "show all settings", "show me all the settings", "show all those settings",
+        "open settings", "open app settings", "app settings", "all app settings", "all the app settings",
+        "change app settings", "change the app settings", "customize settings",
         "customize appearance", "customize the app appearance", "change how the app looks",
     ).any(normalized::contains)
-    if (asksForAppearanceSettings) return AgentLocalAction.ShowAppearanceSettings
+    if (asksForAppearanceSettings) return AgentLocalAction.ShowSettingsPanel
 
     val asksToChangeTheme = listOf(
         "change theme", "change my theme", "change the theme", "change app theme", "change the app theme", "theme change",

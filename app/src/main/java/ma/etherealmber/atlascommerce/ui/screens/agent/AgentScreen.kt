@@ -54,11 +54,13 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.HourglassBottom
+import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Palette
@@ -107,7 +109,9 @@ import kotlinx.coroutines.flow.first
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
+import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.ThemeMode
+import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.core.update.UpdateState
@@ -144,7 +148,7 @@ import java.text.Normalizer
 
 enum class AgentNavigationDestination { HOME, PRODUCTS, SALES, BALANCE_REPORT, EMPLOYEES, SCAN, NOTIFICATIONS, SETTINGS, PROFILE, DATA_STORAGE }
 
-private enum class AgentAppearanceChoice { THEME, LANGUAGE, DENSITY, START_TAB }
+private enum class AgentAppearanceChoice { THEME, LANGUAGE, DENSITY, START_TAB, UPDATE_SOURCE }
 
 data class AgentNavigationSuggestion(
     val destination: AgentNavigationDestination,
@@ -282,6 +286,22 @@ fun AgentScreen(
     val densityMode by appViewModel.densityMode.collectAsStateWithLifecycle()
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val defaultStartTab by appViewModel.defaultStartTab.collectAsStateWithLifecycle()
+    val defaultClientName by appViewModel.defaultClientName.collectAsStateWithLifecycle()
+    val confirmBeforeSale by appViewModel.confirmBeforeSale.collectAsStateWithLifecycle()
+    val autoOpenCamera by appViewModel.autoOpenCamera.collectAsStateWithLifecycle()
+    val scanHapticEnabled by appViewModel.scanHapticEnabled.collectAsStateWithLifecycle()
+    val scanSoundEnabled by appViewModel.scanSoundEnabled.collectAsStateWithLifecycle()
+    val autoAddCartOnScan by appViewModel.autoAddCartOnScan.collectAsStateWithLifecycle()
+    val roleNotificationsEnabled by appViewModel.roleNotificationsEnabled.collectAsStateWithLifecycle()
+    val autoCheckUpdates by appViewModel.autoCheckUpdates.collectAsStateWithLifecycle()
+    val parallelUpdateDownload by appViewModel.parallelUpdateDownload.collectAsStateWithLifecycle()
+    val followLatestRelease by appViewModel.followLatestRelease.collectAsStateWithLifecycle()
+    val updateDownloadSource by appViewModel.updateDownloadSource.collectAsStateWithLifecycle()
+    val automaticCrashReportsEnabled by appViewModel.automaticCrashReportsEnabled.collectAsStateWithLifecycle()
+    val automaticCrashReportsAvailable by appViewModel.automaticCrashReportsAvailable.collectAsStateWithLifecycle()
+    val crashReportsAvailabilityChecked by appViewModel.crashReportsAvailabilityChecked.collectAsStateWithLifecycle()
+    val shakeToReportEnabled by appViewModel.shakeToReportEnabled.collectAsStateWithLifecycle()
+    val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val savedAccounts by appViewModel.allSavedAccounts.collectAsStateWithLifecycle()
     val savedAccount = savedAccounts.firstOrNull {
@@ -328,6 +348,8 @@ fun AgentScreen(
     var showAppearanceDialog by remember { mutableStateOf(false) }
     var appearanceChoice by remember { mutableStateOf<AgentAppearanceChoice?>(null) }
     var returnToAppearanceOverview by remember { mutableStateOf(false) }
+    var defaultClientNameDraft by remember { mutableStateOf("") }
+    LaunchedEffect(defaultClientName) { defaultClientNameDraft = defaultClientName }
     var showDeviceUnlockDialog by remember { mutableStateOf(false) }
     LaunchedEffect(historyRequested) {
         if (historyRequested) { showHistoryDialog = true; onHistoryHandled() }
@@ -349,7 +371,7 @@ fun AgentScreen(
         }
     }
     LaunchedEffect(viewModel) {
-        viewModel.appearanceSettingsRequests.collect {
+        viewModel.settingsPanelRequests.collect {
             appearanceChoice = null
             returnToAppearanceOverview = true
             showAppearanceDialog = true
@@ -444,6 +466,16 @@ fun AgentScreen(
         conversationListState.scrollToConversationEnd()
     }
 
+    val reportedIssueTrackerSource = state.mobileWorkStatus?.trackers?.github
+    val issueTrackerSettingLabel = when {
+        state.workStatusLoading && state.mobileWorkStatus == null -> atlasText("Vérification…", "Checking…", "جارٍ التحقق…")
+        state.workStatusError != null && state.mobileWorkStatus == null -> atlasText("Impossible à vérifier", "Unable to verify", "تعذّر التحقق")
+        state.mobileWorkStatus == null -> atlasText("Non vérifié", "Not checked", "لم يتم التحقق")
+        reportedIssueTrackerSource == null -> atlasText("Statut non fourni par le serveur", "Status not provided by server", "لم يقدّم الخادم الحالة")
+        issueTrackerSetupState(reportedIssueTrackerSource.availability) == IssueTrackerSetupState.AVAILABLE -> atlasText("Flux disponible selon le serveur", "Feed available per server", "الموجز متاح حسب الخادم")
+        issueTrackerSetupState(reportedIssueTrackerSource.availability) == IssueTrackerSetupState.NOT_CONFIGURED -> atlasText("Non configuré selon le serveur", "Not configured per server", "غير مُعدّ حسب الخادم")
+        else -> atlasText("Configuration non vérifiée", "Setup unverified", "لم يتم التحقق من الإعداد")
+    }
     val roleAllowedLaunchTabs = MainTab.bottomTabsForRole(user.role)
     val selectedLaunchTab = roleAllowedLaunchTabs.firstOrNull { it.name == defaultStartTab }
         ?: roleAllowedLaunchTabs.firstOrNull { it == MainTab.HOME }
@@ -472,11 +504,12 @@ fun AgentScreen(
             title = {
                 Text(
                     when (appearanceChoice) {
-                        null -> atlasText("Apparence, navigation & animations", "Appearance, navigation & animations", "المظهر والتنقل والحركات")
+                        null -> atlasText("Réglages de l’application", "App settings", "إعدادات التطبيق")
                         AgentAppearanceChoice.THEME -> atlasText("Thème", "Theme", "المظهر")
                         AgentAppearanceChoice.LANGUAGE -> atlasText("Langue", "Language", "اللغة")
                         AgentAppearanceChoice.DENSITY -> atlasText("Densité d'affichage", "Display density", "كثافة العرض")
                         AgentAppearanceChoice.START_TAB -> atlasText("Onglet d'ouverture au lancement", "Tab to open at launch", "علامة التبويب عند التشغيل")
+                        AgentAppearanceChoice.UPDATE_SOURCE -> atlasText("Source des mises à jour", "Update source", "مصدر التحديثات")
                     },
                 )
             },
@@ -487,6 +520,7 @@ fun AgentScreen(
                 ) {
                     when (appearanceChoice) {
                         null -> {
+                            AgentSettingsSectionTitle(atlasText("Apparence, navigation & animations", "Appearance, navigation & animations", "المظهر والتنقل والحركات"))
                             AgentAppearanceActionRow(
                                 icon = Icons.Outlined.Palette,
                                 title = atlasText("Thème", "Theme", "المظهر"),
@@ -539,6 +573,141 @@ fun AgentScreen(
                                     onCheckedChange = appViewModel::setAnimationsEnabled,
                                 )
                             }
+
+                            AgentSettingsSectionTitle(atlasText("Caméra & lecteur code-barres", "Camera & barcode scanner", "الكاميرا وقارئ الباركود"))
+                            AgentPreferenceToggleRow(
+                                title = atlasText("Ouvrir la caméra automatiquement", "Open camera automatically", "فتح الكاميرا تلقائياً"),
+                                checked = autoOpenCamera,
+                                onCheckedChange = appViewModel::setAutoOpenCamera,
+                            )
+                            AgentPreferenceToggleRow(
+                                title = atlasText("Vibration au scan", "Vibrate on scan", "الاهتزاز عند المسح"),
+                                checked = scanHapticEnabled,
+                                onCheckedChange = appViewModel::setScanHapticEnabled,
+                            )
+                            AgentPreferenceToggleRow(
+                                title = atlasText("Signal sonore au scan", "Scan sound", "صوت المسح"),
+                                checked = scanSoundEnabled,
+                                onCheckedChange = appViewModel::setScanSoundEnabled,
+                            )
+                            AgentPreferenceToggleRow(
+                                title = atlasText("Ajout automatique au panier", "Automatically add to cart", "الإضافة التلقائية إلى السلة"),
+                                checked = autoAddCartOnScan,
+                                onCheckedChange = appViewModel::setAutoAddCartOnScan,
+                            )
+
+                            if (Roles.canCreateDocuments(user.role)) {
+                                AgentSettingsSectionTitle(atlasText("Vente rapide & caisse", "Quick sale & checkout", "البيع السريع ونقطة البيع"))
+                                AtlasTextField(
+                                    value = defaultClientNameDraft,
+                                    onValueChange = { defaultClientNameDraft = it },
+                                    label = atlasText("Client pré-rempli par défaut", "Default prefilled customer", "العميل الافتراضي المُعبّأ مسبقاً"),
+                                    imeAction = ImeAction.Done,
+                                    onDone = {
+                                        appViewModel.setDefaultClientName(defaultClientNameDraft)
+                                        onToast(atlasText("Client par défaut enregistré.", "Default customer saved.", "تم حفظ العميل الافتراضي."))
+                                    },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                TextButton(
+                                    onClick = {
+                                        appViewModel.setDefaultClientName(defaultClientNameDraft)
+                                        onToast(atlasText("Client par défaut enregistré.", "Default customer saved.", "تم حفظ العميل الافتراضي."))
+                                    },
+                                    modifier = Modifier.align(Alignment.End),
+                                ) { Text(atlasText("Enregistrer", "Save", "حفظ")) }
+                                AgentPreferenceToggleRow(
+                                    title = atlasText("Confirmer avant création du ticket", "Confirm before creating a sale", "التأكيد قبل إنشاء عملية البيع"),
+                                    checked = confirmBeforeSale,
+                                    onCheckedChange = appViewModel::setConfirmBeforeSale,
+                                )
+                            }
+
+                            AgentSettingsSectionTitle(atlasText("Notifications & mises à jour", "Notifications & updates", "الإشعارات والتحديثات"))
+                            AgentPreferenceToggleRow(
+                                title = atlasText("Notifications système par rôle", "Role-based system notifications", "إشعارات النظام حسب الدور"),
+                                checked = roleNotificationsEnabled,
+                                onCheckedChange = appViewModel::setRoleNotificationsEnabled,
+                            )
+                            AgentPreferenceToggleRow(
+                                title = atlasText("Recherche automatique des mises à jour", "Check for updates automatically", "التحقق تلقائياً من التحديثات"),
+                                checked = autoCheckUpdates,
+                                onCheckedChange = appViewModel::setAutoCheckUpdates,
+                            )
+                            AgentPreferenceToggleRow(
+                                title = atlasText("Téléchargement accéléré multi-connexions", "Multi-connection accelerated downloads", "تنزيلات سريعة متعددة الاتصالات"),
+                                checked = parallelUpdateDownload,
+                                onCheckedChange = appViewModel::setParallelUpdateDownload,
+                            )
+                            AgentPreferenceToggleRow(
+                                title = atlasText("Toujours suivre la dernière version publiée", "Always follow the latest published release", "اتباع أحدث إصدار منشور دائماً"),
+                                checked = followLatestRelease,
+                                onCheckedChange = appViewModel::setFollowLatestRelease,
+                            )
+                            AgentAppearanceActionRow(
+                                icon = Icons.Outlined.Refresh,
+                                title = atlasText("Source des mises à jour", "Update source", "مصدر التحديثات"),
+                                value = when (updateDownloadSource) {
+                                    UpdateDownloadSource.AUTO -> "Auto"
+                                    UpdateDownloadSource.CDN1 -> "CDN 1"
+                                    UpdateDownloadSource.GITHUB -> "GitHub"
+                                },
+                                actionLabel = atlasText("Modifier", "Change", "تغيير"),
+                                onClick = { appearanceChoice = AgentAppearanceChoice.UPDATE_SOURCE },
+                            )
+
+                            AgentSettingsSectionTitle(atlasText("Confidentialité & aide", "Privacy & support", "الخصوصية والدعم"))
+                            AgentPreferenceToggleRow(
+                                title = atlasText("Secouer pour signaler un problème", "Shake to report a problem", "هزّ الجهاز للإبلاغ عن مشكلة"),
+                                checked = shakeToReportEnabled,
+                                onCheckedChange = appViewModel::setShakeToReportEnabled,
+                            )
+                            AgentAppearanceActionRow(
+                                icon = Icons.Outlined.BugReport,
+                                title = atlasText("Statut du suivi des problèmes", "Issue tracker status", "حالة متعقّب المشكلات"),
+                                value = issueTrackerSettingLabel,
+                                actionLabel = atlasText("Vérifier", "Check", "تحقق"),
+                                onClick = {
+                                    showWorkStatusDialog = true
+                                    viewModel.loadWorkStatus()
+                                },
+                            )
+                            when {
+                                !crashReportsAvailabilityChecked -> Text(
+                                    atlasText("Vérification de la disponibilité des rapports de plantage…", "Checking crash-report availability…", "جارٍ التحقق من توفر تقارير الأعطال…"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                automaticCrashReportsAvailable -> AgentPreferenceToggleRow(
+                                    title = atlasText("Rapports de plantage automatiques", "Automatic crash reports", "تقارير الأعطال التلقائية"),
+                                    checked = automaticCrashReportsEnabled,
+                                    onCheckedChange = { enabled ->
+                                        appViewModel.setAutomaticCrashReportsEnabled(enabled) { succeeded ->
+                                            if (!succeeded) onToast(atlasText("Impossible de modifier ce réglage.", "Could not update this setting.", "تعذر تحديث هذا الإعداد."))
+                                        }
+                                    },
+                                )
+                                else -> Text(
+                                    atlasText("Rapports de plantage indisponibles : le service n’est pas configuré dans cette version.", "Crash reports are unavailable because the service is not configured in this build.", "تقارير الأعطال غير متاحة لأن الخدمة غير مُعدّة في هذا الإصدار."),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            savedAccount?.let { account ->
+                                AgentAppearanceActionRow(
+                                    icon = Icons.Outlined.Fingerprint,
+                                    title = atlasText("Déverrouillage de l’appareil", "Device unlock", "إلغاء قفل الجهاز"),
+                                    value = if (account.canUseDeviceUnlock) atlasText("Activé", "On", "مفعّل") else atlasText("Désactivé", "Off", "متوقف"),
+                                    actionLabel = atlasText("Configurer", "Configure", "إعداد"),
+                                    onClick = { showDeviceUnlockDialog = true },
+                                )
+                            }
+                            AgentPreferenceToggleRow(
+                                title = atlasText("Mode développeur", "Developer mode", "وضع المطوّر"),
+                                checked = developerModeEnabled,
+                                onCheckedChange = appViewModel::setDeveloperModeEnabled,
+                            )
                         }
                         AgentAppearanceChoice.THEME -> ThemeMode.entries.forEach { mode ->
                             AgentAppearanceOptionRow(
@@ -597,6 +766,20 @@ fun AgentScreen(
                                 selected = selectedLaunchTab == tab,
                                 onClick = {
                                     appViewModel.setDefaultStartTab(tab.name)
+                                    finishAppearanceChoice()
+                                },
+                            )
+                        }
+                        AgentAppearanceChoice.UPDATE_SOURCE -> UpdateDownloadSource.entries.forEach { source ->
+                            AgentAppearanceOptionRow(
+                                label = when (source) {
+                                    UpdateDownloadSource.AUTO -> atlasText("Automatique", "Automatic", "تلقائي")
+                                    UpdateDownloadSource.CDN1 -> "CDN 1"
+                                    UpdateDownloadSource.GITHUB -> "GitHub"
+                                },
+                                selected = updateDownloadSource == source,
+                                onClick = {
+                                    appViewModel.setUpdateDownloadSource(source)
                                     finishAppearanceChoice()
                                 },
                             )
@@ -676,10 +859,12 @@ fun AgentScreen(
                 ) {
                     if (state.workStatusLoading && work == null) {
                         LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text(atlasText("Vérification du statut du serveur…", "Checking status reported by the server…", "جارٍ التحقق من الحالة التي أبلغ عنها الخادم…"))
                     } else if (workStatusError != null && work == null) {
                         Text(workStatusError, color = MaterialTheme.colorScheme.error)
                     }
                     work?.let { snapshot ->
+                        AgentIssueTrackerStatus(source = snapshot.trackers.github)
                         WorkStatusSection(
                             title = atlasText("Demandes de stock", "In-app stock requests", "طلبات المخزون"),
                             source = snapshot.inApp,
@@ -1091,6 +1276,32 @@ fun AgentScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AgentSettingsSectionTitle(title: String) {
+    Text(
+        text = title,
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 10.dp, bottom = 2.dp),
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+@Composable
+private fun AgentPreferenceToggleRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -1519,6 +1730,40 @@ private fun formatQuotaWait(iso: String?, fallback: String): String {
         )
     } else {
         atlasText("dans ${remainder} min ($stamp)", "in ${remainder} min ($stamp)", "خلال ${remainder} د ($stamp)")
+    }
+}
+
+@Composable
+private fun AgentIssueTrackerStatus(
+    source: ma.etherealmber.atlascommerce.data.model.WorkStatusSourceDto?,
+) {
+    val detail = when {
+        source == null -> atlasText(
+            "Le serveur n’a fourni aucun statut du suivi GitHub. Je ne peux pas confirmer s’il est configuré.",
+            "The server provided no GitHub tracker status. I can’t verify whether it is configured.",
+            "لم يقدّم الخادم حالة متعقّب GitHub. لا يمكنني التحقق مما إذا كان مُعدّاً.",
+        )
+        issueTrackerSetupState(source.availability) == IssueTrackerSetupState.AVAILABLE -> atlasText(
+            "Le serveur signale que le flux GitHub est disponible.",
+            "The server reports that the GitHub issue feed is available.",
+            "يفيد الخادم بأن موجز مشكلات GitHub متاح.",
+        )
+        issueTrackerSetupState(source.availability) == IssueTrackerSetupState.NOT_CONFIGURED -> atlasText(
+            "Le serveur signale que le suivi GitHub n’est pas configuré.",
+            "The server reports that GitHub issue tracking is not configured.",
+            "يفيد الخادم بأن تتبّع مشكلات GitHub غير مُعدّ.",
+        )
+        else -> atlasText(
+            "Le flux GitHub est indisponible ou inconnu. Sa configuration ne peut pas être vérifiée.",
+            "The GitHub feed is unavailable or unknown; its setup cannot be verified.",
+            "موجز GitHub غير متاح أو حالته مجهولة؛ لا يمكن التحقق من إعداده.",
+        )
+    }
+    AtlasCard(padding = 12.dp) {
+        Text(atlasText("Statut du suivi des problèmes", "Issue tracker status", "حالة متعقّب المشكلات"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(3.dp))
+        Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(atlasText("État rapporté par le serveur", "Status reported by the server", "الحالة حسب تقرير الخادم"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
