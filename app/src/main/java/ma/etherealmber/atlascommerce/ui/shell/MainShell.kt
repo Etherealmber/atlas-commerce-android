@@ -471,7 +471,7 @@ fun MainShell(
             if (isForeground && !productHistoryActive && tab != MainTab.NOTIFICATIONS) {
                 AtlasTopBar(
                     title = if (!useRail || tab == MainTab.AGENT) tab.localizedLabel() else "",
-                    subtitle = agentState?.let { state ->
+                    subtitle = if (!useRail) agentState?.let { state ->
                         val thread = state.activeThreadTitle.takeIf(String::isNotBlank)?.let { localizedAgentText(it, atlasLanguage) }
                             ?: atlasText("Sans titre", "Untitled", "بلا عنوان")
                         val status = when {
@@ -481,10 +481,13 @@ fun MainShell(
                             else -> atlasText("Vérification…", "Checking…", "جارٍ التحقق…")
                         }
                         listOf(thread, status).filter { it.isNotBlank() }.joinToString(" · ")
-                    },
+                    } else null,
                     containerColor = if (useRail) Color.Transparent else MaterialTheme.colorScheme.background,
                     titleLeading = if (tab == MainTab.AGENT) {
                         {
+                            // The top app bar spans over the tablet rail; place the Agent
+                            // title in the content pane instead of making it look like sidebar content.
+                            if (useRail) Spacer(Modifier.width(sidebarWidth))
                             AtlasAgentMascot(
                                 modifier = Modifier.size(32.dp).combinedClickable(
                                     onClick = {},

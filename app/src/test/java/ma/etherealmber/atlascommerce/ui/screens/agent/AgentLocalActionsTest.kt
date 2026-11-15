@@ -2,7 +2,9 @@ package ma.etherealmber.atlascommerce.ui.screens.agent
 
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AgentLocalActionsTest {
@@ -23,19 +25,21 @@ class AgentLocalActionsTest {
     }
 
     @Test
-    fun `broad settings request opens the in-agent settings panel`() {
+    fun `appearance requests offer inline theme choices instead of opening settings`() {
         assertEquals(
-            AgentLocalAction.ShowSettingsPanel,
+            AgentLocalAction.ChooseTheme,
             detectExplicitAgentLocalAction("Hey, I want to change the app appearance"),
         )
         assertEquals(
-            AgentLocalAction.ShowSettingsPanel,
+            AgentLocalAction.ChooseTheme,
+            detectExplicitAgentLocalAction("Can I change the app appearance?"),
+        )
+        assertEquals(AgentLocalAction.ChooseTheme, detectExplicitAgentLocalAction("app appearance"))
+        assertEquals(
+            AgentLocalAction.ChooseTheme,
             detectExplicitAgentLocalAction("change the app appaerence"),
         )
-        assertEquals(
-            AgentLocalAction.ShowSettingsPanel,
-            detectExplicitAgentLocalAction("show all settings"),
-        )
+        assertEquals(AgentLocalAction.ShowSettingsPanel, detectExplicitAgentLocalAction("show all settings"))
         assertEquals(AgentLocalAction.ShowSettingsPanel, detectExplicitAgentLocalAction("settings"))
     }
 
@@ -45,6 +49,13 @@ class AgentLocalActionsTest {
             AgentLocalAction.ChooseTheme,
             detectExplicitAgentLocalAction("change the app theme"),
         )
+    }
+
+    @Test
+    fun `saved theme choice prompts restore their inline controls`() {
+        assertTrue(isAgentThemeChoicePrompt("Which theme would you like? Choose one below."))
+        assertTrue(isAgentThemeChoicePrompt("Quel thème souhaitez-vous ? Choisissez une option ci-dessous."))
+        assertFalse(isAgentThemeChoicePrompt("Done. The dark theme is on."))
     }
 
     @Test

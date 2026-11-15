@@ -23,8 +23,8 @@ internal sealed interface AgentLocalAction {
 }
 
 /**
- * Recognize only direct commands. Questions, explanations, assistant suggestions, and casual
- * discussion are not permission to perform a local action.
+ * Recognize safe native requests locally. Appearance questions may offer in-chat choices, but no
+ * preference changes until the user explicitly selects a theme or names one in their request.
  */
 internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
     val normalized = Normalizer.normalize(prompt, Normalizer.Form.NFD)
@@ -39,9 +39,25 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
                 .any(trackerInquiry::startsWith)
     if (asksForTrackerSetupStatus) return AgentLocalAction.ShowWorkStatus
     val standaloneSettingsRequest = trackerInquiry.trim().trimEnd('.', '!', '?')
-    if (standaloneSettingsRequest in setOf("settings", "app settings", "all settings", "all app settings", "appearance settings")) {
+    if (standaloneSettingsRequest in setOf("appearance", "app appearance", "the app appearance", "appearance settings")) {
+        return AgentLocalAction.ChooseTheme
+    }
+    if (standaloneSettingsRequest in setOf("settings", "app settings", "all settings", "all app settings")) {
         return AgentLocalAction.ShowSettingsPanel
     }
+
+    val asksAboutAppearance = listOf(
+        "app appearance", "the app appearance", "my app appearance", "app's appearance",
+        "change appearance", "change the appearance", "app appaerence", "the app appaerence",
+        "appearance settings", "customize appearance", "customize the app appearance",
+        "change how the app looks", "change the app look", "look and feel",
+    ).any(normalized::contains)
+    val asksHowToChangeAppearance = asksAboutAppearance && listOf(
+        "can i", "can i change", "how do i", "how can i", "is it possible", "i want to", "i want ",
+        "i'd like to", "could you", "change", "customize", "show", "open",
+    ).any(normalized::contains)
+    if (asksHowToChangeAppearance) return AgentLocalAction.ChooseTheme
+
 
     val directRequest = Regex(
         "^(?:(?:hey|hi|hello|bonjour|salut)[,!]?\\s+)?" +
@@ -79,14 +95,9 @@ internal fun detectExplicitAgentLocalAction(prompt: String): AgentLocalAction? {
     if (asksForWorkStatus) return AgentLocalAction.ShowWorkStatus
 
     val asksForAppearanceSettings = listOf(
-        "change app appearance", "change the app appearance", "change my app appearance", "change my app's appearance",
-        "change appearance", "change the appearance", "change app appaerence", "change the app appaerence", "app appaerence",
-        "show appearance settings", "show me appearance settings", "show all appearance settings",
-        "open appearance settings", "open the appearance settings", "appearance settings", "app appearance",
         "show settings", "show me settings", "show all settings", "show me all the settings", "show all those settings",
         "open settings", "open app settings", "app settings", "all app settings", "all the app settings",
         "change app settings", "change the app settings", "customize settings",
-        "customize appearance", "customize the app appearance", "change how the app looks",
     ).any(normalized::contains)
     if (asksForAppearanceSettings) return AgentLocalAction.ShowSettingsPanel
 
