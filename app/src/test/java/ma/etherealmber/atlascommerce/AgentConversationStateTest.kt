@@ -130,8 +130,8 @@ class AgentConversationStateTest {
 
         assertEquals(AgentNavigationDestination.SETTINGS, action?.destination)
         assertEquals(
-            AgentNavigationDestination.DATA_STORAGE,
-            mobileNavigationSuggestion(AssistProposalDto(type = "mobile_ui", action = "navigate", path = "/m/storage"))?.destination,
+            null,
+            mobileNavigationSuggestion(AssistProposalDto(type = "mobile_ui", action = "navigate", path = "/m/storage")),
         )
         assertEquals(
             null,
