@@ -1087,7 +1087,7 @@ private fun ThemeSwitcherDialog(
             Surface(
                 modifier = Modifier
                     .offset(x = dialogCenterOffset)
-                    .widthIn(max = 600.dp)
+                    .widthIn(max = 720.dp)
                     .fillMaxWidth(0.94f)
                     .heightIn(max = dialogMaxHeight),
                 shape = RoundedCornerShape(28.dp),
@@ -1095,70 +1095,75 @@ private fun ThemeSwitcherDialog(
                 tonalElevation = 6.dp,
                 shadowElevation = 20.dp,
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = dialogMaxHeight)
-                        .verticalScroll(rememberScrollState())
-                        .padding(if (compactLayout) 16.dp else 22.dp),
-                    verticalArrangement = Arrangement.spacedBy(if (compactLayout) 12.dp else 16.dp),
+                BoxWithConstraints(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = dialogMaxHeight),
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            atlasText("Choisir un thème", "Choose a theme", "اختر المظهر"),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            atlasText(
-                                "Choisissez une ambiance ; votre choix est appliqué immédiatement.",
-                                "Pick a look; your choice is applied immediately.",
-                                "اختر المظهر؛ يُطبّق اختيارك فوراً.",
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (compactLayout) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ThemeMode.entries.forEach { mode ->
-                                ThemeModeCompactOption(
-                                    mode = mode,
-                                    selected = selectedMode == mode,
-                                    enabled = visibility.targetState,
-                                    onClick = {
-                                        selectedMode = mode
-                                        onApply(mode)
-                                        close()
-                                    },
-                                )
-                            }
-                        }
-                    } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ThemeMode.entries.forEach { mode ->
-                                ThemePreviewCard(
-                                    mode = mode,
-                                    selected = selectedMode == mode,
-                                    enabled = visibility.targetState,
-                                    animationsEnabled = animationsEnabled,
-                                    modifier = Modifier.weight(1f),
-                                    onClick = {
-                                        selectedMode = mode
-                                        onApply(mode)
-                                        close()
-                                    },
-                                )
-                            }
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically,
+                    val useCompactOptions = compactLayout || maxWidth < 600.dp
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = dialogMaxHeight)
+                            .verticalScroll(rememberScrollState())
+                            .padding(if (compactLayout) 16.dp else 22.dp),
+                        verticalArrangement = Arrangement.spacedBy(if (compactLayout) 12.dp else 16.dp),
                     ) {
-                        TextButton(onClick = { close() }, enabled = visibility.targetState) {
-                            Text(atlasText("Terminé", "Done", "تم"))
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                atlasText("Choisir un thème", "Choose a theme", "اختر المظهر"),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                atlasText(
+                                    "Choisissez une ambiance ; votre choix est appliqué immédiatement.",
+                                    "Pick a look; your choice is applied immediately.",
+                                    "اختر المظهر؛ يُطبّق اختيارك فوراً.",
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (useCompactOptions) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ThemeMode.entries.forEach { mode ->
+                                    ThemeModeCompactOption(
+                                        mode = mode,
+                                        selected = selectedMode == mode,
+                                        enabled = visibility.targetState,
+                                        onClick = {
+                                            selectedMode = mode
+                                            onApply(mode)
+                                            close()
+                                        },
+                                    )
+                                }
+                            }
+                        } else {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ThemeMode.entries.forEach { mode ->
+                                    ThemePreviewCard(
+                                        mode = mode,
+                                        selected = selectedMode == mode,
+                                        enabled = visibility.targetState,
+                                        animationsEnabled = animationsEnabled,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = {
+                                            selectedMode = mode
+                                            onApply(mode)
+                                            close()
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(onClick = { close() }, enabled = visibility.targetState) {
+                                Text(atlasText("Terminé", "Done", "تم"))
+                            }
                         }
                     }
                 }

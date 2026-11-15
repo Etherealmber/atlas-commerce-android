@@ -515,6 +515,20 @@ fun MainShell(
                             )
                         }
                         if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
+                        if (!useRail && tab != MainTab.AGENT) {
+                            IconButton(
+                                onClick = { switchTab(MainTab.AGENT) },
+                                modifier = Modifier.semantics {
+                                    contentDescription = atlasText("Ouvrir Atlas Agent", "Open Atlas Agent", "فتح Atlas Agent")
+                                },
+                            ) {
+                                AtlasAgentMascot(
+                                    modifier = Modifier.size(32.dp),
+                                    isTyping = agentState?.input?.isNotBlank() == true,
+                                    isThinking = agentState?.sending == true,
+                                )
+                            }
+                        }
                         if (tab == MainTab.AGENT) {
                             IconButton(onClick = { agentHistoryRequested = true }) {
                                 Icon(
@@ -548,19 +562,22 @@ fun MainShell(
                             MainTab.AGENT, MainTab.SALE, MainTab.SETTINGS -> Unit
 
                             MainTab.PROFILE -> {
-                                IconButton(onClick = { showDataCacheManagerDialog = true }) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Inventory2,
-                                        contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
-                                    )
+                                // On tablets these destinations already live in the sidebar.
+                                if (!useRail) {
+                                    IconButton(onClick = { showDataCacheManagerDialog = true }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Inventory2,
+                                            contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
+                                        )
+                                    }
+                                    IconButton(onClick = { switchTab(MainTab.SETTINGS) }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Settings,
+                                            contentDescription = atlasText("Paramètres", "Settings", "الإعدادات"),
+                                        )
+                                    }
+                                    Spacer(Modifier.width(4.dp))
                                 }
-                                IconButton(onClick = { switchTab(MainTab.SETTINGS) }) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Settings,
-                                        contentDescription = atlasText("Paramètres", "Settings", "الإعدادات"),
-                                    )
-                                }
-                                Spacer(Modifier.width(4.dp))
                             }
 
                             else -> {
