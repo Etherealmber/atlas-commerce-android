@@ -12,6 +12,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -42,7 +43,6 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.input.key.Key
@@ -54,17 +54,13 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.HourglassBottom
-import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -108,16 +104,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import ma.etherealmber.atlascommerce.data.model.AgentPolicyDto
 import ma.etherealmber.atlascommerce.core.AppLanguage
-import ma.etherealmber.atlascommerce.core.DensityMode
-import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.ThemeMode
-import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
-import ma.etherealmber.atlascommerce.ui.shell.MainTab
-import ma.etherealmber.atlascommerce.ui.shell.localizedLabel
 import ma.etherealmber.atlascommerce.data.model.AssistProposalDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChatSkeleton
@@ -148,7 +139,6 @@ import java.text.Normalizer
 
 enum class AgentNavigationDestination { HOME, PRODUCTS, SALES, BALANCE_REPORT, EMPLOYEES, SCAN, NOTIFICATIONS, SETTINGS, PROFILE, DATA_STORAGE }
 
-private enum class AgentAppearanceChoice { THEME, LANGUAGE, DENSITY, START_TAB, UPDATE_SOURCE }
 
 data class AgentNavigationSuggestion(
     val destination: AgentNavigationDestination,
@@ -280,28 +270,6 @@ fun AgentScreen(
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val themeMode by appViewModel.themeMode.collectAsStateWithLifecycle()
-    val appLanguage by appViewModel.appLanguage.collectAsStateWithLifecycle()
-    val appLanguageFollowsSystem by appViewModel.appLanguageFollowsSystem.collectAsStateWithLifecycle()
-    val densityMode by appViewModel.densityMode.collectAsStateWithLifecycle()
-    val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
-    val defaultStartTab by appViewModel.defaultStartTab.collectAsStateWithLifecycle()
-    val defaultClientName by appViewModel.defaultClientName.collectAsStateWithLifecycle()
-    val confirmBeforeSale by appViewModel.confirmBeforeSale.collectAsStateWithLifecycle()
-    val autoOpenCamera by appViewModel.autoOpenCamera.collectAsStateWithLifecycle()
-    val scanHapticEnabled by appViewModel.scanHapticEnabled.collectAsStateWithLifecycle()
-    val scanSoundEnabled by appViewModel.scanSoundEnabled.collectAsStateWithLifecycle()
-    val autoAddCartOnScan by appViewModel.autoAddCartOnScan.collectAsStateWithLifecycle()
-    val roleNotificationsEnabled by appViewModel.roleNotificationsEnabled.collectAsStateWithLifecycle()
-    val autoCheckUpdates by appViewModel.autoCheckUpdates.collectAsStateWithLifecycle()
-    val parallelUpdateDownload by appViewModel.parallelUpdateDownload.collectAsStateWithLifecycle()
-    val followLatestRelease by appViewModel.followLatestRelease.collectAsStateWithLifecycle()
-    val updateDownloadSource by appViewModel.updateDownloadSource.collectAsStateWithLifecycle()
-    val automaticCrashReportsEnabled by appViewModel.automaticCrashReportsEnabled.collectAsStateWithLifecycle()
-    val automaticCrashReportsAvailable by appViewModel.automaticCrashReportsAvailable.collectAsStateWithLifecycle()
-    val crashReportsAvailabilityChecked by appViewModel.crashReportsAvailabilityChecked.collectAsStateWithLifecycle()
-    val shakeToReportEnabled by appViewModel.shakeToReportEnabled.collectAsStateWithLifecycle()
-    val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val savedAccounts by appViewModel.allSavedAccounts.collectAsStateWithLifecycle()
     val savedAccount = savedAccounts.firstOrNull {
@@ -345,11 +313,6 @@ fun AgentScreen(
     val scope = rememberCoroutineScope()
     var showHistoryDialog by remember { mutableStateOf(false) }
     var showWorkStatusDialog by remember { mutableStateOf(false) }
-    var showAppearanceDialog by remember { mutableStateOf(false) }
-    var appearanceChoice by remember { mutableStateOf<AgentAppearanceChoice?>(null) }
-    var returnToAppearanceOverview by remember { mutableStateOf(false) }
-    var defaultClientNameDraft by remember { mutableStateOf("") }
-    LaunchedEffect(defaultClientName) { defaultClientNameDraft = defaultClientName }
     var showDeviceUnlockDialog by remember { mutableStateOf(false) }
     LaunchedEffect(historyRequested) {
         if (historyRequested) { showHistoryDialog = true; onHistoryHandled() }
@@ -362,20 +325,6 @@ fun AgentScreen(
 
     LaunchedEffect(Unit) {
         viewModel.notices.collect { msg -> onToast(msg) }
-    }
-    LaunchedEffect(viewModel) {
-        viewModel.themeChooserRequests.collect {
-            appearanceChoice = AgentAppearanceChoice.THEME
-            returnToAppearanceOverview = false
-            showAppearanceDialog = true
-        }
-    }
-    LaunchedEffect(viewModel) {
-        viewModel.settingsPanelRequests.collect {
-            appearanceChoice = null
-            returnToAppearanceOverview = true
-            showAppearanceDialog = true
-        }
     }
     LaunchedEffect(viewModel) {
         viewModel.deviceUnlockRequests.collect { showDeviceUnlockDialog = true }
@@ -464,352 +413,6 @@ fun AgentScreen(
     LaunchedEffect(isActive, state.streamingReply.length) {
         if (!isActive || state.streamingReply.isBlank() || userScrolledUp) return@LaunchedEffect
         conversationListState.scrollToConversationEnd()
-    }
-
-    val defaultClientNameSavedNotice = atlasText("Client par défaut enregistré.", "Default customer saved.", "تم حفظ العميل الافتراضي.")
-    val crashReportSettingFailureNotice = atlasText("Impossible de modifier ce réglage.", "Could not update this setting.", "تعذر تحديث هذا الإعداد.")
-    val reportedIssueTrackerSource = state.mobileWorkStatus?.trackers?.github
-    val issueTrackerSettingLabel = when {
-        state.workStatusLoading && state.mobileWorkStatus == null -> atlasText("Vérification…", "Checking…", "جارٍ التحقق…")
-        state.workStatusError != null && state.mobileWorkStatus == null -> atlasText("Impossible à vérifier", "Unable to verify", "تعذّر التحقق")
-        state.mobileWorkStatus == null -> atlasText("Non vérifié", "Not checked", "لم يتم التحقق")
-        reportedIssueTrackerSource == null -> atlasText("Statut non fourni par le serveur", "Status not provided by server", "لم يقدّم الخادم الحالة")
-        issueTrackerSetupState(reportedIssueTrackerSource.availability) == IssueTrackerSetupState.AVAILABLE -> atlasText("Flux disponible selon le serveur", "Feed available per server", "الموجز متاح حسب الخادم")
-        issueTrackerSetupState(reportedIssueTrackerSource.availability) == IssueTrackerSetupState.NOT_CONFIGURED -> atlasText("Non configuré selon le serveur", "Not configured per server", "غير مُعدّ حسب الخادم")
-        else -> atlasText("Configuration non vérifiée", "Setup unverified", "لم يتم التحقق من الإعداد")
-    }
-    val roleAllowedLaunchTabs = MainTab.bottomTabsForRole(user.role)
-    val selectedLaunchTab = roleAllowedLaunchTabs.firstOrNull { it.name == defaultStartTab }
-        ?: roleAllowedLaunchTabs.firstOrNull { it == MainTab.HOME }
-        ?: roleAllowedLaunchTabs.first()
-    val languagePreferenceLabel = if (appLanguageFollowsSystem) {
-        atlasText(
-            "Système · ${AppLanguage.fromSystemLocale().nativeLabel}",
-            "System · ${AppLanguage.fromSystemLocale().nativeLabel}",
-            "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}",
-        )
-    } else appLanguage.nativeLabel
-    val finishAppearanceChoice: () -> Unit = {
-        if (returnToAppearanceOverview) {
-            appearanceChoice = null
-        } else {
-            showAppearanceDialog = false
-            appearanceChoice = null
-        }
-    }
-    if (showAppearanceDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                showAppearanceDialog = false
-                appearanceChoice = null
-            },
-            title = {
-                Text(
-                    when (appearanceChoice) {
-                        null -> atlasText("Réglages de l’application", "App settings", "إعدادات التطبيق")
-                        AgentAppearanceChoice.THEME -> atlasText("Thème", "Theme", "المظهر")
-                        AgentAppearanceChoice.LANGUAGE -> atlasText("Langue", "Language", "اللغة")
-                        AgentAppearanceChoice.DENSITY -> atlasText("Densité d'affichage", "Display density", "كثافة العرض")
-                        AgentAppearanceChoice.START_TAB -> atlasText("Onglet d'ouverture au lancement", "Tab to open at launch", "علامة التبويب عند التشغيل")
-                        AgentAppearanceChoice.UPDATE_SOURCE -> atlasText("Source des mises à jour", "Update source", "مصدر التحديثات")
-                    },
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    when (appearanceChoice) {
-                        null -> {
-                            AgentSettingsSectionTitle(atlasText("Apparence, navigation & animations", "Appearance, navigation & animations", "المظهر والتنقل والحركات"))
-                            AgentAppearanceActionRow(
-                                icon = Icons.Outlined.Palette,
-                                title = atlasText("Thème", "Theme", "المظهر"),
-                                value = when (themeMode) {
-                                    ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
-                                    ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
-                                    ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
-                                },
-                                actionLabel = atlasText("Personnaliser", "Customize", "تخصيص"),
-                                onClick = { appearanceChoice = AgentAppearanceChoice.THEME },
-                            )
-                            AgentAppearanceActionRow(
-                                icon = Icons.Outlined.Language,
-                                title = atlasText("Langue", "Language", "اللغة"),
-                                value = languagePreferenceLabel,
-                                actionLabel = atlasText("Modifier", "Change", "تغيير"),
-                                onClick = { appearanceChoice = AgentAppearanceChoice.LANGUAGE },
-                            )
-                            AgentAppearanceActionRow(
-                                icon = Icons.Outlined.Tune,
-                                title = atlasText("Densité d'affichage", "Display density", "كثافة العرض"),
-                                value = when (densityMode) {
-                                    DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
-                                    DensityMode.COMFORT -> atlasText("Confort", "Comfort", "مريح")
-                                },
-                                actionLabel = atlasText("Modifier", "Change", "تغيير"),
-                                onClick = { appearanceChoice = AgentAppearanceChoice.DENSITY },
-                            )
-                            AgentAppearanceActionRow(
-                                icon = Icons.Outlined.Home,
-                                title = atlasText("Onglet d'ouverture au lancement", "Tab to open at launch", "علامة التبويب عند التشغيل"),
-                                value = selectedLaunchTab.localizedLabel(),
-                                actionLabel = atlasText("Modifier", "Change", "تغيير"),
-                                onClick = { appearanceChoice = AgentAppearanceChoice.START_TAB },
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(atlasText("Animations fluides", "Smooth animations", "حركات سلسة"), style = MaterialTheme.typography.bodyMedium)
-                                    Text(
-                                        text = if (animationsEnabled) atlasText("Activées", "On", "مفعّلة") else atlasText("Désactivées", "Off", "متوقفة"),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Switch(
-                                    checked = animationsEnabled,
-                                    onCheckedChange = appViewModel::setAnimationsEnabled,
-                                )
-                            }
-
-                            AgentSettingsSectionTitle(atlasText("Caméra & lecteur code-barres", "Camera & barcode scanner", "الكاميرا وقارئ الباركود"))
-                            AgentPreferenceToggleRow(
-                                title = atlasText("Ouvrir la caméra automatiquement", "Open camera automatically", "فتح الكاميرا تلقائياً"),
-                                checked = autoOpenCamera,
-                                onCheckedChange = appViewModel::setAutoOpenCamera,
-                            )
-                            AgentPreferenceToggleRow(
-                                title = atlasText("Vibration au scan", "Vibrate on scan", "الاهتزاز عند المسح"),
-                                checked = scanHapticEnabled,
-                                onCheckedChange = appViewModel::setScanHapticEnabled,
-                            )
-                            AgentPreferenceToggleRow(
-                                title = atlasText("Signal sonore au scan", "Scan sound", "صوت المسح"),
-                                checked = scanSoundEnabled,
-                                onCheckedChange = appViewModel::setScanSoundEnabled,
-                            )
-                            AgentPreferenceToggleRow(
-                                title = atlasText("Ajout automatique au panier", "Automatically add to cart", "الإضافة التلقائية إلى السلة"),
-                                checked = autoAddCartOnScan,
-                                onCheckedChange = appViewModel::setAutoAddCartOnScan,
-                            )
-
-                            if (Roles.canCreateDocuments(user.role)) {
-                                AgentSettingsSectionTitle(atlasText("Vente rapide & caisse", "Quick sale & checkout", "البيع السريع ونقطة البيع"))
-                                AtlasTextField(
-                                    value = defaultClientNameDraft,
-                                    onValueChange = { defaultClientNameDraft = it },
-                                    label = atlasText("Client pré-rempli par défaut", "Default prefilled customer", "العميل الافتراضي المُعبّأ مسبقاً"),
-                                    imeAction = ImeAction.Done,
-                                    onDone = {
-                                        appViewModel.setDefaultClientName(defaultClientNameDraft)
-                                        onToast(defaultClientNameSavedNotice)
-                                    },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                TextButton(
-                                    onClick = {
-                                        appViewModel.setDefaultClientName(defaultClientNameDraft)
-                                        onToast(defaultClientNameSavedNotice)
-                                    },
-                                    modifier = Modifier.align(Alignment.End),
-                                ) { Text(atlasText("Enregistrer", "Save", "حفظ")) }
-                                AgentPreferenceToggleRow(
-                                    title = atlasText("Confirmer avant création du ticket", "Confirm before creating a sale", "التأكيد قبل إنشاء عملية البيع"),
-                                    checked = confirmBeforeSale,
-                                    onCheckedChange = appViewModel::setConfirmBeforeSale,
-                                )
-                            }
-
-                            AgentSettingsSectionTitle(atlasText("Notifications & mises à jour", "Notifications & updates", "الإشعارات والتحديثات"))
-                            AgentPreferenceToggleRow(
-                                title = atlasText("Notifications système par rôle", "Role-based system notifications", "إشعارات النظام حسب الدور"),
-                                checked = roleNotificationsEnabled,
-                                onCheckedChange = appViewModel::setRoleNotificationsEnabled,
-                            )
-                            AgentPreferenceToggleRow(
-                                title = atlasText("Recherche automatique des mises à jour", "Check for updates automatically", "التحقق تلقائياً من التحديثات"),
-                                checked = autoCheckUpdates,
-                                onCheckedChange = appViewModel::setAutoCheckUpdates,
-                            )
-                            AgentPreferenceToggleRow(
-                                title = atlasText("Téléchargement accéléré multi-connexions", "Multi-connection accelerated downloads", "تنزيلات سريعة متعددة الاتصالات"),
-                                checked = parallelUpdateDownload,
-                                onCheckedChange = appViewModel::setParallelUpdateDownload,
-                            )
-                            AgentPreferenceToggleRow(
-                                title = atlasText("Toujours suivre la dernière version publiée", "Always follow the latest published release", "اتباع أحدث إصدار منشور دائماً"),
-                                checked = followLatestRelease,
-                                onCheckedChange = appViewModel::setFollowLatestRelease,
-                            )
-                            AgentAppearanceActionRow(
-                                icon = Icons.Outlined.Refresh,
-                                title = atlasText("Source des mises à jour", "Update source", "مصدر التحديثات"),
-                                value = when (updateDownloadSource) {
-                                    UpdateDownloadSource.AUTO -> "Auto"
-                                    UpdateDownloadSource.CDN1 -> "CDN 1"
-                                    UpdateDownloadSource.GITHUB -> "GitHub"
-                                },
-                                actionLabel = atlasText("Modifier", "Change", "تغيير"),
-                                onClick = { appearanceChoice = AgentAppearanceChoice.UPDATE_SOURCE },
-                            )
-
-                            AgentSettingsSectionTitle(atlasText("Confidentialité & aide", "Privacy & support", "الخصوصية والدعم"))
-                            AgentPreferenceToggleRow(
-                                title = atlasText("Secouer pour signaler un problème", "Shake to report a problem", "هزّ الجهاز للإبلاغ عن مشكلة"),
-                                checked = shakeToReportEnabled,
-                                onCheckedChange = appViewModel::setShakeToReportEnabled,
-                            )
-                            AgentAppearanceActionRow(
-                                icon = Icons.Outlined.BugReport,
-                                title = atlasText("Statut du suivi des problèmes", "Issue tracker status", "حالة متعقّب المشكلات"),
-                                value = issueTrackerSettingLabel,
-                                actionLabel = atlasText("Vérifier", "Check", "تحقق"),
-                                onClick = {
-                                    showWorkStatusDialog = true
-                                    viewModel.loadWorkStatus()
-                                },
-                            )
-                            when {
-                                !crashReportsAvailabilityChecked -> Text(
-                                    atlasText("Vérification de la disponibilité des rapports de plantage…", "Checking crash-report availability…", "جارٍ التحقق من توفر تقارير الأعطال…"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                automaticCrashReportsAvailable -> AgentPreferenceToggleRow(
-                                    title = atlasText("Rapports de plantage automatiques", "Automatic crash reports", "تقارير الأعطال التلقائية"),
-                                    checked = automaticCrashReportsEnabled,
-                                    onCheckedChange = { enabled ->
-                                        appViewModel.setAutomaticCrashReportsEnabled(enabled) { succeeded ->
-                                            if (!succeeded) onToast(crashReportSettingFailureNotice)
-                                        }
-                                    },
-                                )
-                                else -> Text(
-                                    atlasText("Rapports de plantage indisponibles : le service n’est pas configuré dans cette version.", "Crash reports are unavailable because the service is not configured in this build.", "تقارير الأعطال غير متاحة لأن الخدمة غير مُعدّة في هذا الإصدار."),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            savedAccount?.let { account ->
-                                AgentAppearanceActionRow(
-                                    icon = Icons.Outlined.Fingerprint,
-                                    title = atlasText("Déverrouillage de l’appareil", "Device unlock", "إلغاء قفل الجهاز"),
-                                    value = if (account.canUseDeviceUnlock) atlasText("Activé", "On", "مفعّل") else atlasText("Désactivé", "Off", "متوقف"),
-                                    actionLabel = atlasText("Configurer", "Configure", "إعداد"),
-                                    onClick = { showDeviceUnlockDialog = true },
-                                )
-                            }
-                            AgentPreferenceToggleRow(
-                                title = atlasText("Mode développeur", "Developer mode", "وضع المطوّر"),
-                                checked = developerModeEnabled,
-                                onCheckedChange = appViewModel::setDeveloperModeEnabled,
-                            )
-                        }
-                        AgentAppearanceChoice.THEME -> ThemeMode.entries.forEach { mode ->
-                            AgentAppearanceOptionRow(
-                                label = when (mode) {
-                                    ThemeMode.SYSTEM -> atlasText("Suivre le système", "Follow system", "اتباع النظام")
-                                    ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
-                                    ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
-                                },
-                                selected = themeMode == mode,
-                                onClick = {
-                                    appViewModel.setThemeMode(mode)
-                                    finishAppearanceChoice()
-                                },
-                            )
-                        }
-                        AgentAppearanceChoice.LANGUAGE -> {
-                            AgentAppearanceOptionRow(
-                                label = atlasText(
-                                    "Système · ${AppLanguage.fromSystemLocale().nativeLabel}",
-                                    "System · ${AppLanguage.fromSystemLocale().nativeLabel}",
-                                    "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}",
-                                ),
-                                selected = appLanguageFollowsSystem,
-                                onClick = {
-                                    appViewModel.followSystemAppLanguage()
-                                    finishAppearanceChoice()
-                                },
-                            )
-                            AppLanguage.entries.forEach { language ->
-                                AgentAppearanceOptionRow(
-                                    label = language.nativeLabel,
-                                    selected = !appLanguageFollowsSystem && appLanguage == language,
-                                    onClick = {
-                                        appViewModel.setAppLanguage(language)
-                                        finishAppearanceChoice()
-                                    },
-                                )
-                            }
-                        }
-                        AgentAppearanceChoice.DENSITY -> DensityMode.entries.forEach { mode ->
-                            AgentAppearanceOptionRow(
-                                label = when (mode) {
-                                    DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
-                                    DensityMode.COMFORT -> atlasText("Confort", "Comfort", "مريح")
-                                },
-                                selected = densityMode == mode,
-                                onClick = {
-                                    appViewModel.setDensityMode(mode)
-                                    finishAppearanceChoice()
-                                },
-                            )
-                        }
-                        AgentAppearanceChoice.START_TAB -> roleAllowedLaunchTabs.forEach { tab ->
-                            AgentAppearanceOptionRow(
-                                label = tab.localizedLabel(),
-                                selected = selectedLaunchTab == tab,
-                                onClick = {
-                                    appViewModel.setDefaultStartTab(tab.name)
-                                    finishAppearanceChoice()
-                                },
-                            )
-                        }
-                        AgentAppearanceChoice.UPDATE_SOURCE -> UpdateDownloadSource.entries.forEach { source ->
-                            AgentAppearanceOptionRow(
-                                label = when (source) {
-                                    UpdateDownloadSource.AUTO -> atlasText("Automatique", "Automatic", "تلقائي")
-                                    UpdateDownloadSource.CDN1 -> "CDN 1"
-                                    UpdateDownloadSource.GITHUB -> "GitHub"
-                                },
-                                selected = updateDownloadSource == source,
-                                onClick = {
-                                    appViewModel.setUpdateDownloadSource(source)
-                                    finishAppearanceChoice()
-                                },
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (appearanceChoice != null && returnToAppearanceOverview) {
-                            appearanceChoice = null
-                        } else {
-                            showAppearanceDialog = false
-                            appearanceChoice = null
-                        }
-                    },
-                ) {
-                    Text(
-                        if (appearanceChoice != null && returnToAppearanceOverview) {
-                            atlasText("Retour", "Back", "رجوع")
-                        } else {
-                            atlasText("Fermer", "Close", "إغلاق")
-                        },
-                    )
-                }
-            },
-        )
     }
 
     if (showDeviceUnlockDialog) {
@@ -1097,6 +700,7 @@ fun AgentScreen(
                             },
                             onApprove = { proposalId -> viewModel.approveProposal(msg.id, proposalId) },
                             onNavigate = onNavigate,
+                            onThemeChoice = { messageId, mode -> viewModel.selectThemeOption(messageId, mode) },
                         )
                     }
                     if (state.updateConversationActive) {
@@ -1277,72 +881,6 @@ fun AgentScreen(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun AgentSettingsSectionTitle(title: String) {
-    Text(
-        text = title,
-        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 10.dp, bottom = 2.dp),
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary,
-    )
-}
-
-@Composable
-private fun AgentPreferenceToggleRow(
-    title: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun AgentAppearanceActionRow(
-    icon: ImageVector,
-    title: String,
-    value: String,
-    actionLabel: String,
-    onClick: () -> Unit,
-) {
-    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-            }
-            Text(actionLabel, style = MaterialTheme.typography.labelMedium)
-        }
-    }
-}
-
-@Composable
-private fun AgentAppearanceOptionRow(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = label,
-                modifier = Modifier.weight(1f),
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            )
-            if (selected) Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -1891,6 +1429,7 @@ private fun ChatBubbleRow(
     onCopy: () -> Unit,
     onApprove: (String) -> Unit,
     onNavigate: (AgentNavigationSuggestion) -> Unit = {},
+    onThemeChoice: (String, ThemeMode) -> Unit = { _, _ -> },
     isStreaming: Boolean = false,
 ) {
     val isUser = message.fromUser
@@ -1959,6 +1498,29 @@ private fun ChatBubbleRow(
                                 markdown = displayText,
                                 textColor = MaterialTheme.colorScheme.onSurface,
                             )
+                        }
+
+                        if (!isUser && message.showThemeOptions) {
+                            Spacer(Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                ThemeMode.entries.forEach { mode ->
+                                    val themeLabel = when (mode) {
+                                        ThemeMode.SYSTEM -> atlasText("Système", "System", "النظام")
+                                        ThemeMode.LIGHT -> atlasText("Clair", "Light", "فاتح")
+                                        ThemeMode.DARK -> atlasText("Sombre", "Dark", "داكن")
+                                    }
+                                    val actionLabel = if (message.suggestedThemeMode == mode) {
+                                        atlasText("Confirmer $themeLabel", "Confirm $themeLabel", "تأكيد $themeLabel")
+                                    } else themeLabel
+                                    AssistChip(
+                                        onClick = { onThemeChoice(message.id, mode) },
+                                        label = { Text(actionLabel, maxLines = 1) },
+                                    )
+                                }
+                            }
                         }
 
                         if (message.tools.isNotEmpty()) {

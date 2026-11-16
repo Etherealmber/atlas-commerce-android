@@ -8,6 +8,8 @@ import ma.etherealmber.atlascommerce.ui.screens.agent.AgentLocalAction
 import ma.etherealmber.atlascommerce.ui.screens.agent.detectExplicitAgentLocalAction
 import ma.etherealmber.atlascommerce.ui.screens.agent.isForbiddenAgentRequest
 import ma.etherealmber.atlascommerce.ui.screens.agent.isForbiddenAgentProposal
+import ma.etherealmber.atlascommerce.ui.screens.agent.agentThemeChoiceMode
+import ma.etherealmber.atlascommerce.ui.screens.agent.agentThemeChoiceReply
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentViewModel
 import ma.etherealmber.atlascommerce.ui.screens.agent.detectExplicitAgentNavigationRequest
 import ma.etherealmber.atlascommerce.ui.screens.agent.mobileNavigationSuggestion
@@ -89,19 +91,26 @@ class AgentConversationStateTest {
     }
 
     @Test
-    fun explicitThemeCommandsMapToNativeThemeModes() {
-        assertEquals(AgentLocalAction.SetTheme(ThemeMode.DARK), detectExplicitAgentLocalAction("Switch to dark mode"))
-        assertEquals(AgentLocalAction.SetTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Set theme to light"))
-        assertEquals(AgentLocalAction.SetTheme(ThemeMode.SYSTEM), detectExplicitAgentLocalAction("Use the system theme"))
-        assertEquals(AgentLocalAction.SetTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Use the light theme"))
-        assertEquals(AgentLocalAction.SetTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Switch to light mode from dark mode"))
-        assertEquals(AgentLocalAction.SetTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Change theme from dark to light"))
+    fun explicitThemeCommandsRequestInConversationConfirmation() {
+        assertEquals(AgentLocalAction.ChooseTheme(ThemeMode.DARK), detectExplicitAgentLocalAction("Switch to dark mode"))
+        assertEquals(AgentLocalAction.ChooseTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Set theme to light"))
+        assertEquals(AgentLocalAction.ChooseTheme(ThemeMode.SYSTEM), detectExplicitAgentLocalAction("Use the system theme"))
+        assertEquals(AgentLocalAction.ChooseTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Use the light theme"))
+        assertEquals(AgentLocalAction.ChooseTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Switch to light mode from dark mode"))
+        assertEquals(AgentLocalAction.ChooseTheme(ThemeMode.LIGHT), detectExplicitAgentLocalAction("Change theme from dark to light"))
     }
 
     @Test
-    fun directThemeAndSettingsRequestsOpenNativeControls() {
-        assertEquals(AgentLocalAction.SetTheme(ThemeMode.DARK), detectExplicitAgentLocalAction("I want to change the theme to dark"))
-        assertEquals(AgentLocalAction.ChooseTheme, detectExplicitAgentLocalAction("Can u change theme"))
+    fun explicitThemeConfirmationIsRestorableFromSavedConversationText() {
+        val prompt = agentThemeChoiceReply(ThemeMode.DARK, ma.etherealmber.atlascommerce.core.AppLanguage.ENGLISH)
+        assertEquals("You asked for the dark theme. Confirm below to apply it, or choose another theme.", prompt)
+        assertEquals(ThemeMode.DARK, agentThemeChoiceMode(prompt))
+    }
+
+    @Test
+    fun themeRequestAndSafeActionsMapToInConversationControls() {
+        assertEquals(AgentLocalAction.ChooseTheme(ThemeMode.DARK), detectExplicitAgentLocalAction("I want to change the theme to dark"))
+        assertEquals(AgentLocalAction.ChooseTheme(), detectExplicitAgentLocalAction("Can u change theme"))
         assertEquals(AgentLocalAction.ConfigureDeviceUnlock, detectExplicitAgentLocalAction("Show device unlock"))
         assertEquals(AgentLocalAction.ShowWorkStatus, detectExplicitAgentLocalAction("Show my work status"))
     }

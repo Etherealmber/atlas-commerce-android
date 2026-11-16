@@ -454,6 +454,8 @@ fun MainShell(
         )
     }
 
+    val showShellTopBar = isForeground &&
+        (!productHistoryActive && tab != MainTab.NOTIFICATIONS || (useRail && showDataCacheManagerDialog))
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val floatingBarWidth by animateDpAsState(
         targetValue = maxWidth,
@@ -468,10 +470,10 @@ fun MainShell(
         modifier = Modifier.fillMaxSize(),
         containerColor = Color.Transparent,
         topBar = {
-            if (isForeground && !productHistoryActive && tab != MainTab.NOTIFICATIONS) {
+            if (showShellTopBar) {
                 AtlasTopBar(
                     title = if (!useRail || tab == MainTab.AGENT) tab.localizedLabel() else "",
-                    subtitle = agentState?.let { state ->
+                    subtitle = if (!useRail) agentState?.let { state ->
                         val thread = state.activeThreadTitle.takeIf(String::isNotBlank)?.let { localizedAgentText(it, atlasLanguage) }
                             ?: atlasText("Sans titre", "Untitled", "بلا عنوان")
                         val status = when {
@@ -481,27 +483,58 @@ fun MainShell(
                             else -> atlasText("Vérification…", "Checking…", "جارٍ التحقق…")
                         }
                         listOf(thread, status).filter { it.isNotBlank() }.joinToString(" · ")
-                    },
-                    containerColor = if (useRail) Color.Transparent else MaterialTheme.colorScheme.background,
-                    titleLeading = if (tab == MainTab.AGENT) {
-                        {
-                            AtlasAgentMascot(
-                                modifier = Modifier.size(32.dp).combinedClickable(
-                                    onClick = {},
-                                    onLongClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
-                                    onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAgentSurprise = true },
-                                ),
-                                isTyping = agentState?.input?.isNotBlank() == true,
-                                isThinking = agentState?.sending == true,
-                            )
-                        }
                     } else null,
+                    containerColor = if (useRail) Color.Transparent else MaterialTheme.colorScheme.background,
+                    titleLeading = when {
+                        useRail -> {
+                            {
+                                // Use the otherwise-empty rail area above the page content for
+                                // the brand, instead of leaving a tall blank gap above the logo.
+                                AtlasSidebarBrand(
+                                    expanded = sidebarExpanded,
+                                    canCollapse = true,
+                                    onToggleCollapse = { onSidebarCollapsedChange(!sidebarCollapsed) },
+                                    modifier = Modifier.width(sidebarWidth),
+                                )
+                                if (tab == MainTab.AGENT) {
+                                    AtlasAgentMascot(
+                                        modifier = Modifier.size(32.dp).combinedClickable(
+                                            onClick = {},
+                                            onLongClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
+                                            onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAgentSurprise = true },
+                                        ),
+                                        isTyping = agentState?.input?.isNotBlank() == true,
+                                        isThinking = agentState?.sending == true,
+                                    )
+                                }
+                            }
+                        }
+                        tab == MainTab.AGENT -> {
+                            {
+                                AtlasAgentMascot(
+                                    modifier = Modifier.size(32.dp).combinedClickable(
+                                        onClick = {},
+                                        onLongClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
+                                        onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAgentSurprise = true },
+                                    ),
+                                    isTyping = agentState?.input?.isNotBlank() == true,
+                                    isThinking = agentState?.sending == true,
+                                )
+                            }
+                        }
+                        else -> null
+                    },
                     onBack = if (useRail) null else when (tab) {
                         MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
                         MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> ({ setTabName(lastBottomTabName) })
                         else -> null
                     },
                     actions = {
+                        val openAgentDescription = atlasText(
+                            "Ouvrir Atlas Agent",
+                            "Open Atlas Agent",
+                            "فتح Atlas Agent",
+                        )
                         val hasHiddenUpdate = when (val state = updateState) {
                             is UpdateState.Downloading -> state.hiddenInForeground && !state.info.mandatory
                             is UpdateState.Available -> state.dismissedBanner && !state.info.mandatory
@@ -515,6 +548,20 @@ fun MainShell(
                             )
                         }
                         if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
+                        if (!useRail && tab != MainTab.AGENT) {
+                            IconButton(
+                                onClick = { switchTab(MainTab.AGENT) },
+                                modifier = Modifier.semantics {
+                                    contentDescription = openAgentDescription
+                                },
+                            ) {
+                                AtlasAgentMascot(
+                                    modifier = Modifier.size(32.dp),
+                                    isTyping = agentState?.input?.isNotBlank() == true,
+                                    isThinking = agentState?.sending == true,
+                                )
+                            }
+                        }
                         if (tab == MainTab.AGENT) {
                             IconButton(onClick = { agentHistoryRequested = true }) {
                                 Icon(
@@ -548,31 +595,35 @@ fun MainShell(
                             MainTab.AGENT, MainTab.SALE, MainTab.SETTINGS -> Unit
 
                             MainTab.PROFILE -> {
-                                IconButton(onClick = { showDataCacheManagerDialog = true }) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Inventory2,
-                                        contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
-                                    )
+                                // On tablets these destinations already live in the sidebar.
+                                if (!useRail) {
+                                    IconButton(onClick = { showDataCacheManagerDialog = true }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Inventory2,
+                                            contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
+                                        )
+                                    }
+                                    IconButton(onClick = { switchTab(MainTab.SETTINGS) }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Settings,
+                                            contentDescription = atlasText("Paramètres", "Settings", "الإعدادات"),
+                                        )
+                                    }
+                                    Spacer(Modifier.width(4.dp))
                                 }
-                                IconButton(onClick = { switchTab(MainTab.SETTINGS) }) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Settings,
-                                        contentDescription = atlasText("Paramètres", "Settings", "الإعدادات"),
-                                    )
-                                }
-                                Spacer(Modifier.width(4.dp))
                             }
 
                             else -> {
-                                TopBarQuickActionsMenu(
-                                    notificationCount = notificationCount,
-                                    showSale = Roles.canCreateDocuments(user.role),
-                                    onOpenNotifications = openNotificationsForLayout,
-                                    onOpenSale = { switchTab(MainTab.SALE) },
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                // The full-width sidebar owns the account avatar on tablets.
+                                // Tablet navigation is in the sidebar; keep its notifications,
+                                // sale, and account actions out of the top-bar dropdown.
                                 if (!useRail) {
+                                    TopBarQuickActionsMenu(
+                                        notificationCount = notificationCount,
+                                        showSale = Roles.canCreateDocuments(user.role),
+                                        onOpenNotifications = openNotificationsForLayout,
+                                        onOpenSale = { switchTab(MainTab.SALE) },
+                                    )
+                                    Spacer(Modifier.width(6.dp))
                                     AtlasAvatar(
                                         avatarUrl = user.avatarUrl,
                                         label = user.displayName.ifBlank { user.username },
@@ -588,8 +639,8 @@ fun MainShell(
                                         onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAvatarSurprise = true },
                                         longClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
                                     )
+                                    Spacer(Modifier.width(10.dp))
                                 }
-                                Spacer(Modifier.width(10.dp))
                             }
                         }
                     },
@@ -654,6 +705,7 @@ fun MainShell(
                         surpriseIndex = nextSurprise(surpriseIndex, 5)
                         showAvatarSurprise = true
                     },
+                    showBrand = !showShellTopBar,
                 )
             }
             VerticalDivider(

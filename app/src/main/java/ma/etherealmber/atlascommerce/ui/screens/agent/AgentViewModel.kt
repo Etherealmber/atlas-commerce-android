@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -62,6 +64,68 @@ internal fun firstSelectableAgentThread(threads: List<AgentThreadSummaryDto>): A
 internal fun replaceProvisionalReply(provisional: String, doneReply: String): String =
     doneReply.ifBlank { "Analyse terminée." }
 
+internal fun agentThemeChoiceReply(mode: ThemeMode?, language: AppLanguage): String {
+    val themeName = when (language) {
+        AppLanguage.FRENCH -> when (mode) {
+            ThemeMode.SYSTEM -> "système"
+            ThemeMode.LIGHT -> "clair"
+            ThemeMode.DARK -> "sombre"
+            null -> ""
+        }
+        AppLanguage.ENGLISH -> when (mode) {
+            ThemeMode.SYSTEM -> "system"
+            ThemeMode.LIGHT -> "light"
+            ThemeMode.DARK -> "dark"
+            null -> ""
+        }
+        AppLanguage.ARABIC -> when (mode) {
+            ThemeMode.SYSTEM -> "النظام"
+            ThemeMode.LIGHT -> "الفاتح"
+            ThemeMode.DARK -> "الداكن"
+            null -> ""
+        }
+    }
+    return when (language) {
+        AppLanguage.FRENCH -> if (mode == null) {
+            "Quel thème souhaitez-vous ? Choisissez une option ci-dessous. Aucun changement ne sera appliqué avant votre choix."
+        } else {
+            "Vous avez demandé le thème $themeName. Confirmez ci-dessous pour l’appliquer, ou choisissez-en un autre."
+        }
+        AppLanguage.ENGLISH -> if (mode == null) {
+            "Which theme would you like? Choose one below. Nothing changes until you confirm."
+        } else {
+            "You asked for the $themeName theme. Confirm below to apply it, or choose another theme."
+        }
+        AppLanguage.ARABIC -> if (mode == null) {
+            "ما المظهر الذي تفضله؟ اختر أحد الخيارات أدناه. لن يتغير المظهر حتى تؤكد اختيارك."
+        } else {
+            "طلبت المظهر $themeName. أكّد أدناه لتطبيقه أو اختر مظهراً آخر."
+        }
+    }
+}
+
+internal fun agentThemeChoiceMode(text: String): ThemeMode? {
+    val clean = text.trim()
+    return ThemeMode.entries.firstOrNull { mode ->
+        AppLanguage.entries.any { language -> agentThemeChoiceReply(mode, language) == clean }
+    }
+}
+
+internal fun isAgentThemeChoicePrompt(text: String): Boolean {
+    val clean = text.trim()
+    return agentThemeChoiceMode(clean) != null || clean in setOf(
+        "Quel thème souhaitez-vous ? Choisissez une option ci-dessous. Aucun changement ne sera appliqué avant votre choix.",
+        "Which theme would you like? Choose one below. Nothing changes until you confirm.",
+        "ما المظهر الذي تفضله؟ اختر أحد الخيارات أدناه. لن يتغير المظهر حتى تؤكد اختيارك.",
+        "Quel thème souhaitez-vous ? Choisissez une option ci-dessous.",
+        "Which theme would you like? Choose one below.",
+        "ما المظهر الذي تفضله؟ اختر أحد الخيارات أدناه.",
+        "Choisissez le thème à appliquer ici.",
+        "Choose the theme to apply here.",
+        "اختر المظهر الذي تريد تطبيقه هنا.",
+    )
+}
+
 @HiltViewModel
 class AgentViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
@@ -85,6 +149,8 @@ class AgentViewModel @Inject constructor(
         val tools: List<AssistToolTraceDto> = emptyList(),
         val proposals: List<AssistProposalDto> = emptyList(),
         val approvedIds: Set<String> = emptySet(),
+        val showThemeOptions: Boolean = false,
+        val suggestedThemeMode: ThemeMode? = null,
     )
 
     data class UiState(
@@ -119,6 +185,7 @@ class AgentViewModel @Inject constructor(
     private var pendingSensitiveResponseLanguage: AppLanguage = AppLanguage.FRENCH
     @Volatile private var activeSendRequestId: String? = null
     @Volatile private var activeThreadLoadId: String? = null
+    private val pendingThemeChoiceIds = mutableSetOf<String>()
 
     private val _notices = MutableSharedFlow<String>(
         extraBufferCapacity = 4,
@@ -128,12 +195,6 @@ class AgentViewModel @Inject constructor(
 
     private val _navigationRequests = MutableSharedFlow<AgentNavigationSuggestion>(extraBufferCapacity = 1)
     val navigationRequests: SharedFlow<AgentNavigationSuggestion> = _navigationRequests.asSharedFlow()
-
-    private val _themeChooserRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val themeChooserRequests: SharedFlow<Unit> = _themeChooserRequests.asSharedFlow()
-
-    private val _settingsPanelRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val settingsPanelRequests: SharedFlow<Unit> = _settingsPanelRequests.asSharedFlow()
 
     private val _deviceUnlockRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val deviceUnlockRequests: SharedFlow<Unit> = _deviceUnlockRequests.asSharedFlow()
@@ -281,6 +342,8 @@ class AgentViewModel @Inject constructor(
                                 fromUser = message.role == "user",
                                 text = message.text,
                                 ms = message.ms,
+                                showThemeOptions = message.role == "assistant" && isAgentThemeChoicePrompt(message.text),
+                                suggestedThemeMode = if (message.role == "assistant") agentThemeChoiceMode(message.text) else null,
                             )
                         }
                     _state.update { current ->
@@ -313,7 +376,16 @@ class AgentViewModel @Inject constructor(
             // Prioritize the conversation list: waiting for status/policy first could hold
             // a ready thread behind an unrelated slow endpoint. Start loading its detail as
             // soon as the list arrives, while the other context calls continue concurrently.
-            val threadsRes = threadsDef.await()
+            var threadsRes = threadsDef.await()
+            if (threadsRes !is ApiResult.Success) {
+                AtlasLogBuffer.log("AGENT", "Conversation list request failed; retrying once", "WARN")
+                threadsRes = loadAgentContext { commerceRepository.listAgentThreads() }
+            }
+            val threadLoadError = when (threadsRes) {
+                is ApiResult.Failure -> "Saved conversations could not be loaded (${threadsRes.code}). Check the connection and retry."
+                null -> "Saved conversations could not be loaded. Check the connection and retry."
+                else -> null
+            }
             val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
             if (currentScope != requestedScope) return@launch
             val remoteThreads = newestAgentThreadsFirst((threadsRes as? ApiResult.Success)?.data.orEmpty())
@@ -328,6 +400,7 @@ class AgentViewModel @Inject constructor(
                     loadingContext = false,
                     // Keep one continuous loading state while moving from context to thread detail.
                     loadingThread = selectedThread != null || current.loadingThread,
+                    error = threadLoadError,
                 )
             }
             selectedThread?.let(::selectThread)
@@ -383,21 +456,11 @@ class AgentViewModel @Inject constructor(
                         AppLanguage.ARABIC -> "أفتح حالة أعمالك في هذه اللوحة."
                     }
                 }
-                AgentLocalAction.ChooseTheme -> {
-                    _themeChooserRequests.tryEmit(Unit)
-                    when (responseLanguage) {
-                        AppLanguage.FRENCH -> "Choisissez le thème à appliquer ici."
-                        AppLanguage.ENGLISH -> "Choose the theme to apply here."
-                        AppLanguage.ARABIC -> "اختر المظهر الذي تريد تطبيقه هنا."
-                    }
-                }
-                AgentLocalAction.ShowSettingsPanel -> {
-                    _settingsPanelRequests.tryEmit(Unit)
-                    when (responseLanguage) {
-                        AppLanguage.FRENCH -> "Voici les réglages disponibles dans Atlas. Vous pouvez modifier vos préférences ici."
-                        AppLanguage.ENGLISH -> "Here are the available app settings. You can change your preferences here."
-                        AppLanguage.ARABIC -> "إليك إعدادات التطبيق المتاحة. يمكنك تغيير تفضيلاتك هنا."
-                    }
+                is AgentLocalAction.ChooseTheme -> agentThemeChoiceReply(action.requestedMode, responseLanguage)
+                AgentLocalAction.ShowSettingsPanel -> when (responseLanguage) {
+                    AppLanguage.FRENCH -> "Dites-moi quel réglage vous souhaitez modifier et je le ferai ici."
+                    AppLanguage.ENGLISH -> "Tell me which preference you want to change and I’ll handle it here."
+                    AppLanguage.ARABIC -> "أخبرني بالإعداد الذي تريد تغييره وسأعدّله هنا."
                 }
                 AgentLocalAction.ConfigureDeviceUnlock -> {
                     _deviceUnlockRequests.tryEmit(Unit)
@@ -407,45 +470,18 @@ class AgentViewModel @Inject constructor(
                         AppLanguage.ARABIC -> "فتحت إعدادات إلغاء القفل هنا. فعّله لبدء إعداد البصمة."
                     }
                 }
-                is AgentLocalAction.SetTheme -> {
-                    val saved = try {
-                        preferences.setThemeMode(action.mode)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        false
-                    }
-                    if (!saved) {
-                        when (responseLanguage) {
-                            AppLanguage.FRENCH -> "Je n’ai pas pu enregistrer ce thème. Vous pouvez réessayer dans Profil et personnalisation."
-                            AppLanguage.ENGLISH -> "I couldn't save that theme. You can try again in Profile & Personalization."
-                            AppLanguage.ARABIC -> "تعذّر حفظ هذا المظهر. يمكنك إعادة المحاولة من الملف الشخصي والتخصيص."
-                        }
-                    } else when (responseLanguage) {
-                        AppLanguage.FRENCH -> when (action.mode) {
-                            ThemeMode.SYSTEM -> "D’accord, le thème suit maintenant les réglages du système."
-                            ThemeMode.LIGHT -> "C’est fait : le thème clair est activé."
-                            ThemeMode.DARK -> "C’est fait : le thème sombre est activé."
-                        }
-                        AppLanguage.ENGLISH -> when (action.mode) {
-                            ThemeMode.SYSTEM -> "Done. Atlas now follows your system theme."
-                            ThemeMode.LIGHT -> "Done. The light theme is on."
-                            ThemeMode.DARK -> "Done. The dark theme is on."
-                        }
-                        AppLanguage.ARABIC -> when (action.mode) {
-                            ThemeMode.SYSTEM -> "تم. سيتبع Atlas الآن مظهر النظام."
-                            ThemeMode.LIGHT -> "تم تفعيل المظهر الفاتح."
-                            ThemeMode.DARK -> "تم تفعيل المظهر الداكن."
-                        }
-                    }
-                }
                 AgentLocalAction.CheckForUpdate -> when (responseLanguage) {
                     AppLanguage.FRENCH -> "Je peux vérifier les mises à jour ici. Confirmez avant de démarrer la vérification."
                     AppLanguage.ENGLISH -> "I can check for updates here. Confirm to start the check."
                     AppLanguage.ARABIC -> "يمكنني التحقق من التحديثات هنا. أكّد لبدء التحقق."
                 }
             }
-            val assistantMessage = ChatMessage(fromUser = false, text = reply)
+            val assistantMessage = ChatMessage(
+                fromUser = false,
+                text = reply,
+                showThemeOptions = action is AgentLocalAction.ChooseTheme,
+                suggestedThemeMode = (action as? AgentLocalAction.ChooseTheme)?.requestedMode,
+            )
             val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
             if (currentScope != requestScope || activeSendRequestId != requestId) return@launch
             activeSendRequestId = null
@@ -472,28 +508,131 @@ class AgentViewModel @Inject constructor(
                 }
             }
             val messagesToPersist = _state.value.messages.takeIf { _state.value.activeThreadId == activeId }
-            if (messagesToPersist != null) {
-                try {
-                    commerceRepository.putAgentThread(
-                        id = activeId,
-                        title = resolvedTitle,
-                        messages = messagesToPersist.map { message ->
-                            AgentThreadMessageDto(
-                                role = if (message.fromUser) "user" else "assistant",
-                                text = if (message.fromUser && message.attachmentNames.isNotEmpty()) {
-                                    "${message.text}\n\n📎 ${message.attachmentNames.joinToString()}"
-                                } else message.text,
-                                ms = message.ms,
-                            )
-                        },
-                    )
+            if (messagesToPersist != null && !persistAgentThread(requestScope, activeId, resolvedTitle, messagesToPersist, attempts = 3)) {
+                _notices.tryEmit(conversationSaveFailureNotice(responseLanguage))
+            }
+        }
+    }
+
+
+    fun selectThemeOption(messageId: String, mode: ThemeMode) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return
+        val scope = activeUser.scopeIdentity
+        val current = _state.value
+        if (current.messages.none { it.id == messageId && it.showThemeOptions }) return
+        if (!pendingThemeChoiceIds.add(messageId)) return
+
+        viewModelScope.launch {
+            try {
+                val saved = try {
+                    preferences.setThemeMode(mode)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    AtlasLogBuffer.log("AGENT", "Could not persist the local action reply", "WARN")
+                    false
                 }
+                if (!saved) {
+                    _notices.tryEmit("Could not save the selected theme. Please try again.")
+                    return@launch
+                }
+                val responseLanguage = try {
+                    preferences.appLanguage.first()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    AppLanguage.ENGLISH
+                }
+                val confirmation = when (responseLanguage) {
+                    AppLanguage.FRENCH -> when (mode) {
+                        ThemeMode.SYSTEM -> "C’est fait : Atlas suit maintenant le thème du système."
+                        ThemeMode.LIGHT -> "C’est fait : le thème clair est activé."
+                        ThemeMode.DARK -> "C’est fait : le thème sombre est activé."
+                    }
+                    AppLanguage.ENGLISH -> when (mode) {
+                        ThemeMode.SYSTEM -> "Done. Atlas now follows your system theme."
+                        ThemeMode.LIGHT -> "Done. The light theme is on."
+                        ThemeMode.DARK -> "Done. The dark theme is on."
+                    }
+                    AppLanguage.ARABIC -> when (mode) {
+                        ThemeMode.SYSTEM -> "تم. سيتبع Atlas الآن مظهر النظام."
+                        ThemeMode.LIGHT -> "تم تفعيل المظهر الفاتح."
+                        ThemeMode.DARK -> "تم تفعيل المظهر الداكن."
+                    }
+                }
+                if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != scope) return@launch
+                _state.update { state ->
+                    if (state.messages.none { it.id == messageId && it.showThemeOptions }) state
+                    else state.copy(
+                        messages = state.messages.map { message ->
+                            if (message.id == messageId) {
+                                message.copy(text = confirmation, showThemeOptions = false, suggestedThemeMode = null)
+                            } else message
+                        },
+                    )
+                }
+                val latest = _state.value
+                if (latest.activeThreadId == current.activeThreadId &&
+                    !persistAgentThread(scope, latest.activeThreadId, latest.activeThreadTitle, latest.messages, attempts = 3)
+                ) {
+                    _notices.tryEmit(conversationSaveFailureNotice(responseLanguage))
+                }
+            } finally {
+                pendingThemeChoiceIds.remove(messageId)
             }
         }
+    }
+
+    private suspend fun persistAgentThread(
+        scope: String,
+        id: String,
+        title: String,
+        messages: List<ChatMessage>,
+        attempts: Int,
+    ): Boolean {
+        val requestMessages = messages.takeLast(40).map { message ->
+            AgentThreadMessageDto(
+                role = if (message.fromUser) "user" else "assistant",
+                text = if (message.fromUser && message.attachmentNames.isNotEmpty()) {
+                    "${message.text}\n\n📎 ${message.attachmentNames.joinToString()}"
+                } else message.text,
+                ms = message.ms,
+            )
+        }
+        repeat(attempts.coerceAtLeast(1)) { attempt ->
+            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != scope) return false
+            val result = try {
+                commerceRepository.putAgentThread(id = id, title = title, messages = requestMessages)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                AtlasLogBuffer.log(
+                    "AGENT",
+                    "Thread persistence exception: ${error.javaClass.simpleName}: ${AtlasLogBuffer.sanitize(error.message.orEmpty()).take(160)}",
+                    "WARN",
+                )
+                null
+            }
+            when (result) {
+                is ApiResult.Success -> {
+                    AtlasLogBuffer.log("AGENT", "Conversation thread saved to backend: id=${id.take(18)} messages=${requestMessages.size}")
+                    return true
+                }
+                is ApiResult.Failure -> AtlasLogBuffer.log(
+                    "AGENT",
+                    "Thread persistence failed (${result.code}): ${AtlasLogBuffer.sanitize(result.message).take(160)}",
+                    "WARN",
+                )
+                null -> Unit
+            }
+            if (attempt + 1 < attempts) delay(350L * (attempt + 1))
+        }
+        return false
+    }
+
+    private fun conversationSaveFailureNotice(language: AppLanguage): String = when (language) {
+        AppLanguage.FRENCH -> "Impossible d’enregistrer cette conversation sur votre compte. Vérifiez la connexion avant de fermer l’application."
+        AppLanguage.ENGLISH -> "This conversation could not be saved to your account. Check your connection before closing the app."
+        AppLanguage.ARABIC -> "تعذر حفظ هذه المحادثة في حسابك. تحقق من الاتصال قبل إغلاق التطبيق."
     }
 
 
@@ -678,6 +817,9 @@ class AgentViewModel @Inject constructor(
                 return@launch
             }
             val requestScope = activeUser.scopeIdentity
+            // Save the user's turn before the network-backed assistant response starts. If the
+            // app is closed while generation is running, the conversation still has a backend row.
+            persistAgentThread(requestScope, activeId, resolvedTitle, snapshot.messages + userBubble, attempts = 1)
             val imageAttachments = attachments.flatMap { it.imageDataUrls }.take(4)
             val documentAttachments = attachments.flatMap { it.documentDataUrls }.take(2)
             val result = try {
@@ -730,6 +872,10 @@ class AgentViewModel @Inject constructor(
                     "ERROR",
                 )
                 finishSendWithError(requestId, activeId, "Atlas Agent n'a pas pu terminer la réponse. Vérifiez la connexion puis réessayez.")
+                val failedTurn = _state.value.messages.takeIf { _state.value.activeThreadId == activeId }
+                if (failedTurn != null && !persistAgentThread(requestScope, activeId, resolvedTitle, failedTurn, attempts = 3)) {
+                    _notices.tryEmit(conversationSaveFailureNotice(responseLanguage))
+                }
                 return@launch
             }
 
@@ -748,6 +894,10 @@ class AgentViewModel @Inject constructor(
                     // Refresh quota right away in case server returned 429 / quota reached.
                     val refreshedPolicy = (commerceRepository.agentPolicy() as? ApiResult.Success)?.data
                     finishSendWithError(requestId, activeId, result.message, refreshedPolicy)
+                    val failedTurn = _state.value.messages.takeIf { _state.value.activeThreadId == activeId }
+                    if (failedTurn != null && !persistAgentThread(requestScope, activeId, resolvedTitle, failedTurn, attempts = 3)) {
+                        _notices.tryEmit(conversationSaveFailureNotice(responseLanguage))
+                    }
                 }
 
                 is ApiResult.Success -> {
@@ -768,6 +918,8 @@ class AgentViewModel @Inject constructor(
                         title = resolvedTitle,
                         messageCount = allMessages.size,
                     )
+                    // Finish the backend write before presenting the turn as fully complete.
+                    val threadSaved = persistAgentThread(requestScope, activeId, resolvedTitle, allMessages, attempts = 3)
                     activeSendRequestId = null
                     _state.update { current ->
                         if (current.activeThreadId != activeId) current
@@ -781,22 +933,8 @@ class AgentViewModel @Inject constructor(
                         )
                     }
 
-                    // Persist only the response for the conversation that still owns this request.
-                    val r2Messages = allMessages.map { message ->
-                        AgentThreadMessageDto(
-                            role = if (message.fromUser) "user" else "assistant",
-                            text = if (message.fromUser && message.attachmentNames.isNotEmpty()) {
-                                "${message.text}\n\n📎 ${message.attachmentNames.joinToString()}"
-                            } else message.text,
-                            ms = message.ms,
-                        )
-                    }
-                    runCatching {
-                        commerceRepository.putAgentThread(
-                            id = activeId,
-                            title = resolvedTitle,
-                            messages = r2Messages,
-                        )
+                    if (!threadSaved && requestScope == (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity) {
+                        _notices.tryEmit(conversationSaveFailureNotice(responseLanguage))
                     }
 
                     // Immediately refresh live token quota counter.
