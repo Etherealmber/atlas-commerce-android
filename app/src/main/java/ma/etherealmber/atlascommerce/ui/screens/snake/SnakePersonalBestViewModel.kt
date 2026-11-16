@@ -52,7 +52,7 @@ class SnakePersonalBestViewModel @Inject constructor(
                     ActiveSession(
                         storageKey = storageKey(token),
                         serverUrl = user.serverUrl,
-                        bearerToken = token,
+                        token = token,
                     )
                 }
                 .distinctUntilChanged()
