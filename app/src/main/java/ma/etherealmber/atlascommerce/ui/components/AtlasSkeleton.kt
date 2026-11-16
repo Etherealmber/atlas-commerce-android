@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import ma.etherealmber.atlascommerce.data.model.PayrollRowDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 private data class AtlasSkeletonStyle(
     val base: Color,
@@ -266,15 +267,16 @@ fun AtlasCatalogSkeleton(
     products: List<ProductDto> = emptyList(),
 ) {
     val itemCount = products.size.takeIf { it > 0 } ?: rows.coerceAtLeast(1)
+    val density = Atlas.density
     AtlasShimmer {
         BoxWithConstraints(modifier = modifier.fillMaxSize()) {
             val wideLayout = maxWidth >= 760.dp
             LazyVerticalGrid(
                 columns = if (listLayout) GridCells.Fixed(1) else GridCells.Adaptive(minSize = if (wideLayout) 250.dp else 170.dp),
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = bottomPadding),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(start = density.screenPadding, end = density.screenPadding, top = 10.dp, bottom = bottomPadding),
+                horizontalArrangement = Arrangement.spacedBy(density.itemGap),
+                verticalArrangement = Arrangement.spacedBy(density.itemGap),
             ) {
                 if (showRoleBanner) {
                     item(span = { GridItemSpan(maxLineSpan) }, key = "catalog_role_banner_skeleton") {
