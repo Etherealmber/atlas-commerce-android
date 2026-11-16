@@ -109,9 +109,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.offset
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ma.etherealmber.atlascommerce.core.AppDetails
@@ -198,7 +196,6 @@ fun ProfileScreen(
     onToast: (String) -> Unit,
     isForeground: Boolean = true,
     appViewModel: AppViewModel = hiltViewModel(),
-    dialogCenterOffset: Dp = 0.dp,
 ) {
     val context = LocalContext.current
     val density = Atlas.density
@@ -535,14 +532,12 @@ fun ProfileScreen(
                 ThemeSwitcherDialog(
                     currentMode = themeMode,
                     animationsEnabled = animationsEnabled,
-                    dialogCenterOffset = dialogCenterOffset,
                     onDismiss = { showThemeSwitcher = false },
                     onApply = { appViewModel.setThemeMode(it) },
                 )
             }
             SettingsChoiceRow(
                 icon = Icons.Outlined.Language,
-                dialogCenterOffset = dialogCenterOffset,
                 title = atlasText("Langue", "Language", "اللغة"),
                 value = if (appLanguageFollowsSystem) {
                     atlasText("Système · ${AppLanguage.fromSystemLocale().nativeLabel}", "System · ${AppLanguage.fromSystemLocale().nativeLabel}", "النظام · ${AppLanguage.fromSystemLocale().nativeLabel}")
@@ -557,7 +552,6 @@ fun ProfileScreen(
             )
             SettingsChoiceRow(
                 icon = Icons.Outlined.Tune,
-                dialogCenterOffset = dialogCenterOffset,
                 title = atlasText("Densité d'affichage", "Display density", "كثافة العرض"),
                 value = when (densityMode) {
                     DensityMode.COMPACT -> atlasText("Compact", "Compact", "مضغوط")
@@ -574,7 +568,6 @@ fun ProfileScreen(
             )
             SettingsChoiceRow(
                 icon = Icons.Outlined.Home,
-                dialogCenterOffset = dialogCenterOffset,
                 title = atlasText("Onglet d'ouverture au lancement", "Tab to open at launch", "علامة التبويب عند التشغيل"),
                 value = settingsTabLabel(selectedLaunchTab),
                 selectedKey = selectedLaunchTab.name,
@@ -721,7 +714,7 @@ fun ProfileScreen(
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Surface(
-                modifier = Modifier.fillMaxSize().padding(start = dialogCenterOffset * 2).statusBarsPadding().navigationBarsPadding(),
+                modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
                 shape = RoundedCornerShape(0.dp),
                 color = MaterialTheme.colorScheme.background,
             ) {
@@ -858,7 +851,7 @@ fun ProfileScreen(
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Surface(
-                modifier = Modifier.fillMaxSize().padding(start = dialogCenterOffset * 2).statusBarsPadding().navigationBarsPadding().imePadding(),
+                modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding(),
                 shape = RoundedCornerShape(0.dp),
                 color = MaterialTheme.colorScheme.background,
             ) {
@@ -962,7 +955,6 @@ fun ProfileScreen(
 
     if (confirmSignOut) {
         AlertDialog(
-            modifier = Modifier.offset(x = dialogCenterOffset),
             onDismissRequest = { confirmSignOut = false; addAccountAfterSignOut = false },
             title = {
                 Text(
@@ -1042,7 +1034,6 @@ private fun ThemeSettingRow(
 private fun ThemeSwitcherDialog(
     currentMode: ThemeMode,
     animationsEnabled: Boolean,
-    dialogCenterOffset: Dp = 0.dp,
     onDismiss: () -> Unit,
     onApply: (ThemeMode) -> Unit,
 ) {
@@ -1077,7 +1068,7 @@ private fun ThemeSwitcherDialog(
     } else ExitTransition.None
     val configuration = LocalConfiguration.current
     val compactLayout = configuration.screenWidthDp < 420
-    val dialogMaxHeight = (configuration.screenHeightDp.dp - 32.dp).coerceAtLeast(300.dp)
+    val dialogMaxHeight = (configuration.screenHeightDp.dp - 88.dp).coerceAtLeast(240.dp)
 
     Dialog(
         onDismissRequest = { close() },
@@ -1086,7 +1077,6 @@ private fun ThemeSwitcherDialog(
         AnimatedVisibility(visibleState = visibility, enter = enter, exit = exit) {
             Surface(
                 modifier = Modifier
-                    .offset(x = dialogCenterOffset)
                     .widthIn(max = 720.dp)
                     .fillMaxWidth(0.94f)
                     .heightIn(max = dialogMaxHeight),
@@ -1328,7 +1318,6 @@ private fun ThemePreviewCard(
 @Composable
 private fun SettingsChoiceRow(
     icon: ImageVector,
-    dialogCenterOffset: Dp = 0.dp,
     title: String,
     value: String,
     selectedKey: String,
@@ -1355,13 +1344,15 @@ private fun SettingsChoiceRow(
         }
     }
     if (pickerOpen) {
-        val maxHeight = (LocalConfiguration.current.screenHeightDp.dp - 32.dp).coerceAtLeast(280.dp)
+        val maxHeight = (LocalConfiguration.current.screenHeightDp.dp - 88.dp)
+            .coerceAtLeast(200.dp)
+            .coerceAtMost(520.dp)
         Dialog(
             onDismissRequest = { pickerOpen = false },
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Surface(
-                modifier = Modifier.offset(x = dialogCenterOffset).widthIn(max = 460.dp).fillMaxWidth(0.92f).heightIn(max = maxHeight),
+                modifier = Modifier.widthIn(max = 460.dp).fillMaxWidth(0.92f).heightIn(max = maxHeight),
                 shape = RoundedCornerShape(26.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 6.dp,
@@ -1425,7 +1416,6 @@ fun SettingsScreen(
     onToast: (String) -> Unit,
     onStartUpdateDownload: () -> Unit = {},
     appViewModel: AppViewModel = hiltViewModel(),
-    dialogCenterOffset: Dp = 0.dp,
 ) {
     val context = LocalContext.current
     val density = Atlas.density
@@ -1494,8 +1484,10 @@ fun SettingsScreen(
     }
 
     if (showReleaseHistoryDialog) {
+        val releaseHistoryMaxHeight = (LocalConfiguration.current.screenHeightDp.dp - 176.dp)
+            .coerceAtLeast(180.dp)
+            .coerceAtMost(520.dp)
         AlertDialog(
-            modifier = Modifier.offset(x = dialogCenterOffset),
             onDismissRequest = { showReleaseHistoryDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1513,7 +1505,7 @@ fun SettingsScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 480.dp)
+                        .heightIn(max = releaseHistoryMaxHeight)
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
@@ -1561,7 +1553,6 @@ fun SettingsScreen(
         val updatePackageClearedMessage = atlasText("Fichier de mise à jour supprimé.", "Downloaded update removed.", "تم حذف ملف التحديث.")
         val updatePackageBusyMessage = atlasText("Impossible de supprimer le fichier. Si un téléchargement est actif, attendez sa fin puis réessayez.", "Could not remove the downloaded update. If a download is active, wait for it to finish and try again.", "تعذّر حذف الملف. إذا كان هناك تنزيل نشط، انتظر حتى يكتمل ثم أعد المحاولة.")
         AlertDialog(
-            modifier = Modifier.offset(x = dialogCenterOffset),
             onDismissRequest = { confirmClearUpdatePackage = false },
             title = { Text(atlasText("Supprimer le fichier téléchargé ?", "Delete downloaded update?", "حذف ملف التحديث المُنزّل؟")) },
             text = {
@@ -1656,14 +1647,14 @@ fun SettingsScreen(
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsToggleRow(
                 title = atlasText("Téléchargement accéléré multi-connexions", "Multi-connection accelerated downloads", "تنزيلات سريعة متعددة الاتصالات"),
-                subtitle = atlasText("Adapte le nombre de connexions au réseau (CDN : 6 sur mobile, 16 en Wi-Fi ; GitHub reste limité à 4).", "Adapts connections to the network (CDN: 6 on mobile, 16 on Wi-Fi; GitHub stays capped at 4).", "يكيّف عدد الاتصالات حسب الشبكة (CDN: 6 على بيانات الهاتف و16 على Wi-Fi؛ يظل GitHub محدوداً بـ4)."),
+                subtitle = atlasText("Adapte le nombre de connexions au réseau (Atlas API : 6 sur mobile, 16 en Wi-Fi ; GitHub reste limité à 4).", "Adapts connections to the network (Atlas API: 6 on mobile, 16 on Wi-Fi; GitHub stays capped at 4).", "يكيّف عدد الاتصالات حسب الشبكة (Atlas API: 6 على بيانات الهاتف و16 على Wi-Fi؛ يظل GitHub محدوداً بـ4)."),
                 checked = parallelUpdateDownload,
                 onCheckedChange = appViewModel::setParallelUpdateDownload,
             )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsToggleRow(
                 title = atlasText("Toujours suivre la dernière version publiée", "Always follow the latest published release", "اتباع أحدث إصدار منشور دائماً"),
-                subtitle = atlasText("Considère toute version publiée en dernier sur GitHub Releases ou CDN 1 comme la version active.", "Treat the latest version published on GitHub Releases or CDN 1 as the active release.", "اعتبار أحدث إصدار منشور على GitHub Releases أو CDN 1 هو الإصدار النشط."),
+                subtitle = atlasText("Considère toute version publiée en dernier sur GitHub Releases ou Atlas API comme la version active.", "Treat the latest version published on GitHub Releases or Atlas API as the active release.", "اعتبار أحدث إصدار منشور على GitHub Releases أو Atlas API هو الإصدار النشط."),
                 checked = followLatestRelease,
                 onCheckedChange = appViewModel::setFollowLatestRelease,
             )

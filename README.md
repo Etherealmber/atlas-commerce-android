@@ -7,6 +7,7 @@
   <p><strong>Official Native Android Companion for <a href="https://github.com/Etherealmber/atlas-commerce">Atlas Commerce Web</a></strong><br/>Stock · POS &amp; Receipts · Invoicing · Barcode &amp; PC QR Scanner · Atlas Agent AI</p>
 
 ![Version](https://img.shields.io/github/v/release/Etherealmber/atlas-commerce-android?label=version)
+![Downloads](https://img.shields.io/github/downloads/Etherealmber/atlas-commerce-android/total?label=downloads&logo=github)
 ![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)
 ![Kotlin](https://img.shields.io/badge/kotlin-2.3.0-7f52ff)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285f4)

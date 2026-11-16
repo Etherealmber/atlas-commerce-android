@@ -99,9 +99,9 @@ fun NotificationsScreen(
             AtlasTopBar(
                 title = atlasText("Info Box & Notifications", "Info Box & Notifications", "صندوق المعلومات والإشعارات"),
                 subtitle = atlasText(
-                    "${roleLabel} · ${state.alerts.size} alerte(s) · ${state.pendingCount} en attente",
-                    "${roleLabel} · ${state.alerts.size} alert(s) · ${state.pendingCount} pending",
-                    "${roleLabel} · ${state.alerts.size} تنبيه · ${state.pendingCount} معلّق",
+                    "${roleLabel} · ${state.alerts.size} alerte(s) · ${state.pendingCount} en attente · ${state.sentNotificationCount} envoyée(s)",
+                    "${roleLabel} · ${state.alerts.size} alert(s) · ${state.pendingCount} pending · ${state.sentNotificationCount} sent",
+                    "${roleLabel} · ${state.alerts.size} تنبيه · ${state.pendingCount} معلّق · ${state.sentNotificationCount} مُرسل",
                 ),
                 onBack = if (embeddedInTabletPane) null else onBack,
                 actions = {

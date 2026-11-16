@@ -28,9 +28,12 @@ import ma.etherealmber.atlascommerce.core.update.pingMirrorsSequentially
 import ma.etherealmber.atlascommerce.core.update.UpdateFormatter
 import ma.etherealmber.atlascommerce.core.update.formatReleaseNotesForDisplay
 import ma.etherealmber.atlascommerce.core.update.UpdateInfo
+import ma.etherealmber.atlascommerce.core.update.UpdateCheckRateLimiter
+import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateNotifier
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.core.update.minimumVersionRequiresUpdate
+import ma.etherealmber.atlascommerce.core.update.updateCheckCooldownRemainingMs
 import ma.etherealmber.atlascommerce.core.update.shouldClearOptionalUpdateErrorOnResume
 import ma.etherealmber.atlascommerce.push.DeviceTokenAckDto
 import ma.etherealmber.atlascommerce.push.DeviceTokenRequest
@@ -65,6 +68,7 @@ import java.nio.file.Files
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class AppUpdateManagerTest {
 
@@ -75,6 +79,7 @@ class AppUpdateManagerTest {
 
     @Before
     fun setUp() {
+        UpdateCheckRateLimiter.resetForTests()
         tempDir = Files.createTempDirectory("atlas-update-test").toFile()
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         moshi = Moshi.Builder()
@@ -160,6 +165,46 @@ class AppUpdateManagerTest {
     }
 
     @Test
+    fun autoDownloadChoosesTheFastestAvailableMirrorAndFallsBackSafely() {
+        val info = UpdateInfo(
+            versionCode = 12,
+            versionName = "1.2.0",
+            apkUrl = "https://api.example/updates/latest.apk",
+            mandatory = false,
+            cdn1Url = "https://atlas.example/latest.apk",
+            githubUrl = "https://github.example/latest.apk",
+        )
+
+        assertEquals(
+            listOf("https://github.example/latest.apk", "https://atlas.example/latest.apk", "https://api.example/updates/latest.apk"),
+            info.orderedDownloadUrls(
+                UpdateDownloadSource.AUTO,
+                MirrorPingResult(cdn1Online = true, cdn1Ms = 90L, githubOnline = true, githubMs = 24L),
+            ),
+        )
+        assertEquals(
+            listOf("https://atlas.example/latest.apk", "https://api.example/updates/latest.apk", "https://github.example/latest.apk"),
+            info.orderedDownloadUrls(
+                UpdateDownloadSource.AUTO,
+                MirrorPingResult(cdn1Online = true, cdn1Ms = 90L, githubOnline = false, githubMs = 100L),
+            ),
+        )
+        assertEquals(
+            listOf("https://api.example/updates/latest.apk", "https://atlas.example/latest.apk", "https://github.example/latest.apk"),
+            info.orderedDownloadUrls(UpdateDownloadSource.AUTO),
+        )
+    }
+
+    @Test
+    fun updateChecksRespectOneMinuteCooldownIncludingManualRequests() {
+        assertEquals(0L, updateCheckCooldownRemainingMs(0L, 10_000L, 60_000L))
+        assertEquals(60_000L, updateCheckCooldownRemainingMs(10_000L, 10_000L, 60_000L))
+        assertEquals(1L, updateCheckCooldownRemainingMs(10_000L, 69_999L, 60_000L))
+        assertEquals(0L, updateCheckCooldownRemainingMs(10_000L, 70_000L, 60_000L))
+        assertEquals(0L, updateCheckCooldownRemainingMs(70_000L, 10_000L, 60_000L))
+    }
+
+    @Test
     fun minimumVersionRequiresAnAvailableReleaseAtOrAboveTheConfiguredFloor() {
         assertTrue(minimumVersionRequiresUpdate(installedVersionCode = 10, minimumSupportedVersionCode = 12, availableVersionCode = 14))
         assertFalse(minimumVersionRequiresUpdate(installedVersionCode = 12, minimumSupportedVersionCode = 12, availableVersionCode = 14))
@@ -223,9 +268,9 @@ class AppUpdateManagerTest {
         )
         assertEquals(4, manager.connectionsForSource("GitHub", DownloadNetworkTransport.WIFI))
         assertEquals(4, manager.connectionsForSource("github", DownloadNetworkTransport.CELLULAR))
-        assertEquals(16, manager.connectionsForSource("CDN 1", DownloadNetworkTransport.WIFI))
-        assertEquals(6, manager.connectionsForSource("CDN 1", DownloadNetworkTransport.CELLULAR))
-        assertEquals(4, manager.connectionsForSource("CDN 1", DownloadNetworkTransport.OTHER))
+        assertEquals(16, manager.connectionsForSource("Atlas API", DownloadNetworkTransport.WIFI))
+        assertEquals(6, manager.connectionsForSource("Atlas API", DownloadNetworkTransport.CELLULAR))
+        assertEquals(4, manager.connectionsForSource("Atlas API", DownloadNetworkTransport.OTHER))
         assertEquals(4, manager.connectionsForSource("R2", DownloadNetworkTransport.WIFI))
         assertEquals(4, manager.connectionsForSource(null, DownloadNetworkTransport.WIFI))
     }
@@ -590,30 +635,50 @@ class AppUpdateManagerTest {
                 val cdnPort = cdnBroken.localPort
                 val ghPort = githubMirror.localPort
 
+                val cdnDownloadRequests = AtomicInteger()
+                val githubDownloadRequests = AtomicInteger()
                 Thread {
-                    val s = runCatching { cdnBroken.accept() }.getOrNull() ?: return@Thread
-                    s.use { sock ->
-                        val r = BufferedReader(InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8))
-                        while ((r.readLine() ?: "").isNotEmpty()) { /* drain */ }
-                        sock.getOutputStream().write(
-                            "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                                .toByteArray(StandardCharsets.UTF_8),
-                        )
+                    repeat(2) {
+                        val s = runCatching { cdnBroken.accept() }.getOrNull() ?: return@Thread
+                        s.use { sock ->
+                            val r = BufferedReader(InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8))
+                            val requestLine = r.readLine().orEmpty()
+                            while ((r.readLine() ?: "").isNotEmpty()) { /* drain */ }
+                            val isProbe = requestLine.startsWith("HEAD ")
+                            val status = if (isProbe) "200 OK" else {
+                                cdnDownloadRequests.incrementAndGet()
+                                "503 Service Unavailable"
+                            }
+                            sock.getOutputStream().write(
+                                "HTTP/1.1 $status\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                                    .toByteArray(StandardCharsets.UTF_8),
+                            )
+                        }
                     }
                 }.apply { isDaemon = true; start() }
 
                 Thread {
-                    val s = runCatching { githubMirror.accept() }.getOrNull() ?: return@Thread
-                    s.use { sock ->
-                        val r = BufferedReader(InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8))
-                        while ((r.readLine() ?: "").isNotEmpty()) { /* drain */ }
-                        val out = sock.getOutputStream()
-                        out.write(
-                            "HTTP/1.1 200 OK\r\nContent-Type: application/vnd.android.package-archive\r\nContent-Length: ${apkBytes.size}\r\nConnection: close\r\n\r\n"
-                                .toByteArray(StandardCharsets.UTF_8),
-                        )
-                        out.write(apkBytes)
-                        out.flush()
+                    repeat(2) {
+                        val s = runCatching { githubMirror.accept() }.getOrNull() ?: return@Thread
+                        s.use { sock ->
+                            val r = BufferedReader(InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8))
+                            val requestLine = r.readLine().orEmpty()
+                            while ((r.readLine() ?: "").isNotEmpty()) { /* drain */ }
+                            val out = sock.getOutputStream()
+                            if (requestLine.startsWith("HEAD ")) {
+                                // Keep CDN ahead of GitHub in latency ordering so fallback is exercised.
+                                Thread.sleep(200)
+                                out.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray(StandardCharsets.UTF_8))
+                            } else {
+                                githubDownloadRequests.incrementAndGet()
+                                out.write(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: application/vnd.android.package-archive\r\nContent-Length: ${apkBytes.size}\r\nConnection: close\r\n\r\n"
+                                        .toByteArray(StandardCharsets.UTF_8),
+                                )
+                                out.write(apkBytes)
+                            }
+                            out.flush()
+                        }
                     }
                 }.apply { isDaemon = true; start() }
 
@@ -645,6 +710,8 @@ class AppUpdateManagerTest {
                 awaitCondition { manager.state.value is UpdateState.ReadyToInstall }
                 val ready = manager.state.value as UpdateState.ReadyToInstall
                 assertArrayEquals(apkBytes, ready.apkFile.readBytes())
+                assertTrue("The CDN download attempt should fail before GitHub fallback", cdnDownloadRequests.get() > 0)
+                assertTrue("GitHub should supply the fallback APK", githubDownloadRequests.get() > 0)
                 assertNull(notifier.errorMessage)
             }
         }

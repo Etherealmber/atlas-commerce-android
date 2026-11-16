@@ -115,6 +115,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -150,6 +151,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlin.math.sqrt
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.ui.i18n.AtlasLanguageSelector
@@ -1959,14 +1961,26 @@ fun AtlasBootSplashScreen(
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val logoScale = remember { Animatable(if (motionEnabled) 0.72f else 1f) }
     val barProgress = remember { Animatable(if (motionEnabled) 0.08f else 1f) }
+    var revealWordmark by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
+    var revealTagline by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
+    var revealComplete by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
 
     LaunchedEffect(motionEnabled) {
         if (motionEnabled) {
+            revealWordmark = true
             logoScale.animateTo(
                 targetValue = 1f,
                 animationSpec = spring(dampingRatio = 0.68f, stiffness = 380f),
             )
+            delay(140)
+            revealTagline = true
+            // Let the tagline's existing delayed fade/slide finish before dismissing the splash.
+            delay(380)
+        } else {
+            revealWordmark = true
+            revealTagline = true
         }
+        revealComplete = true
     }
     LaunchedEffect(motionEnabled, holdUntilReady) {
         if (motionEnabled) {
@@ -1975,6 +1989,7 @@ fun AtlasBootSplashScreen(
             delay(150)
         }
         if (!holdUntilReady) {
+            snapshotFlow { revealComplete }.first { it }
             onFinished()
         }
     }
@@ -1995,23 +2010,38 @@ fun AtlasBootSplashScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            AtlasBrandWordmark(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        scaleX = logoScale.value
-                        scaleY = logoScale.value
-                    },
-                height = 78.dp,
-            )
+            AnimatedVisibility(
+                visible = revealWordmark,
+                enter = fadeIn(tween(320, easing = FastOutSlowInEasing)) +
+                    scaleIn(spring(dampingRatio = 0.72f, stiffness = 340f), initialScale = 0.9f) +
+                    slideInVertically(tween(320, easing = FastOutSlowInEasing)) { it / 7 },
+                label = "splash-wordmark-reveal",
+            ) {
+                AtlasBrandWordmark(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            scaleX = logoScale.value
+                            scaleY = logoScale.value
+                        },
+                    height = 78.dp,
+                )
+            }
 
             Spacer(Modifier.height(24.dp))
-            Text(
-                text = atlasText("Stock · Caisse · Facturation", "Inventory · Register · Invoicing", "المخزون · نقطة البيع · الفوترة"),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
+            AnimatedVisibility(
+                visible = revealTagline,
+                enter = fadeIn(tween(280, delayMillis = 80, easing = FastOutSlowInEasing)) +
+                    slideInVertically(tween(300, delayMillis = 80, easing = FastOutSlowInEasing)) { it / 3 },
+                label = "splash-tagline-reveal",
+            ) {
+                Text(
+                    text = atlasText("Stock · Caisse · Facturation", "Inventory · Register · Invoicing", "المخزون · نقطة البيع · الفوترة"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
 
             Spacer(Modifier.height(28.dp))
 

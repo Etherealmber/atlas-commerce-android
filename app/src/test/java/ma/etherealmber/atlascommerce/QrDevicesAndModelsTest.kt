@@ -20,6 +20,8 @@ import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.QrSessionStatusDto
 import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
+import ma.etherealmber.atlascommerce.data.model.SnakePersonalBestDto
+import ma.etherealmber.atlascommerce.data.model.UserReportReceiptDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.screens.products.productStockTone
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
@@ -163,11 +165,29 @@ class QrDevicesAndModelsTest {
 
     @Test
     fun productStockToneUsesRequestedThresholds() {
-        assertEquals(AtlasTone.DANGER, productStockTone(9.0))
-        assertEquals(AtlasTone.WARNING, productStockTone(10.0))
+        assertEquals(AtlasTone.DANGER, productStockTone(19.99))
         assertEquals(AtlasTone.WARNING, productStockTone(20.0))
-        assertEquals(AtlasTone.POSITIVE, productStockTone(20.01))
+        assertEquals(AtlasTone.WARNING, productStockTone(40.0))
+        assertEquals(AtlasTone.POSITIVE, productStockTone(40.01))
+        assertEquals(AtlasTone.POSITIVE, productStockTone(51.0))
         assertEquals(AtlasTone.NEUTRAL, productStockTone(0.0, trackInventory = false))
+    }
+
+    @Test
+    fun privateSnakeScoreUsesTheUnwrappedSingleFieldContract() {
+        val adapter = Moshi.Builder().build().adapter(SnakePersonalBestDto::class.java)
+        assertEquals("{\"personalBest\":123}", adapter.toJson(SnakePersonalBestDto(123)))
+        assertEquals(123, adapter.fromJson("{\"personalBest\":123}")?.personalBest)
+    }
+
+    @Test
+    fun reportReceiptCanRepresentAnAlreadyReportedClosedIssue() {
+        val adapter = Moshi.Builder().build().adapter(UserReportReceiptDto::class.java)
+        val receipt = adapter.fromJson(
+            """{"reference":"atlas-42","issue_url":"https://github.com/Etherealmber/atlas-commerce-android/issues/42","already_reported":true,"issue_status":"closed"}""",
+        )
+        assertEquals(true, receipt?.alreadyReported)
+        assertEquals("closed", receipt?.issueStatus)
     }
 
     @Test

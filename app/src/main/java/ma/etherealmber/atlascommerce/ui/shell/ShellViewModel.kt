@@ -109,8 +109,17 @@ class ShellViewModel @Inject constructor(
             val roleAlerts = Roles.filterAlertsForRole(role, rawAlerts)
             val roleActions = rawActions.filter { Roles.isActionVisibleForUser(role, username, it) }
             val actionablePending = roleActions.filter { it.isPending }
+            val sentRoleNotifications = roleActions.filter { action ->
+                action.createdBy.equals(username, ignoreCase = true) &&
+                    commerceRepository.parseActionMeta(action)?.category.equals("role_notification", ignoreCase = true)
+            }
+            val sentNotificationIds = sentRoleNotifications.mapTo(mutableSetOf()) { it.id }
 
-            _notificationCount.value = roleAlerts.size + actionablePending.size
+            // Keep the existing inbox badge (alerts + pending actions), while including sent
+            // role notifications even after they are completed. Pending sends are counted once.
+            _notificationCount.value = roleAlerts.size +
+                actionablePending.count { it.id !in sentNotificationIds } +
+                sentRoleNotifications.size
 
             if (!roleNotificationsEnabled.value) return@launch
 

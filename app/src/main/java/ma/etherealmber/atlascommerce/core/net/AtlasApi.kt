@@ -53,6 +53,7 @@ import ma.etherealmber.atlascommerce.data.model.ReportLinkTicketDto
 import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
 import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestBody
 import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
+import ma.etherealmber.atlascommerce.data.model.SnakePersonalBestDto
 import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.data.model.UserReportRequest
@@ -106,6 +107,17 @@ interface AtlasApi {
         @Query("in_app_cursor") inAppCursor: String? = null,
         @Query("github_cursor") githubCursor: String? = null,
     ): MobileWorkStatusDto
+
+    /** Private per-account Snake record; the Worker returns this resource unwrapped. */
+    @GET("api/mobile/snake-score")
+    suspend fun getSnakePersonalBest(@Header("Authorization") authorization: String): SnakePersonalBestDto
+
+    /** Monotonic max write; request and response use the same unwrapped one-field shape. */
+    @PUT("api/mobile/snake-score")
+    suspend fun putSnakePersonalBest(
+        @Header("Authorization") authorization: String,
+        @Body body: SnakePersonalBestDto,
+    ): SnakePersonalBestDto
 
     /** Authenticated user report; GitHub delivery is handled by the Worker (never by the app). */
     @POST("api/reports")

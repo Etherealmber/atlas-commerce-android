@@ -36,21 +36,34 @@ class ApiProvider @Inject constructor(
 
     fun baseUrl(): String = ServerUrl.withSlash(serverConfig.baseUrl())
 
-    fun api(): AtlasApi {
-        val base = baseUrl()
-        synchronized(lock) {
-            val cached = builtApi
-            if (cached != null && builtFor == base) return cached
-            val api = Retrofit.Builder()
-                .baseUrl(base)
-                .client(client)
-                .addConverterFactory(MoshiConverterFactory.create(moshi))
-                .build()
-                .create(AtlasApi::class.java)
-            builtFor = base
-            builtApi = api
-            return api
+    fun api(): AtlasApi = synchronized(lock) {
+        apiForBaseUrl(baseUrl())
+    }
+
+    /** Return an API bound to the currently selected server only when it matches the session origin. */
+    fun apiForSession(serverUrl: String): AtlasApi? {
+        val expectedBase = ServerUrl.normalize(serverUrl)
+            ?.let { ServerUrl.withSlash(it) }
+            ?: return null
+        return synchronized(lock) {
+            val selectedBase = baseUrl()
+            if (selectedBase != expectedBase) return@synchronized null
+            apiForBaseUrl(selectedBase)
         }
+    }
+
+    private fun apiForBaseUrl(base: String): AtlasApi {
+        val cached = builtApi
+        if (cached != null && builtFor == base) return cached
+        val api = Retrofit.Builder()
+            .baseUrl(base)
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(AtlasApi::class.java)
+        builtFor = base
+        builtApi = api
+        return api
     }
 
     /**
@@ -67,7 +80,7 @@ class ApiProvider @Inject constructor(
             // This client only sends the idempotent GET /api/auth/me; the regular API client
             // keeps retries disabled so mutating POSTs are never replayed implicitly.
             retryOnConnectionFailure(true)
-            addInterceptor(StartupResumeHeadersInterceptor(deviceIdentity, bearerToken))
+            addInterceptor(PinnedSessionHeadersInterceptor(deviceIdentity, bearerToken))
         }.build()
         return Retrofit.Builder()
             .baseUrl(ServerUrl.withSlash(normalized))
@@ -86,7 +99,7 @@ class ApiProvider @Inject constructor(
     }
 }
 
-private class StartupResumeHeadersInterceptor(
+private class PinnedSessionHeadersInterceptor(
     private val deviceIdentity: DeviceIdentity,
     private val bearerToken: String,
 ) : Interceptor {

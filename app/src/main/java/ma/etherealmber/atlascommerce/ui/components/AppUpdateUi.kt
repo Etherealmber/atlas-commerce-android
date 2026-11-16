@@ -606,7 +606,7 @@ fun SettingsUpdateCard(
             Spacer(Modifier.height(8.dp))
         }
 
-        // Source selector: Auto (Fastest + Failover) | CDN 1 | GitHub
+        // Source selector: Auto (lowest latency + failover) | Atlas API | GitHub
         Text(
             text = atlasText("Serveur de téléchargement"),
             style = MaterialTheme.typography.labelMedium,
@@ -624,7 +624,7 @@ fun SettingsUpdateCard(
                     label = {
                         Text(when (src) {
                             UpdateDownloadSource.AUTO -> atlasText("Auto", "Auto", "تلقائي")
-                            UpdateDownloadSource.CDN1 -> "CDN 1"
+                            UpdateDownloadSource.CDN1 -> "Atlas API"
                             UpdateDownloadSource.GITHUB -> "GitHub"
                         })
                     },
@@ -635,7 +635,7 @@ fun SettingsUpdateCard(
         // Mirrors are tested serially so each result is visible before the next request starts.
         val mirrorActionLabel = when {
             mirrorPing.testing && mirrorPing.currentTest == MirrorTestTarget.CDN1 ->
-                atlasText("Test CDN 1…", "Testing CDN 1…", "جارٍ اختبار CDN 1…")
+                atlasText("Test Atlas API…", "Testing Atlas API…", "جارٍ اختبار Atlas API…")
             mirrorPing.testing && mirrorPing.currentTest == MirrorTestTarget.GITHUB ->
                 atlasText("Test GitHub…", "Testing GitHub…", "جارٍ اختبار GitHub…")
             mirrorPing.testing -> atlasText("Test en cours…")
@@ -681,12 +681,12 @@ fun SettingsUpdateCard(
         val recommendation = when {
             mirrorPing.cdn1Online == true && mirrorPing.githubOnline == true && mirrorPing.cdn1Ms != null && mirrorPing.githubMs != null -> {
                 if (mirrorPing.cdn1Ms <= mirrorPing.githubMs) {
-                    atlasText("CDN 1 recommandé (${mirrorPing.cdn1Ms} ms)", "CDN 1 recommended (${mirrorPing.cdn1Ms} ms)", "CDN 1 موصى به (${mirrorPing.cdn1Ms} مللي ثانية)")
+                    atlasText("Atlas API recommandé (${mirrorPing.cdn1Ms} ms)", "Atlas API recommended (${mirrorPing.cdn1Ms} ms)", "Atlas API موصى به (${mirrorPing.cdn1Ms} مللي ثانية)")
                 } else {
                     atlasText("GitHub recommandé (${mirrorPing.githubMs} ms)", "GitHub recommended (${mirrorPing.githubMs} ms)", "GitHub موصى به (${mirrorPing.githubMs} مللي ثانية)")
                 }
             }
-            mirrorPing.cdn1Online == true && mirrorPing.cdn1Ms != null -> atlasText("CDN 1 actif (${mirrorPing.cdn1Ms} ms)", "CDN 1 active (${mirrorPing.cdn1Ms} ms)", "CDN 1 نشط (${mirrorPing.cdn1Ms} مللي ثانية)")
+            mirrorPing.cdn1Online == true && mirrorPing.cdn1Ms != null -> atlasText("Atlas API actif (${mirrorPing.cdn1Ms} ms)", "Atlas API active (${mirrorPing.cdn1Ms} ms)", "Atlas API نشط (${mirrorPing.cdn1Ms} مللي ثانية)")
             mirrorPing.githubOnline == true && mirrorPing.githubMs != null -> atlasText("GitHub actif (${mirrorPing.githubMs} ms)", "GitHub active (${mirrorPing.githubMs} ms)", "GitHub نشط (${mirrorPing.githubMs} مللي ثانية)")
             else -> null
         }
@@ -927,7 +927,7 @@ fun DownloadProgressBlock(state: UpdateState.Downloading) {
 @Composable
 private fun MirrorLatencyChips(mirrorPing: MirrorPingResult) {
     MirrorLatencyChip(
-        label = "CDN 1",
+        label = "Atlas API",
         online = mirrorPing.cdn1Online,
         latencyMs = mirrorPing.cdn1Ms,
         target = MirrorTestTarget.CDN1,

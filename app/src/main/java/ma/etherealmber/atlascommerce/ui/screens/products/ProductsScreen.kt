@@ -47,12 +47,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddShoppingCart
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.outlined.ViewList
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -67,6 +69,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -117,6 +120,7 @@ fun ProductsScreen(
     var selected by remember { mutableStateOf<ProductDto?>(null) }
     var historyTarget by remember { mutableStateOf<ProductDto?>(null) }
     var adjustTarget by remember { mutableStateOf<ProductDto?>(null) }
+    var listLayout by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var pendingFulfillRequest by remember { mutableStateOf<ProductCreationRequestDto?>(null) }
 
@@ -281,27 +285,49 @@ fun ProductsScreen(
                 state.filter != ProductsViewModel.FilterMode.STOCK_ADJUSTMENTS &&
                 !state.loading && state.error.isNullOrBlank()
             ) {
-                Text(
-                    when {
-                        state.checkingCachedCatalog -> atlasText(
-                            "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue enregistré, vérification en cours",
-                            "${state.visibleProducts.size} results · saved catalog, checking for updates",
-                            "${state.visibleProducts.size} نتيجة · كتالوج محفوظ، جارٍ التحقق من التحديثات",
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        when {
+                            state.checkingCachedCatalog -> atlasText(
+                                "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue enregistré, vérification en cours",
+                                "${state.visibleProducts.size} results · saved catalog, checking for updates",
+                                "${state.visibleProducts.size} نتيجة · كتالوج محفوظ، جارٍ التحقق من التحديثات",
+                            )
+                            state.cachedFallback -> atlasText(
+                                "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue enregistré",
+                                "${state.visibleProducts.size} results · saved catalog",
+                                "${state.visibleProducts.size} نتيجة · كتالوج محفوظ",
+                            )
+                            else -> atlasText(
+                                "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue en direct",
+                                "${state.visibleProducts.size} results · live catalog",
+                                "${state.visibleProducts.size} نتيجة · الكتالوج المباشر",
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    IconButton(onClick = { listLayout = false }) {
+                        Icon(
+                            Icons.Outlined.GridView,
+                            contentDescription = atlasText("Affichage en grille", "Grid view", "عرض شبكي"),
+                            tint = if (!listLayout) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        state.cachedFallback -> atlasText(
-                            "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue enregistré",
-                            "${state.visibleProducts.size} results · saved catalog",
-                            "${state.visibleProducts.size} نتيجة · كتالوج محفوظ",
+                    }
+                    IconButton(onClick = { listLayout = true }) {
+                        Icon(
+                            Icons.Outlined.ViewList,
+                            contentDescription = atlasText("Affichage en liste", "List view", "عرض القائمة"),
+                            tint = if (listLayout) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        else -> atlasText(
-                            "${state.visibleProducts.size} résultat${if (state.visibleProducts.size == 1) "" else "s"} · catalogue en direct",
-                            "${state.visibleProducts.size} results · live catalog",
-                            "${state.visibleProducts.size} نتيجة · الكتالوج المباشر",
-                        )
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                    }
+                }
             }
         }
 
@@ -513,7 +539,11 @@ fun ProductsScreen(
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     val wideLayout = maxWidth >= 760.dp
                     LazyVerticalGrid(
-                        columns = if (wideLayout) GridCells.Fixed(1) else GridCells.Adaptive(minSize = 320.dp),
+                        columns = if (listLayout) {
+                            GridCells.Fixed(1)
+                        } else {
+                            GridCells.Adaptive(minSize = if (wideLayout) 250.dp else 170.dp)
+                        },
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = density.screenPadding, end = density.screenPadding, bottom = 24.dp + dockPadding),
                         horizontalArrangement = Arrangement.spacedBy(density.itemGap),
@@ -550,6 +580,7 @@ fun ProductsScreen(
                                     animatedVisibilityScope = animatedVisibilityScope,
                                     canSell = canSell,
                                     wideLayout = wideLayout,
+                                    listLayout = listLayout,
                                     onOpen = {
                                         if (canSell) historyTarget = product else selected = product
                                     },
@@ -783,11 +814,19 @@ private fun StockAdjustmentRequestRow(
             Text(request.reason.orEmpty(), style = MaterialTheme.typography.bodySmall)
         }
         Spacer(Modifier.height(6.dp))
+        val requester = request.requestedBy.ifBlank { atlasText("non renseigné", "not recorded", "غير مسجل") }
+        val reviewer = request.decidedBy.takeIf { it.isNotBlank() }
+            ?: atlasText("en attente", "pending", "قيد الانتظار")
+        val reviewerLabel = if (status == "approved") {
+            atlasText("Approuvé par", "Approved by", "اعتمده")
+        } else {
+            atlasText("Décidé par", "Decided by", "قرر بشأنه")
+        }
         Text(
             atlasText(
-                "Demandé par ${request.requestedBy}",
-                "Requested by ${request.requestedBy}",
-                "طلبه ${request.requestedBy}",
+                "Demandé par $requester · $reviewerLabel $reviewer",
+                "Requested by $requester · $reviewerLabel $reviewer",
+                "طلبه $requester · $reviewerLabel $reviewer",
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -827,6 +866,7 @@ private fun ProductRow(
     animatedVisibilityScope: AnimatedVisibilityScope,
     canSell: Boolean,
     wideLayout: Boolean,
+    listLayout: Boolean,
     onOpen: () -> Unit,
     onAdd: () -> Unit,
 ) {
@@ -841,7 +881,7 @@ private fun ProductRow(
         Modifier
     }
     AtlasCard(onClick = onOpen, padding = if (wideLayout) 16.dp else 14.dp) {
-        if (wideLayout) {
+        if (listLayout && wideLayout) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 ProductArtwork(
                     imageUrl = product.imageUrl,
@@ -864,7 +904,7 @@ private fun ProductRow(
                     }
                 }
             }
-        } else {
+        } else if (listLayout) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ProductArtwork(
@@ -878,6 +918,29 @@ private fun ProductRow(
                         Text(product.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         if (product.subtitle.isNotBlank()) {
                             Text(product.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    if (canSell) {
+                        IconButton(onClick = onAdd) {
+                            Icon(Icons.Outlined.AddShoppingCart, contentDescription = atlasText("Ajouter au panier"), tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+                ProductMetaChips(product, currency)
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ProductArtwork(
+                    imageUrl = product.imageUrl,
+                    serverBaseUrl = serverBaseUrl,
+                    label = product.name,
+                    modifier = Modifier.fillMaxWidth().height(if (wideLayout) 160.dp else 124.dp).then(sharedArtworkModifier),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(product.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (product.subtitle.isNotBlank()) {
+                            Text(product.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     if (canSell) {
