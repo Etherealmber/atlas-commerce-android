@@ -20,9 +20,9 @@ import ma.etherealmber.atlascommerce.data.repo.SnakeScoreRepository
 import java.security.MessageDigest
 import javax.inject.Inject
 
-internal enum class SnakeScoreSyncStatus { GUEST, CHECKING, PENDING, SYNCED, UNAVAILABLE }
+enum class SnakeScoreSyncStatus { GUEST, CHECKING, PENDING, SYNCED, UNAVAILABLE }
 
-internal data class SnakePersonalBestState(
+data class SnakePersonalBestState(
     val personalBest: Int = 0,
     val syncStatus: SnakeScoreSyncStatus = SnakeScoreSyncStatus.CHECKING,
 )

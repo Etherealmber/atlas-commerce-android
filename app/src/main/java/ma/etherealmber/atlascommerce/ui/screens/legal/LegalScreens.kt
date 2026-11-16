@@ -120,6 +120,26 @@ fun ProblemReportDialog(
         .coerceAtLeast(180.dp)
         .coerceAtMost(520.dp)
     val language = LocalAtlasLanguage.current
+    val duplicateClosedMessage = atlasText(
+        "Ce problème a déjà été signalé et l’issue est fermée.",
+        "This issue was already reported and is closed.",
+        "تم الإبلاغ عن هذه المشكلة مسبقاً وإغلاقها.",
+    )
+    val closedIssueMessage = atlasText(
+        "L’issue existante est fermée; aucun nouveau formulaire n’a été ouvert.",
+        "The existing issue is closed; no new issue form was opened.",
+        "المشكلة الموجودة مغلقة؛ لم يتم فتح نموذج جديد.",
+    )
+    val duplicateMessage = atlasText(
+        "Ce problème a déjà été signalé.",
+        "This issue has already been reported.",
+        "تم الإبلاغ عن هذه المشكلة مسبقاً.",
+    )
+    val existingIssueOpenedMessage = atlasText(
+        "Issue ouverte.",
+        "Existing issue opened.",
+        "تم فتح المشكلة الموجودة.",
+    )
     val scope = rememberCoroutineScope()
     val session by appViewModel.session.collectAsStateWithLifecycle()
     val activeRole = (session as? SessionState.Active)?.user?.role
@@ -489,21 +509,6 @@ fun ProblemReportDialog(
                                 val issueClosed = result.data.issueStatus.equals("closed", ignoreCase = true) ||
                                     result.data.issueStatus.equals("resolved", ignoreCase = true)
                                 val created = issueUrl != null && !alreadyReported && !issueClosed
-                                val duplicateClosedMessage = atlasText(
-                                    "Ce problème a déjà été signalé et l’issue est fermée.",
-                                    "This issue was already reported and is closed.",
-                                    "تم الإبلاغ عن هذه المشكلة مسبقاً وإغلاقها.",
-                                )
-                                val closedIssueMessage = atlasText(
-                                    "L’issue existante est fermée; aucun nouveau formulaire n’a été ouvert.",
-                                    "The existing issue is closed; no new issue form was opened.",
-                                    "المشكلة الموجودة مغلقة؛ لم يتم فتح نموذج جديد.",
-                                )
-                                val duplicateMessage = atlasText(
-                                    "Ce problème a déjà été signalé.",
-                                    "This issue has already been reported.",
-                                    "تم الإبلاغ عن هذه المشكلة مسبقاً.",
-                                )
                                 // Never open a new issue form for a duplicate. Open the existing
                                 // issue, when the backend returns its verified GitHub URL.
                                 val fallbackIssueUrl = Uri.parse(AppDetails.ISSUES_URL).buildUpon()
@@ -528,7 +533,7 @@ fun ProblemReportDialog(
                                     when {
                                         alreadyReported && issueClosed -> duplicateClosedMessage
                                         issueClosed -> closedIssueMessage
-                                        alreadyReported && opened -> "$duplicateMessage ${atlasText("Issue ouverte.", "Existing issue opened.", "تم فتح المشكلة الموجودة.")}"
+                                        alreadyReported && opened -> "$duplicateMessage $existingIssueOpenedMessage"
                                         alreadyReported -> duplicateMessage
                                         created && opened -> "Ticket GitHub créé et ouvert${reference?.let { " · $it" } ?: ""}."
                                         created -> "Ticket créé${reference?.let { " · $it" } ?: ""}, mais aucun navigateur n'est disponible."
