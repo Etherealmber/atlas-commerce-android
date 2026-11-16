@@ -530,6 +530,11 @@ fun MainShell(
                         else -> null
                     },
                     actions = {
+                        val openAgentDescription = atlasText(
+                            "Ouvrir Atlas Agent",
+                            "Open Atlas Agent",
+                            "فتح Atlas Agent",
+                        )
                         val hasHiddenUpdate = when (val state = updateState) {
                             is UpdateState.Downloading -> state.hiddenInForeground && !state.info.mandatory
                             is UpdateState.Available -> state.dismissedBanner && !state.info.mandatory
@@ -547,7 +552,7 @@ fun MainShell(
                             IconButton(
                                 onClick = { switchTab(MainTab.AGENT) },
                                 modifier = Modifier.semantics {
-                                    contentDescription = atlasText("Ouvrir Atlas Agent", "Open Atlas Agent", "فتح Atlas Agent")
+                                    contentDescription = openAgentDescription
                                 },
                             ) {
                                 AtlasAgentMascot(
