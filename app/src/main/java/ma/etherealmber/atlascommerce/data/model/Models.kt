@@ -6,6 +6,60 @@ import ma.etherealmber.atlascommerce.core.net.ApiStatus
 import kotlin.math.ceil
 
 // ---------------------------------------------------------------------------
+// Authenticated mobile preference sync (strictly allowlisted settings only)
+// ---------------------------------------------------------------------------
+
+@JsonClass(generateAdapter = true)
+data class MobilePreferencesDto(
+    @Json(name = "schema_version") val schemaVersion: Int,
+    val settings: Map<String, Any?>,
+    val revision: Long,
+    @Json(name = "updated_at") val updatedAt: String?,
+    @Json(name = "server_time") val serverTime: String,
+    @Json(name = "sync_frequency") val syncFrequency: String,
+    @Json(name = "last_synced_at") val lastSyncedAt: String?,
+    @Json(name = "next_sync_at") val nextSyncAt: String?,
+)
+
+@JsonClass(generateAdapter = true)
+data class MobilePreferencesPutRequest(
+    @Json(name = "schema_version") val schemaVersion: Int = 1,
+    val revision: Long,
+    @Json(name = "sync_type") val syncType: String,
+    val settings: Map<String, Any?>,
+    @Json(name = "sync_frequency") val syncFrequency: String? = null,
+)
+
+/** Reject malformed/incomplete payloads before any remote values reach local settings. */
+fun MobilePreferencesDto.hasValidContractPayload(): Boolean =
+    schemaVersion == 1 && revision >= 0 &&
+        runCatching { java.time.Instant.parse(serverTime) }.isSuccess &&
+        listOfNotNull(updatedAt, lastSyncedAt, nextSyncAt).all { value ->
+            runCatching { java.time.Instant.parse(value) }.isSuccess
+        } && syncFrequency in setOf("daily", "weekly", "monthly", "yearly") &&
+        isValidMobilePreferenceSettings(settings)
+
+fun MobilePreferencesDto.isSuccessfulWriteAfter(previousRevision: Long): Boolean =
+    hasValidContractPayload() && previousRevision >= 0 && revision > previousRevision
+
+fun isValidMobilePreferenceSettings(settings: Map<String, Any?>): Boolean {
+    val required = setOf(
+        "theme", "language", "density", "animations", "navigation_default", "scan_behavior",
+        "sale_confirmation", "product_view", "update_notifications", "update_channel", "onboarding_completed",
+    )
+    if (settings.keys != required) return false
+    fun stringIn(key: String, values: Set<String>) = (settings[key] as? String) in values
+    fun bool(key: String) = settings[key] is Boolean
+    return stringIn("theme", setOf("system", "light", "dark")) &&
+        stringIn("language", setOf("system", "en", "fr", "ar")) &&
+        stringIn("density", setOf("comfortable", "compact")) && bool("animations") &&
+        stringIn("navigation_default", setOf("dashboard", "products", "scan", "sales")) &&
+        stringIn("scan_behavior", setOf("preview", "auto")) && bool("sale_confirmation") &&
+        stringIn("product_view", setOf("list", "grid")) && bool("update_notifications") &&
+        stringIn("update_channel", setOf("stable", "beta")) && bool("onboarding_completed")
+}
+
+// ---------------------------------------------------------------------------
 // Health / server discovery / self-update
 // ---------------------------------------------------------------------------
 

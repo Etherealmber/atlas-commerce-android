@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.scan
 
+import ma.etherealmber.atlascommerce.ui.theme.AtlasIllustrationPalette as ArtPalette
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -61,7 +62,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -190,7 +190,7 @@ fun ScanScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .background(Color(0xFF0B1220)),
+                .background(ArtPalette.scanIdleBackdrop),
         ) {
             if (hardwareActive) {
                 BarcodeCameraView(
@@ -231,7 +231,7 @@ fun ScanScreen(
                             Icon(
                                 imageVector = Icons.Outlined.Videocam,
                                 contentDescription = null,
-                                tint = Color.White,
+                                tint = ArtPalette.white,
                                 modifier = Modifier.size(32.dp),
                             )
                         }
@@ -241,14 +241,14 @@ fun ScanScreen(
                         text = atlasText("Caméra en veille", "Camera is paused", "الكاميرا متوقفة مؤقتًا"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
+                        color = ArtPalette.white,
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = atlasText("La caméra ne s'ouvre plus automatiquement. Appuyez ci-dessous pour scanner un code-barres, ou saisissez le code manuellement.", "The camera will no longer open automatically. Tap below to scan a barcode, or enter the code manually.", "لن تفتح الكاميرا تلقائيًا بعد الآن. اضغط أدناه لمسح الرمز الشريطي أو أدخل الرمز يدويًا."),
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.78f),
+                        color = ArtPalette.white.copy(alpha = 0.78f),
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(16.dp))
@@ -269,7 +269,7 @@ fun ScanScreen(
                 if (state.hasActiveScan) {
                     Surface(
                         onClick = { viewModel.cancelCurrentScan() },
-                        color = Color(0xDC7F1D1D),
+                        color = ArtPalette.scanCancelOverlay,
                         shape = MaterialTheme.shapes.large,
                     ) {
                         Row(
@@ -279,20 +279,20 @@ fun ScanScreen(
                             Icon(
                                 Icons.Outlined.Close,
                                 contentDescription = atlasText("Annuler le scan", "Cancel scan", "إلغاء المسح"),
-                                tint = Color.White,
+                                tint = ArtPalette.white,
                                 modifier = Modifier.size(16.dp),
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 text = atlasText("Annuler", "Cancel", "إلغاء"),
                                 style = MaterialTheme.typography.labelLarge,
-                                color = Color.White,
+                                color = ArtPalette.white,
                             )
                         }
                     }
                 }
                 Surface(
-                    color = Color(0xCC0F172A),
+                    color = ArtPalette.scanControlOverlay,
                     shape = MaterialTheme.shapes.large,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -300,13 +300,13 @@ fun ScanScreen(
                             Icon(
                                 if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send,
                                 contentDescription = null,
-                                tint = Color.White,
+                                tint = ArtPalette.white,
                                 modifier = Modifier.size(16.dp),
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 text = if (isAdmin) atlasText("Nouveau produit", "New product", "منتج جديد") else atlasText("Demander à l'Admin", "Ask an admin", "طلب من المسؤول"),
-                                color = Color.White,
+                                color = ArtPalette.white,
                             )
                         }
                         if (hardwareActive) {
@@ -314,7 +314,7 @@ fun ScanScreen(
                                 Icon(
                                     imageVector = Icons.Outlined.VideocamOff,
                                     contentDescription = atlasText("Fermer la caméra", "Close camera", "إغلاق الكاميرا"),
-                                    tint = Color.White,
+                                    tint = ArtPalette.white,
                                 )
                             }
                         }
@@ -829,27 +829,27 @@ private fun CameraPermissionPane(
         Icon(
             imageVector = Icons.Outlined.CameraAlt,
             contentDescription = null,
-            tint = Color.White,
+            tint = ArtPalette.white,
             modifier = Modifier.size(40.dp),
         )
         Spacer(Modifier.height(12.dp))
         Text(
             text = atlasText("Accès caméra requis", "Camera access required", "يلزم الوصول إلى الكاميرا"),
             style = MaterialTheme.typography.titleMedium,
-            color = Color.White,
+            color = ArtPalette.white,
         )
         Spacer(Modifier.height(6.dp))
         Text(
             text = atlasText("La caméra sert uniquement à lire les codes-barres et se coupe automatiquement dès que vous quittez l'onglet Scan.", "The camera is used only to read barcodes and turns off automatically when you leave the Scan tab.", "تُستخدم الكاميرا لقراءة الرموز الشريطية فقط، وتتوقف تلقائيًا عند مغادرة علامة تبويب المسح."),
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.75f),
+            color = ArtPalette.white.copy(alpha = 0.75f),
         )
         Spacer(Modifier.height(14.dp))
         AtlasButton(text = atlasText("Autoriser la caméra", "Allow camera", "السماح بالكاميرا"), onClick = onRequest)
         if (askedOnce) {
             Spacer(Modifier.height(6.dp))
             TextButton(onClick = onOpenSettings) {
-                Text(atlasText("Ouvrir les réglages", "Open settings", "فتح الإعدادات"), color = Color.White)
+                Text(atlasText("Ouvrir les réglages", "Open settings", "فتح الإعدادات"), color = ArtPalette.white)
             }
         }
     }

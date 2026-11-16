@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -45,7 +46,6 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ma.etherealmber.atlascommerce.data.model.PayrollRowDto
@@ -63,9 +63,8 @@ private val LocalAtlasSkeletonStyle = compositionLocalOf<AtlasSkeletonStyle?> { 
 /** Provides one coordinated shimmer phase to a screen's loading placeholders. */
 @Composable
 fun AtlasShimmer(content: @Composable () -> Unit) {
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val base = if (dark) Color(0xFF424242) else Color(0xFFE0E0E0) // Gray 800 / 300
-    val highlight = if (dark) Color(0xFF616161) else Color(0xFFF5F5F5) // Gray 700 / 100
+    val base = MaterialTheme.colorScheme.surfaceContainerHigh
+    val highlight = MaterialTheme.colorScheme.surfaceBright
     val phase: State<Float> = if (LocalAtlasAnimationsEnabled.current) {
         val transition = rememberInfiniteTransition(label = "atlas_skeleton_shimmer")
         transition.animateFloat(
@@ -92,9 +91,8 @@ fun AtlasSkeletonBlock(
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(10.dp),
 ) {
     val provided = LocalAtlasSkeletonStyle.current
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val base = provided?.base ?: if (dark) Color(0xFF424242) else Color(0xFFE0E0E0)
-    val highlight = provided?.highlight ?: if (dark) Color(0xFF616161) else Color(0xFFF5F5F5)
+    val base = provided?.base ?: MaterialTheme.colorScheme.surfaceContainerHigh
+    val highlight = provided?.highlight ?: MaterialTheme.colorScheme.surfaceBright
     val phaseState = provided?.phase
     Box(
         modifier = modifier
@@ -262,13 +260,14 @@ fun AtlasCatalogSkeleton(
     rows: Int = 5,
     showRoleBanner: Boolean = false,
     showCartButton: Boolean = true,
+    listLayout: Boolean = true,
     bottomPadding: Dp = 24.dp,
     products: List<ProductDto> = emptyList(),
 ) {
     val itemCount = products.size.takeIf { it > 0 } ?: rows.coerceAtLeast(1)
     AtlasShimmer {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 320.dp),
+            columns = if (listLayout) GridCells.Fixed(1) else GridCells.Adaptive(minSize = 320.dp),
             modifier = modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = bottomPadding),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -290,18 +289,38 @@ fun AtlasCatalogSkeleton(
                 val product = products.getOrNull(index)
                 AtlasCard(modifier = Modifier.fillMaxWidth(), padding = 14.dp, animateSize = false) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            AtlasSkeletonBlock(Modifier.size(64.dp), RoundedCornerShape(14.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.76f else 0.58f).height(18.dp))
-                                if (product?.subtitle?.isNotBlank() == true || product == null) {
-                                    AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 3 == 0) 0.68f else 0.45f).height(16.dp))
+                        if (listLayout) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                AtlasSkeletonBlock(Modifier.size(64.dp), RoundedCornerShape(14.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.76f else 0.58f).height(18.dp))
+                                    if (product?.subtitle?.isNotBlank() == true || product == null) {
+                                        AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 3 == 0) 0.68f else 0.45f).height(16.dp))
+                                    }
+                                }
+                                if (showCartButton) {
+                                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                        AtlasSkeletonBlock(Modifier.size(24.dp), CircleShape)
+                                    }
                                 }
                             }
-                            if (showCartButton) {
-                                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                                    AtlasSkeletonBlock(Modifier.size(24.dp), CircleShape)
+                        } else {
+                            AtlasSkeletonBlock(
+                                Modifier.fillMaxWidth().aspectRatio(1f),
+                                RoundedCornerShape(14.dp),
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.76f else 0.58f).height(18.dp))
+                                    if (product?.subtitle?.isNotBlank() == true || product == null) {
+                                        AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 3 == 0) 0.68f else 0.45f).height(13.dp))
+                                    }
+                                }
+                                if (showCartButton) {
+                                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                        AtlasSkeletonBlock(Modifier.size(24.dp), CircleShape)
+                                    }
                                 }
                             }
                         }

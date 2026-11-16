@@ -33,19 +33,89 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 val Brand = Color(0xFF0A0A0A)
 val BrandSoft = Color(0xFF171717)
 val Saffron = Color(0xFFF59E0B)
-val Paper = Color(0xFFF5F2EB)
+val Paper = Color(0xFFF2F2F2)
 val Surface = Color(0xFFFFFFFF)
-val Elevated = Color(0xFFFAF8F4)
+val Elevated = Color(0xFFE9E9E9)
 val Ink = Color(0xFF0F172A)
 val InkSoft = Color(0xFF475569)
-val Line = Color(0xFFE8EAEF)
+val Line = Color(0xFFD2D2D2)
+val LineSoft = Color(0xFFE0E0E0)
+val LightPrimaryContainer = Elevated
+val LightSecondaryContainer = Elevated
+val LightSurfaceDim = Line
+val LightSurfaceBright = Surface
+val LightContainerLowest = Surface
+val LightContainerLow = Paper
+val LightContainer = Elevated
+val LightContainerHigh = LineSoft
+val LightContainerHighest = Line
 
-val DarkBg = Color(0xFF000000)
-val DarkSurface = Color(0xFF09090B)
-val DarkElevated = Color(0xFF121214)
-val DarkOnBg = Color(0xFFF5F5F5)
-val DarkMuted = Color(0xFFA1A1AA)
-val DarkOutline = Color(0xFF29292D)
+val DarkBg = Color(0xFF06141B)
+val DarkSurface = Color(0xFF11212D)
+val DarkSurfaceLow = Color(0xFF0B1B25)
+val DarkSurfaceVariant = Color(0xFF1B2D39)
+val DarkSurfaceBright = Color(0xFF3A4D58)
+val DarkElevated = Color(0xFF253745)
+val DarkOnBg = Color(0xFFE8EFF1)
+val DarkMuted = Color(0xFFB6C2C7)
+val DarkOutline = Color(0xFF4A5C6A)
+val DarkOutlineSoft = Color(0xFF334956)
+val DarkPrimary = Color(0xFFCCD0CF)
+val DarkSecondary = Color(0xFF9BA8AB)
+val DarkError = Color(0xFFF87171)
+val DarkErrorOn = DarkBg
+val DarkContainer = DarkSurface
+val DarkContainerHigh = DarkSurfaceVariant
+val DarkContainerHighest = DarkElevated
+
+/** Fixed artwork and camera-accent colors; kept here so UI files contain no scattered hex palette. */
+object AtlasIllustrationPalette {
+    const val avatarFallbackHex = "#1D4ED8"
+    val white = Color(0xFFFFFFFF)
+    val scanIdleBackdrop = Color(0xFF0B1220)
+    val scanCancelOverlay = Color(0xDC7F1D1D)
+    val scanControlOverlay = Color(0xCC0F172A)
+    val scanControlOverlaySoft = Color(0xAA0F172A)
+    val cameraSecurityBackdrop = Color(0xFF0B1026)
+    val cameraSecurityMuted = Color(0xFF94A3B8)
+    val cameraCyan = Color(0xFF38BDF8)
+    val cameraIndigo = Color(0xFF818CF8)
+    val onboardingCyan = Color(0xFF62D9F5)
+    val onboardingBlue = Color(0xFF6AA8FF)
+    val onboardingPurple = Color(0xFFAA8BFF)
+    val onboardingMagenta = Color(0xFFF17CCB)
+    val onboardingMint = Color(0xFF69E0C2)
+    val onboardingAmber = Color(0xFFFFC66D)
+    val skinLight = Color(0xFFF0BD98)
+    val skinMedium = Color(0xFFD99B72)
+    val skinDark = Color(0xFF8C5D42)
+    val hairDark = Color(0xFF33251F)
+    val hairBlack = Color(0xFF211B19)
+    val hairBrown = Color(0xFF704A35)
+    val hairChestnut = Color(0xFF60402D)
+    val shirtLight = Color(0xFFF7F5F1)
+    val shirtBlue = Color(0xFFEAEFF5)
+    val eyeDark = Color(0xFF362A26)
+    val snakePupil = Color(0xFF173540)
+}
+
+@Immutable
+data class AtlasThemePreviewPalette(
+    val background: Color,
+    val surface: Color,
+    val ink: Color,
+    val muted: Color,
+    val primary: Color,
+    val primaryContainer: Color,
+    val onPrimaryContainer: Color,
+    val outline: Color,
+)
+
+fun atlasThemePreviewPalette(dark: Boolean): AtlasThemePreviewPalette = if (dark) {
+    AtlasThemePreviewPalette(DarkBg, DarkSurface, DarkOnBg, DarkMuted, DarkPrimary, DarkElevated, DarkOnBg, DarkOutlineSoft)
+} else {
+    AtlasThemePreviewPalette(Paper, Surface, Ink, InkSoft, Brand, Elevated, Brand, LineSoft)
+}
 
 @Immutable
 data class AtlasPalette(
@@ -63,11 +133,14 @@ data class AtlasPalette(
     val mutedText: Color,
     val heroStart: Color,
     val heroEnd: Color,
+    val heroText: Color,
+    val heroMutedText: Color,
+    val heroPill: Color,
 )
 
 val LightPalette = AtlasPalette(
-    positive = Color(0xFFA16207),
-    positiveSoft = Color(0xFFFEF3C7),
+    positive = Color(0xFF15803D),
+    positiveSoft = Color(0xFFDCFCE7),
     warning = Color(0xFFB45309),
     warningSoft = Color(0xFFFEF3C7),
     danger = Color(0xFFB91C1C),
@@ -78,25 +151,31 @@ val LightPalette = AtlasPalette(
     markInk = Color(0xFFFAFAFA),
     cardBorder = Line,
     mutedText = InkSoft,
-    heroStart = Color(0xFF171717),
-    heroEnd = Color(0xFF2B2B2B),
+    heroStart = Color(0xFFE9E9E9),
+    heroEnd = Color(0xFFD2D2D2),
+    heroText = Ink,
+    heroMutedText = InkSoft,
+    heroPill = Color.White.copy(alpha = 0.62f),
 )
 
 val DarkPalette = AtlasPalette(
-    positive = Color(0xFFFBBF24),
-    positiveSoft = Color(0xFF3A2A0B),
+    positive = Color(0xFF86EFAC),
+    positiveSoft = Color(0xFF163322),
     warning = Color(0xFFFBBF24),
     warningSoft = Color(0xFF3A2A0B),
-    danger = Color(0xFFF87171),
+    danger = DarkError,
     dangerSoft = Color(0xFF3A1414),
-    info = Color(0xFF93C5FD),
-    infoSoft = Color(0xFF16233F),
+    info = Color(0xFF9BC8DF),
+    infoSoft = Color(0xFF193543),
     markFace = Color(0xFFFAFAFA),
     markInk = Brand,
     cardBorder = DarkOutline,
     mutedText = DarkMuted,
-    heroStart = Color(0xFF1F1F23),
-    heroEnd = Color(0xFF0E0E11),
+    heroStart = DarkSurface,
+    heroEnd = DarkBg,
+    heroText = DarkOnBg,
+    heroMutedText = DarkMuted,
+    heroPill = Color.White.copy(alpha = 0.14f),
 )
 
 val LocalAtlasPalette = staticCompositionLocalOf { LightPalette }
@@ -143,11 +222,11 @@ val LocalAtlasDensity = staticCompositionLocalOf { CompactDensity }
 private fun lightColors() = lightColorScheme(
     primary = Brand,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFF1F5F9),
+    primaryContainer = LightPrimaryContainer,
     onPrimaryContainer = Brand,
     secondary = BrandSoft,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFEDE9E1),
+    secondaryContainer = LightSecondaryContainer,
     onSecondaryContainer = Brand,
     tertiary = Saffron,
     onTertiary = Ink,
@@ -158,21 +237,26 @@ private fun lightColors() = lightColorScheme(
     surfaceVariant = Elevated,
     onSurfaceVariant = InkSoft,
     outline = Line,
-    outlineVariant = Color(0xFFDDE1E8),
-    error = Color(0xFFB91C1C),
+    outlineVariant = LineSoft,
+    error = LightPalette.danger,
     onError = Color.White,
-    surfaceContainer = Surface,
-    surfaceContainerHigh = Elevated,
+    surfaceDim = LightSurfaceDim,
+    surfaceBright = LightSurfaceBright,
+    surfaceContainerLowest = LightContainerLowest,
+    surfaceContainerLow = LightContainerLow,
+    surfaceContainer = LightContainer,
+    surfaceContainerHigh = LightContainerHigh,
+    surfaceContainerHighest = LightContainerHighest,
 )
 
 private fun darkColors() = darkColorScheme(
-    primary = Color(0xFFFAFAFA),
-    onPrimary = Brand,
+    primary = DarkPrimary,
+    onPrimary = DarkBg,
     primaryContainer = DarkElevated,
     onPrimaryContainer = DarkOnBg,
-    secondary = DarkMuted,
+    secondary = DarkSecondary,
     onSecondary = DarkBg,
-    secondaryContainer = DarkElevated,
+    secondaryContainer = DarkSurfaceVariant,
     onSecondaryContainer = DarkOnBg,
     tertiary = Saffron,
     onTertiary = Brand,
@@ -180,14 +264,19 @@ private fun darkColors() = darkColorScheme(
     onBackground = DarkOnBg,
     surface = DarkSurface,
     onSurface = DarkOnBg,
-    surfaceVariant = DarkElevated,
+    surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = DarkMuted,
     outline = DarkOutline,
-    outlineVariant = Color(0xFF3F3F46),
-    error = Color(0xFFF87171),
-    onError = Brand,
-    surfaceContainer = DarkSurface,
-    surfaceContainerHigh = DarkElevated,
+    outlineVariant = DarkOutlineSoft,
+    error = DarkPalette.danger,
+    onError = DarkErrorOn,
+    surfaceDim = DarkBg,
+    surfaceBright = DarkSurfaceBright,
+    surfaceContainerLowest = DarkBg,
+    surfaceContainerLow = DarkSurfaceLow,
+    surfaceContainer = DarkContainer,
+    surfaceContainerHigh = DarkContainerHigh,
+    surfaceContainerHighest = DarkContainerHighest,
 )
 
 private fun atlasShapes() = Shapes(
@@ -283,6 +372,9 @@ fun AtlasTheme(
         mutedText = animateColorAsState(paletteTarget.mutedText, colorSpec, label = "palette-muted").value,
         heroStart = animateColorAsState(paletteTarget.heroStart, colorSpec, label = "palette-hero-start").value,
         heroEnd = animateColorAsState(paletteTarget.heroEnd, colorSpec, label = "palette-hero-end").value,
+        heroText = animateColorAsState(paletteTarget.heroText, colorSpec, label = "palette-hero-text").value,
+        heroMutedText = animateColorAsState(paletteTarget.heroMutedText, colorSpec, label = "palette-hero-muted").value,
+        heroPill = animateColorAsState(paletteTarget.heroPill, colorSpec, label = "palette-hero-pill").value,
     )
     CompositionLocalProvider(
         LocalAtlasPalette provides palette,
@@ -303,34 +395,8 @@ fun AtlasTheme(
 fun AtlasAuthTheme(content: @Composable () -> Unit) {
     val typography = MaterialTheme.typography
     val shapes = MaterialTheme.shapes
-    val colors = darkColorScheme(
-        primary = Color(0xFFBCCBC4),
-        onPrimary = Color(0xFF151917),
-        primaryContainer = Color(0xFF121214),
-        onPrimaryContainer = Color(0xFFF4F4F5),
-        secondary = Color(0xFFD4D6D9),
-        onSecondary = Color(0xFF1E2025),
-        tertiary = Color(0xFF94AAA1),
-        onTertiary = Color(0xFF151917),
-        background = Color(0xFF000000),
-        onBackground = Color(0xFFF4F4F5),
-        surface = Color(0xFF09090B),
-        onSurface = Color(0xFFF4F4F5),
-        surfaceVariant = Color(0xFF121214),
-        onSurfaceVariant = Color(0xFFB8BBC2),
-        outline = Color(0xFF666B73),
-        outlineVariant = Color(0xFF3C4047),
-        error = Color(0xFFFCA5A5),
-        onError = Color(0xFF450A0A),
-    )
-    val authPalette = DarkPalette.copy(
-        positive = Color(0xFF94AAA1),
-        positiveSoft = Color(0xFF252C29),
-        cardBorder = Color(0xFF3C4047),
-        mutedText = Color(0xFFB8BBC2),
-        heroStart = Color(0xFF000000),
-        heroEnd = Color(0xFF121214),
-    )
+    val colors = darkColors()
+    val authPalette = DarkPalette
     CompositionLocalProvider(LocalAtlasPalette provides authPalette) {
         MaterialTheme(colorScheme = colors, typography = typography, shapes = shapes) {
             // Establish matching LocalContentColor as well as MaterialTheme colors;

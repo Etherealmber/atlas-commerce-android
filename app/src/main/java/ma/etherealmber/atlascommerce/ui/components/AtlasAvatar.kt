@@ -265,7 +265,7 @@ object AvatarBitmapCache {
     }
 
     internal fun renderSvgXml(xml: String): Bitmap? {
-        var bgColor = android.graphics.Color.parseColor("#1D4ED8")
+        var bgColor = android.graphics.Color.parseColor(ma.etherealmber.atlascommerce.ui.theme.AtlasIllustrationPalette.avatarFallbackHex)
         var textColor = android.graphics.Color.WHITE
         var label = ""
         runCatching {

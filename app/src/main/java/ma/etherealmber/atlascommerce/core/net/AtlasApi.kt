@@ -83,6 +83,16 @@ import retrofit2.http.Query
  */
 interface AtlasApi {
 
+    @Headers("Cache-Control: no-store")
+    @GET("api/mobile/preferences")
+    suspend fun getMobilePreferences(): ma.etherealmber.atlascommerce.data.model.MobilePreferencesDto
+
+    @Headers("Cache-Control: no-store")
+    @PUT("api/mobile/preferences")
+    suspend fun putMobilePreferences(
+        @Body body: ma.etherealmber.atlascommerce.data.model.MobilePreferencesPutRequest,
+    ): ma.etherealmber.atlascommerce.data.model.MobilePreferencesDto
+
     @GET("api/health")
     suspend fun health(): ApiEnvelope<HealthDto>
 

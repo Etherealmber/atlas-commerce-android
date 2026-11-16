@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.components
 
+import ma.etherealmber.atlascommerce.ui.theme.Saffron
+import ma.etherealmber.atlascommerce.ui.theme.AtlasIllustrationPalette as ArtPalette
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import android.annotation.SuppressLint
 import androidx.camera.core.CameraSelector
@@ -31,7 +33,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -112,7 +113,7 @@ fun BarcodeCameraView(
                 .clip(containerShape)
                 .background(
                     if (style == CameraVisualStyle.QR_DEVICE_SECURITY) {
-                        Color(0xFF0B1026)
+                        ArtPalette.cameraSecurityBackdrop
                     } else {
                         MaterialTheme.colorScheme.surfaceContainerHighest
                     },
@@ -123,7 +124,7 @@ fun BarcodeCameraView(
                 text = atlasText("Caméra en veille"),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (style == CameraVisualStyle.QR_DEVICE_SECURITY) {
-                    Color(0xFF94A3B8)
+                    ArtPalette.cameraSecurityMuted
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
@@ -237,7 +238,7 @@ fun BarcodeCameraView(
             .border(
                 width = if (style == CameraVisualStyle.QR_DEVICE_SECURITY) 2.dp else 1.dp,
                 brush = if (style == CameraVisualStyle.QR_DEVICE_SECURITY) {
-                    Brush.linearGradient(listOf(Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFFF59E0B)))
+                    Brush.linearGradient(listOf(ArtPalette.cameraCyan, ArtPalette.cameraIndigo, Saffron))
                 } else {
                     Brush.linearGradient(
                         listOf(
@@ -261,14 +262,14 @@ fun BarcodeCameraView(
                     .align(Alignment.TopCenter)
                     .padding(top = 12.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(Color(0xCC0F172A))
+                    .background(ArtPalette.scanControlOverlay)
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             ) {
                 Text(
                     text = atlasText("QR SÉCURITÉ POSTE PC UNIQUEMENT"),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF38BDF8),
+                    color = ArtPalette.cameraCyan,
                 )
             }
         } else {
@@ -278,13 +279,13 @@ fun BarcodeCameraView(
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 10.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(Color(0xAA0F172A))
+                    .background(ArtPalette.scanControlOverlaySoft)
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             ) {
                 Text(
                     text = atlasText("Alignez le code-barres produit dans le cadre"),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
+                    color = ArtPalette.white,
                 )
             }
         }
@@ -300,7 +301,7 @@ private fun StockBarcodeReticleOverlay(modifier: Modifier = Modifier) {
         val left = (size.width - boxW) / 2f
         val top = (size.height - boxH) / 2f
         drawRoundRect(
-            color = Color.White.copy(alpha = 0.72f),
+            color = ArtPalette.white.copy(alpha = 0.72f),
             topLeft = Offset(left, top),
             size = Size(boxW, boxH),
             cornerRadius = CornerRadius(20f, 20f),
@@ -325,12 +326,12 @@ private fun QrSecurityReticleOverlay(modifier: Modifier = Modifier) {
         val top = (size.height - side) / 2f
         val corner = side * 0.18f
         val stroke = 7f
-        val cyan = Color(0xFF38BDF8)
-        val saffron = Color(0xFFF59E0B)
+        val cyan = ArtPalette.cameraCyan
+        val saffron = Saffron
 
         // Subtle square frame
         drawRoundRect(
-            color = Color(0xFF818CF8).copy(alpha = 0.35f),
+            color = ArtPalette.cameraIndigo.copy(alpha = 0.35f),
             topLeft = Offset(left, top),
             size = Size(side, side),
             cornerRadius = CornerRadius(28f, 28f),

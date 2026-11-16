@@ -1,10 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.products
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
-import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -56,11 +53,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.data.model.ProductDto
 import ma.etherealmber.atlascommerce.data.model.ProductMovementDto
+import ma.etherealmber.atlascommerce.ui.components.encodeProductImageDataUri
 import ma.etherealmber.atlascommerce.ui.components.ProductArtwork
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -72,10 +68,6 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasQuantity
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
-import java.io.ByteArrayOutputStream
-import java.io.IOException
-import kotlin.math.max
-import kotlin.math.roundToInt
 
 /** Full-page product details and stock history, backed by the commerce movement endpoint. */
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -127,8 +119,10 @@ internal fun ProductHistoryScreen(
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             scope.launch {
-                runCatching { productImageDataUrl(context, uri) }
-                    .onSuccess { dataUrl -> viewModel.setPrimaryImage(product.id, dataUrl, product.name) }
+                runCatching {
+                    encodeProductImageDataUri(context, uri)
+                        ?: error("Impossible d'encoder cette image.")
+                }.onSuccess { dataUrl -> viewModel.setPrimaryImage(product.id, dataUrl, product.name) }
                     .onFailure {
                         onToast(imageReadErrorMessage)
                     }
@@ -408,39 +402,4 @@ private fun ProductMovementRow(movement: ProductMovementDto) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-}
-
-private suspend fun productImageDataUrl(context: Context, uri: Uri): String = withContext(Dispatchers.IO) {
-    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        ?: throw IOException("Impossible de lire cette image.")
-    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw IOException("Format d'image illisible.")
-
-    var sample = 1
-    while (max(bounds.outWidth / sample, bounds.outHeight / sample) > 1800) sample *= 2
-    val options = BitmapFactory.Options().apply { inSampleSize = sample }
-    var bitmap: Bitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
-        ?: throw IOException("Impossible de décoder cette image.")
-    val scale = minOf(1f, 1600f / max(bitmap.width, bitmap.height))
-    if (scale < 1f) {
-        val resized = Bitmap.createScaledBitmap(
-            bitmap,
-            (bitmap.width * scale).roundToInt().coerceAtLeast(1),
-            (bitmap.height * scale).roundToInt().coerceAtLeast(1),
-            true,
-        )
-        if (resized !== bitmap) bitmap.recycle()
-        bitmap = resized
-    }
-
-    var bytes: ByteArray? = null
-    for (quality in listOf(88, 80, 72, 64)) {
-        val stream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream)
-        bytes = stream.toByteArray()
-        if (bytes.size <= 3_500_000) break
-    }
-    bitmap.recycle()
-    val encoded = bytes?.takeIf { it.size <= 3_500_000 } ?: throw IOException("Image trop lourde après compression (maximum 3,5 Mo).")
-    "data:image/jpeg;base64,${Base64.encodeToString(encoded, Base64.NO_WRAP)}"
 }

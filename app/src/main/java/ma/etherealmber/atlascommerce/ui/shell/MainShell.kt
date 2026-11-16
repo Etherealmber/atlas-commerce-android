@@ -453,8 +453,11 @@ fun MainShell(
         )
     }
 
-    val showShellTopBar = isForeground &&
-        (!productHistoryActive && tab != MainTab.NOTIFICATIONS || (useRail && showDataCacheManagerDialog))
+    val showShellTopBar = isForeground && (
+        (!useRail && !productHistoryActive && tab != MainTab.NOTIFICATIONS) ||
+            (useRail && tab == MainTab.AGENT && !productHistoryActive) ||
+            (useRail && showDataCacheManagerDialog)
+        )
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val floatingBarWidth by animateDpAsState(
         targetValue = maxWidth,
@@ -634,10 +637,11 @@ fun MainShell(
         val sidebarEdgeOffset = if (layoutDirection == LayoutDirection.Ltr) -sidebarStartInset else sidebarStartInset
         val sidebarTopInset = padding.calculateTopPadding()
         val sidebarBottomInset = padding.calculateBottomPadding()
+        val sidebarContentTopLift = if (useRail && showShellTopBar) sidebarTopInset else 0.dp
         val sidebarHeight = (shellMaxHeight - sidebarBottomInset).coerceAtLeast(0.dp)
         if (showRail) {
-            // Extend only the rail background behind the top bar; keep its contents
-            // positioned in the Scaffold body, below the top bar as usual.
+            // Extend the rail surface behind the top bar. On tablet destinations with
+            // a top bar, lift the contents into its transparent sidebar region as well.
             Surface(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
@@ -649,9 +653,9 @@ fun MainShell(
             Surface(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .offset(x = sidebarEdgeOffset)
+                    .offset(x = sidebarEdgeOffset, y = -sidebarContentTopLift)
                     .width(sidebarWidth + sidebarStartInset)
-                    .fillMaxHeight(),
+                    .height(sidebarHeight + sidebarContentTopLift),
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 tonalElevation = 1.dp,
             ) {
@@ -715,7 +719,7 @@ fun MainShell(
                             if (currentPage.isDataStorage) {
                                 atlasText("Données et cache", "Data & cache", "البيانات والذاكرة المؤقتة")
                             } else currentTab.localizedLabel(),
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground,

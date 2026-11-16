@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.snake
 
+import ma.etherealmber.atlascommerce.ui.theme.AtlasIllustrationPalette as ArtPalette
 import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -28,7 +29,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -915,8 +915,8 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSnakeEyes(head:
     }
     listOf(eyeA, eyeB).forEach { eye ->
         val center = Offset((head.x + eye.x) * cell, (head.y + eye.y) * cell)
-        drawCircle(Color.White, cell * 0.105f, center)
-        drawCircle(Color(0xFF173540), cell * 0.052f, Offset(center.x + pupilOffset.x * cell, center.y + pupilOffset.y * cell))
+        drawCircle(ArtPalette.white, cell * 0.105f, center)
+        drawCircle(ArtPalette.snakePupil, cell * 0.052f, Offset(center.x + pupilOffset.x * cell, center.y + pupilOffset.y * cell))
     }
 }
 

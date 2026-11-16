@@ -46,6 +46,11 @@ import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockSetupPrompt
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.server.ServerSelection
+import ma.etherealmber.atlascommerce.core.sync.MobilePreferenceSyncState
+import ma.etherealmber.atlascommerce.core.sync.MobilePreferencesSyncRepository
+import ma.etherealmber.atlascommerce.core.sync.encodeMobilePreferenceBackup
+import ma.etherealmber.atlascommerce.core.sync.decodeMobilePreferenceBackup
+import ma.etherealmber.atlascommerce.core.sync.mergeMobilePreferenceBackup
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
@@ -90,6 +95,11 @@ private fun File.directorySizeBytes(): Long =
 
 data class DeviceIdentityDiagnostics(val shortId: String, val fingerprint: String)
 
+data class MobilePreferenceImportPreview(
+    val changedKeys: List<String>,
+    val mergedSettings: Map<String, Any?>,
+)
+
 /**
  * Root view model: appearance, motion & isolated per-user preferences, server choice,
  * saved accounts/servers, live AI quota policy, profile photo & details, connected devices,
@@ -106,6 +116,7 @@ class AppViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
     private val sessionEvents: SessionEvents,
     private val apiProvider: ApiProvider,
+    private val mobilePreferencesSyncRepository: MobilePreferencesSyncRepository,
     private val serverProbe: ServerProbe,
     private val updateManager: AppUpdateManager,
     private val offlineCache: OfflineCache,
@@ -123,6 +134,10 @@ class AppViewModel @Inject constructor(
     val automaticCrashReportsAvailable: StateFlow<Boolean> = _automaticCrashReportsAvailable.asStateFlow()
     private val _crashReportsAvailabilityChecked = MutableStateFlow(false)
     val crashReportsAvailabilityChecked: StateFlow<Boolean> = _crashReportsAvailabilityChecked.asStateFlow()
+    val mobilePreferenceSyncState: StateFlow<MobilePreferenceSyncState> = mobilePreferencesSyncRepository.state
+    val mobilePreferenceLastSuccessfulSyncAt: StateFlow<String?> = mobilePreferencesSyncRepository.lastSuccessfulSyncAt
+    private val _mobilePreferenceFrequency = MutableStateFlow("daily")
+    val mobilePreferenceFrequency: StateFlow<String> = _mobilePreferenceFrequency.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -224,6 +239,29 @@ class AppViewModel @Inject constructor(
 
     init {
         checkUpdatesOnceServerReady()
+        viewModelScope.launch {
+            sessionManager.state.collect { state ->
+                if (state is SessionState.Active) {
+                    _mobilePreferenceFrequency.value = preferences.mobilePreferenceFrequency()
+                }
+            }
+        }
+        viewModelScope.launch {
+            val atlasApp = applicationContext as ma.etherealmber.atlascommerce.AtlasApp
+            atlasApp.languageLoaded.first { it }
+            preferences.appLanguage.collect { savedLanguage ->
+                _languageRestartNotice.value = savedLanguage.takeIf { it != atlasApp.activeLanguage.value }
+            }
+        }
+        viewModelScope.launch {
+            mobilePreferencesSyncRepository.state.collect { syncState ->
+                if (syncState is MobilePreferenceSyncState.Synced &&
+                    !preferences.mobilePreferenceFrequencyDirty()
+                ) {
+                    _mobilePreferenceFrequency.value = preferences.mobilePreferenceFrequency()
+                }
+            }
+        }
     }
 
     val parallelUpdateDownload: StateFlow<Boolean> = preferences.parallelUpdateDownload
@@ -757,6 +795,44 @@ class AppViewModel @Inject constructor(
 
     fun setAnimationsEnabled(enabled: Boolean) {
         viewModelScope.launch { preferences.setAnimationsEnabled(enabled) }
+    }
+
+    fun refreshMobilePreferenceSyncStatus() {
+        viewModelScope.launch { mobilePreferencesSyncRepository.refreshStatus() }
+    }
+
+    fun syncMobilePreferences() {
+        viewModelScope.launch { mobilePreferencesSyncRepository.syncNow() }
+    }
+
+    fun setMobilePreferenceFrequency(frequency: String) {
+        viewModelScope.launch {
+            if (preferences.setMobilePreferenceFrequency(frequency)) {
+                _mobilePreferenceFrequency.value = frequency
+                mobilePreferencesSyncRepository.cancelScheduledWork()
+            }
+        }
+    }
+
+    suspend fun exportMobilePreferenceBackup(): String =
+        encodeMobilePreferenceBackup(preferences.mobilePreferenceSettings())
+
+    suspend fun previewMobilePreferenceBackup(json: String): MobilePreferenceImportPreview? {
+        val backup = decodeMobilePreferenceBackup(json) ?: return null
+        val current = preferences.mobilePreferenceSettings()
+        val merged = mergeMobilePreferenceBackup(current, backup.settings) ?: return null
+        return MobilePreferenceImportPreview(
+            changedKeys = merged.keys.filter { merged[it] != current[it] },
+            mergedSettings = merged,
+        )
+    }
+
+    fun applyImportedMobilePreferences(settings: Map<String, Any?>, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            // Import is merge-only: the allowlisted keys are applied transactionally, and
+            // passwords, accounts, servers, diagnostics, consent, and caches are never touched.
+            onResult(preferences.applyMobilePreferenceSettings(settings))
+        }
     }
 
     fun setDeveloperModeEnabled(enabled: Boolean) {
