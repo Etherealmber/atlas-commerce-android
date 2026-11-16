@@ -19,6 +19,8 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.squareup.moshi.Moshi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.AtlasApp
@@ -42,9 +44,14 @@ class UpdateCheckWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
+            if (UpdateCheckRateLimiter.acquire() != null) return@withContext Result.success()
             val backendUrl = backendManifestUrl()
-            val backendManifest = backendUrl?.let(::fetchManifest)
-            val candidates = listOfNotNull(backendManifest) + MANIFEST_URLS.mapNotNull(::fetchManifest)
+            val (backendManifest, mirrorManifests) = coroutineScope {
+                val backend = async { backendUrl?.let(::fetchManifest) }
+                val mirrors = MANIFEST_URLS.map { url -> async { fetchManifest(url) } }
+                backend.await() to mirrors.mapNotNull { it.await() }
+            }
+            val candidates = listOfNotNull(backendManifest) + mirrorManifests
             val newest = candidates.maxByOrNull { it.versionCode }
                 ?: return@withContext Result.retry()
             val minimumVersionCode = maxOf(
@@ -168,9 +175,9 @@ class UpdateCheckWorker(
             "${BuildConfig.PROJECT_REPO.trimEnd('/')}/releases/latest/download/latest.json",
         )
         val client = OkHttpClient.Builder()
-            .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(12, TimeUnit.SECONDS)
-            .callTimeout(20, TimeUnit.SECONDS)
+            .connectTimeout(3, TimeUnit.SECONDS)
+            .readTimeout(4, TimeUnit.SECONDS)
+            .callTimeout(6, TimeUnit.SECONDS)
             .retryOnConnectionFailure(false)
             .build()
         val adapter = Moshi.Builder().build().adapter(AndroidUpdateDto::class.java)

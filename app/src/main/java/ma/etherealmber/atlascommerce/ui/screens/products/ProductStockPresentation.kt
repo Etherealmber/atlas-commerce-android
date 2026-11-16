@@ -11,10 +11,10 @@ internal fun productStockDisplay(quantity: Double, unit: String?): String {
     return if (cleanUnit == null) amount else "$amount $cleanUnit"
 }
 
-/** Stock badge colors requested for the catalog: <10 red, 10–20 orange, >20 green. */
+/** Green above 40, orange from 20 through 40, and red below 20. */
 internal fun productStockTone(quantity: Double, trackInventory: Boolean = true): AtlasTone = when {
     !trackInventory -> AtlasTone.NEUTRAL
-    quantity < 10.0 -> AtlasTone.DANGER
-    quantity <= 20.0 -> AtlasTone.WARNING
+    quantity < 20.0 -> AtlasTone.DANGER
+    quantity <= 40.0 -> AtlasTone.WARNING
     else -> AtlasTone.POSITIVE
 }

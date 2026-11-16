@@ -1,11 +1,19 @@
 package ma.etherealmber.atlascommerce.ui.shell
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +29,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -46,7 +56,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -61,7 +73,6 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun AtlasSidebarBrand(
     expanded: Boolean,
@@ -72,60 +83,100 @@ internal fun AtlasSidebarBrand(
     val logoDescription = when {
         !canCollapse -> atlasText("Logo Atlas Commerce", "Atlas Commerce logo", "شعار أطلس كوميرس")
         expanded -> atlasText(
-            "Logo Atlas Commerce. Appuyez deux fois pour réduire le menu",
-            "Atlas Commerce logo. Double-tap to collapse navigation",
-            "شعار أطلس كوميرس. انقر مرتين لتصغير القائمة",
+            "Logo Atlas Commerce. Appuyez deux ou trois fois pour réduire le menu",
+            "Atlas Commerce logo. Double- or triple-tap to collapse navigation",
+            "شعار أطلس كوميرس. انقر مرتين أو ثلاث مرات لتصغير القائمة",
         )
         else -> atlasText(
-            "Logo Atlas Commerce. Appuyez deux fois pour développer le menu",
-            "Atlas Commerce logo. Double-tap to expand navigation",
-            "شعار أطلس كوميرس. انقر مرتين لتوسيع القائمة",
+            "Logo Atlas Commerce. Appuyez deux ou trois fois pour développer le menu",
+            "Atlas Commerce logo. Double- or triple-tap to expand navigation",
+            "شعار أطلس كوميرس. انقر مرتين أو ثلاث مرات لتوسيع القائمة",
         )
+    }
+    val toggleDescription = if (expanded) {
+        atlasText("Réduire la navigation", "Collapse navigation", "تصغير القائمة")
+    } else {
+        atlasText("Développer la navigation", "Expand navigation", "توسيع القائمة")
     }
     val brandModifier = if (canCollapse) {
         Modifier
-            .combinedClickable(onClick = {}, onDoubleClick = onToggleCollapse)
-            .semantics { contentDescription = logoDescription }
+            .atlasTapSequenceGestures(
+                onDoubleTap = onToggleCollapse,
+                onTripleTap = onToggleCollapse,
+            )
+            .semantics {
+                contentDescription = logoDescription
+                customActions = listOf(CustomAccessibilityAction(toggleDescription) {
+                    onToggleCollapse()
+                    true
+                })
+            }
     } else {
-        Modifier
+        Modifier.semantics { contentDescription = logoDescription }
     }
 
-    if (expanded) {
-        Row(
-            modifier = modifier.fillMaxWidth().heightIn(min = 54.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AtlasMark(
-                modifier = brandModifier,
-                size = 42.dp,
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.width(9.dp))
-            Text(
-                "Atlas Commerce",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    } else {
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val logoPulse by rememberInfiniteTransition(label = "sidebar-brand-glow").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "sidebar-brand-glow-pulse",
+    )
+    val logoScale by animateFloatAsState(
+        targetValue = if (expanded) 1f else 0.92f,
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.7f, stiffness = 420f) else tween(0),
+        label = "sidebar-brand-scale",
+    )
+    Row(
+        modifier = modifier.fillMaxWidth().heightIn(min = 58.dp).animateContentSize(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(
-            modifier = modifier.fillMaxWidth().heightIn(min = 54.dp),
+            modifier = Modifier
+                .size(if (expanded) 54.dp else 44.dp)
+                .clip(CircleShape)
+                .background(
+                    MaterialTheme.colorScheme.primary.copy(
+                        alpha = when {
+                            !motionEnabled -> if (expanded) 0.10f else 0.03f
+                            expanded -> 0.06f + logoPulse * 0.10f
+                            else -> 0.025f + logoPulse * 0.035f
+                        },
+                    ),
+                ),
             contentAlignment = Alignment.Center,
         ) {
             AtlasMark(
-                modifier = brandModifier,
-                size = 32.dp,
+                modifier = brandModifier.graphicsLayer { scaleX = logoScale; scaleY = logoScale },
+                size = if (expanded) 42.dp else 32.dp,
                 tint = MaterialTheme.colorScheme.onSurface,
             )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn(tween(180)) + slideInHorizontally(tween(210)) { -it / 5 },
+            exit = fadeOut(tween(100)) + slideOutHorizontally(tween(140)) { -it / 5 },
+            label = "sidebar-brand-title",
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.width(9.dp))
+                Text(
+                    "Atlas Commerce",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun AtlasSidebarContent(
     user: SessionUser,

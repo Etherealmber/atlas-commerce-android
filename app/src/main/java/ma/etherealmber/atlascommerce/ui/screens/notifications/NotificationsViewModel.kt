@@ -38,6 +38,7 @@ class NotificationsViewModel @Inject constructor(
         val alerts: List<AlertItemDto> = emptyList(),
         val actions: List<MobileActionDto> = emptyList(),
         val pendingOnly: Boolean = false,
+        val sentNotificationCount: Int = 0,
         val busyId: Long? = null,
         val sendingNotification: Boolean = false,
         val error: String? = null,
@@ -122,6 +123,10 @@ class NotificationsViewModel @Inject constructor(
                     username = username,
                     alerts = filteredAlerts,
                     actions = filteredActions,
+                    sentNotificationCount = filteredActions.count { action ->
+                        action.createdBy.equals(username, ignoreCase = true) &&
+                            commerceRepository.parseActionMeta(action)?.category.equals("role_notification", ignoreCase = true)
+                    },
                     error = err,
                 )
             }

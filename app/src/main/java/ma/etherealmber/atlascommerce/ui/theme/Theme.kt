@@ -40,12 +40,12 @@ val Ink = Color(0xFF0F172A)
 val InkSoft = Color(0xFF475569)
 val Line = Color(0xFFE8EAEF)
 
-val DarkBg = Color(0xFF0A0A0C)
-val DarkSurface = Color(0xFF141414)
-val DarkElevated = Color(0xFF1A1A1A)
-val DarkOnBg = Color(0xFFF4F4F5)
+val DarkBg = Color(0xFF000000)
+val DarkSurface = Color(0xFF09090B)
+val DarkElevated = Color(0xFF121214)
+val DarkOnBg = Color(0xFFF5F5F5)
 val DarkMuted = Color(0xFFA1A1AA)
-val DarkOutline = Color(0xFF27272A)
+val DarkOutline = Color(0xFF29292D)
 
 @Immutable
 data class AtlasPalette(
@@ -306,17 +306,17 @@ fun AtlasAuthTheme(content: @Composable () -> Unit) {
     val colors = darkColorScheme(
         primary = Color(0xFFBCCBC4),
         onPrimary = Color(0xFF151917),
-        primaryContainer = Color(0xFF2A2D30),
+        primaryContainer = Color(0xFF121214),
         onPrimaryContainer = Color(0xFFF4F4F5),
         secondary = Color(0xFFD4D6D9),
         onSecondary = Color(0xFF1E2025),
         tertiary = Color(0xFF94AAA1),
         onTertiary = Color(0xFF151917),
-        background = Color(0xFF121316),
+        background = Color(0xFF000000),
         onBackground = Color(0xFFF4F4F5),
-        surface = Color(0xFF1E2025),
+        surface = Color(0xFF09090B),
         onSurface = Color(0xFFF4F4F5),
-        surfaceVariant = Color(0xFF282A30),
+        surfaceVariant = Color(0xFF121214),
         onSurfaceVariant = Color(0xFFB8BBC2),
         outline = Color(0xFF666B73),
         outlineVariant = Color(0xFF3C4047),
@@ -328,8 +328,8 @@ fun AtlasAuthTheme(content: @Composable () -> Unit) {
         positiveSoft = Color(0xFF252C29),
         cardBorder = Color(0xFF3C4047),
         mutedText = Color(0xFFB8BBC2),
-        heroStart = Color(0xFF121316),
-        heroEnd = Color(0xFF25282D),
+        heroStart = Color(0xFF000000),
+        heroEnd = Color(0xFF121214),
     )
     CompositionLocalProvider(LocalAtlasPalette provides authPalette) {
         MaterialTheme(colorScheme = colors, typography = typography, shapes = shapes) {

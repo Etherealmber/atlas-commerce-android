@@ -3,6 +3,8 @@ package ma.etherealmber.atlascommerce.ui.screens.agent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
@@ -482,6 +484,7 @@ fun AgentScreen(
                                 title = atlasText("Problèmes signalés", "Reported issues", "البلاغات المرسلة"),
                                 source = github,
                                 loading = state.workStatusLoading,
+                                openGitHubIssues = true,
                                 onLoadMore = { viewModel.loadWorkStatus(loadMore = true) },
                             )
                         }
@@ -823,14 +826,18 @@ fun AgentScreen(
             )
 
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(
+                    horizontal = if (isTabletLayout) 16.dp else 12.dp,
+                    vertical = 6.dp,
+                ),
+                shape = RoundedCornerShape(if (isTabletLayout) 24.dp else 28.dp),
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                tonalElevation = 3.dp,
-                shadowElevation = 4.dp,
+                tonalElevation = 6.dp,
+                shadowElevation = 10.dp,
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(
-                        horizontal = composerSidePadding,
+                        horizontal = if (isTabletLayout) composerSidePadding else 12.dp,
                         vertical = if (compactComposer) 4.dp else 8.dp,
                     ),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1312,8 +1319,10 @@ private fun WorkStatusSection(
     title: String,
     source: ma.etherealmber.atlascommerce.data.model.WorkStatusSourceDto,
     loading: Boolean,
+    openGitHubIssues: Boolean = false,
     onLoadMore: () -> Unit,
 ) {
+    val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         if (source.availability != "available") {
@@ -1330,7 +1339,24 @@ private fun WorkStatusSection(
             )
         } else {
             source.items.forEach { item ->
-                AtlasCard(padding = 9.dp) {
+                val issueUrl = item.url?.takeIf { url ->
+                    openGitHubIssues && runCatching {
+                        val parsed = java.net.URI(url)
+                        parsed.scheme.equals("https", ignoreCase = true) &&
+                            parsed.host.equals("github.com", ignoreCase = true)
+                    }.getOrDefault(false)
+                }
+                AtlasCard(
+                    padding = 9.dp,
+                    onClick = issueUrl?.let { url ->
+                        {
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                            }
+                            Unit
+                        }
+                    },
+                ) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(item.title?.takeIf { it.isNotBlank() } ?: atlasText("Sans titre", "Untitled", "بلا عنوان"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(
@@ -1341,6 +1367,13 @@ private fun WorkStatusSection(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (issueUrl != null) {
+                            Text(
+                                atlasText("Ouvrir l’issue GitHub", "Open GitHub issue", "فتح مشكلة GitHub"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 }
             }

@@ -55,6 +55,7 @@ import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -82,7 +83,7 @@ private fun detectDownloadNetworkTransport(context: Context): DownloadNetworkTra
 }.getOrDefault(DownloadNetworkTransport.OTHER)
 
 /**
- * Application-scoped manager for checking, pinging (`CDN 1` vs `GitHub`),
+ * Application-scoped manager for checking, pinging (`Atlas API` vs `GitHub`),
  * downloading across parallel HTTP `Range` instances (with automatic single-stream
  * fallback, mirror failover & SHA-256 verification), loading release changelogs,
  * and installing native APK updates.
@@ -160,6 +161,12 @@ class AppUpdateManager internal constructor(
         internetAvailableProvider = { hasDeviceInternetCapability(context) },
         backgroundDownloadScheduler = { info -> UpdateDownloadWorker.enqueue(context, info) },
     )
+
+    private val updateProbeClient = probeClient.newBuilder()
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(4, TimeUnit.SECONDS)
+        .callTimeout(6, TimeUnit.SECONDS)
+        .build()
 
     private val lock = Any()
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
@@ -263,8 +270,8 @@ class AppUpdateManager internal constructor(
             title = "Atlas Commerce v$currentVersionName (build $currentVersionCode)",
             isLatest = true,
             notes = buildString {
-                appendLine("• Téléchargement multi-connexions adapté à la source : CDN 1 et GitHub Releases.")
-                appendLine("• Suivi direct de la dernière version publiée sur GitHub Releases & CDN 1.")
+                appendLine("• Téléchargement multi-connexions adapté à la source : Atlas API et GitHub Releases.")
+                appendLine("• Suivi direct de la dernière version publiée sur GitHub Releases & Atlas API.")
                 appendLine("• Journal complet des versions intégré dans Paramètres et notes JSON allégées.")
                 append("• Licence MIT ou Apache 2.0 © 2026 Etherealmber & navigation persistante entre sous-écrans.")
             },
@@ -324,7 +331,7 @@ class AppUpdateManager internal constructor(
 
 
     /**
-     * Measures real HTTPS latency in `ms` to both `CDN 1` and `GitHub Releases` in parallel.
+     * Measures HTTPS latency in `ms` to the Atlas API and GitHub Releases endpoints.
      */
     fun pingMirrors() {
         if (pingJob?.isActive == true) return
@@ -367,7 +374,7 @@ class AppUpdateManager internal constructor(
             .header("User-Agent", "Atlas-Android-Updater")
             .build()
         return try {
-            probeClient.newCall(headReq).execute().use { resp ->
+            updateProbeClient.newCall(headReq).execute().use { resp ->
                 val elapsed = ((System.nanoTime() - startNs) / 1_000_000L).coerceAtLeast(1L)
                 if (resp.code in 200..399 || resp.code == 405) {
                     true to elapsed
@@ -381,7 +388,7 @@ class AppUpdateManager internal constructor(
     }
 
     /**
-     * Checks `GET /api/app/android-update`, `CDN 1/latest.json`, and
+     * Checks `GET /api/app/android-update`, the Atlas API release manifest, and
      * `GitHub releases/latest/download/latest.json` without overriding any active download.
      */
     fun checkForUpdate(manual: Boolean = false, mandatoryOnly: Boolean = false) {
@@ -393,6 +400,11 @@ class AppUpdateManager internal constructor(
                 return
             }
             if (checkJob?.isActive == true) {
+                return
+            }
+            val cooldownRemainingMs = UpdateCheckRateLimiter.acquire()
+            if (cooldownRemainingMs != null) {
+                AtlasLogBuffer.log("UPDATE", "Update check throttled; retry in ${cooldownRemainingMs}ms")
                 return
             }
             if (manual) {
@@ -414,7 +426,7 @@ class AppUpdateManager internal constructor(
                 .header("Cache-Control", "no-cache")
                 .header("User-Agent", "Atlas-Android-Updater")
                 .build()
-            probeClient.newCall(req).execute().use { resp ->
+            updateProbeClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) null
                 else resp.body?.string()?.let { updateAdapter.fromJson(it) }
             }
@@ -455,7 +467,7 @@ class AppUpdateManager internal constructor(
                         .header("Accept", "application/json")
                         .header("X-Atlas-Client", "android")
                         .build()
-                    probeClient.newCall(request).execute().use { response ->
+                    updateProbeClient.newCall(request).execute().use { response ->
                         val rawBody = runCatching { response.body?.string() }.getOrNull().orEmpty()
                         if (response.isSuccessful) {
                             runCatching { updateAdapter.fromJson(rawBody) }.getOrNull()
@@ -666,6 +678,25 @@ class AppUpdateManager internal constructor(
         return (_state.value as? UpdateState.Error)?.recoverableNetwork == true
     }
 
+    private suspend fun probeMirrorsForAutomaticDownload(info: UpdateInfo): MirrorPingResult = coroutineScope {
+        val cdnUrl = info.cdn1Url?.takeIf { it.isNotBlank() }
+        val githubUrl = info.githubUrl?.takeIf { it.isNotBlank() }
+        val cdnResult = async(ioDispatcher) {
+            cdnUrl?.let(::measureEndpointMs) ?: (false to null)
+        }
+        val githubResult = async(ioDispatcher) {
+            githubUrl?.let(::measureEndpointMs) ?: (false to null)
+        }
+        val (cdnOnline, cdnMs) = cdnResult.await()
+        val (githubOnline, githubMs) = githubResult.await()
+        MirrorPingResult(
+            cdn1Ms = cdnMs,
+            cdn1Online = cdnOnline,
+            githubMs = githubMs,
+            githubOnline = githubOnline,
+        ).also { _mirrorPing.value = it }
+    }
+
     private suspend fun executeDownload(info: UpdateInfo) {
         val dir = updatesDirProvider().apply { mkdirs() }
         val partFile = File(dir, "atlas-commerce-v${info.versionCode}.apk.part")
@@ -673,7 +704,12 @@ class AppUpdateManager internal constructor(
 
         val preferred = runCatching { sourceProvider() }.getOrDefault(UpdateDownloadSource.AUTO)
         val useParallel = runCatching { parallelDownloadProvider() }.getOrDefault(true)
-        val candidateUrls = info.orderedDownloadUrls(preferred, _mirrorPing.value)
+        val mirrorLatency = if (preferred == UpdateDownloadSource.AUTO) {
+            probeMirrorsForAutomaticDownload(info)
+        } else {
+            _mirrorPing.value
+        }
+        val candidateUrls = info.orderedDownloadUrls(preferred, mirrorLatency)
             .ifEmpty { listOf(info.apkUrl) }
 
         var lastError: Throwable? = null
@@ -684,7 +720,7 @@ class AppUpdateManager internal constructor(
             val sourceLabel = when {
                 candidateUrl.contains("github.com", ignoreCase = true) ||
                     candidateUrl.contains("githubusercontent.com", ignoreCase = true) -> "GitHub"
-                candidateUrl.contains("cdn1", ignoreCase = true) -> "CDN 1"
+                candidateUrl.contains("cdn1", ignoreCase = true) -> "Atlas API"
                 else -> null
             }
 
@@ -837,7 +873,7 @@ class AppUpdateManager internal constructor(
         transport: DownloadNetworkTransport = networkTransportProvider(),
     ): Int = when {
         sourceLabel.equals("GitHub", ignoreCase = true) -> GITHUB_PARALLEL_CONNECTIONS
-        sourceLabel.equals("CDN 1", ignoreCase = true) -> when (transport) {
+        sourceLabel.equals("Atlas API", ignoreCase = true) -> when (transport) {
             DownloadNetworkTransport.WIFI -> R2_CDN_WIFI_CONNECTIONS
             DownloadNetworkTransport.CELLULAR -> R2_CDN_CELLULAR_CONNECTIONS
             DownloadNetworkTransport.OTHER -> R2_CDN_OTHER_CONNECTIONS

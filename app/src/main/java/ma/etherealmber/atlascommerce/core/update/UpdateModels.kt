@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.core.update
 
+import android.os.SystemClock
 import ma.etherealmber.atlascommerce.BuildConfig
 import java.io.File
 import java.text.NumberFormat
@@ -7,7 +8,7 @@ import java.util.Locale
 
 enum class UpdateDownloadSource(val key: String, val label: String) {
     AUTO("auto", "Auto"),
-    CDN1("cdn1", "CDN 1"),
+    CDN1("cdn1", "Atlas API"),
     GITHUB("github", "GitHub"),
     ;
 
@@ -43,8 +44,8 @@ data class MirrorPingResult(
     val fastestLabel: String?
         get() = when {
             cdn1Online == true && githubOnline == true && cdn1Ms != null && githubMs != null ->
-                if (cdn1Ms <= githubMs) "CDN 1 recommandé (${cdn1Ms} ms)" else "GitHub recommandé (${githubMs} ms)"
-            cdn1Online == true && cdn1Ms != null -> "CDN 1 actif (${cdn1Ms} ms)"
+                if (cdn1Ms <= githubMs) "Atlas API recommandé (${cdn1Ms} ms)" else "GitHub recommandé (${githubMs} ms)"
+            cdn1Online == true && cdn1Ms != null -> "Atlas API actif (${cdn1Ms} ms)"
             githubOnline == true && githubMs != null -> "GitHub actif (${githubMs} ms)"
             else -> null
         }
@@ -116,6 +117,38 @@ internal fun formatReleaseNotesForDisplay(rawBody: String, tagName: String): Str
         ?: "• Mise à jour $tagName — optimisations et correctifs."
 }
 
+internal fun updateCheckCooldownRemainingMs(
+    lastCheckElapsedMs: Long,
+    nowElapsedMs: Long,
+    minimumIntervalMs: Long,
+): Long {
+    if (lastCheckElapsedMs <= 0L || nowElapsedMs < lastCheckElapsedMs || minimumIntervalMs <= 0L) return 0L
+    return (minimumIntervalMs - (nowElapsedMs - lastCheckElapsedMs)).coerceAtLeast(0L)
+}
+
+internal object UpdateCheckRateLimiter {
+    private var lastCheckElapsedMs = 0L
+
+    @Synchronized
+    fun resetForTests() {
+        lastCheckElapsedMs = 0L
+    }
+
+    @Synchronized
+    fun acquire(nowElapsedMs: Long = SystemClock.elapsedRealtime()): Long? {
+        val remaining = updateCheckCooldownRemainingMs(
+            lastCheckElapsedMs = lastCheckElapsedMs,
+            nowElapsedMs = nowElapsedMs,
+            minimumIntervalMs = MIN_INTERVAL_MS,
+        )
+        if (remaining > 0L) return remaining
+        lastCheckElapsedMs = nowElapsedMs
+        return null
+    }
+
+    private const val MIN_INTERVAL_MS = 60_000L
+}
+
 internal fun minimumVersionRequiresUpdate(
     installedVersionCode: Int,
     minimumSupportedVersionCode: Int,
@@ -170,14 +203,15 @@ data class UpdateInfo(
             UpdateDownloadSource.CDN1 -> listOfNotNull(cdn, apkUrl, gh)
             UpdateDownloadSource.GITHUB -> listOfNotNull(gh, cdn, apkUrl)
             UpdateDownloadSource.AUTO -> {
-                val ghFaster = ping.githubOnline == true &&
-                    ping.githubMs != null &&
-                    (ping.cdn1Online != true || ping.cdn1Ms == null || ping.githubMs < ping.cdn1Ms)
-                if (ghFaster) {
-                    listOfNotNull(gh, cdn, apkUrl)
-                } else {
-                    listOfNotNull(cdn, apkUrl, gh)
-                }
+                val measuredAvailable = buildList {
+                    if (cdn != null && ping.cdn1Online == true && ping.cdn1Ms != null) {
+                        add(cdn to ping.cdn1Ms)
+                    }
+                    if (gh != null && ping.githubOnline == true && ping.githubMs != null) {
+                        add(gh to ping.githubMs)
+                    }
+                }.sortedBy { it.second }.map { it.first }
+                measuredAvailable + listOfNotNull(apkUrl, cdn, gh)
             }
         }
         return rawOrder.map { it.trim() }.filter { it.isNotEmpty() }.distinct()

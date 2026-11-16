@@ -20,8 +20,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
@@ -98,8 +96,10 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -201,7 +201,6 @@ internal fun MainTab.localizedLabel(): String = when (this) {
 
 private val BackStackTabs = setOf(MainTab.AGENT, MainTab.SALE, MainTab.PROFILE, MainTab.SETTINGS, MainTab.NOTIFICATIONS)
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainShell(
     user: SessionUser,
@@ -485,45 +484,16 @@ fun MainShell(
                         listOf(thread, status).filter { it.isNotBlank() }.joinToString(" · ")
                     } else null,
                     containerColor = if (useRail) Color.Transparent else MaterialTheme.colorScheme.background,
-                    titleLeading = when {
-                        useRail -> {
-                            {
-                                // Use the otherwise-empty rail area above the page content for
-                                // the brand, instead of leaving a tall blank gap above the logo.
-                                AtlasSidebarBrand(
-                                    expanded = sidebarExpanded,
-                                    canCollapse = true,
-                                    onToggleCollapse = { onSidebarCollapsedChange(!sidebarCollapsed) },
-                                    modifier = Modifier.width(sidebarWidth),
-                                )
-                                if (tab == MainTab.AGENT) {
-                                    AtlasAgentMascot(
-                                        modifier = Modifier.size(32.dp).combinedClickable(
-                                            onClick = {},
-                                            onLongClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
-                                            onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAgentSurprise = true },
-                                        ),
-                                        isTyping = agentState?.input?.isNotBlank() == true,
-                                        isThinking = agentState?.sending == true,
-                                    )
-                                }
-                            }
+                    titleLeading = if (tab == MainTab.AGENT) {
+                        {
+                            AtlasAgentSurpriseMascot(
+                                modifier = Modifier.size(32.dp),
+                                isTyping = agentState?.input?.isNotBlank() == true,
+                                isThinking = agentState?.sending == true,
+                                onSurprise = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAgentSurprise = true },
+                            )
                         }
-                        tab == MainTab.AGENT -> {
-                            {
-                                AtlasAgentMascot(
-                                    modifier = Modifier.size(32.dp).combinedClickable(
-                                        onClick = {},
-                                        onLongClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
-                                        onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAgentSurprise = true },
-                                    ),
-                                    isTyping = agentState?.input?.isNotBlank() == true,
-                                    isThinking = agentState?.sending == true,
-                                )
-                            }
-                        }
-                        else -> null
-                    },
+                    } else null,
                     onBack = if (useRail) null else when (tab) {
                         MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
                         MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> ({ setTabName(lastBottomTabName) })
@@ -548,7 +518,7 @@ fun MainShell(
                             )
                         }
                         if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
-                        if (!useRail && tab != MainTab.AGENT) {
+                        if (!useRail && tab !in BackStackTabs) {
                             IconButton(
                                 onClick = { switchTab(MainTab.AGENT) },
                                 modifier = Modifier.semantics {
@@ -705,7 +675,7 @@ fun MainShell(
                         surpriseIndex = nextSurprise(surpriseIndex, 5)
                         showAvatarSurprise = true
                     },
-                    showBrand = !showShellTopBar,
+                    showBrand = true,
                 )
             }
             VerticalDivider(
@@ -815,7 +785,6 @@ fun MainShell(
                         onSignOut = onSignOut,
                         onToast = onToast,
                         isForeground = isForeground,
-                        dialogCenterOffset = if (useRail) sidebarWidth / 2 else 0.dp,
                     )
 
                     MainTab.BALANCE -> BalanceScreen(
@@ -851,7 +820,6 @@ fun MainShell(
                         onSignOut = onSignOut,
                         onStartUpdateDownload = onStartUpdateDownload,
                         onToast = onToast,
-                        dialogCenterOffset = if (useRail) sidebarWidth / 2 else 0.dp,
                     )
                 }
                     }
@@ -957,6 +925,34 @@ fun MainShell(
     }
 }
 
+
+@Composable
+private fun AtlasAgentSurpriseMascot(
+    modifier: Modifier = Modifier,
+    isTyping: Boolean,
+    isThinking: Boolean,
+    onSurprise: () -> Unit,
+) {
+    val description = atlasText(
+        "Mascotte Atlas Agent. Appuyez trois fois ou maintenez pour afficher une surprise",
+        "Atlas Agent mascot. Triple-tap or long-press for a surprise",
+        "تميمة Atlas Agent. انقر ثلاث مرات أو اضغط مطولاً لعرض مفاجأة",
+    )
+    val actionLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة")
+    AtlasAgentMascot(
+        modifier = modifier
+            .atlasTapSequenceGestures(onTripleTap = onSurprise, onLongPress = onSurprise)
+            .semantics {
+                contentDescription = description
+                customActions = listOf(CustomAccessibilityAction(actionLabel) {
+                    onSurprise()
+                    true
+                })
+            },
+        isTyping = isTyping,
+        isThinking = isThinking,
+    )
+}
 
 @Composable
 private fun AtlasFloatingBottomBar(

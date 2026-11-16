@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
@@ -74,13 +76,15 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
     }
 
     val context = LocalContext.current
+    val scoreViewModel: SnakePersonalBestViewModel = hiltViewModel()
+    val personalBestState by scoreViewModel.state.collectAsStateWithLifecycle()
+    val bestScore = personalBestState.personalBest
     val preferences = remember(context) {
         context.getSharedPreferences("atlas_snake_progress", Context.MODE_PRIVATE)
     }
     val today = remember { LocalDate.now() }
     val todayKey = remember(today) { today.toString() }
     val dailyTarget = remember(today) { 8 + today.dayOfYear % 5 }
-    var bestScore by remember(preferences) { mutableIntStateOf(preferences.getInt("best_score", 0)) }
     var bestCrowns by remember(preferences) { mutableIntStateOf(preferences.getInt("best_crowns", 0)) }
     var dailyBest by remember(preferences, todayKey) {
         mutableIntStateOf(if (preferences.getString("daily_date", null) == todayKey) preferences.getInt("daily_best", 0) else 0)
@@ -104,10 +108,9 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
         page = SnakePage.PLAY
     }
 
-    LaunchedEffect(game.score, game.crowns, dailyMode) {
+    LaunchedEffect(game.score, game.crowns, dailyMode, bestScore) {
         if (game.score > bestScore) {
-            bestScore = game.score
-            preferences.edit().putInt("best_score", bestScore).apply()
+            scoreViewModel.recordScore(game.score)
         }
         if (game.crowns > bestCrowns) {
             bestCrowns = game.crowns
@@ -189,6 +192,7 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                 modifier = Modifier.fillMaxSize().padding(padding),
                 bestScore = bestScore,
                 bestCrowns = bestCrowns,
+                syncStatus = personalBestState.syncStatus,
                 onPlay = { startGame(false) },
                 onSettings = { page = SnakePage.SETTINGS },
                 onDaily = { page = SnakePage.DAILY },
@@ -215,74 +219,180 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
 }
 
 @Composable
+private fun SnakeSyncStatusText(status: SnakeScoreSyncStatus) {
+    val message = when (status) {
+        SnakeScoreSyncStatus.GUEST -> atlasText("Enregistré sur cet appareil", "Saved on this device", "محفوظ على هذا الجهاز")
+        SnakeScoreSyncStatus.CHECKING -> atlasText("Vérification du record…", "Checking personal best…", "جارٍ التحقق من أفضل نتيجة…")
+        SnakeScoreSyncStatus.PENDING -> atlasText("Synchronisation du record…", "Syncing personal best…", "جارٍ مزامنة أفضل نتيجة…")
+        SnakeScoreSyncStatus.SYNCED -> atlasText("Record synchronisé", "Personal best synced", "تمت مزامنة أفضل نتيجة")
+        SnakeScoreSyncStatus.UNAVAILABLE -> atlasText("Synchronisation indisponible · record conservé ici", "Sync unavailable · best kept on this device", "المزامنة غير متاحة · النتيجة محفوظة على هذا الجهاز")
+    }
+    Text(
+        text = message,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+    )
+}
+
+@Composable
 private fun MenuPage(
     modifier: Modifier,
     bestScore: Int,
     bestCrowns: Int,
+    syncStatus: SnakeScoreSyncStatus,
     onPlay: () -> Unit,
     onSettings: () -> Unit,
     onDaily: () -> Unit,
 ) {
-    Column(
-        modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Text(
-            atlasText("Le serpent Atlas", "Atlas Snake", "ثعبان Atlas"),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            atlasText("Ramassez les logos Atlas et le logo Etherealmber !", "Collect Atlas logos and the Etherealmber logo!", "اجمع شعارات Atlas وشعار Etherealmber!" ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Surface(
-            modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp),
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 2.dp,
-        ) {
-            Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                    StatBadge(
-                        icon = { PersonalBestCrown(Modifier.size(24.dp)) },
-                        label = atlasText("Record perso", "Personal best", "أفضل نتيجة شخصية"),
-                        value = bestScore,
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        if (maxWidth >= 760.dp) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f).widthIn(max = 480.dp).fillMaxHeight()
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        atlasText("Le serpent Atlas", "Atlas Snake", "ثعبان Atlas"),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
                     )
-                    StatBadge(
-                        icon = { EtherealmberLogoGlyph(Modifier.size(22.dp), size = 22.dp) },
-                        label = atlasText("Etherealmber", "Etherealmber", "Etherealmber"),
-                        value = bestCrowns,
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        atlasText("Ramassez les logos Atlas et le logo Etherealmber !", "Collect Atlas logos and the Etherealmber logo!", "اجمع شعارات Atlas وشعار Etherealmber!"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
                     )
+                    Spacer(Modifier.height(20.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        tonalElevation = 2.dp,
+                    ) {
+                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            SnakeScoreLine(
+                                icon = { PersonalBestCrown(Modifier.size(24.dp)) },
+                                label = atlasText("Record perso", "Personal best", "أفضل نتيجة شخصية"),
+                                value = bestScore,
+                            )
+                            SnakeScoreLine(
+                                icon = { EtherealmberLogoGlyph(Modifier.size(22.dp), size = 22.dp) },
+                                label = atlasText("Etherealmber", "Etherealmber", "Etherealmber"),
+                                value = bestCrowns,
+                            )
+                        }
+                    }
+                    SnakeSyncStatusText(syncStatus)
+                    Spacer(Modifier.height(18.dp))
+                    Button(onClick = onPlay, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(18.dp)) {
+                        Text(atlasText("Jouer", "Play", "العب"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = onSettings, modifier = Modifier.weight(1f).heightIn(min = 52.dp), shape = RoundedCornerShape(16.dp)) {
+                            Text(atlasText("Paramètres", "Settings", "الإعدادات"))
+                        }
+                        OutlinedButton(onClick = onDaily, modifier = Modifier.weight(1f).heightIn(min = 52.dp), shape = RoundedCornerShape(16.dp)) {
+                            Text(atlasText("Défi du jour", "Daily challenge", "تحدي اليوم"))
+                        }
+                    }
                 }
-                BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    val previewSide = (maxWidth - 12.dp).coerceAtMost(340.dp)
-                    SnakeBoard(
-                        game = SnakeState(
-                            body = listOf(Cell(5, 11), Cell(4, 11), Cell(3, 11), Cell(2, 11)),
-                            direction = Direction.RIGHT,
-                            queued = Direction.RIGHT,
-                            food = Cell(13, 8),
-                            crown = Cell(9, 5),
-                        ),
-                        modifier = Modifier.size(previewSide),
-                        showEyes = true,
-                    )
+                Surface(
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    shape = RoundedCornerShape(30.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 2.dp,
+                ) {
+                    BoxWithConstraints(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
+                        val previewSide = minOf(maxWidth, maxHeight, 620.dp)
+                        SnakeBoard(
+                            game = SnakeState(
+                                body = listOf(Cell(5, 11), Cell(4, 11), Cell(3, 11), Cell(2, 11)),
+                                direction = Direction.RIGHT,
+                                queued = Direction.RIGHT,
+                                food = Cell(13, 8),
+                                crown = Cell(9, 5),
+                            ),
+                            modifier = Modifier.size(previewSide),
+                            showEyes = true,
+                        )
+                    }
                 }
             }
-        }
-        Button(onClick = onPlay, modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).height(54.dp), shape = RoundedCornerShape(18.dp)) {
-            Text(atlasText("Jouer", "Play", "العب"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        }
-        Row(Modifier.fillMaxWidth().widthIn(max = 420.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onSettings, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(16.dp)) {
-                Text(atlasText("Paramètres", "Settings", "الإعدادات"))
-            }
-            OutlinedButton(onClick = onDaily, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(16.dp)) {
-                Text(atlasText("Défi du jour", "Daily challenge", "تحدي اليوم"))
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    atlasText("Le serpent Atlas", "Atlas Snake", "ثعبان Atlas"),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    atlasText("Ramassez les logos Atlas et le logo Etherealmber !", "Collect Atlas logos and the Etherealmber logo!", "اجمع شعارات Atlas وشعار Etherealmber!"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+                Surface(
+                    modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 2.dp,
+                ) {
+                    Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                            StatBadge(
+                                icon = { PersonalBestCrown(Modifier.size(24.dp)) },
+                                label = atlasText("Record perso", "Personal best", "أفضل نتيجة شخصية"),
+                                value = bestScore,
+                            )
+                            StatBadge(
+                                icon = { EtherealmberLogoGlyph(Modifier.size(22.dp), size = 22.dp) },
+                                label = atlasText("Etherealmber", "Etherealmber", "Etherealmber"),
+                                value = bestCrowns,
+                            )
+                        }
+                        SnakeSyncStatusText(syncStatus)
+                        BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            val previewSide = (maxWidth - 12.dp).coerceAtMost(340.dp)
+                            SnakeBoard(
+                                game = SnakeState(
+                                    body = listOf(Cell(5, 11), Cell(4, 11), Cell(3, 11), Cell(2, 11)),
+                                    direction = Direction.RIGHT,
+                                    queued = Direction.RIGHT,
+                                    food = Cell(13, 8),
+                                    crown = Cell(9, 5),
+                                ),
+                                modifier = Modifier.size(previewSide),
+                                showEyes = true,
+                            )
+                        }
+                    }
+                }
+                Button(onClick = onPlay, modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).height(54.dp), shape = RoundedCornerShape(18.dp)) {
+                    Text(atlasText("Jouer", "Play", "العب"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                }
+                Row(Modifier.fillMaxWidth().widthIn(max = 420.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = onSettings, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(16.dp)) {
+                        Text(atlasText("Paramètres", "Settings", "الإعدادات"))
+                    }
+                    OutlinedButton(onClick = onDaily, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(16.dp)) {
+                        Text(atlasText("Défi du jour", "Daily challenge", "تحدي اليوم"))
+                    }
+                }
             }
         }
     }
@@ -305,6 +415,217 @@ private fun GameplayPage(
     onRestart: () -> Unit,
     onSettings: () -> Unit,
 ) {
+    val statusMessage = when {
+        game.over && game.won && dailyMode -> atlasText("Défi relevé !", "Challenge complete!", "اكتمل التحدي!")
+        game.over && game.won -> atlasText("Plateau rempli !", "Board filled!", "امتلأت اللوحة!")
+        game.over -> atlasText("Partie terminée", "Game over", "انتهت اللعبة")
+        pausedByPrompt -> atlasText("Partie en pause", "Game paused", "اللعبة متوقفة مؤقتاً")
+        !running -> atlasText("Balayez, utilisez le clavier ou les actions TalkBack", "Swipe, use the keyboard, or TalkBack actions", "اسحب أو استخدم لوحة المفاتيح أو إجراءات TalkBack")
+        else -> atlasText("Balayez pour tourner · actions TalkBack disponibles", "Swipe to turn · TalkBack actions available", "اسحب للانعطاف · إجراءات TalkBack متاحة")
+    }
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        if (maxWidth >= 760.dp) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(20.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.width(280.dp).fillMaxHeight().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        atlasText("Atlas Snake", "Atlas Snake", "ثعبان Atlas"),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Button(
+                        onClick = onToggleRun,
+                        enabled = !pausedByPrompt,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                    ) {
+                        Text(
+                            when {
+                                game.over -> atlasText("Rejouer", "Play again", "العب مجدداً")
+                                running -> atlasText("Pause", "Pause", "إيقاف مؤقت")
+                                else -> atlasText("Continuer", "Resume", "متابعة")
+                            },
+                            maxLines = 1,
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onRestart,
+                        enabled = !pausedByPrompt,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                    ) {
+                        Text(atlasText("Recommencer", "Restart", "إعادة البدء"), maxLines = 1)
+                    }
+                    OutlinedButton(
+                        onClick = onSettings,
+                        enabled = !running,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                    ) {
+                        Icon(Icons.Outlined.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(atlasText("Paramètres", "Settings", "الإعدادات"), maxLines = 1)
+                    }
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(22.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        tonalElevation = 2.dp,
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            SnakeScoreLine(
+                                icon = { AtlasLogoGlyph(Modifier.size(22.dp)) },
+                                label = atlasText("Score", "Score", "النقاط"),
+                                value = game.score,
+                            )
+                            SnakeScoreLine(
+                                icon = { EtherealmberLogoGlyph(Modifier.size(22.dp), size = 22.dp) },
+                                label = atlasText("Etherealmber", "Etherealmber", "Etherealmber"),
+                                value = game.crowns,
+                            )
+                            HorizontalDivider()
+                            SnakeScoreLine(
+                                icon = { PersonalBestCrown(Modifier.size(22.dp)) },
+                                label = atlasText("Record perso", "Personal best", "أفضل نتيجة شخصية"),
+                                value = bestScore,
+                            )
+                        }
+                    }
+                    if (dailyMode) {
+                        Text(
+                            atlasText("Défi : $dailyTarget logos", "Daily goal: $dailyTarget Atlas logos", "الهدف اليومي: $dailyTarget شعاراً"),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    Text(
+                        statusMessage,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                SnakeBoardViewport(
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    maxBoardSide = 720.dp,
+                    game = game,
+                    crownToastVisible = crownToastVisible,
+                    running = running,
+                    boardFocusRequester = boardFocusRequester,
+                    onDirection = onDirection,
+                    onToggleRun = onToggleRun,
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(
+                        onClick = onToggleRun,
+                        enabled = !pausedByPrompt,
+                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            when {
+                                game.over -> atlasText("Rejouer", "Play again", "العب مجدداً")
+                                running -> atlasText("Pause", "Pause", "إيقاف مؤقت")
+                                else -> atlasText("Continuer", "Resume", "متابعة")
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onRestart,
+                        enabled = !pausedByPrompt,
+                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+                    ) {
+                        Text(atlasText("Recommencer", "Restart", "إعادة البدء"), style = MaterialTheme.typography.labelMedium, maxLines = 2)
+                    }
+                    TextButton(
+                        onClick = onSettings,
+                        enabled = !running,
+                        modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+                    ) {
+                        Icon(Icons.Outlined.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text(atlasText("Paramètres", "Settings", "الإعدادات"), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth().height(44.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    StatBadge(icon = { AtlasLogoGlyph(Modifier.size(22.dp)) }, label = atlasText("Atlas", "Atlas", "Atlas"), value = game.score)
+                    StatBadge(
+                        icon = { EtherealmberLogoGlyph(Modifier.size(22.dp), size = 22.dp) },
+                        label = atlasText("Etherealmber", "Etherealmber", "Etherealmber"),
+                        value = game.crowns,
+                    )
+                    StatBadge(
+                        icon = { PersonalBestCrown(Modifier.size(22.dp)) },
+                        label = atlasText("Record perso", "Personal best", "أفضل نتيجة شخصية"),
+                        value = bestScore,
+                    )
+                }
+                if (dailyMode) {
+                    Text(
+                        atlasText("Défi : $dailyTarget logos", "Daily goal: $dailyTarget Atlas logos", "الهدف اليومي: $dailyTarget شعاراً"),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                SnakeBoardViewport(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    maxBoardSide = 500.dp,
+                    game = game,
+                    crownToastVisible = crownToastVisible,
+                    running = running,
+                    boardFocusRequester = boardFocusRequester,
+                    onDirection = onDirection,
+                    onToggleRun = onToggleRun,
+                )
+                Text(
+                    statusMessage,
+                    Modifier.padding(top = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SnakeBoardViewport(
+    modifier: Modifier,
+    maxBoardSide: Dp,
+    game: SnakeState,
+    crownToastVisible: Boolean,
+    running: Boolean,
+    boardFocusRequester: FocusRequester,
+    onDirection: (Direction) -> Unit,
+    onToggleRun: () -> Unit,
+) {
     val boardDescription = atlasText(
         "Plateau du jeu Snake. Utilisez les actions TalkBack pour diriger le serpent.",
         "Snake game board. Use TalkBack actions to steer the snake.",
@@ -314,127 +635,69 @@ private fun GameplayPage(
     val moveDownLabel = atlasText("Descendre", "Move down", "تحرك للأسفل")
     val moveLeftLabel = atlasText("Aller à gauche", "Move left", "تحرك إلى اليسار")
     val moveRightLabel = atlasText("Aller à droite", "Move right", "تحرك إلى اليمين")
-    Column(modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Button(
-                onClick = onToggleRun,
-                enabled = !pausedByPrompt,
-                modifier = Modifier.weight(1f).heightIn(min = 40.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-            ) {
-                Text(
-                    when {
-                        game.over -> atlasText("Rejouer", "Play again", "العب مجدداً")
-                        running -> atlasText("Pause", "Pause", "إيقاف مؤقت")
-                        else -> atlasText("Continuer", "Resume", "متابعة")
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1,
-                )
-            }
-            OutlinedButton(
-                onClick = onRestart,
-                enabled = !pausedByPrompt,
-                modifier = Modifier.weight(1f).heightIn(min = 40.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-            ) {
-                Text(atlasText("Recommencer", "Restart", "إعادة البدء"), style = MaterialTheme.typography.labelMedium, maxLines = 2)
-            }
-            TextButton(
-                onClick = onSettings,
-                enabled = !running,
-                modifier = Modifier.weight(1f).heightIn(min = 40.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-            ) {
-                Icon(Icons.Outlined.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(3.dp))
-                Text(atlasText("Paramètres", "Settings", "الإعدادات"), style = MaterialTheme.typography.labelMedium, maxLines = 1)
-            }
-        }
-        Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
-            StatBadge(icon = { AtlasLogoGlyph(Modifier.size(22.dp)) }, label = atlasText("Atlas", "Atlas", "Atlas"), value = game.score)
-            StatBadge(
-                icon = { EtherealmberLogoGlyph(Modifier.size(22.dp), size = 22.dp) },
-                label = atlasText("Etherealmber", "Etherealmber", "Etherealmber"),
-                value = game.crowns,
-            )
-            StatBadge(
-                icon = { PersonalBestCrown(Modifier.size(22.dp)) },
-                label = atlasText("Record perso", "Personal best", "أفضل نتيجة شخصية"),
-                value = bestScore,
-            )
-        }
-        if (dailyMode) {
-            Text(
-                atlasText("Défi : $dailyTarget logos", "Daily goal: $dailyTarget Atlas logos", "الهدف اليومي: $dailyTarget شعاراً"),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val boardSide = minOf(maxWidth, maxHeight, 500.dp)
-            SnakeBoard(
-                game = game,
-                modifier = Modifier.size(boardSide)
-                    .focusRequester(boardFocusRequester)
-                    .onPreviewKeyEvent { event ->
-                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        val direction = when (event.key) {
-                            Key.DirectionUp, Key.W -> Direction.UP
-                            Key.DirectionDown, Key.S -> Direction.DOWN
-                            Key.DirectionLeft, Key.A -> Direction.LEFT
-                            Key.DirectionRight, Key.D -> Direction.RIGHT
-                            else -> null
-                        }
-                        if (direction != null) {
+    BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
+        val boardSide = minOf(maxWidth, maxHeight, maxBoardSide)
+        SnakeBoard(
+            game = game,
+            modifier = Modifier.size(boardSide)
+                .focusRequester(boardFocusRequester)
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val direction = when (event.key) {
+                        Key.DirectionUp, Key.W -> Direction.UP
+                        Key.DirectionDown, Key.S -> Direction.DOWN
+                        Key.DirectionLeft, Key.A -> Direction.LEFT
+                        Key.DirectionRight, Key.D -> Direction.RIGHT
+                        else -> null
+                    }
+                    if (direction != null) {
+                        onDirection(direction)
+                        true
+                    } else if (event.key == Key.Enter || event.key == Key.Spacebar) {
+                        onToggleRun()
+                        true
+                    } else false
+                }
+                .focusable()
+                .pointerInput(game.over, running) {
+                    var drag = Offset.Zero
+                    detectDragGestures(onDragStart = { drag = Offset.Zero }, onDragEnd = {
+                        if (drag.getDistance() > 18f && !game.over) {
+                            val direction = if (abs(drag.x) > abs(drag.y)) {
+                                if (drag.x > 0) Direction.RIGHT else Direction.LEFT
+                            } else if (drag.y > 0) Direction.DOWN else Direction.UP
                             onDirection(direction)
-                            true
-                        } else if (event.key == Key.Enter || event.key == Key.Spacebar) {
-                            onToggleRun()
-                            true
-                        } else false
-                    }
-                    .focusable()
-                    .pointerInput(game.over, running) {
-                        var drag = Offset.Zero
-                        detectDragGestures(onDragStart = { drag = Offset.Zero }, onDragEnd = {
-                            if (drag.getDistance() > 18f && !game.over) {
-                                val direction = if (abs(drag.x) > abs(drag.y)) {
-                                    if (drag.x > 0) Direction.RIGHT else Direction.LEFT
-                                } else if (drag.y > 0) Direction.DOWN else Direction.UP
-                                onDirection(direction)
-                            }
-                        }) { change, amount -> change.consume(); drag += amount }
-                    }
-                    .semantics {
-                        contentDescription = boardDescription
-                        customActions = listOf(
-                            CustomAccessibilityAction(moveUpLabel) { onDirection(Direction.UP); true },
-                            CustomAccessibilityAction(moveDownLabel) { onDirection(Direction.DOWN); true },
-                            CustomAccessibilityAction(moveLeftLabel) { onDirection(Direction.LEFT); true },
-                            CustomAccessibilityAction(moveRightLabel) { onDirection(Direction.RIGHT); true },
-                        )
-                    },
-                showEyes = true,
-            )
-            CrownCollectedToast(
-                visible = crownToastVisible,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
-            )
-        }
-        val message = when {
-            game.over && game.won && dailyMode -> atlasText("Défi relevé !", "Challenge complete!", "اكتمل التحدي!")
-            game.over && game.won -> atlasText("Plateau rempli !", "Board filled!", "امتلأت اللوحة!")
-            game.over -> atlasText("Partie terminée", "Game over", "انتهت اللعبة")
-            pausedByPrompt -> atlasText("Partie en pause", "Game paused", "اللعبة متوقفة مؤقتاً")
-            !running -> atlasText("Balayez, utilisez le clavier ou les actions TalkBack", "Swipe, use the keyboard, or TalkBack actions", "اسحب أو استخدم لوحة المفاتيح أو إجراءات TalkBack")
-            else -> atlasText("Balayez pour tourner · actions TalkBack disponibles", "Swipe to turn · TalkBack actions available", "اسحب للانعطاف · إجراءات TalkBack متاحة")
-        }
-        Text(message, Modifier.padding(top = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }) { change, amount -> change.consume(); drag += amount }
+                }
+                .semantics {
+                    contentDescription = boardDescription
+                    customActions = listOf(
+                        CustomAccessibilityAction(moveUpLabel) { onDirection(Direction.UP); true },
+                        CustomAccessibilityAction(moveDownLabel) { onDirection(Direction.DOWN); true },
+                        CustomAccessibilityAction(moveLeftLabel) { onDirection(Direction.LEFT); true },
+                        CustomAccessibilityAction(moveRightLabel) { onDirection(Direction.RIGHT); true },
+                    )
+                },
+            showEyes = true,
+        )
+        CrownCollectedToast(
+            visible = crownToastVisible,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
+        )
+    }
+}
+
+@Composable
+private fun SnakeScoreLine(icon: @Composable () -> Unit, label: String, value: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        icon()
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(value.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }
 }
 

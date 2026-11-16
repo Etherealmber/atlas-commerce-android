@@ -112,6 +112,13 @@ data class UserReportRequest(
 data class UserReportReceiptDto(
     val reference: String? = null,
     @Json(name = "issue_url") val issueUrl: String? = null,
+    @Json(name = "already_reported") val alreadyReported: Boolean? = null,
+    @Json(name = "issue_status") val issueStatus: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class SnakePersonalBestDto(
+    val personalBest: Int = 0,
 )
 
 @JsonClass(generateAdapter = true)
@@ -567,6 +574,8 @@ data class ProductDto(
     @Json(name = "image_url") val imageUrl: String? = null,
     @Json(name = "variant_label") val variantLabel: String? = null,
     @Json(name = "display_name") val displayName: String? = null,
+    @Json(name = "created_by") val createdBy: String? = null,
+    @Json(name = "approved_by") val approvedBy: String? = null,
 ) {
     val lowStockThreshold: Double get() = lowStockThresholdRaw ?: 0.0
 
@@ -603,6 +612,7 @@ data class ProductMovementDto(
     val reason: String? = null,
     val reference: String? = null,
     @Json(name = "created_by") val createdBy: String? = null,
+    @Json(name = "approved_by") val approvedBy: String? = null,
     @Json(name = "created_at") val createdAt: String? = null,
 )
 

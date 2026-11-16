@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -114,6 +116,9 @@ fun ProblemReportDialog(
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val dialogBodyMaxHeight = (LocalConfiguration.current.screenHeightDp.dp - 190.dp)
+        .coerceAtLeast(180.dp)
+        .coerceAtMost(520.dp)
     val language = LocalAtlasLanguage.current
     val scope = rememberCoroutineScope()
     val session by appViewModel.session.collectAsStateWithLifecycle()
@@ -203,6 +208,7 @@ fun ProblemReportDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(max = dialogBodyMaxHeight)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -479,9 +485,27 @@ fun ProblemReportDialog(
                                             parsed.host.equals("github.com", ignoreCase = true)
                                     }.getOrDefault(false)
                                 }
-                                val created = issueUrl != null
-                                // Open the actual created issue. If the Worker only queued the report,
-                                // open a prefilled GitHub issue form without placing diagnostic logs in the URL.
+                                val alreadyReported = result.data.alreadyReported == true
+                                val issueClosed = result.data.issueStatus.equals("closed", ignoreCase = true) ||
+                                    result.data.issueStatus.equals("resolved", ignoreCase = true)
+                                val created = issueUrl != null && !alreadyReported && !issueClosed
+                                val duplicateClosedMessage = atlasText(
+                                    "Ce problème a déjà été signalé et l’issue est fermée.",
+                                    "This issue was already reported and is closed.",
+                                    "تم الإبلاغ عن هذه المشكلة مسبقاً وإغلاقها.",
+                                )
+                                val closedIssueMessage = atlasText(
+                                    "L’issue existante est fermée; aucun nouveau formulaire n’a été ouvert.",
+                                    "The existing issue is closed; no new issue form was opened.",
+                                    "المشكلة الموجودة مغلقة؛ لم يتم فتح نموذج جديد.",
+                                )
+                                val duplicateMessage = atlasText(
+                                    "Ce problème a déjà été signalé.",
+                                    "This issue has already been reported.",
+                                    "تم الإبلاغ عن هذه المشكلة مسبقاً.",
+                                )
+                                // Never open a new issue form for a duplicate. Open the existing
+                                // issue, when the backend returns its verified GitHub URL.
                                 val fallbackIssueUrl = Uri.parse(AppDetails.ISSUES_URL).buildUpon()
                                     .appendQueryParameter("title", "[Atlas Android] ${title.ifBlank { category }.take(120)}")
                                     .appendQueryParameter(
@@ -495,9 +519,17 @@ fun ProblemReportDialog(
                                     )
                                     .build()
                                     .toString()
-                                val opened = openExternal(context, issueUrl ?: fallbackIssueUrl)
+                                val destination = when {
+                                    alreadyReported || issueClosed -> issueUrl
+                                    else -> issueUrl ?: fallbackIssueUrl
+                                }
+                                val opened = destination?.let { openExternal(context, it) } ?: false
                                 onToast(
                                     when {
+                                        alreadyReported && issueClosed -> duplicateClosedMessage
+                                        issueClosed -> closedIssueMessage
+                                        alreadyReported && opened -> "$duplicateMessage ${atlasText("Issue ouverte.", "Existing issue opened.", "تم فتح المشكلة الموجودة.")}"
+                                        alreadyReported -> duplicateMessage
                                         created && opened -> "Ticket GitHub créé et ouvert${reference?.let { " · $it" } ?: ""}."
                                         created -> "Ticket créé${reference?.let { " · $it" } ?: ""}, mais aucun navigateur n'est disponible."
                                         opened -> "Rapport reçu par Atlas${reference?.let { " · $it" } ?: ""}. Le formulaire GitHub prérempli est ouvert; envoyez-le pour créer l'issue."

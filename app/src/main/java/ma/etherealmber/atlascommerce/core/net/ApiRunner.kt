@@ -86,6 +86,17 @@ class ApiRunner @Inject constructor(private val moshi: Moshi) {
         }
     }
 
+    /** Runs an API whose success body is an unwrapped resource rather than Atlas's usual envelope. */
+    suspend fun <T> direct(block: suspend () -> T): ApiResult<T> {
+        return try {
+            ApiResult.Success(block())
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            failure(t)
+        }
+    }
+
     private fun failure(t: Throwable): ApiResult.Failure = when (t) {
         is HttpException -> httpFailure(t)
         is JsonEncodingException -> notAtlas()

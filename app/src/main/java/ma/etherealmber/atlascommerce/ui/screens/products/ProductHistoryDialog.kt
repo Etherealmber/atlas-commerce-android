@@ -242,6 +242,19 @@ internal fun ProductHistoryScreen(
                         }
                     }
                 }
+                val creator = product.createdBy?.takeIf { it.isNotBlank() }
+                    ?: atlasText("non renseigné", "not recorded", "غير مسجل")
+                val approver = product.approvedBy?.takeIf { it.isNotBlank() }
+                    ?: atlasText("non transmis par le serveur", "not supplied by the server", "غير متوفر من الخادم")
+                Text(
+                    atlasText(
+                        "Créé par $creator · Approuvé par $approver",
+                        "Created by $creator · Approved by $approver",
+                        "أنشأه $creator · اعتمده $approver",
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 if (!state.imageError.isNullOrBlank()) {
                     Spacer(Modifier.height(8.dp))
                     Text(state.imageError.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
@@ -375,12 +388,25 @@ private fun ProductMovementRow(movement: ProductMovementDto) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        val details = listOfNotNull(movement.reason, movement.reference, movement.createdBy)
+        val details = listOfNotNull(movement.reason, movement.reference)
             .filter { it.isNotBlank() }
             .joinToString(" · ")
         if (details.isNotBlank()) {
             Text(details, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        val actor = movement.createdBy?.takeIf { it.isNotBlank() }
+            ?: atlasText("non renseigné", "not recorded", "غير مسجل")
+        val approver = movement.approvedBy?.takeIf { it.isNotBlank() }
+            ?: atlasText("non transmis par le serveur", "not supplied by the server", "غير متوفر من الخادم")
+        Text(
+            atlasText(
+                "Créé par $actor · Approuvé par $approver",
+                "Created by $actor · Approved by $approver",
+                "أنشأه $actor · اعتمده $approver",
+            ),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

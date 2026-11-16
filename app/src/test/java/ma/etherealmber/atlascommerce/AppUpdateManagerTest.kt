@@ -28,9 +28,12 @@ import ma.etherealmber.atlascommerce.core.update.pingMirrorsSequentially
 import ma.etherealmber.atlascommerce.core.update.UpdateFormatter
 import ma.etherealmber.atlascommerce.core.update.formatReleaseNotesForDisplay
 import ma.etherealmber.atlascommerce.core.update.UpdateInfo
+import ma.etherealmber.atlascommerce.core.update.UpdateCheckRateLimiter
+import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateNotifier
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.core.update.minimumVersionRequiresUpdate
+import ma.etherealmber.atlascommerce.core.update.updateCheckCooldownRemainingMs
 import ma.etherealmber.atlascommerce.core.update.shouldClearOptionalUpdateErrorOnResume
 import ma.etherealmber.atlascommerce.push.DeviceTokenAckDto
 import ma.etherealmber.atlascommerce.push.DeviceTokenRequest
@@ -75,6 +78,7 @@ class AppUpdateManagerTest {
 
     @Before
     fun setUp() {
+        UpdateCheckRateLimiter.resetForTests()
         tempDir = Files.createTempDirectory("atlas-update-test").toFile()
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         moshi = Moshi.Builder()
@@ -157,6 +161,45 @@ class AppUpdateManagerTest {
         assertEquals(true, published[1].cdn1Online)
         assertEquals(false, published.last().githubOnline)
         assertEquals(55L, published.last().githubMs)
+    }
+
+    @Test
+    fun autoDownloadChoosesTheFastestAvailableMirrorAndFallsBackSafely() {
+        val info = UpdateInfo(
+            versionCode = 12,
+            versionName = "1.2.0",
+            apkUrl = "https://api.example/updates/latest.apk",
+            mandatory = false,
+            cdn1Url = "https://atlas.example/latest.apk",
+            githubUrl = "https://github.example/latest.apk",
+        )
+
+        assertEquals(
+            listOf("https://github.example/latest.apk", "https://atlas.example/latest.apk", "https://api.example/updates/latest.apk"),
+            info.orderedDownloadUrls(
+                UpdateDownloadSource.AUTO,
+                MirrorPingResult(cdn1Online = true, cdn1Ms = 90L, githubOnline = true, githubMs = 24L),
+            ),
+        )
+        assertEquals(
+            listOf("https://atlas.example/latest.apk", "https://api.example/updates/latest.apk", "https://github.example/latest.apk"),
+            info.orderedDownloadUrls(
+                UpdateDownloadSource.AUTO,
+                MirrorPingResult(cdn1Online = true, cdn1Ms = 90L, githubOnline = false, githubMs = 100L),
+            ),
+        )
+        assertEquals(
+            listOf("https://api.example/updates/latest.apk", "https://atlas.example/latest.apk", "https://github.example/latest.apk"),
+            info.orderedDownloadUrls(UpdateDownloadSource.AUTO),
+        )
+    }
+
+    @Test
+    fun updateChecksRespectOneMinuteCooldownIncludingManualRequests() {
+        assertEquals(60_000L, updateCheckCooldownRemainingMs(0L, 10_000L, 60_000L))
+        assertEquals(1L, updateCheckCooldownRemainingMs(10_000L, 69_999L, 60_000L))
+        assertEquals(0L, updateCheckCooldownRemainingMs(10_000L, 70_000L, 60_000L))
+        assertEquals(0L, updateCheckCooldownRemainingMs(70_000L, 10_000L, 60_000L))
     }
 
     @Test

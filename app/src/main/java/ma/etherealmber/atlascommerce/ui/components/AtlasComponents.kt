@@ -1959,13 +1959,21 @@ fun AtlasBootSplashScreen(
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val logoScale = remember { Animatable(if (motionEnabled) 0.72f else 1f) }
     val barProgress = remember { Animatable(if (motionEnabled) 0.08f else 1f) }
+    var revealWordmark by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
+    var revealTagline by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
 
     LaunchedEffect(motionEnabled) {
         if (motionEnabled) {
+            revealWordmark = true
             logoScale.animateTo(
                 targetValue = 1f,
                 animationSpec = spring(dampingRatio = 0.68f, stiffness = 380f),
             )
+            delay(140)
+            revealTagline = true
+        } else {
+            revealWordmark = true
+            revealTagline = true
         }
     }
     LaunchedEffect(motionEnabled, holdUntilReady) {
@@ -1995,23 +2003,38 @@ fun AtlasBootSplashScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            AtlasBrandWordmark(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        scaleX = logoScale.value
-                        scaleY = logoScale.value
-                    },
-                height = 78.dp,
-            )
+            AnimatedVisibility(
+                visible = revealWordmark,
+                enter = fadeIn(tween(320, easing = FastOutSlowInEasing)) +
+                    scaleIn(spring(dampingRatio = 0.72f, stiffness = 340f), initialScale = 0.9f) +
+                    slideInVertically(tween(320, easing = FastOutSlowInEasing)) { it / 7 },
+                label = "splash-wordmark-reveal",
+            ) {
+                AtlasBrandWordmark(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            scaleX = logoScale.value
+                            scaleY = logoScale.value
+                        },
+                    height = 78.dp,
+                )
+            }
 
             Spacer(Modifier.height(24.dp))
-            Text(
-                text = atlasText("Stock · Caisse · Facturation", "Inventory · Register · Invoicing", "المخزون · نقطة البيع · الفوترة"),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
+            AnimatedVisibility(
+                visible = revealTagline,
+                enter = fadeIn(tween(280, delayMillis = 80, easing = FastOutSlowInEasing)) +
+                    slideInVertically(tween(300, delayMillis = 80, easing = FastOutSlowInEasing)) { it / 3 },
+                label = "splash-tagline-reveal",
+            ) {
+                Text(
+                    text = atlasText("Stock · Caisse · Facturation", "Inventory · Register · Invoicing", "المخزون · نقطة البيع · الفوترة"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
 
             Spacer(Modifier.height(28.dp))
 
