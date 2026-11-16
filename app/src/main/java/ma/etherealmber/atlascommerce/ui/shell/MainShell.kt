@@ -454,7 +454,8 @@ fun MainShell(
         )
     }
 
-    val showShellTopBar = isForeground && !productHistoryActive && tab != MainTab.NOTIFICATIONS
+    val showShellTopBar = isForeground &&
+        (!productHistoryActive && tab != MainTab.NOTIFICATIONS || (useRail && showDataCacheManagerDialog))
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val floatingBarWidth by animateDpAsState(
         targetValue = maxWidth,
