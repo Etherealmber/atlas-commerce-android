@@ -294,15 +294,19 @@ class AtlasHeaderInterceptor(
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
-        val request = chain.request().newBuilder()
+        val incomingRequest = chain.request()
+        val explicitAuthorization = incomingRequest.header("Authorization")
+        val request = incomingRequest.newBuilder()
             .header("Accept", "application/json")
             .header("X-Atlas-Client", "android")
             .addAtlasAppVersionHeaders()
             .header("X-Device-Fingerprint", deviceIdentity.fingerprintForRequest())
             .header("User-Agent", deviceIdentity.userAgent)
             .apply {
-                tokenHolder.token?.takeIf { it.isNotBlank() }?.let {
-                    header("Authorization", "Bearer $it")
+                if (explicitAuthorization.isNullOrBlank()) {
+                    tokenHolder.token?.takeIf { it.isNotBlank() }?.let {
+                        header("Authorization", "Bearer $it")
+                    }
                 }
             }
             .build()

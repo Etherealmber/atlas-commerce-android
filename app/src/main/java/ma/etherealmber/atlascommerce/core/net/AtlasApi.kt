@@ -110,11 +110,14 @@ interface AtlasApi {
 
     /** Private per-account Snake record; the Worker returns this resource unwrapped. */
     @GET("api/mobile/snake-score")
-    suspend fun getSnakePersonalBest(): SnakePersonalBestDto
+    suspend fun getSnakePersonalBest(@Header("Authorization") authorization: String): SnakePersonalBestDto
 
     /** Monotonic max write; request and response use the same unwrapped one-field shape. */
     @PUT("api/mobile/snake-score")
-    suspend fun putSnakePersonalBest(@Body body: SnakePersonalBestDto): SnakePersonalBestDto
+    suspend fun putSnakePersonalBest(
+        @Header("Authorization") authorization: String,
+        @Body body: SnakePersonalBestDto,
+    ): SnakePersonalBestDto
 
     /** Authenticated user report; GitHub delivery is handled by the Worker (never by the app). */
     @POST("api/reports")

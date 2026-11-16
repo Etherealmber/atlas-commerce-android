@@ -36,54 +36,40 @@ class ApiProvider @Inject constructor(
 
     fun baseUrl(): String = ServerUrl.withSlash(serverConfig.baseUrl())
 
-    fun api(): AtlasApi {
-        val base = baseUrl()
-        synchronized(lock) {
-            val cached = builtApi
-            if (cached != null && builtFor == base) return cached
-            val api = Retrofit.Builder()
-                .baseUrl(base)
-                .client(client)
-                .addConverterFactory(MoshiConverterFactory.create(moshi))
-                .build()
-                .create(AtlasApi::class.java)
-            builtFor = base
-            builtApi = api
-            return api
+    fun api(): AtlasApi = synchronized(lock) {
+        apiForBaseUrl(baseUrl())
+    }
+
+    /** Return an API bound to the currently selected server only when it matches the session origin. */
+    fun apiForSession(serverUrl: String): AtlasApi? {
+        val expectedBase = ServerUrl.normalize(serverUrl)
+            ?.let { ServerUrl.withSlash(it) }
+            ?: return null
+        return synchronized(lock) {
+            val selectedBase = baseUrl()
+            if (selectedBase != expectedBase) return@synchronized null
+            apiForBaseUrl(selectedBase)
         }
     }
 
-    /**
-     * Creates an uncached API client pinned to one verified session origin and token.
-     * Mutating calls made through this API cannot inherit a later account's global token.
-     */
-    fun apiForSession(serverUrl: String, bearerToken: String): AtlasApi {
-        val normalized = ServerUrl.normalize(serverUrl)
-            ?: throw IllegalArgumentException("Invalid session server URL")
-        require(bearerToken.isNotBlank()) { "Missing session token" }
-        val pinnedHeaders = PinnedSessionHeadersInterceptor(deviceIdentity, bearerToken)
-        val sessionClient = client.newBuilder().apply {
-            val appInterceptors = interceptors()
-            val authHeaderIndex = appInterceptors.indexOfFirst { it is AtlasHeaderInterceptor }
-            if (authHeaderIndex >= 0) {
-                appInterceptors[authHeaderIndex] = pinnedHeaders
-            } else {
-                appInterceptors.add(0, pinnedHeaders)
-            }
-        }.build()
-        return Retrofit.Builder()
-            .baseUrl(ServerUrl.withSlash(normalized))
-            .client(sessionClient)
+    private fun apiForBaseUrl(base: String): AtlasApi {
+        val cached = builtApi
+        if (cached != null && builtFor == base) return cached
+        val api = Retrofit.Builder()
+            .baseUrl(base)
+            .client(client)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(AtlasApi::class.java)
+        builtFor = base
+        builtApi = api
+        return api
     }
 
     /**
-     * Creates a one-shot API client for a pinned session credential. Startup uses it to
-     * verify a saved account; session-bound score requests use it to avoid following a
-     * later global token/server switch. It sends only the supplied token to the selected
-     * normalized server origin.
+     * Creates a one-shot API client for verifying a saved session during process startup.
+     * It omits the global token holder and session guard, and sends only the supplied token
+     * to the normalized server origin selected by the user.
      */
     fun startupResumeApi(serverUrl: String, bearerToken: String): AtlasApi {
         val normalized = ServerUrl.normalize(serverUrl)
