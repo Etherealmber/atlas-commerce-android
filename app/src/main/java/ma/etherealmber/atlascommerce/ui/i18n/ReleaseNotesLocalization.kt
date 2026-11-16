@@ -19,7 +19,7 @@ fun localizeReleaseNotes(notes: String, language: AppLanguage): String = notes.l
         "Fix remaining Android unit test failures" -> "Corriger les derniers échecs des tests unitaires Android" to "إصلاح إخفاقات اختبارات Android المتبقية"
         "Fix Android compile errors found by CI" -> "Corriger les erreurs de compilation Android détectées par la CI" to "إصلاح أخطاء ترجمة Android المكتشفة في CI"
         "Keep release verification within Actions expression limits" -> "Respecter les limites des expressions Actions lors de la vérification" to "مراعاة حدود تعبيرات Actions أثناء التحقق من الإصدار"
-        "Fail release when CDN publication is incomplete" -> "Faire échouer la publication si le CDN est incomplet" to "إيقاف الإصدار إذا لم يكتمل النشر على CDN"
+        "Fail release when CDN publication is incomplete" -> "Faire échouer la publication si le miroir Atlas API est incomplet" to "إيقاف الإصدار إذا لم يكتمل النشر على مرآة Atlas API"
         "Resolve Android CI compilation errors" -> "Corriger les erreurs de compilation Android dans la CI" to "إصلاح أخطاء ترجمة Android في CI"
         "Localize notices outside composable callbacks" -> "Traduire les messages hors des callbacks Compose" to "ترجمة التنبيهات خارج استدعاءات Compose"
         "Complete audited French English Arabic UI localization" -> "Terminer la traduction vérifiée de l’interface en français, anglais et arabe" to "إكمال ترجمة الواجهة المدققة إلى الفرنسية والإنجليزية والعربية"
@@ -44,7 +44,7 @@ fun localizeReleaseNotes(notes: String, language: AppLanguage): String = notes.l
     val version = Regex("^Set version ([0-9.]+) \\((\\d+)\\) \\[skip ci]$").matchEntire(text)
     val metadata = Regex("^Version : (v[0-9.]+) \\(versionCode = (\\d+)\\)$").matchEntire(text)
     val offline = when (text) {
-        "Téléchargement multi-connexions adapté au réseau : CDN 6 sur mobile, 16 en Wi-Fi ; GitHub reste limité à 4." -> "Network-adaptive multi-connection downloads: CDN uses 6 on mobile and 16 on Wi-Fi; GitHub stays capped at 4." to "تنزيل متعدد الاتصالات يتكيف مع الشبكة: يستخدم CDN ستة على الهاتف و16 على Wi-Fi؛ يظل GitHub محدوداً بأربعة."
+        "Téléchargement multi-connexions adapté au réseau : Atlas API 6 sur mobile, 16 en Wi-Fi ; GitHub reste limité à 4." -> "Network-adaptive multi-connection downloads: Atlas API uses 6 on mobile and 16 on Wi-Fi; GitHub stays capped at 4." to "تنزيل متعدد الاتصالات يتكيف مع الشبكة: يستخدم Atlas API ستة على الهاتف و16 على Wi-Fi؛ يظل GitHub محدوداً بأربعة."
         "Suivi direct de la dernière version publiée sur GitHub Releases & Atlas API." -> "Direct tracking of the latest release on GitHub Releases and Atlas API." to "متابعة أحدث إصدار على GitHub وAtlas API مباشرة."
         "Journal complet des versions intégré dans Paramètres et notes JSON allégées." -> "Full release history in Settings and compact JSON notes." to "سجل الإصدارات الكامل في الإعدادات وملاحظات JSON مختصرة."
         "Licence MIT ou Apache 2.0 © 2026 Etherealmber & navigation persistante entre sous-écrans." -> "MIT or Apache 2.0 license © 2026 Etherealmber and persistent navigation between screens." to "ترخيص MIT أو Apache 2.0 © 2026 Etherealmber وتنقل مستمر بين الشاشات."

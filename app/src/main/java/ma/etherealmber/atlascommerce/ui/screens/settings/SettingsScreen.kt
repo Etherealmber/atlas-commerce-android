@@ -97,10 +97,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -118,6 +118,12 @@ import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.core.update.UpdateState
+import ma.etherealmber.atlascommerce.core.sync.MobilePreferenceSyncState
+import ma.etherealmber.atlascommerce.core.sync.MOBILE_PREFERENCE_BACKUP_MAX_BYTES
+import ma.etherealmber.atlascommerce.ui.root.MobilePreferenceImportPreview
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
@@ -140,6 +146,7 @@ import ma.etherealmber.atlascommerce.ui.screens.legal.EtherealmberAuthorCard
 import ma.etherealmber.atlascommerce.ui.screens.legal.ProblemReportDialog
 import ma.etherealmber.atlascommerce.ui.shell.MainTab
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
+import ma.etherealmber.atlascommerce.ui.theme.atlasThemePreviewPalette
 import ma.etherealmber.atlascommerce.ui.util.findActivity
 import ma.etherealmber.atlascommerce.ui.util.openExternal
 
@@ -1226,11 +1233,12 @@ private fun ThemePreviewCard(
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val previewBackground = if (dark) Color(0xFF191A1E) else Color(0xFFF4F1EA)
-    val previewSurface = if (dark) Color(0xFF282A30) else Color.White
-    val previewInk = if (dark) Color(0xFFF4F4F5) else Color(0xFF202124)
-    val previewMuted = if (dark) Color(0xFFA9ABB2) else Color(0xFF77736D)
-    val selectedBorder = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    val preview = atlasThemePreviewPalette(dark)
+    val previewBackground = preview.background
+    val previewSurface = preview.surface
+    val previewInk = preview.ink
+    val previewMuted = preview.muted
+    val selectedBorder = if (selected) preview.primary else preview.outline
     val borderColor by animateColorAsState(
         targetValue = selectedBorder,
         animationSpec = if (animationsEnabled) tween(260) else snap(),
@@ -1257,7 +1265,7 @@ private fun ThemePreviewCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = CircleShape,
-                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else previewSurface,
+                    color = if (selected) preview.primaryContainer else previewSurface,
                     modifier = Modifier.size(26.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -1267,7 +1275,7 @@ private fun ThemePreviewCard(
                                 ThemeMode.LIGHT -> "☼"
                                 ThemeMode.DARK -> "☾"
                             },
-                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else previewInk,
+                            color = if (selected) preview.onPrimaryContainer else previewInk,
                             style = MaterialTheme.typography.labelMedium,
                         )
                     }
@@ -1293,7 +1301,7 @@ private fun ThemePreviewCard(
             ) {
                 Column(Modifier.padding(7.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(8.dp)) {}
+                        Surface(shape = CircleShape, color = preview.primary, modifier = Modifier.size(8.dp)) {}
                         Spacer(Modifier.width(5.dp))
                         Surface(shape = RoundedCornerShape(99.dp), color = previewMuted.copy(alpha = 0.48f), modifier = Modifier.fillMaxWidth(0.58f).height(4.dp)) {}
                     }
@@ -1420,6 +1428,44 @@ fun SettingsScreen(
     val context = LocalContext.current
     val density = Atlas.density
     val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+    val mobileSyncState by appViewModel.mobilePreferenceSyncState.collectAsStateWithLifecycle()
+    val mobileLastSuccessfulSync by appViewModel.mobilePreferenceLastSuccessfulSyncAt.collectAsStateWithLifecycle()
+    val mobileSyncFrequency by appViewModel.mobilePreferenceFrequency.collectAsStateWithLifecycle()
+    var pendingImportPreview by remember { mutableStateOf<MobilePreferenceImportPreview?>(null) }
+
+    val exportPreferencesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) coroutineScope.launch {
+            runCatching {
+                val json = appViewModel.exportMobilePreferenceBackup()
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(json) }
+                        ?: error("Could not open the destination document.")
+                }
+            }.onSuccess {
+                onToast(atlasText("Export des préférences terminé.", "Preference export completed.", "اكتمل تصدير التفضيلات."))
+            }.onFailure {
+                onToast(atlasText("Impossible d'exporter les préférences.", "Could not export preferences.", "تعذّر تصدير التفضيلات."))
+            }
+        }
+    }
+    val importPreferencesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) coroutineScope.launch {
+            val json = runCatching {
+                withContext(Dispatchers.IO) {
+                    readBoundedText(context.contentResolver.openInputStream(uri), MOBILE_PREFERENCE_BACKUP_MAX_BYTES)
+                }
+            }.getOrNull()
+            val preview = json?.let { appViewModel.previewMobilePreferenceBackup(it) }
+            if (preview == null) {
+                onToast(atlasText("Fichier de préférences invalide ou trop volumineux.", "The preference file is invalid or too large.", "ملف التفضيلات غير صالح أو كبير جداً."))
+            } else {
+                pendingImportPreview = preview
+            }
+        }
+    }
 
     val autoCheckUpdates by appViewModel.autoCheckUpdates.collectAsStateWithLifecycle()
     val automaticCrashReportsEnabled by appViewModel.automaticCrashReportsEnabled.collectAsStateWithLifecycle()
@@ -1591,10 +1637,58 @@ fun SettingsScreen(
         )
     }
 
+    pendingImportPreview?.let { preview ->
+        val settingLabels = preview.changedKeys.map { key ->
+            when (key) {
+                "theme" -> atlasText("Thème", "Theme", "المظهر")
+                "language" -> atlasText("Langue", "Language", "اللغة")
+                "density" -> atlasText("Densité", "Density", "الكثافة")
+                "animations" -> atlasText("Animations", "Animations", "الحركات")
+                "navigation_default" -> atlasText("Onglet de départ", "Default tab", "علامة التبويب الافتراضية")
+                "scan_behavior" -> atlasText("Comportement du scan", "Scan behavior", "سلوك المسح")
+                "sale_confirmation" -> atlasText("Confirmation de vente", "Sale confirmation", "تأكيد البيع")
+                "product_view" -> atlasText("Affichage des produits", "Product view", "عرض المنتجات")
+                "update_notifications" -> atlasText("Notifications de mise à jour", "Update notifications", "إشعارات التحديث")
+                "update_channel" -> atlasText("Canal de mise à jour", "Update channel", "قناة التحديث")
+                "onboarding_completed" -> atlasText("Bienvenue terminée", "Welcome completed", "اكتمل الترحيب")
+                else -> key
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { pendingImportPreview = null },
+            title = { Text(atlasText("Vérifier l'import", "Review import", "مراجعة الاستيراد")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(atlasText(
+                        "L'import fusionnera ces paramètres autorisés avec ceux de ce compte. Les autres données locales ne seront pas modifiées.",
+                        "Import will merge these allowlisted settings into this account. Other local data will not be changed.",
+                        "سيُدمج الاستيراد هذه الإعدادات المسموح بها مع هذا الحساب. لن تتغير البيانات المحلية الأخرى.",
+                    ))
+                    Text(if (settingLabels.isEmpty()) atlasText("Aucune différence détectée.", "No changes detected.", "لم يتم اكتشاف تغييرات.") else settingLabels.joinToString(" · "))
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = settingLabels.isNotEmpty(),
+                    onClick = {
+                        appViewModel.applyImportedMobilePreferences(preview.mergedSettings) { saved ->
+                            pendingImportPreview = null
+                            onToast(if (saved) atlasText("Préférences importées.", "Preferences imported.", "تم استيراد التفضيلات.") else atlasText("Import impossible.", "Import failed.", "تعذّر الاستيراد."))
+                        }
+                    },
+                ) { Text(atlasText("Fusionner", "Merge", "دمج")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingImportPreview = null }) { Text(atlasText("Annuler", "Cancel", "إلغاء")) }
+            },
+        )
+    }
+
     LaunchedEffect(user.scopeIdentity, serverSelection?.baseUrl) {
         appViewModel.refreshCachedProductCount()
         appViewModel.refreshLocalStorageSummary()
         appViewModel.refreshReleaseChangelog()
+        appViewModel.refreshMobilePreferenceSyncStatus()
     }
     LaunchedEffect(updateState) {
         if (updateState is UpdateState.ReadyToInstall) {
@@ -1615,6 +1709,71 @@ fun SettingsScreen(
             ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {
+        AtlasCard {
+            Text(atlasText("Synchronisation des préférences", "Preference sync", "مزامنة التفضيلات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                atlasText("Synchronisez uniquement les paramètres autorisés de ce compte. Choisissez une fréquence puis touchez Synchroniser maintenant pour l'enregistrer. Les mots de passe, comptes enregistrés, serveurs, données biométriques et consentements restent locaux.", "Sync only this account’s allowlisted settings. Choose a frequency, then tap Sync now to save it. Passwords, saved accounts, servers, biometrics, and consent remain local.", "تتم مزامنة الإعدادات المسموح بها لهذا الحساب فقط. اختر التكرار ثم اضغط زامن الآن لحفظه. تبقى كلمات المرور والحسابات والخوادم والبيانات الحيوية والموافقات محلية."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SettingsChoiceRow(
+                icon = Icons.Outlined.Refresh,
+                title = atlasText("Fréquence", "Frequency", "التكرار"),
+                value = when (mobileSyncFrequency) {
+                    "weekly" -> atlasText("Hebdomadaire", "Weekly", "أسبوعي")
+                    "monthly" -> atlasText("Mensuelle", "Monthly", "شهري")
+                    "yearly" -> atlasText("Annuelle", "Yearly", "سنوي")
+                    else -> atlasText("Quotidienne", "Daily", "يومي")
+                },
+                selectedKey = mobileSyncFrequency,
+                options = listOf(
+                    "daily" to atlasText("Quotidienne", "Daily", "يومي"),
+                    "weekly" to atlasText("Hebdomadaire", "Weekly", "أسبوعي"),
+                    "monthly" to atlasText("Mensuelle", "Monthly", "شهري"),
+                    "yearly" to atlasText("Annuelle", "Yearly", "سنوي"),
+                ),
+                onSelected = appViewModel::setMobilePreferenceFrequency,
+            )
+            val syncStatusText = when (val sync = mobileSyncState) {
+                MobilePreferenceSyncState.Idle -> atlasText("État de synchronisation inconnu.", "Sync status is not available yet.", "حالة المزامنة غير متاحة بعد.")
+                MobilePreferenceSyncState.Loading -> atlasText("Synchronisation en cours…", "Syncing…", "جارٍ المزامنة…")
+                is MobilePreferenceSyncState.Synced -> atlasText("État synchronisé avec le serveur.", "Server state loaded.", "تم تحميل حالة الخادم.")
+                is MobilePreferenceSyncState.Conflict -> atlasText("Conflit de révision. Actualisez l'état puis réessayez.", "Revision conflict. Refresh the status, then try again.", "تعارض في المراجعة. حدّث الحالة ثم أعد المحاولة.")
+                is MobilePreferenceSyncState.Cooldown -> atlasText("Le serveur impose une pause de ${sync.retryAfterSeconds} s avant le prochain essai.", "The server requires a ${sync.retryAfterSeconds}s cooldown before retrying.", "يفرض الخادم مهلة ${sync.retryAfterSeconds} ثانية قبل إعادة المحاولة.")
+                is MobilePreferenceSyncState.Offline -> atlasText("Hors ligne. Vos paramètres locaux sont conservés.", "Offline. Your local settings are preserved.", "غير متصل. تم الاحتفاظ بإعداداتك المحلية.")
+                is MobilePreferenceSyncState.Error -> atlasText("Échec de synchronisation. Vos paramètres locaux sont conservés.", "Sync failed. Your local settings are preserved.", "فشلت المزامنة. تم الاحتفاظ بإعداداتك المحلية.")
+            }
+            Text(syncStatusText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                mobileLastSuccessfulSync?.let { stamp ->
+                    atlasText("Dernière synchronisation réussie : $stamp", "Last successful sync: $stamp", "آخر مزامنة ناجحة: $stamp")
+                } ?: atlasText("Aucune synchronisation réussie pour le moment.", "No successful sync yet.", "لا توجد مزامنة ناجحة بعد."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            AtlasButton(
+                text = atlasText("Synchroniser maintenant", "Sync now", "زامن الآن"),
+                onClick = appViewModel::syncMobilePreferences,
+                modifier = Modifier.fillMaxWidth(),
+                loading = mobileSyncState is MobilePreferenceSyncState.Loading,
+                icon = Icons.Outlined.Refresh,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                AtlasOutlinedButton(
+                    text = atlasText("Exporter", "Export", "تصدير"),
+                    onClick = { exportPreferencesLauncher.launch("atlas-mobile-preferences.json") },
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.Share,
+                )
+                AtlasOutlinedButton(
+                    text = atlasText("Importer", "Import", "استيراد"),
+                    onClick = { importPreferencesLauncher.launch(arrayOf("application/json", "text/*")) },
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.Description,
+                )
+            }
+        }
+
         // Updates, accelerated downloads, and release history
         AtlasEntrance(delayMillis = 90, offsetY = 8.dp) {
             SettingsUpdateCard(

@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.components
 
+import ma.etherealmber.atlascommerce.ui.theme.AtlasIllustrationPalette as ArtPalette
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -123,13 +124,6 @@ private val welcomeSlides = listOf(
     ),
 )
 
-private val AtlasCyan = Color(0xFF62D9F5)
-private val AtlasBlue = Color(0xFF6AA8FF)
-private val AtlasPurple = Color(0xFFAA8BFF)
-private val AtlasMagenta = Color(0xFFF17CCB)
-private val AtlasMint = Color(0xFF69E0C2)
-private val AtlasAmber = Color(0xFFFFC66D)
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AtlasWelcomeOnboardingScreen(
@@ -210,8 +204,8 @@ fun AtlasWelcomeOnboardingScreen(
                         )
                         val dotColor by animateColorAsState(
                             when {
-                                selected -> AtlasCyan
-                                page < indicatorPage -> AtlasPurple.copy(alpha = 0.72f)
+                                selected -> ArtPalette.onboardingCyan
+                                page < indicatorPage -> ArtPalette.onboardingPurple.copy(alpha = 0.72f)
                                 else -> MaterialTheme.colorScheme.outlineVariant
                             },
                             tween(260),
@@ -718,8 +712,8 @@ private fun TutorialCaption(
     ) {
         Surface(
             shape = CircleShape,
-            color = AtlasCyan.copy(alpha = 0.12f),
-            border = BorderStroke(1.dp, AtlasCyan.copy(alpha = 0.3f)),
+            color = ArtPalette.onboardingCyan.copy(alpha = 0.12f),
+            border = BorderStroke(1.dp, ArtPalette.onboardingCyan.copy(alpha = 0.3f)),
         ) {
             Text(
                 atlasText("APERÇU · DONNÉES FICTIVES", "DEMO · SAMPLE DATA", "عرض · بيانات تجريبية"),
@@ -769,7 +763,7 @@ private fun TutorialDemoCard(step: Int, modifier: Modifier = Modifier) {
                         else -> Icons.Outlined.ReceiptLong
                     },
                     contentDescription = null,
-                    tint = AtlasCyan,
+                    tint = ArtPalette.onboardingCyan,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -777,16 +771,16 @@ private fun TutorialDemoCard(step: Int, modifier: Modifier = Modifier) {
                 0 -> {
                     Text(atlasText("Aujourd'hui", "Today", "اليوم"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                        TutorialMetricCard(atlasText("Ventes", "Sales", "المبيعات"), "12 480 DH", AtlasCyan, Modifier.weight(1f))
-                        TutorialMetricCard(atlasText("Alertes stock", "Low stock", "تنبيه المخزون"), "4", AtlasAmber, Modifier.weight(1f))
+                        TutorialMetricCard(atlasText("Ventes", "Sales", "المبيعات"), "12 480 DH", ArtPalette.onboardingCyan, Modifier.weight(1f))
+                        TutorialMetricCard(atlasText("Alertes stock", "Low stock", "تنبيه المخزون"), "4", ArtPalette.onboardingAmber, Modifier.weight(1f))
                     }
                     TutorialInfoRow(atlasText("Factures du jour", "Today's invoices", "فواتير اليوم"), "8")
                 }
                 1 -> {
                     Text(atlasText("Stock récent", "Recent stock", "المخزون مؤخراً"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    TutorialProductRow(atlasText("Café en grains", "Coffee beans", "حبوب القهوة"), atlasText("12 unités", "12 units", "12 وحدة"), AtlasCyan)
-                    TutorialProductRow(atlasText("Gobelets papier", "Paper cups", "أكواب ورقية"), atlasText("4 unités · bas", "4 units · low", "4 وحدات · منخفض"), AtlasAmber)
-                    TutorialProductRow(atlasText("Eau pétillante", "Sparkling water", "مياه غازية"), atlasText("28 unités", "28 units", "28 وحدة"), AtlasPurple)
+                    TutorialProductRow(atlasText("Café en grains", "Coffee beans", "حبوب القهوة"), atlasText("12 unités", "12 units", "12 وحدة"), ArtPalette.onboardingCyan)
+                    TutorialProductRow(atlasText("Gobelets papier", "Paper cups", "أكواب ورقية"), atlasText("4 unités · bas", "4 units · low", "4 وحدات · منخفض"), ArtPalette.onboardingAmber)
+                    TutorialProductRow(atlasText("Eau pétillante", "Sparkling water", "مياه غازية"), atlasText("28 unités", "28 units", "28 وحدة"), ArtPalette.onboardingPurple)
                 }
                 else -> {
                     Text(atlasText("Aperçu du ticket", "Receipt preview", "معاينة الإيصال"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -940,10 +934,10 @@ private fun WelcomeIllustration(page: Int) {
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val center = Offset(size.width * 0.5f, size.height * 0.51f)
-            drawCircle(AtlasBlue.copy(alpha = 0.055f), size.minDimension * 0.38f, center)
-            drawCircle(AtlasPurple.copy(alpha = 0.06f), size.minDimension * 0.28f, center)
+            drawCircle(ArtPalette.onboardingBlue.copy(alpha = 0.055f), size.minDimension * 0.38f, center)
+            drawCircle(ArtPalette.onboardingPurple.copy(alpha = 0.06f), size.minDimension * 0.28f, center)
             drawCircle(
-                color = AtlasCyan.copy(alpha = 0.18f),
+                color = ArtPalette.onboardingCyan.copy(alpha = 0.18f),
                 radius = size.minDimension * 0.37f,
                 center = center,
                 style = Stroke(width = 1.dp.toPx()),
@@ -952,7 +946,7 @@ private fun WelcomeIllustration(page: Int) {
                 val angle = index * (Math.PI / 4.0)
                 val radius = size.minDimension * 0.43f
                 drawCircle(
-                    color = listOf(AtlasCyan, AtlasPurple, AtlasMagenta, AtlasBlue)[index % 4].copy(alpha = 0.76f),
+                    color = listOf(ArtPalette.onboardingCyan, ArtPalette.onboardingPurple, ArtPalette.onboardingMagenta, ArtPalette.onboardingBlue)[index % 4].copy(alpha = 0.76f),
                     radius = if (index % 2 == 0) 3.dp.toPx() else 2.dp.toPx(),
                     center = Offset(
                         center.x + kotlin.math.cos(angle).toFloat() * radius,
@@ -985,11 +979,11 @@ private fun WorkspaceIllustration(bob: Float, drop: Float, motion: Boolean) {
                     Spacer(Modifier.width(6.dp))
                     Text("Atlas", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))
-                    Icon(Icons.Outlined.AutoAwesome, null, tint = AtlasCyan, modifier = Modifier.size(15.dp))
+                    Icon(Icons.Outlined.AutoAwesome, null, tint = ArtPalette.onboardingCyan, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(6.dp))
-                    Box(Modifier.size(6.dp).clip(CircleShape).background(AtlasMint))
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(ArtPalette.onboardingMint))
                 }
-                Surface(shape = RoundedCornerShape(13.dp), color = AtlasBlue.copy(alpha = 0.12f)) {
+                Surface(shape = RoundedCornerShape(13.dp), color = ArtPalette.onboardingBlue.copy(alpha = 0.12f)) {
                     Column(Modifier.fillMaxWidth().padding(10.dp)) {
                         Text(atlasText("AUJOURD’HUI", "TODAY", "اليوم"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("12 480 DH", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -997,7 +991,7 @@ private fun WorkspaceIllustration(bob: Float, drop: Float, motion: Boolean) {
                 }
                 repeat(2) { index ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(23.dp).clip(RoundedCornerShape(8.dp)).background(if (index == 0) AtlasPurple.copy(.2f) else AtlasCyan.copy(.2f)))
+                        Box(Modifier.size(23.dp).clip(RoundedCornerShape(8.dp)).background(if (index == 0) ArtPalette.onboardingPurple.copy(.2f) else ArtPalette.onboardingCyan.copy(.2f)))
                         Spacer(Modifier.width(8.dp))
                         Column {
                             Box(Modifier.width(67.dp).height(5.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = .16f)))
@@ -1011,7 +1005,7 @@ private fun WorkspaceIllustration(bob: Float, drop: Float, motion: Boolean) {
         WidgetDropCard(
             icon = Icons.Outlined.ReceiptLong,
             label = atlasText("Facture", "Invoice", "فاتورة"),
-            accent = AtlasPurple,
+            accent = ArtPalette.onboardingPurple,
             modifier = Modifier.align(Alignment.TopStart).padding(start = 2.dp, top = 42.dp).graphicsLayer {
                 translationY = if (motion) -24f + drop * 22f + bob * 1.2f else 0f
                 rotationZ = -7f
@@ -1020,7 +1014,7 @@ private fun WorkspaceIllustration(bob: Float, drop: Float, motion: Boolean) {
         WidgetDropCard(
             icon = Icons.Outlined.NotificationsActive,
             label = atlasText("Alerte stock", "Stock alert", "تنبيه المخزون"),
-            accent = AtlasCyan,
+            accent = ArtPalette.onboardingCyan,
             modifier = Modifier.align(Alignment.TopEnd).padding(end = 0.dp, top = 72.dp).graphicsLayer {
                 val staggeredDrop = ((drop - 0.2f) / 0.8f).coerceIn(0f, 1f)
                 translationY = if (motion) -24f + staggeredDrop * 22f - bob else 0f
@@ -1034,11 +1028,11 @@ private fun WorkspaceIllustration(bob: Float, drop: Float, motion: Boolean) {
             },
             shape = RoundedCornerShape(15.dp),
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, AtlasMagenta.copy(alpha = .65f)),
+            border = BorderStroke(1.dp, ArtPalette.onboardingMagenta.copy(alpha = .65f)),
             shadowElevation = 8.dp,
         ) {
             Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.ReceiptLong, null, tint = AtlasMagenta, modifier = Modifier.size(17.dp))
+                Icon(Icons.Outlined.ReceiptLong, null, tint = ArtPalette.onboardingMagenta, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(7.dp))
                 Text(atlasText("Ticket de caisse", "POS receipt", "إيصال نقطة البيع"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
             }
@@ -1070,31 +1064,31 @@ private fun ConnectionIllustration(bob: Float, motion: Boolean) {
         val orbitColor = MaterialTheme.colorScheme.outlineVariant
         Canvas(Modifier.size(245.dp)) {
             drawCircle(orbitColor.copy(alpha = .8f), radius = size.minDimension * .36f, style = Stroke(1.2.dp.toPx()))
-            drawCircle(AtlasPurple.copy(alpha = .45f), radius = size.minDimension * .45f, style = Stroke(1.dp.toPx()))
+            drawCircle(ArtPalette.onboardingPurple.copy(alpha = .45f), radius = size.minDimension * .45f, style = Stroke(1.dp.toPx()))
         }
         Surface(
             Modifier.size(116.dp).graphicsLayer { translationY = if (motion) bob else 0f},
             shape = CircleShape,
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(2.dp, AtlasCyan.copy(alpha = .7f)),
+            border = BorderStroke(2.dp, ArtPalette.onboardingCyan.copy(alpha = .7f)),
             shadowElevation = 14.dp,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 AtlasMark(size = 58.dp)
-                Box(Modifier.align(Alignment.BottomEnd).padding(end = 11.dp, bottom = 9.dp).size(13.dp).clip(CircleShape).background(AtlasMint))
+                Box(Modifier.align(Alignment.BottomEnd).padding(end = 11.dp, bottom = 9.dp).size(13.dp).clip(CircleShape).background(ArtPalette.onboardingMint))
             }
         }
-        IllustratedAvatarBadge(0, AtlasCyan, Modifier.align(Alignment.TopStart).padding(start = 44.dp, top = 26.dp).graphicsLayer { scaleX = if (motion) 1f + bob / 45f else 1f; scaleY = if (motion) 1f + bob / 45f else 1f })
-        IllustratedAvatarBadge(1, AtlasMagenta, Modifier.align(Alignment.TopEnd).padding(end = 48.dp, top = 34.dp).graphicsLayer { scaleX = if (motion) 1f - bob / 45f else 1f; scaleY = if (motion) 1f - bob / 45f else 1f })
-        IllustratedAvatarBadge(2, AtlasAmber, Modifier.align(Alignment.BottomStart).padding(start = 40.dp, bottom = 34.dp).graphicsLayer { translationY = if (motion) bob / 2f else 0f })
-        IllustratedAvatarBadge(3, AtlasPurple, Modifier.align(Alignment.BottomEnd).padding(end = 44.dp, bottom = 26.dp).graphicsLayer { translationY = if (motion) -bob else 0f })
+        IllustratedAvatarBadge(0, ArtPalette.onboardingCyan, Modifier.align(Alignment.TopStart).padding(start = 44.dp, top = 26.dp).graphicsLayer { scaleX = if (motion) 1f + bob / 45f else 1f; scaleY = if (motion) 1f + bob / 45f else 1f })
+        IllustratedAvatarBadge(1, ArtPalette.onboardingMagenta, Modifier.align(Alignment.TopEnd).padding(end = 48.dp, top = 34.dp).graphicsLayer { scaleX = if (motion) 1f - bob / 45f else 1f; scaleY = if (motion) 1f - bob / 45f else 1f })
+        IllustratedAvatarBadge(2, ArtPalette.onboardingAmber, Modifier.align(Alignment.BottomStart).padding(start = 40.dp, bottom = 34.dp).graphicsLayer { translationY = if (motion) bob / 2f else 0f })
+        IllustratedAvatarBadge(3, ArtPalette.onboardingPurple, Modifier.align(Alignment.BottomEnd).padding(end = 44.dp, bottom = 26.dp).graphicsLayer { translationY = if (motion) -bob else 0f })
         Surface(
             Modifier.align(Alignment.TopCenter).padding(top = 1.dp),
             shape = RoundedCornerShape(20.dp),
-            color = AtlasMint.copy(alpha = .18f),
-            border = BorderStroke(1.dp, AtlasMint.copy(alpha = .4f)),
+            color = ArtPalette.onboardingMint.copy(alpha = .18f),
+            border = BorderStroke(1.dp, ArtPalette.onboardingMint.copy(alpha = .4f)),
         ) {
-            Text(atlasText("●  EN DIRECT", "●  LIVE", "●  مباشر"), Modifier.padding(horizontal = 11.dp, vertical = 6.dp), color = AtlasMint, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            Text(atlasText("●  EN DIRECT", "●  LIVE", "●  مباشر"), Modifier.padding(horizontal = 11.dp, vertical = 6.dp), color = ArtPalette.onboardingMint, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -1112,17 +1106,17 @@ private fun IllustratedAvatarBadge(variant: Int, accent: Color, modifier: Modifi
             val w = size.width
             val h = size.height
             val skin = when (variant) {
-                1 -> Color(0xFFD99B72)
-                2 -> Color(0xFF8C5D42)
-                else -> Color(0xFFF0BD98)
+                1 -> ArtPalette.skinMedium
+                2 -> ArtPalette.skinDark
+                else -> ArtPalette.skinLight
             }
             val hair = when (variant) {
-                1 -> Color(0xFF33251F)
-                2 -> Color(0xFF211B19)
-                3 -> Color(0xFF704A35)
-                else -> Color(0xFF60402D)
+                1 -> ArtPalette.hairDark
+                2 -> ArtPalette.hairBlack
+                3 -> ArtPalette.hairBrown
+                else -> ArtPalette.hairChestnut
             }
-            val shirt = if (variant % 2 == 0) Color(0xFFF7F5F1) else Color(0xFFEAEFF5)
+            val shirt = if (variant % 2 == 0) ArtPalette.shirtLight else ArtPalette.shirtBlue
 
             drawCircle(accent.copy(alpha = .12f), radius = size.minDimension * .49f)
             val jacket = androidx.compose.ui.graphics.Path().apply {
@@ -1174,8 +1168,8 @@ private fun IllustratedAvatarBadge(variant: Int, accent: Color, modifier: Modifi
                 size = androidx.compose.ui.geometry.Size(w * .10f, h * .21f),
                 cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * .05f),
             )
-            drawCircle(Color(0xFF362A26), radius = w * .018f, center = Offset(w * .41f, h * .42f))
-            drawCircle(Color(0xFF362A26), radius = w * .018f, center = Offset(w * .59f, h * .42f))
+            drawCircle(ArtPalette.eyeDark, radius = w * .018f, center = Offset(w * .41f, h * .42f))
+            drawCircle(ArtPalette.eyeDark, radius = w * .018f, center = Offset(w * .59f, h * .42f))
             val tie = androidx.compose.ui.graphics.Path().apply {
                 moveTo(w * .47f, h * .70f)
                 lineTo(w * .53f, h * .70f)
@@ -1184,7 +1178,7 @@ private fun IllustratedAvatarBadge(variant: Int, accent: Color, modifier: Modifi
                 lineTo(w * .45f, h * .86f)
                 close()
             }
-            drawPath(tie, AtlasAmber)
+            drawPath(tie, ArtPalette.onboardingAmber)
         }
     }
 }
@@ -1203,25 +1197,25 @@ private fun DashboardIllustration(bob: Float, motion: Boolean) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(atlasText("MON TABLEAU DE BORD", "MY DASHBOARD", "لوحة تحكمي"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))
-                    Icon(Icons.Outlined.AutoAwesome, null, tint = AtlasPurple, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.AutoAwesome, null, tint = ArtPalette.onboardingPurple, modifier = Modifier.size(18.dp))
                 }
                 Spacer(Modifier.height(11.dp))
                 Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    DashboardTile(atlasText("Ventes", "Sales", "المبيعات"), "8.4k", AtlasCyan, Modifier.weight(1f))
-                    DashboardTile(atlasText("Stock", "Stock", "المخزون"), "94%", AtlasPurple, Modifier.weight(1f))
+                    DashboardTile(atlasText("Ventes", "Sales", "المبيعات"), "8.4k", ArtPalette.onboardingCyan, Modifier.weight(1f))
+                    DashboardTile(atlasText("Stock", "Stock", "المخزون"), "94%", ArtPalette.onboardingPurple, Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(9.dp))
                 Surface(
                     Modifier.fillMaxWidth().weight(.72f),
                     shape = RoundedCornerShape(14.dp),
-                    color = AtlasMagenta.copy(alpha = .1f),
-                    border = BorderStroke(1.dp, AtlasMagenta.copy(alpha = .28f)),
+                    color = ArtPalette.onboardingMagenta.copy(alpha = .1f),
+                    border = BorderStroke(1.dp, ArtPalette.onboardingMagenta.copy(alpha = .28f)),
                 ) {
                     Row(Modifier.fillMaxSize().padding(horizontal = 11.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(atlasText("ENCAISSEMENT RAPIDE", "QUICK BILLING", "فوترة سريعة"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.weight(1f))
-                        Box(Modifier.width(47.dp).height(24.dp).clip(RoundedCornerShape(8.dp)).background(AtlasMagenta.copy(alpha = .24f)), contentAlignment = Alignment.Center) {
-                            Text(atlasText("+ Nouveau", "+ New", "+ جديد"), style = MaterialTheme.typography.labelSmall, color = AtlasMagenta, fontWeight = FontWeight.Bold)
+                        Box(Modifier.width(47.dp).height(24.dp).clip(RoundedCornerShape(8.dp)).background(ArtPalette.onboardingMagenta.copy(alpha = .24f)), contentAlignment = Alignment.Center) {
+                            Text(atlasText("+ Nouveau", "+ New", "+ جديد"), style = MaterialTheme.typography.labelSmall, color = ArtPalette.onboardingMagenta, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1231,17 +1225,17 @@ private fun DashboardIllustration(bob: Float, motion: Boolean) {
             Modifier.align(Alignment.TopStart).padding(start = 18.dp, top = 45.dp).graphicsLayer { translationX = if (motion) bob * 1.3f else 0f },
             shape = CircleShape,
             color = MaterialTheme.colorScheme.background,
-            border = BorderStroke(1.dp, AtlasCyan.copy(alpha = .55f)),
+            border = BorderStroke(1.dp, ArtPalette.onboardingCyan.copy(alpha = .55f)),
         ) {
-            Icon(Icons.Outlined.Inventory2, null, Modifier.padding(10.dp).size(22.dp), tint = AtlasCyan)
+            Icon(Icons.Outlined.Inventory2, null, Modifier.padding(10.dp).size(22.dp), tint = ArtPalette.onboardingCyan)
         }
         Surface(
             Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 28.dp).graphicsLayer { translationY = if (motion) -bob else 0f },
             shape = CircleShape,
             color = MaterialTheme.colorScheme.background,
-            border = BorderStroke(1.dp, AtlasPurple.copy(alpha = .6f)),
+            border = BorderStroke(1.dp, ArtPalette.onboardingPurple.copy(alpha = .6f)),
         ) {
-            Icon(Icons.Outlined.AutoAwesome, null, Modifier.padding(10.dp).size(20.dp), tint = AtlasPurple)
+            Icon(Icons.Outlined.AutoAwesome, null, Modifier.padding(10.dp).size(20.dp), tint = ArtPalette.onboardingPurple)
         }
     }
 }
@@ -1291,8 +1285,8 @@ private fun RecapIllustration(bob: Float, motion: Boolean) {
             shadowElevation = 9.dp,
         ) {
             Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.fillMaxWidth().height(62.dp).clip(RoundedCornerShape(15.dp)).background(AtlasPurple.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
-                    Surface(Modifier.size(42.dp), shape = CircleShape, color = MaterialTheme.colorScheme.background, border = BorderStroke(1.dp, AtlasPurple.copy(alpha = .55f))) {
+                Box(Modifier.fillMaxWidth().height(62.dp).clip(RoundedCornerShape(15.dp)).background(ArtPalette.onboardingPurple.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
+                    Surface(Modifier.size(42.dp), shape = CircleShape, color = MaterialTheme.colorScheme.background, border = BorderStroke(1.dp, ArtPalette.onboardingPurple.copy(alpha = .55f))) {
                         Box(contentAlignment = Alignment.Center) { AtlasMark(size = 25.dp) }
                     }
                 }
@@ -1306,7 +1300,7 @@ private fun RecapIllustration(bob: Float, motion: Boolean) {
                     bars.forEachIndexed { index, fraction ->
                         val barHeight = size.height * fraction
                         drawRoundRect(
-                            color = listOf(AtlasCyan, AtlasBlue, AtlasPurple, AtlasMagenta)[index % 4].copy(alpha = .82f),
+                            color = listOf(ArtPalette.onboardingCyan, ArtPalette.onboardingBlue, ArtPalette.onboardingPurple, ArtPalette.onboardingMagenta)[index % 4].copy(alpha = .82f),
                             topLeft = Offset(index * (barWidth + gap), size.height - barHeight),
                             size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
                             cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()),
@@ -1319,11 +1313,11 @@ private fun RecapIllustration(bob: Float, motion: Boolean) {
             Modifier.align(Alignment.TopEnd).padding(end = 22.dp, top = 45.dp).graphicsLayer { translationY = if (motion) -bob else 0f },
             shape = RoundedCornerShape(17.dp),
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, AtlasCyan.copy(alpha = .56f)),
+            border = BorderStroke(1.dp, ArtPalette.onboardingCyan.copy(alpha = .56f)),
             shadowElevation = 8.dp,
         ) {
             Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.AutoAwesome, null, tint = AtlasCyan, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.AutoAwesome, null, tint = ArtPalette.onboardingCyan, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 AnimatedContent(metricIndex, label = "daily_recap_metric") { index ->
                     Text(metrics[index], style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
@@ -1333,11 +1327,11 @@ private fun RecapIllustration(bob: Float, motion: Boolean) {
         Surface(
             Modifier.align(Alignment.BottomEnd).padding(end = 38.dp, bottom = 38.dp).graphicsLayer { translationX = if (motion) bob else 0f },
             shape = RoundedCornerShape(15.dp),
-            color = AtlasMagenta.copy(alpha = .16f),
-            border = BorderStroke(1.dp, AtlasMagenta.copy(alpha = .48f)),
+            color = ArtPalette.onboardingMagenta.copy(alpha = .16f),
+            border = BorderStroke(1.dp, ArtPalette.onboardingMagenta.copy(alpha = .48f)),
         ) {
             Row(Modifier.padding(horizontal = 11.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.ReceiptLong, null, tint = AtlasMagenta, modifier = Modifier.size(16.dp))
+                Icon(Icons.Outlined.ReceiptLong, null, tint = ArtPalette.onboardingMagenta, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(5.dp))
                 Text(atlasText("RÉSUMÉ DU JOUR", "DAILY SUMMARY", "ملخص يومي"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
             }
@@ -1346,10 +1340,10 @@ private fun RecapIllustration(bob: Float, motion: Boolean) {
             Modifier.align(Alignment.CenterEnd).padding(end = 5.dp).size(47.dp),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, AtlasAmber.copy(alpha = .72f)),
+            border = BorderStroke(1.dp, ArtPalette.onboardingAmber.copy(alpha = .72f)),
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Outlined.AutoAwesome, null, tint = AtlasAmber, modifier = Modifier.size(23.dp))
+                Icon(Icons.Outlined.AutoAwesome, null, tint = ArtPalette.onboardingAmber, modifier = Modifier.size(23.dp))
             }
         }
     }

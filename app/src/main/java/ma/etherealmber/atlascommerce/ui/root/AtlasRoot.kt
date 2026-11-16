@@ -207,8 +207,8 @@ fun AtlasRoot(
                             TextButton(
                                 onClick = { viewModel.applySavedLanguageAndRestart { activity?.recreate() } },
                                 colors = ButtonDefaults.textButtonColors(
-                                    containerColor = Color.Black,
-                                    contentColor = Color.White,
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                 ),
                                 shape = MaterialTheme.shapes.small,
                             ) {

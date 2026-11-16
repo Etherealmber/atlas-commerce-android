@@ -284,6 +284,8 @@ sealed interface UpdateState {
         val info: UpdateInfo? = null,
         /** True only for a transport failure during the APK download itself. */
         val recoverableNetwork: Boolean = false,
+        /** Remaining manual-check cooldown in seconds, when the check was rate-limited. */
+        val retryAfterSeconds: Int? = null,
     ) : UpdateState
 }
 

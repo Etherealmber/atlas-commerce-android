@@ -6,6 +6,8 @@ import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.localizeReleaseNotes
 import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSize
 import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSummary
+import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateCheckCooldown
+import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateCooldownButton
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
@@ -52,22 +54,25 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
+import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
 import ma.etherealmber.atlascommerce.core.update.MirrorTestTarget
 import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
-import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 
 /**
  * Persistent compact update icon shown in the Top Bar when a download or update
@@ -542,6 +547,15 @@ fun SettingsUpdateCard(
     val notificationsEnabled = runCatching {
         NotificationManagerCompat.from(context).areNotificationsEnabled()
     }.getOrDefault(true)
+    val cooldownSeed = (state as? UpdateState.Error)?.retryAfterSeconds ?: 0
+    var cooldownSeconds by remember(cooldownSeed) { mutableStateOf(cooldownSeed) }
+    LaunchedEffect(cooldownSeed) {
+        cooldownSeconds = cooldownSeed
+        while (cooldownSeconds > 0) {
+            delay(1_000L)
+            cooldownSeconds -= 1
+        }
+    }
 
     AtlasCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -553,7 +567,7 @@ fun SettingsUpdateCard(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = atlasText("Mise à jour & Miroirs CDN", "Updates & CDN mirrors", "التحديثات ومرايا CDN"),
+                text = atlasText("Mise à jour & Sources de téléchargement", "Updates & download sources", "التحديثات ومصادر التنزيل"),
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.weight(1f),
             )
@@ -639,7 +653,7 @@ fun SettingsUpdateCard(
             mirrorPing.testing && mirrorPing.currentTest == MirrorTestTarget.GITHUB ->
                 atlasText("Test GitHub…", "Testing GitHub…", "جارٍ اختبار GitHub…")
             mirrorPing.testing -> atlasText("Test en cours…")
-            else -> atlasText("Tester les miroirs", "Test mirrors", "اختبار المرايا")
+            else -> atlasText("Tester les sources", "Test download sources", "اختبار مصادر التنزيل")
         }
         Spacer(Modifier.height(6.dp))
         BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -719,7 +733,7 @@ fun SettingsUpdateCard(
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        text = atlasText("Recherche de mises à jour sur le serveur…", "Checking the server for updates…", "جارٍ التحقق من التحديثات على الخادم…"),
+                        text = atlasText("Recherche de mises à jour sur le serveur…", "Checking the update service…", "جارٍ التحقق من خدمة التحديثات…"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -727,7 +741,7 @@ fun SettingsUpdateCard(
             }
 
             is UpdateState.UpToDate -> {
-                val updateSuccessColor = if (LocalAtlasDarkTheme.current) Color(0xFF4ADE80) else Color(0xFF15803D)
+                val updateSuccessColor = Atlas.palette.positive
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Outlined.CheckCircle,
@@ -835,9 +849,13 @@ fun SettingsUpdateCard(
 
             is UpdateState.Error -> {
                 Text(
-                    text = atlasNotice(state.message, LocalAtlasLanguage.current),
+                    text = if (state.retryAfterSeconds != null) {
+                        localizedUpdateCheckCooldown(cooldownSeconds, LocalAtlasLanguage.current)
+                    } else {
+                        atlasNotice(state.message, LocalAtlasLanguage.current)
+                    },
                     style = MaterialTheme.typography.bodySmall,
-                    color = Atlas.palette.danger,
+                    color = if (state.retryAfterSeconds != null) MaterialTheme.colorScheme.onSurfaceVariant else Atlas.palette.danger,
                 )
                 Spacer(Modifier.height(10.dp))
                 if (state.info != null) {
@@ -849,9 +867,14 @@ fun SettingsUpdateCard(
                     )
                 } else {
                     AtlasOutlinedButton(
-                        text = atlasText("Réessayer"),
+                        text = if (state.retryAfterSeconds != null && cooldownSeconds > 0) {
+                            localizedUpdateCooldownButton(cooldownSeconds, LocalAtlasLanguage.current)
+                        } else {
+                            atlasText("Réessayer", "Check again", "التحقق مجدداً")
+                        },
                         onClick = onCheck,
-                        icon = Icons.Outlined.Refresh,
+                        enabled = cooldownSeconds == 0,
+                        icon = if (cooldownSeconds == 0) Icons.Outlined.Refresh else null,
                     )
                 }
             }
@@ -950,23 +973,15 @@ private fun MirrorLatencyChip(
     target: MirrorTestTarget,
     mirrorPing: MirrorPingResult,
 ) {
-    val dark = LocalAtlasDarkTheme.current
+    val palette = Atlas.palette
     val testingThis = mirrorPing.testing && mirrorPing.currentTest == target
     val waitingNext = mirrorPing.testing && mirrorPing.currentTest != target && online == null
     val (container, foreground) = when {
         testingThis || waitingNext -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
-        online == false ->
-            (if (dark) Color(0xFF3E2023) else Color(0xFFFEE2E2)) to
-                (if (dark) Color(0xFFFCA5A5) else Color(0xFFB91C1C))
-        online == true && latencyMs != null && latencyMs < 250L ->
-            (if (dark) Color(0xFF173728) else Color(0xFFE8F5E9)) to
-                (if (dark) Color(0xFFA5D6A7) else Color(0xFF166534))
-        online == true && latencyMs != null && latencyMs <= 700L ->
-            (if (dark) Color(0xFF3B2B18) else Color(0xFFFFF3E0)) to
-                (if (dark) Color(0xFFFFCC80) else Color(0xFF9A3412))
-        online == true ->
-            (if (dark) Color(0xFF3E2023) else Color(0xFFFEE2E2)) to
-                (if (dark) Color(0xFFFCA5A5) else Color(0xFFB91C1C))
+        online == false -> palette.dangerSoft to palette.danger
+        online == true && latencyMs != null && latencyMs < 250L -> palette.positiveSoft to palette.positive
+        online == true && latencyMs != null && latencyMs <= 700L -> palette.warningSoft to palette.warning
+        online == true -> palette.dangerSoft to palette.danger
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
     val text = when {

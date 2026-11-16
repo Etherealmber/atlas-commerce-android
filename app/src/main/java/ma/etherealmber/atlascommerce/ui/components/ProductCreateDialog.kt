@@ -113,7 +113,7 @@ fun ProductCreateDialog(
         if (uri != null) {
             photoScope.launch {
                 encodingPhoto = true
-                val encoded = AvatarBitmapCache.encodeGalleryAvatarDataUri(context, uri)
+                val encoded = encodeProductImageDataUri(context, uri)
                 photoUrl = encoded
                 photoError = encoded == null
                 encodingPhoto = false

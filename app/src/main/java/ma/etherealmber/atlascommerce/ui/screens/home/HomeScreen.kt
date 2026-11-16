@@ -1194,14 +1194,14 @@ private fun BalanceHero(
         Text(
             text = atlasText("SOLDE DE TRÉSORERIE"),
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.68f),
+            color = palette.heroMutedText.copy(alpha = 0.82f),
         )
         Spacer(Modifier.height(6.dp))
         Text(
             text = atlasMoney(balance, currency),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = palette.heroText,
         )
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1227,7 +1227,7 @@ private fun OperationsHero(
         Text(
             text = atlasText("CATALOGUE & STOCK"),
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.72f),
+            color = palette.heroMutedText.copy(alpha = 0.82f),
         )
         Spacer(Modifier.height(6.dp))
         Text(
@@ -1238,7 +1238,7 @@ private fun OperationsHero(
             ),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = palette.heroText,
         )
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1256,15 +1256,16 @@ private fun OperationsHero(
 
 @Composable
 private fun HeroPill(text: String, modifier: Modifier = Modifier) {
+    val palette = Atlas.palette
     Surface(
         modifier = modifier,
-        color = Color.White.copy(alpha = 0.14f),
+        color = palette.heroPill,
         shape = MaterialTheme.shapes.extraSmall,
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White,
+            color = palette.heroText,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         )
     }

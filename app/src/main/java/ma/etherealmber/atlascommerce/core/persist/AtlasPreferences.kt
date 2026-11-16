@@ -38,6 +38,26 @@ import javax.inject.Singleton
 // fall back to account-password sign-in instead of being upgraded without fresh authentication.
 const val LEGACY_DEVICE_UNLOCK_TOKEN_PREFIX = "du1:"
 const val DEVICE_UNLOCK_TOKEN_PREFIX = "du2:"
+private const val MOBILE_SETTINGS_MIGRATION_OWNER = "mobile_preferences_legacy_migration_owner"
+
+private fun mobileScopeHash(scope: String): String = java.security.MessageDigest.getInstance("SHA-256")
+    .digest(scope.toByteArray(Charsets.UTF_8))
+    .take(12)
+    .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
+private fun mobileSettingsKey(scope: String): String = "mobile_sync_settings::${mobileScopeHash(scope)}"
+private fun mobileFrequencyKey(scope: String): String = "mobile_sync_frequency::${mobileScopeHash(scope)}"
+private fun mobileFrequencyDirtyKey(scope: String): String = "mobile_sync_frequency_dirty::${mobileScopeHash(scope)}"
+private fun mobileRevisionKey(scope: String): String = "mobile_sync_revision::${mobileScopeHash(scope)}"
+private fun mobileMetadataKey(scope: String): String = "mobile_sync_metadata::${mobileScopeHash(scope)}"
+
+data class MobilePreferenceSyncMetadata(
+    val revision: Long,
+    val serverTime: String,
+    val syncFrequency: String,
+    val lastSyncedAt: String?,
+    val nextSyncAt: String?,
+)
 
 private val Context.atlasDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "atlas_prefs",
@@ -111,6 +131,7 @@ class AtlasPreferences @Inject constructor(
         val PARALLEL_UPDATE_DOWNLOAD = booleanPreferencesKey("parallel_update_download")
         val FOLLOW_LATEST_RELEASE = booleanPreferencesKey("follow_latest_release")
         val UPDATE_SOURCE = stringPreferencesKey("update_download_source")
+        val PRODUCTS_LIST_LAYOUT = booleanPreferencesKey("products_list_layout")
         val ROLE_NOTIFICATIONS_ENABLED = booleanPreferencesKey("role_notifications_enabled")
         val SESSION_SERVER = stringPreferencesKey("session_server_url")
         val SESSION_TOKEN = stringPreferencesKey("session_token")
@@ -138,6 +159,336 @@ class AtlasPreferences @Inject constructor(
         val srv = serverUrl?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
         val usr = username?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
         activeScopeFlow.value = if (srv != null && usr != null) "$srv|$usr" else ""
+    }
+
+    /** Persist the outgoing account's safe settings and hydrate only the incoming account. */
+    suspend fun activateMobilePreferenceScope(serverUrl: String, username: String) {
+        val targetScope = "${serverUrl.trim().lowercase()}|${username.trim().lowercase()}"
+        val previousScope = activeScopeFlow.value
+        if (previousScope.isNotBlank() && previousScope != targetScope) {
+            persistScopedMobileSettings(previousScope, captureMobileSettings(safeData.first(), previousScope))
+        }
+        val current = safeData.first()
+        val stored = decodeMobileSettings(current.safeString(mobileSettingsKey(targetScope)))
+        val isLegacySeed = stored == null && current.safeString(MOBILE_SETTINGS_MIGRATION_OWNER).isNullOrBlank()
+        val settings = stored ?: if (isLegacySeed) captureMobileSettings(current, targetScope) else defaultMobileSettings()
+        if (stored == null) {
+            safeEdit { prefs ->
+                prefs.putClean(stringPreferencesKey(mobileSettingsKey(targetScope)), encodeMobileSettings(settings))
+                val defaults = defaultMobileSettings()
+                val dirty = if (isLegacySeed) settings.keys.filterTo(mutableSetOf()) { settings[it] != defaults[it] } else emptySet()
+                prefs.putClean(stringPreferencesKey(mobileSettingsDirtyKey(targetScope)), encodeMobileDirtyKeys(dirty))
+                if (isLegacySeed) {
+                    prefs.putClean(stringPreferencesKey(MOBILE_SETTINGS_MIGRATION_OWNER), mobileScopeHash(targetScope))
+                }
+            }
+        }
+        activeScopeFlow.value = targetScope
+        applyMobileSettingsToPreferences(settings, targetScope)
+    }
+
+    /** Flush the current account snapshot before its active scope is cleared. */
+    suspend fun persistAndClearMobilePreferenceScope() {
+        val scope = activeScopeFlow.value
+        if (scope.isNotBlank()) persistScopedMobileSettings(scope, captureMobileSettings(safeData.first(), scope))
+        activeScopeFlow.value = ""
+    }
+
+    suspend fun mobilePreferenceSettings(): Map<String, Any?> =
+        captureMobileSettings(safeData.first(), activeScopeFlow.value)
+
+    suspend fun applyMobilePreferenceSettings(
+        settings: Map<String, Any?>,
+        expectedScope: String? = null,
+        markDirty: Boolean = true,
+    ): Boolean {
+        if (!ma.etherealmber.atlascommerce.data.model.isValidMobilePreferenceSettings(settings)) return false
+        val scope = activeScopeFlow.value
+        if (scope.isBlank() || (expectedScope != null && scope != expectedScope)) return false
+        val before = safeData.first()
+        val oldSettings = captureMobileSettings(before, scope)
+        val dirtyKeys = if (markDirty) {
+            decodeMobileDirtyKeys(before.safeString(mobileSettingsDirtyKey(scope))) +
+                settings.keys.filter { settings[it] != oldSettings[it] }
+        } else emptySet()
+        return safeEditResult { prefs ->
+            check(activeScopeFlow.value == scope && (expectedScope == null || activeScopeFlow.value == expectedScope))
+            writeMobileSettingsToPreferences(prefs, settings, scope)
+            prefs.putClean(stringPreferencesKey(mobileSettingsKey(scope)), encodeMobileSettings(settings))
+            prefs.putClean(stringPreferencesKey(mobileSettingsDirtyKey(scope)), encodeMobileDirtyKeys(dirtyKeys))
+        }
+    }
+
+    suspend fun applySuccessfulMobilePreferenceSettings(
+        serverSettings: Map<String, Any?>,
+        submittedSettings: Map<String, Any?>,
+        expectedScope: String,
+    ): Boolean {
+        if (!ma.etherealmber.atlascommerce.data.model.isValidMobilePreferenceSettings(serverSettings) ||
+            !ma.etherealmber.atlascommerce.data.model.isValidMobilePreferenceSettings(submittedSettings) ||
+            activeScopeFlow.value != expectedScope
+        ) return false
+        return safeEditResult { prefs ->
+            check(activeScopeFlow.value == expectedScope)
+            val current = captureMobileSettings(prefs, expectedScope)
+            val changedDuringRequest = current.keys.filter { current[it] != submittedSettings[it] }.toSet()
+            val merged = serverSettings + changedDuringRequest.associateWith { current[it] }
+            check(ma.etherealmber.atlascommerce.data.model.isValidMobilePreferenceSettings(merged))
+            writeMobileSettingsToPreferences(prefs, merged, expectedScope)
+            prefs.putClean(stringPreferencesKey(mobileSettingsKey(expectedScope)), encodeMobileSettings(merged))
+            prefs.putClean(stringPreferencesKey(mobileSettingsDirtyKey(expectedScope)), encodeMobileDirtyKeys(changedDuringRequest))
+        }
+    }
+
+    suspend fun applyRemoteMobilePreferenceSettings(
+        serverSettings: Map<String, Any?>,
+        expectedScope: String,
+    ): Boolean {
+        if (!ma.etherealmber.atlascommerce.data.model.isValidMobilePreferenceSettings(serverSettings) ||
+            activeScopeFlow.value != expectedScope
+        ) return false
+        return safeEditResult { prefs ->
+            check(activeScopeFlow.value == expectedScope)
+            val current = captureMobileSettings(prefs, expectedScope)
+            val dirtyKeys = decodeMobileDirtyKeys(prefs.safeString(mobileSettingsDirtyKey(expectedScope)))
+            val merged = serverSettings + dirtyKeys.associateWith { current[it] }
+            check(ma.etherealmber.atlascommerce.data.model.isValidMobilePreferenceSettings(merged))
+            writeMobileSettingsToPreferences(prefs, merged, expectedScope)
+            prefs.putClean(stringPreferencesKey(mobileSettingsKey(expectedScope)), encodeMobileSettings(merged))
+            prefs.putClean(stringPreferencesKey(mobileSettingsDirtyKey(expectedScope)), encodeMobileDirtyKeys(dirtyKeys))
+        }
+    }
+
+    suspend fun mobilePreferenceFrequency(): String {
+        val scope = activeScopeFlow.value
+        val raw = safeData.first().safeString(mobileFrequencyKey(scope))
+        return raw?.takeIf { it in setOf("daily", "weekly", "monthly", "yearly") } ?: "daily"
+    }
+
+    suspend fun mobilePreferenceDirtySettings(scope: String = activeScopeFlow.value): Set<String> =
+        if (scope.isBlank()) emptySet() else decodeMobileDirtyKeys(safeData.first().safeString(mobileSettingsDirtyKey(scope)))
+
+    suspend fun mobilePreferenceSettingsDirty(scope: String = activeScopeFlow.value): Boolean =
+        mobilePreferenceDirtySettings(scope).isNotEmpty()
+
+    suspend fun hasAtLeastKnownMobilePreferenceRevision(revision: Long, scope: String): Boolean {
+        if (revision < 0 || scope.isBlank() || activeScopeFlow.value != scope) return false
+        val known = safeData.first().safeString(mobileRevisionKey(scope))?.toLongOrNull() ?: 0L
+        return revision >= known
+    }
+
+    suspend fun recordMobilePreferenceRevision(revision: Long, expectedScope: String): Boolean {
+        if (revision < 0 || activeScopeFlow.value != expectedScope) return false
+        val current = safeData.first().safeString(mobileRevisionKey(expectedScope))?.toLongOrNull() ?: 0L
+        if (revision < current) return false
+        return safeEditResult { prefs ->
+            check(activeScopeFlow.value == expectedScope)
+            val latest = prefs.safeString(mobileRevisionKey(expectedScope))?.toLongOrNull() ?: 0L
+            check(revision >= latest)
+            prefs.putClean(stringPreferencesKey(mobileRevisionKey(expectedScope)), revision.toString())
+        }
+    }
+
+    suspend fun recordMobilePreferenceMetadata(
+        revision: Long,
+        serverTime: String,
+        syncFrequency: String,
+        lastSyncedAt: String?,
+        nextSyncAt: String?,
+        expectedScope: String,
+    ): Boolean {
+        if (revision < 0 || syncFrequency !in setOf("daily", "weekly", "monthly", "yearly") ||
+            activeScopeFlow.value != expectedScope
+        ) return false
+        val json = JSONObject()
+            .put("revision", revision)
+            .put("server_time", serverTime)
+            .put("sync_frequency", syncFrequency)
+            .put("last_synced_at", lastSyncedAt ?: JSONObject.NULL)
+            .put("next_sync_at", nextSyncAt ?: JSONObject.NULL)
+            .toString()
+        return safeEditResult { prefs ->
+            check(activeScopeFlow.value == expectedScope)
+            prefs.putClean(stringPreferencesKey(mobileMetadataKey(expectedScope)), json)
+        }
+    }
+
+    suspend fun mobilePreferenceSyncMetadata(scope: String = activeScopeFlow.value): MobilePreferenceSyncMetadata? {
+        if (scope.isBlank()) return null
+        val raw = safeData.first().safeString(mobileMetadataKey(scope)) ?: return null
+        return runCatching {
+            val json = JSONObject(raw)
+            val revision = json.optLong("revision", -1L)
+            val serverTime = json.optString("server_time")
+            val frequency = json.optString("sync_frequency")
+            if (revision < 0 || serverTime.isBlank() || frequency !in setOf("daily", "weekly", "monthly", "yearly")) return null
+            MobilePreferenceSyncMetadata(
+                revision = revision,
+                serverTime = serverTime,
+                syncFrequency = frequency,
+                lastSyncedAt = json.optString("last_synced_at").takeIf { it.isNotBlank() && it != "null" },
+                nextSyncAt = json.optString("next_sync_at").takeIf { it.isNotBlank() && it != "null" },
+            )
+        }.getOrNull()
+    }
+
+    private suspend fun persistCurrentMobileSettingsAsDirty() {
+        val scope = activeScopeFlow.value
+        if (scope.isBlank()) return
+        val current = safeData.first()
+        val currentSettings = captureMobileSettings(current, scope)
+        val previousSettings = decodeMobileSettings(current.safeString(mobileSettingsKey(scope))) ?: defaultMobileSettings()
+        val changedKeys = currentSettings.keys.filter { currentSettings[it] != previousSettings[it] }
+        if (changedKeys.isEmpty()) return
+        val dirtyKeys = decodeMobileDirtyKeys(current.safeString(mobileSettingsDirtyKey(scope))) + changedKeys
+        safeEdit { prefs ->
+            if (activeScopeFlow.value == scope) {
+                prefs.putClean(stringPreferencesKey(mobileSettingsKey(scope)), encodeMobileSettings(currentSettings))
+                prefs.putClean(stringPreferencesKey(mobileSettingsDirtyKey(scope)), encodeMobileDirtyKeys(dirtyKeys))
+            }
+        }
+    }
+
+    suspend fun setMobilePreferenceFrequency(frequency: String): Boolean {
+        if (frequency !in setOf("daily", "weekly", "monthly", "yearly")) return false
+        val scope = activeScopeFlow.value
+        if (scope.isBlank()) return false
+        return safeEditResult {
+            it.putClean(stringPreferencesKey(mobileFrequencyKey(scope)), frequency)
+            it.putClean(stringPreferencesKey(mobileFrequencyDirtyKey(scope)), "true")
+        }
+    }
+
+    suspend fun mobilePreferenceFrequencyDirty(scope: String = activeScopeFlow.value): Boolean =
+        scope.isNotBlank() && safeData.first().safeString(mobileFrequencyDirtyKey(scope)) == "true"
+
+    suspend fun acceptServerMobilePreferenceFrequency(frequency: String, expectedScope: String): Boolean {
+        if (frequency !in setOf("daily", "weekly", "monthly", "yearly") || activeScopeFlow.value != expectedScope) return false
+        return safeEditResult {
+            check(activeScopeFlow.value == expectedScope)
+            it.putClean(stringPreferencesKey(mobileFrequencyKey(expectedScope)), frequency)
+            it.putClean(stringPreferencesKey(mobileFrequencyDirtyKey(expectedScope)), "false")
+        }
+    }
+
+    suspend fun acceptSuccessfulMobilePreferenceFrequency(
+        serverFrequency: String,
+        submittedFrequency: String,
+        expectedScope: String,
+    ): Boolean {
+        if (serverFrequency !in setOf("daily", "weekly", "monthly", "yearly") ||
+            submittedFrequency !in setOf("daily", "weekly", "monthly", "yearly") ||
+            activeScopeFlow.value != expectedScope
+        ) return false
+        var accepted = false
+        val saved = safeEditResult { prefs ->
+            check(activeScopeFlow.value == expectedScope)
+            val current = prefs.safeString(mobileFrequencyKey(expectedScope)) ?: "daily"
+            if (current == submittedFrequency) {
+                prefs.putClean(stringPreferencesKey(mobileFrequencyKey(expectedScope)), serverFrequency)
+                prefs.putClean(stringPreferencesKey(mobileFrequencyDirtyKey(expectedScope)), "false")
+                accepted = true
+            }
+        }
+        return saved && accepted
+    }
+
+    private suspend fun persistScopedMobileSettings(scope: String, settings: Map<String, Any?>) {
+        if (scope.isBlank() || !ma.etherealmber.atlascommerce.data.model.isValidMobilePreferenceSettings(settings)) return
+        safeEdit { prefs ->
+            prefs.putClean(stringPreferencesKey(mobileSettingsKey(scope)), encodeMobileSettings(settings))
+        }
+    }
+
+    private suspend fun applyMobileSettingsToPreferences(settings: Map<String, Any?>, scope: String) {
+        safeEdit { prefs -> writeMobileSettingsToPreferences(prefs, settings, scope) }
+    }
+
+    private fun captureMobileSettings(prefs: Preferences, scope: String): Map<String, Any?> {
+        val savedTab = prefs.safeString("default_start_tab::$scope") ?: prefs.safeString(Keys.DEFAULT_START_TAB.name)
+        val defaultTab = when (savedTab?.uppercase(Locale.ROOT)) {
+            "PRODUCTS", "PRODUCT" -> "products"
+            "SCAN" -> "scan"
+            "SALES", "SALE" -> "sales"
+            else -> "dashboard"
+        }
+        val storedDensity = prefs.safeString(Keys.DENSITY.name)?.lowercase(Locale.ROOT)
+        return linkedMapOf(
+            "theme" to (prefs.safeString(Keys.THEME.name)?.lowercase(Locale.ROOT)
+                ?.takeIf { it in setOf("system", "light", "dark") } ?: "system"),
+            "language" to (prefs.safeString(Keys.LANGUAGE.name)?.lowercase(Locale.ROOT)
+                ?.takeIf { it in setOf("system", "en", "fr", "ar") } ?: "system"),
+            "density" to if (storedDensity == "compact") "compact" else "comfortable",
+            "animations" to (prefs.safeBoolean(Keys.ANIMATIONS_ENABLED.name) ?: true),
+            "navigation_default" to defaultTab,
+            "scan_behavior" to if (prefs.safeBoolean(Keys.AUTO_OPEN_CAMERA.name) == true) "auto" else "preview",
+            "sale_confirmation" to (prefs.safeBoolean(Keys.CONFIRM_BEFORE_SALE.name) ?: true),
+            "product_view" to if (prefs.safeBoolean(Keys.PRODUCTS_LIST_LAYOUT.name) == false) "grid" else "list",
+            "update_notifications" to (prefs.safeBoolean(Keys.AUTO_CHECK_UPDATES.name) ?: true),
+            "update_channel" to (prefs.safeString("mobile_setting_update_channel::${mobileScopeHash(scope)}")
+                ?.takeIf { it in setOf("stable", "beta") } ?: "stable"),
+            "onboarding_completed" to (prefs.safeBoolean(Keys.ONBOARDING_DONE.name) ?: false),
+        )
+    }
+
+    private fun writeMobileSettingsToPreferences(
+        prefs: MutablePreferences,
+        settings: Map<String, Any?>,
+        scope: String,
+    ) {
+        prefs.putClean(Keys.THEME, settings.getValue("theme") as String)
+        prefs.putClean(Keys.LANGUAGE, settings.getValue("language") as String)
+        prefs.putClean(Keys.DENSITY, if (settings.getValue("density") == "compact") "compact" else "comfort")
+        prefs.putClean(Keys.ANIMATIONS_ENABLED, settings.getValue("animations") as Boolean)
+        val tab = when (settings.getValue("navigation_default")) {
+            "products" -> "PRODUCTS"
+            "scan" -> "SCAN"
+            "sales" -> "SALES"
+            else -> "HOME"
+        }
+        prefs.putClean(stringPreferencesKey("default_start_tab::$scope"), tab)
+        prefs.putClean(Keys.AUTO_OPEN_CAMERA, settings.getValue("scan_behavior") == "auto")
+        prefs.putClean(Keys.CONFIRM_BEFORE_SALE, settings.getValue("sale_confirmation") as Boolean)
+        prefs.putClean(Keys.PRODUCTS_LIST_LAYOUT, settings.getValue("product_view") == "list")
+        prefs.putClean(Keys.AUTO_CHECK_UPDATES, settings.getValue("update_notifications") as Boolean)
+        prefs.putClean(
+            stringPreferencesKey("mobile_setting_update_channel::${mobileScopeHash(scope)}"),
+            settings.getValue("update_channel") as String,
+        )
+        prefs.putClean(Keys.ONBOARDING_DONE, settings.getValue("onboarding_completed") as Boolean)
+    }
+
+    private fun defaultMobileSettings(): Map<String, Any?> = linkedMapOf(
+        "theme" to "system", "language" to "system", "density" to "comfortable", "animations" to true,
+        "navigation_default" to "dashboard", "scan_behavior" to "preview", "sale_confirmation" to true,
+        "product_view" to "list", "update_notifications" to true, "update_channel" to "stable",
+        "onboarding_completed" to false,
+    )
+
+    private fun encodeMobileSettings(settings: Map<String, Any?>): String =
+        JSONObject(settings).toString()
+
+    private fun decodeMobileSettings(raw: String?): Map<String, Any?>? {
+        if (raw.isNullOrBlank()) return null
+        return runCatching {
+            val json = JSONObject(raw)
+            buildMap {
+                json.keys().forEach { key ->
+                    val value = json.get(key)
+                    put(key, if (value == JSONObject.NULL) null else value)
+                }
+            }.takeIf { ma.etherealmber.atlascommerce.data.model.isValidMobilePreferenceSettings(it) }
+        }.getOrNull()
+    }
+
+    private fun encodeMobileDirtyKeys(keys: Set<String>): String = JSONArray(keys.sorted()).toString()
+
+    private fun decodeMobileDirtyKeys(raw: String?): Set<String> {
+        if (raw.isNullOrBlank()) return emptySet()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildSet { for (index in 0 until array.length()) array.optString(index).takeIf { it.isNotBlank() }?.let(::add) }
+        }.getOrDefault(emptySet())
     }
 
     val apiBaseUrl: Flow<String?> = safeData
@@ -267,6 +618,10 @@ class AtlasPreferences @Inject constructor(
 
     val updateDownloadSource: Flow<String> = safeData
         .map { it.safeString(Keys.UPDATE_SOURCE.name)?.takeIf { s -> s.isNotBlank() } ?: "auto" }
+        .distinctUntilChanged()
+
+    val productsListLayout: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.PRODUCTS_LIST_LAYOUT.name) ?: true }
         .distinctUntilChanged()
 
     val roleNotificationsEnabled: Flow<Boolean> = safeData
@@ -406,24 +761,30 @@ class AtlasPreferences @Inject constructor(
         }
     }
 
-    suspend fun setThemeMode(mode: ThemeMode): Boolean = safeEditResult { prefs ->
-        prefs.putClean(Keys.THEME, mode.storageKey)
+    suspend fun setThemeMode(mode: ThemeMode): Boolean {
+        val saved = safeEditResult { prefs -> prefs.putClean(Keys.THEME, mode.storageKey) }
+        if (saved) persistCurrentMobileSettingsAsDirty()
+        return saved
     }
 
     suspend fun setAppLanguage(language: AppLanguage) {
         safeEdit { prefs -> prefs.putClean(Keys.LANGUAGE, language.tag) }
+        persistCurrentMobileSettingsAsDirty()
     }
 
     suspend fun useSystemAppLanguage() {
         safeEdit { prefs -> prefs.putClean(Keys.LANGUAGE, "system") }
+        persistCurrentMobileSettingsAsDirty()
     }
 
     suspend fun setDensityMode(mode: DensityMode) {
         safeEdit { prefs -> prefs.putClean(Keys.DENSITY, mode.storageKey) }
+        persistCurrentMobileSettingsAsDirty()
     }
 
     suspend fun setAnimationsEnabled(enabled: Boolean) {
         safeEdit { prefs -> prefs.putClean(Keys.ANIMATIONS_ENABLED, enabled) }
+        persistCurrentMobileSettingsAsDirty()
     }
 
     suspend fun setDeveloperModeEnabled(enabled: Boolean) {
@@ -437,6 +798,7 @@ class AtlasPreferences @Inject constructor(
 
     suspend fun setAutoOpenCamera(enabled: Boolean) {
         safeEdit { prefs -> prefs.putClean(Keys.AUTO_OPEN_CAMERA, enabled) }
+        persistCurrentMobileSettingsAsDirty()
     }
 
     suspend fun setShakeToReportEnabled(enabled: Boolean) {
@@ -464,6 +826,7 @@ class AtlasPreferences @Inject constructor(
                 prefs.putClean(Keys.DEFAULT_START_TAB, tabName)
             }
         }
+        persistCurrentMobileSettingsAsDirty()
     }
 
     suspend fun setDefaultClientName(name: String) {
@@ -476,10 +839,12 @@ class AtlasPreferences @Inject constructor(
 
     suspend fun setConfirmBeforeSale(enabled: Boolean) {
         safeEdit { prefs -> prefs.putClean(Keys.CONFIRM_BEFORE_SALE, enabled) }
+        persistCurrentMobileSettingsAsDirty()
     }
 
     suspend fun setAutoCheckUpdates(enabled: Boolean) {
         safeEdit { prefs -> prefs.putClean(Keys.AUTO_CHECK_UPDATES, enabled) }
+        persistCurrentMobileSettingsAsDirty()
     }
 
     suspend fun setParallelUpdateDownload(enabled: Boolean) {
@@ -494,16 +859,23 @@ class AtlasPreferences @Inject constructor(
         safeEdit { prefs -> prefs.putClean(Keys.UPDATE_SOURCE, sourceKey.trim().lowercase()) }
     }
 
+    suspend fun setProductsListLayout(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.PRODUCTS_LIST_LAYOUT, enabled) }
+        persistCurrentMobileSettingsAsDirty()
+    }
+
     suspend fun setRoleNotificationsEnabled(enabled: Boolean) {
         safeEdit { prefs -> prefs.putClean(Keys.ROLE_NOTIFICATIONS_ENABLED, enabled) }
     }
 
     suspend fun markOnboardingDone() {
         safeEdit { prefs -> prefs.putClean(Keys.ONBOARDING_DONE, true) }
+        persistCurrentMobileSettingsAsDirty()
     }
 
     suspend fun setOnboardingDone(done: Boolean) {
         safeEdit { prefs -> prefs.putClean(Keys.ONBOARDING_DONE, done) }
+        persistCurrentMobileSettingsAsDirty()
     }
 
     suspend fun readSession(): StoredSession? {

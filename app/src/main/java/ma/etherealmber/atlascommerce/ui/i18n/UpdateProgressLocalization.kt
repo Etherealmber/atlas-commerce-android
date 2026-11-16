@@ -5,6 +5,18 @@ import ma.etherealmber.atlascommerce.core.update.UpdateState
 import java.text.NumberFormat
 import java.util.Locale
 
+fun localizedUpdateCheckCooldown(seconds: Int, language: AppLanguage): String = when (language) {
+    AppLanguage.FRENCH -> if (seconds > 0) "La vérification est limitée. Réessayez dans $seconds s." else "Vous pouvez vérifier les mises à jour maintenant."
+    AppLanguage.ENGLISH -> if (seconds > 0) "Update checks are rate-limited. Try again in $seconds sec." else "You can check for updates now."
+    AppLanguage.ARABIC -> if (seconds > 0) "تم تقييد التحقق من التحديثات. أعد المحاولة بعد $seconds ث." else "يمكنك التحقق من التحديثات الآن."
+}
+
+fun localizedUpdateCooldownButton(seconds: Int, language: AppLanguage): String = when (language) {
+    AppLanguage.FRENCH -> "Réessayez dans $seconds s"
+    AppLanguage.ENGLISH -> "Try again in $seconds sec"
+    AppLanguage.ARABIC -> "أعد المحاولة بعد $seconds ث"
+}
+
 /** Locale-aware display only; transfer calculations remain in UpdateState. */
 fun localizedUpdateSize(bytes: Long, language: AppLanguage): String {
     val safe = bytes.coerceAtLeast(0L)

@@ -1108,7 +1108,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 AtlasBullet("Catalogue produits avec recherche, stock faible et mode hors ligne.")
                 AtlasBullet("Scan de codes-barres pour ajouter un article au panier.")
                 AtlasBullet("Vente rapide : ticket VR sans TVA, prêt à encaisser sur le web.")
-                AtlasBullet("Mises à jour accélérées multi-connexions (CDN : 6 sur mobile, 16 en Wi-Fi ; GitHub limité à 4) et diagnostic @atlas-bot.")
+                AtlasBullet("Mises à jour accélérées multi-connexions (Atlas API : 6 sur mobile, 16 en Wi-Fi ; GitHub limité à 4) et diagnostic @atlas-bot.")
             }
         }
 

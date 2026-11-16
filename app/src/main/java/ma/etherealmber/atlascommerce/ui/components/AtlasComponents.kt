@@ -1005,15 +1005,22 @@ fun <S> AtlasPageTransition(
                 val targetOrder = indexSelector(targetState)
                 when {
                     tabletMode && initialOrder < 100 && targetOrder < 100 -> {
-                        // Exit the previous tablet page before the next one appears. This avoids
-                        // two navigation/page surfaces being visible together during a fast tap.
+                        // A directional, short slide makes tablet navigation feel intentional
+                        // without sending wide page surfaces sweeping across the whole screen.
+                        val forward = targetOrder > initialOrder
                         (
-                            fadeIn(tween(190, delayMillis = 165, easing = FastOutSlowInEasing)) +
-                                scaleIn(
-                                    tween(190, delayMillis = 165, easing = FastOutSlowInEasing),
-                                    initialScale = 0.985f,
-                                )
-                            ) togetherWith fadeOut(tween(155, easing = FastOutSlowInEasing))
+                            slideInHorizontally(
+                                animationSpec = tween(260, easing = FastOutSlowInEasing),
+                                initialOffsetX = { width -> if (forward) width / 18 else -width / 18 },
+                            ) +
+                                fadeIn(tween(230, easing = FastOutSlowInEasing)) +
+                                scaleIn(tween(260, easing = FastOutSlowInEasing), initialScale = 0.985f)
+                            ) togetherWith (
+                            slideOutHorizontally(
+                                animationSpec = tween(210, easing = FastOutSlowInEasing),
+                                targetOffsetX = { width -> if (forward) -width / 24 else width / 24 },
+                            ) + fadeOut(tween(190, easing = FastOutSlowInEasing))
+                            )
                     }
 
                     // Overlay / Settings pushed vertically

@@ -17,7 +17,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -129,7 +128,6 @@ import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
-import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 import java.text.NumberFormat
 import java.time.Duration
 import java.time.Instant
@@ -1466,9 +1464,8 @@ private fun ChatBubbleRow(
     isStreaming: Boolean = false,
 ) {
     val isUser = message.fromUser
-    val darkTheme = LocalAtlasDarkTheme.current
-    val userGreen = if (darkTheme) Color(0xFF173D2B) else Color(0xFFE8F5E9)
-    val userInk = if (darkTheme) Color(0xFFB7E4C7) else Color(0xFF14532D)
+    val userGreen = Atlas.palette.positiveSoft
+    val userInk = Atlas.palette.positive
 
     Row(
         modifier = Modifier.fillMaxWidth(),

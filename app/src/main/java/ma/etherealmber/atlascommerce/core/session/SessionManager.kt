@@ -281,6 +281,7 @@ class SessionManager @Inject constructor(
             purgeInMemorySession()
             tokenHolder.set(sessionToken)
             preferences.bindActiveScope(user.serverUrl, user.username)
+            preferences.activateMobilePreferenceScope(user.serverUrl, user.username)
             offlineCache.bindScope(user.serverUrl, user.username)
             runCatching {
                 val encryptedToken = cryptoStore.encrypt(sessionToken)
@@ -611,6 +612,7 @@ class SessionManager @Inject constructor(
             purgeInMemorySession()
             val cipher = cryptoStore.encrypt(token)
             preferences.bindActiveScope(serverUrl, username)
+            preferences.activateMobilePreferenceScope(serverUrl, username)
             offlineCache.bindScope(serverUrl, username)
             tokenHolder.set(token)
             runCatching {
@@ -794,9 +796,10 @@ class SessionManager @Inject constructor(
         (reason?.takeIf(String::isNotBlank) ?: logoutNotice)?.let(_notices::tryEmit)
     }
 
-    private fun purgeInMemorySession() {
+    private suspend fun purgeInMemorySession() {
         tokenHolder.clear()
         cartStore.clear()
+        preferences.persistAndClearMobilePreferenceScope()
         preferences.bindActiveScope(null, null)
         offlineCache.bindScope(null, null)
         runCatching { AvatarBitmapCache.clear() }

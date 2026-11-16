@@ -336,17 +336,10 @@ class AppUpdateManager internal constructor(
      */
     fun pingMirrors() {
         if (pingJob?.isActive == true) return
-        val activeInfo = when (val st = _state.value) {
-            is UpdateState.Available -> st.info
-            is UpdateState.Downloading -> st.info
-            is UpdateState.ReadyToInstall -> st.info
-            is UpdateState.Error -> st.info
-            else -> null
-        }
-        val cdnTarget = activeInfo?.cdn1Url?.takeIf { it.isNotBlank() }
-            ?: UpdateDefaults.CDN1_LATEST_APK_URL
-        val ghTarget = activeInfo?.githubUrl?.takeIf { it.isNotBlank() }
-            ?: UpdateDefaults.GITHUB_LATEST_APK_URL
+        // The Settings UI labels this source “Atlas API”; probe its small manifest
+        // instead of a version-specific package URL to test the download source.
+        val cdnTarget = UpdateDefaults.CDN1_LATEST_JSON_URL
+        val ghTarget = UpdateDefaults.GITHUB_LATEST_JSON_URL
 
         pingJob = scope.launch(ioDispatcher) {
             try {
@@ -405,7 +398,14 @@ class AppUpdateManager internal constructor(
             }
             val cooldownRemainingMs = UpdateCheckRateLimiter.acquire(elapsedRealtimeMsProvider())
             if (cooldownRemainingMs != null) {
+                val retryAfterSeconds = ((cooldownRemainingMs + 999L) / 1_000L).coerceAtLeast(1L).toInt()
                 AtlasLogBuffer.log("UPDATE", "Update check throttled; retry in ${cooldownRemainingMs}ms")
+                if (manual) {
+                    _state.value = UpdateState.Error(
+                        message = "La vérification des mises à jour est temporairement limitée.",
+                        retryAfterSeconds = retryAfterSeconds,
+                    )
+                }
                 return
             }
             if (manual) {
