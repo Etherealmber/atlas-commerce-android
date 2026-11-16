@@ -46,6 +46,7 @@ private fun mobileScopeHash(scope: String): String = java.security.MessageDigest
     .joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
 private fun mobileSettingsKey(scope: String): String = "mobile_sync_settings::${mobileScopeHash(scope)}"
+private fun mobileSettingsDirtyKey(scope: String): String = "mobile_sync_settings_dirty::${mobileScopeHash(scope)}"
 private fun mobileFrequencyKey(scope: String): String = "mobile_sync_frequency::${mobileScopeHash(scope)}"
 private fun mobileFrequencyDirtyKey(scope: String): String = "mobile_sync_frequency_dirty::${mobileScopeHash(scope)}"
 private fun mobileRevisionKey(scope: String): String = "mobile_sync_revision::${mobileScopeHash(scope)}"

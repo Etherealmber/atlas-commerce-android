@@ -278,7 +278,7 @@ class SessionManager @Inject constructor(
             ) {
                 return@withLock false
             }
-            purgeInMemorySession()
+            purgeInMemorySessionAndPersist()
             tokenHolder.set(sessionToken)
             preferences.bindActiveScope(user.serverUrl, user.username)
             preferences.activateMobilePreferenceScope(user.serverUrl, user.username)
@@ -480,7 +480,7 @@ class SessionManager @Inject constructor(
                 "Le serveur enregistré ne peut pas être utilisé dans cette version. Vérifiez son adresse HTTPS puis réessayez.",
             )
         }.baseUrl
-        purgeInMemorySession()
+        purgeInMemorySessionAndPersist()
         val selectedServer = serverConfig.select(savedServerUrl, rememberServer = false)
         if (selectedServer.isFailure) {
             tokenHolder.clear()
@@ -609,7 +609,7 @@ class SessionManager @Inject constructor(
             if (clearRestoreDisabledAfterPasswordLogin) {
                 runCatching { preferences.disableSessionRestore(disabled = false) }
             }
-            purgeInMemorySession()
+            purgeInMemorySessionAndPersist()
             val cipher = cryptoStore.encrypt(token)
             preferences.bindActiveScope(serverUrl, username)
             preferences.activateMobilePreferenceScope(serverUrl, username)
@@ -788,7 +788,7 @@ class SessionManager @Inject constructor(
                     logoutNotice = LOGOUT_RESUME_UNCONFIRMED_NOTICE
                 }
             }
-            purgeInMemorySession()
+            purgeInMemorySessionAndPersist()
             runCatching { preferences.disableSessionRestore(disabled = true) }
             runCatching { preferences.clearSession() }
             _state.value = SessionState.SignedOut
@@ -796,10 +796,14 @@ class SessionManager @Inject constructor(
         (reason?.takeIf(String::isNotBlank) ?: logoutNotice)?.let(_notices::tryEmit)
     }
 
-    private suspend fun purgeInMemorySession() {
+    private suspend fun purgeInMemorySessionAndPersist() {
+        preferences.persistAndClearMobilePreferenceScope()
+        purgeInMemorySession()
+    }
+
+    private fun purgeInMemorySession() {
         tokenHolder.clear()
         cartStore.clear()
-        preferences.persistAndClearMobilePreferenceScope()
         preferences.bindActiveScope(null, null)
         offlineCache.bindScope(null, null)
         runCatching { AvatarBitmapCache.clear() }

@@ -1429,6 +1429,11 @@ fun SettingsScreen(
     val density = Atlas.density
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
+    val exportDoneToast = atlasText("Export des préférences terminé.", "Preference export completed.", "اكتمل تصدير التفضيلات.")
+    val exportFailedToast = atlasText("Impossible d'exporter les préférences.", "Could not export preferences.", "تعذّر تصدير التفضيلات.")
+    val importInvalidToast = atlasText("Fichier de préférences invalide ou trop volumineux.", "The preference file is invalid or too large.", "ملف التفضيلات غير صالح أو كبير جداً.")
+    val importDoneToast = atlasText("Préférences importées.", "Preferences imported.", "تم استيراد التفضيلات.")
+    val importFailedToast = atlasText("Import impossible.", "Import failed.", "تعذّر الاستيراد.")
     val mobileSyncState by appViewModel.mobilePreferenceSyncState.collectAsStateWithLifecycle()
     val mobileLastSuccessfulSync by appViewModel.mobilePreferenceLastSuccessfulSyncAt.collectAsStateWithLifecycle()
     val mobileSyncFrequency by appViewModel.mobilePreferenceFrequency.collectAsStateWithLifecycle()
@@ -1445,9 +1450,9 @@ fun SettingsScreen(
                         ?: error("Could not open the destination document.")
                 }
             }.onSuccess {
-                onToast(atlasText("Export des préférences terminé.", "Preference export completed.", "اكتمل تصدير التفضيلات."))
+                onToast(exportDoneToast)
             }.onFailure {
-                onToast(atlasText("Impossible d'exporter les préférences.", "Could not export preferences.", "تعذّر تصدير التفضيلات."))
+                onToast(exportFailedToast)
             }
         }
     }
@@ -1460,7 +1465,7 @@ fun SettingsScreen(
             }.getOrNull()
             val preview = json?.let { appViewModel.previewMobilePreferenceBackup(it) }
             if (preview == null) {
-                onToast(atlasText("Fichier de préférences invalide ou trop volumineux.", "The preference file is invalid or too large.", "ملف التفضيلات غير صالح أو كبير جداً."))
+                onToast(importInvalidToast)
             } else {
                 pendingImportPreview = preview
             }
@@ -1673,7 +1678,7 @@ fun SettingsScreen(
                     onClick = {
                         appViewModel.applyImportedMobilePreferences(preview.mergedSettings) { saved ->
                             pendingImportPreview = null
-                            onToast(if (saved) atlasText("Préférences importées.", "Preferences imported.", "تم استيراد التفضيلات.") else atlasText("Import impossible.", "Import failed.", "تعذّر الاستيراد."))
+                            onToast(if (saved) importDoneToast else importFailedToast)
                         }
                     },
                 ) { Text(atlasText("Fusionner", "Merge", "دمج")) }
