@@ -1,6 +1,5 @@
 package ma.etherealmber.atlascommerce.core.update
 
-import android.os.SystemClock
 import ma.etherealmber.atlascommerce.BuildConfig
 import java.io.File
 import java.text.NumberFormat
@@ -117,6 +116,8 @@ internal fun formatReleaseNotesForDisplay(rawBody: String, tagName: String): Str
         ?: "• Mise à jour $tagName — optimisations et correctifs."
 }
 
+internal fun monotonicElapsedRealtimeMs(): Long = System.nanoTime() / 1_000_000L
+
 internal fun updateCheckCooldownRemainingMs(
     lastCheckElapsedMs: Long,
     nowElapsedMs: Long,
@@ -135,7 +136,7 @@ internal object UpdateCheckRateLimiter {
     }
 
     @Synchronized
-    fun acquire(nowElapsedMs: Long = SystemClock.elapsedRealtime()): Long? {
+    fun acquire(nowElapsedMs: Long): Long? {
         val remaining = updateCheckCooldownRemainingMs(
             lastCheckElapsedMs = lastCheckElapsedMs,
             nowElapsedMs = nowElapsedMs,

@@ -45,11 +45,15 @@ class SnakePersonalBestViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             sessionManager.state
-                .map {
+                .map { state ->
+                    val user = (state as? SessionState.Active)?.user ?: return@map null
                     val token = sessionManager.authToken?.takeIf(String::isNotBlank)
                         ?: return@map null
-                    if (sessionManager.state.value !is SessionState.Active) return@map null
-                    ActiveSession(storageKey = storageKey(token))
+                    ActiveSession(
+                        storageKey = storageKey(token),
+                        serverUrl = user.serverUrl,
+                        bearerToken = token,
+                    )
                 }
                 .distinctUntilChanged()
                 .collect { nextSession ->
@@ -87,7 +91,7 @@ class SnakePersonalBestViewModel @Inject constructor(
     }
 
     private suspend fun reconcileWithServer(session: ActiveSession) {
-        when (val result = repository.getPersonalBest()) {
+        when (val result = repository.getPersonalBest(session.serverUrl, session.bearerToken())) {
             is ApiResult.Failure -> {
                 if (activeSession == session) {
                     _state.value = _state.value.copy(syncStatus = SnakeScoreSyncStatus.UNAVAILABLE)
@@ -111,7 +115,7 @@ class SnakePersonalBestViewModel @Inject constructor(
         var candidate = maxOf(requestedBest, readLocalBest(session), _state.value.personalBest)
         repeat(MAX_SYNC_ATTEMPTS) { attempt ->
             if (activeSession != session) return
-            when (val result = repository.putPersonalBest(candidate)) {
+            when (val result = repository.putPersonalBest(session.serverUrl, session.bearerToken(), candidate)) {
                 is ApiResult.Success -> {
                     if (activeSession != session) return
                     val highest = maxOf(candidate, result.data, readLocalBest(session), _state.value.personalBest)
@@ -154,7 +158,19 @@ class SnakePersonalBestViewModel @Inject constructor(
         return "best_score_session_$suffix"
     }
 
-    private data class ActiveSession(val storageKey: String)
+    private class ActiveSession(
+        val storageKey: String,
+        val serverUrl: String,
+        private val token: String,
+    ) {
+        fun bearerToken(): String = token
+
+        override fun equals(other: Any?): Boolean =
+            other is ActiveSession && storageKey == other.storageKey &&
+                serverUrl == other.serverUrl && token == other.token
+
+        override fun hashCode(): Int = 31 * (31 * storageKey.hashCode() + serverUrl.hashCode()) + token.hashCode()
+    }
 
     private companion object {
         const val GUEST_SCORE_KEY = "best_score"

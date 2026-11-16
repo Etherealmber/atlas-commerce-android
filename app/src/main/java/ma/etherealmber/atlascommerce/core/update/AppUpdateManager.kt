@@ -110,6 +110,7 @@ class AppUpdateManager internal constructor(
     private val networkTransportProvider: () -> DownloadNetworkTransport = { DownloadNetworkTransport.OTHER },
     private val internetAvailableProvider: () -> Boolean = { false },
     private val backgroundDownloadScheduler: ((UpdateInfo) -> Unit)? = null,
+    private val elapsedRealtimeMsProvider: () -> Long = ::monotonicElapsedRealtimeMs,
 ) {
 
     @Inject
@@ -402,7 +403,7 @@ class AppUpdateManager internal constructor(
             if (checkJob?.isActive == true) {
                 return
             }
-            val cooldownRemainingMs = UpdateCheckRateLimiter.acquire()
+            val cooldownRemainingMs = UpdateCheckRateLimiter.acquire(elapsedRealtimeMsProvider())
             if (cooldownRemainingMs != null) {
                 AtlasLogBuffer.log("UPDATE", "Update check throttled; retry in ${cooldownRemainingMs}ms")
                 return

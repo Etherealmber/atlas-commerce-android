@@ -13,13 +13,15 @@ class SnakeScoreRepository @Inject constructor(
     private val apiProvider: ApiProvider,
     private val runner: ApiRunner,
 ) {
-    suspend fun getPersonalBest(): ApiResult<Int> = runner.direct {
-        apiProvider.api().getSnakePersonalBest().personalBest.also(::requireValidScore)
+    suspend fun getPersonalBest(serverUrl: String, bearerToken: String): ApiResult<Int> = runner.direct {
+        apiProvider.apiForSession(serverUrl, bearerToken).getSnakePersonalBest()
+            .personalBest.also(::requireValidScore)
     }
 
-    suspend fun putPersonalBest(score: Int): ApiResult<Int> = runner.direct {
+    suspend fun putPersonalBest(serverUrl: String, bearerToken: String, score: Int): ApiResult<Int> = runner.direct {
         requireValidScore(score)
-        apiProvider.api().putSnakePersonalBest(SnakePersonalBestDto(personalBest = score))
+        apiProvider.apiForSession(serverUrl, bearerToken)
+            .putSnakePersonalBest(SnakePersonalBestDto(personalBest = score))
             .personalBest
             .also(::requireValidScore)
     }

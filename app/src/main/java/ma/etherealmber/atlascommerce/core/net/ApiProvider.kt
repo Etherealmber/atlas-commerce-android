@@ -54,9 +54,36 @@ class ApiProvider @Inject constructor(
     }
 
     /**
-     * Creates a one-shot API client for verifying a saved session during process startup.
-     * It omits the global token holder and session guard, and sends only the supplied token
-     * to the normalized server origin selected by the user.
+     * Creates an uncached API client pinned to one verified session origin and token.
+     * Mutating calls made through this API cannot inherit a later account's global token.
+     */
+    fun apiForSession(serverUrl: String, bearerToken: String): AtlasApi {
+        val normalized = ServerUrl.normalize(serverUrl)
+            ?: throw IllegalArgumentException("Invalid session server URL")
+        require(bearerToken.isNotBlank()) { "Missing session token" }
+        val pinnedHeaders = PinnedSessionHeadersInterceptor(deviceIdentity, bearerToken)
+        val sessionClient = client.newBuilder().apply {
+            val appInterceptors = interceptors()
+            val authHeaderIndex = appInterceptors.indexOfFirst { it is AtlasHeaderInterceptor }
+            if (authHeaderIndex >= 0) {
+                appInterceptors[authHeaderIndex] = pinnedHeaders
+            } else {
+                appInterceptors.add(0, pinnedHeaders)
+            }
+        }.build()
+        return Retrofit.Builder()
+            .baseUrl(ServerUrl.withSlash(normalized))
+            .client(sessionClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(AtlasApi::class.java)
+    }
+
+    /**
+     * Creates a one-shot API client for a pinned session credential. Startup uses it to
+     * verify a saved account; session-bound score requests use it to avoid following a
+     * later global token/server switch. It sends only the supplied token to the selected
+     * normalized server origin.
      */
     fun startupResumeApi(serverUrl: String, bearerToken: String): AtlasApi {
         val normalized = ServerUrl.normalize(serverUrl)
@@ -67,7 +94,7 @@ class ApiProvider @Inject constructor(
             // This client only sends the idempotent GET /api/auth/me; the regular API client
             // keeps retries disabled so mutating POSTs are never replayed implicitly.
             retryOnConnectionFailure(true)
-            addInterceptor(StartupResumeHeadersInterceptor(deviceIdentity, bearerToken))
+            addInterceptor(PinnedSessionHeadersInterceptor(deviceIdentity, bearerToken))
         }.build()
         return Retrofit.Builder()
             .baseUrl(ServerUrl.withSlash(normalized))
@@ -86,7 +113,7 @@ class ApiProvider @Inject constructor(
     }
 }
 
-private class StartupResumeHeadersInterceptor(
+private class PinnedSessionHeadersInterceptor(
     private val deviceIdentity: DeviceIdentity,
     private val bearerToken: String,
 ) : Interceptor {

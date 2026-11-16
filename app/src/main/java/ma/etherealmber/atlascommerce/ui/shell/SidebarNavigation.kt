@@ -1,6 +1,8 @@
 package ma.etherealmber.atlascommerce.ui.shell
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
@@ -131,7 +133,9 @@ internal fun AtlasSidebarBrand(
         label = "sidebar-brand-scale",
     )
     Row(
-        modifier = modifier.fillMaxWidth().heightIn(min = 58.dp).animateContentSize(),
+        modifier = modifier.fillMaxWidth().heightIn(min = 58.dp).let { rowModifier ->
+            if (motionEnabled) rowModifier.animateContentSize() else rowModifier
+        },
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -158,8 +162,16 @@ internal fun AtlasSidebarBrand(
         }
         AnimatedVisibility(
             visible = expanded,
-            enter = fadeIn(tween(180)) + slideInHorizontally(tween(210)) { -it / 5 },
-            exit = fadeOut(tween(100)) + slideOutHorizontally(tween(140)) { -it / 5 },
+            enter = if (motionEnabled) {
+                fadeIn(tween(180)) + slideInHorizontally(tween(210)) { -it / 5 }
+            } else {
+                EnterTransition.None
+            },
+            exit = if (motionEnabled) {
+                fadeOut(tween(100)) + slideOutHorizontally(tween(140)) { -it / 5 }
+            } else {
+                ExitTransition.None
+            },
             label = "sidebar-brand-title",
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {

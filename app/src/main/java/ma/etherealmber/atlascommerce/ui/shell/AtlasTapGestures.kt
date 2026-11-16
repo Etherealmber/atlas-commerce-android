@@ -35,6 +35,14 @@ internal fun Modifier.atlasTapSequenceGestures(
     val hasDoubleTapAction = onDoubleTap != null
     return pointerInput(hasDoubleTapAction) {
         fun registerTap(count: Int) {
+            if (count == 2 && tapCount == 2) {
+                // The previous double-tap timer can still be pending when another,
+                // separate double-tap arrives just outside the platform double-tap window.
+                pendingAction?.cancel()
+                pendingAction = null
+                tapCount = 0
+                currentDoubleTap?.invoke()
+            }
             tapCount += count
             if (tapCount >= 3) {
                 pendingAction?.cancel()

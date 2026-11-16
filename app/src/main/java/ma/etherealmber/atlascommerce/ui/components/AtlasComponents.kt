@@ -115,6 +115,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -150,6 +151,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlin.math.sqrt
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.ui.i18n.AtlasLanguageSelector
@@ -1961,6 +1963,7 @@ fun AtlasBootSplashScreen(
     val barProgress = remember { Animatable(if (motionEnabled) 0.08f else 1f) }
     var revealWordmark by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
     var revealTagline by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
+    var revealComplete by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
 
     LaunchedEffect(motionEnabled) {
         if (motionEnabled) {
@@ -1971,10 +1974,13 @@ fun AtlasBootSplashScreen(
             )
             delay(140)
             revealTagline = true
+            // Let the tagline's existing delayed fade/slide finish before dismissing the splash.
+            delay(380)
         } else {
             revealWordmark = true
             revealTagline = true
         }
+        revealComplete = true
     }
     LaunchedEffect(motionEnabled, holdUntilReady) {
         if (motionEnabled) {
@@ -1983,6 +1989,7 @@ fun AtlasBootSplashScreen(
             delay(150)
         }
         if (!holdUntilReady) {
+            snapshotFlow { revealComplete }.first { it }
             onFinished()
         }
     }

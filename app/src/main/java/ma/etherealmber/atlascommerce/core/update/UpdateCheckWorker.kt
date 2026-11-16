@@ -44,7 +44,9 @@ class UpdateCheckWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            if (UpdateCheckRateLimiter.acquire() != null) return@withContext Result.success()
+            if (runAttemptCount == 0 && UpdateCheckRateLimiter.acquire(monotonicElapsedRealtimeMs()) != null) {
+                return@withContext Result.success()
+            }
             val backendUrl = backendManifestUrl()
             val (backendManifest, mirrorManifests) = coroutineScope {
                 val backend = async { backendUrl?.let(::fetchManifest) }
