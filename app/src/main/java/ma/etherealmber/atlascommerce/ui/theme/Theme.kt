@@ -33,40 +33,40 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 val Brand = Color(0xFF0A0A0A)
 val BrandSoft = Color(0xFF171717)
 val Saffron = Color(0xFFF59E0B)
-val Paper = Color(0xFFF2F2F2)
+val Paper = Color(0xFFF5F5F5)
 val Surface = Color(0xFFFFFFFF)
-val Elevated = Color(0xFFE9E9E9)
-val Ink = Color(0xFF0F172A)
-val InkSoft = Color(0xFF475569)
-val Line = Color(0xFFD2D2D2)
-val LineSoft = Color(0xFFE0E0E0)
+val Elevated = Color(0xFFE5E5E5)
+val Ink = Color(0xFF171717)
+val InkSoft = Color(0xFF525252)
+val Line = Color(0xFFD4D4D4)
+val LineSoft = Color(0xFFE5E5E5)
 val LightPrimaryContainer = Elevated
 val LightSecondaryContainer = Elevated
 val LightSurfaceDim = Line
 val LightSurfaceBright = Surface
 val LightContainerLowest = Surface
-val LightContainerLow = Paper
-val LightContainer = Elevated
-val LightContainerHigh = LineSoft
+val LightContainerLow = Color(0xFFFAFAFA)
+val LightContainer = Paper
+val LightContainerHigh = Elevated
 val LightContainerHighest = Line
 
-val DarkBg = Color(0xFF06141B)
-val DarkSurface = Color(0xFF11212D)
-val DarkSurfaceLow = Color(0xFF0B1B25)
-val DarkSurfaceVariant = Color(0xFF1B2D39)
-val DarkSurfaceBright = Color(0xFF3A4D58)
-val DarkElevated = Color(0xFF253745)
-val DarkOnBg = Color(0xFFE8EFF1)
-val DarkMuted = Color(0xFFB6C2C7)
-val DarkOutline = Color(0xFF4A5C6A)
-val DarkOutlineSoft = Color(0xFF334956)
-val DarkPrimary = Color(0xFFCCD0CF)
-val DarkSecondary = Color(0xFF9BA8AB)
+val DarkBg = Color(0xFF000000)
+val DarkSurface = Color(0xFF0A0A0A)
+val DarkSurfaceLow = Color(0xFF0A0A0A)
+val DarkSurfaceVariant = Color(0xFF171717)
+val DarkSurfaceBright = Color(0xFF525252)
+val DarkElevated = Color(0xFF262626)
+val DarkOnBg = Color(0xFFFAFAFA)
+val DarkMuted = Color(0xFFD4D4D4)
+val DarkOutline = Color(0xFF525252)
+val DarkOutlineSoft = Color(0xFF404040)
+val DarkPrimary = Color(0xFFFAFAFA)
+val DarkSecondary = Color(0xFFE5E5E5)
 val DarkError = Color(0xFFF87171)
 val DarkErrorOn = DarkBg
-val DarkContainer = DarkSurface
-val DarkContainerHigh = DarkSurfaceVariant
-val DarkContainerHighest = DarkElevated
+val DarkContainer = DarkSurfaceVariant
+val DarkContainerHigh = DarkElevated
+val DarkContainerHighest = Color(0xFF373737)
 
 /** Fixed artwork and camera-accent colors; kept here so UI files contain no scattered hex palette. */
 object AtlasIllustrationPalette {
@@ -136,6 +136,11 @@ data class AtlasPalette(
     val heroText: Color,
     val heroMutedText: Color,
     val heroPill: Color,
+    val chartSales: Color,
+    val chartIncome: Color,
+    val chartExpense: Color,
+    val chartReceivable: Color,
+    val chartPayable: Color,
 )
 
 val LightPalette = AtlasPalette(
@@ -155,7 +160,12 @@ val LightPalette = AtlasPalette(
     heroEnd = Color(0xFFD2D2D2),
     heroText = Ink,
     heroMutedText = InkSoft,
-    heroPill = Color.White.copy(alpha = 0.62f),
+    heroPill = Color.White.copy(alpha = 0.72f),
+    chartSales = Color(0xFF2563EB),
+    chartIncome = Color(0xFF15803D),
+    chartExpense = Color(0xFFDC2626),
+    chartReceivable = Color(0xFF7C3AED),
+    chartPayable = Color(0xFFD97706),
 )
 
 val DarkPalette = AtlasPalette(
@@ -175,7 +185,12 @@ val DarkPalette = AtlasPalette(
     heroEnd = DarkBg,
     heroText = DarkOnBg,
     heroMutedText = DarkMuted,
-    heroPill = Color.White.copy(alpha = 0.14f),
+    heroPill = Color.White.copy(alpha = 0.10f),
+    chartSales = Color(0xFF60A5FA),
+    chartIncome = Color(0xFF86EFAC),
+    chartExpense = Color(0xFFFCA5A5),
+    chartReceivable = Color(0xFFC4B5FD),
+    chartPayable = Color(0xFFFCD34D),
 )
 
 val LocalAtlasPalette = staticCompositionLocalOf { LightPalette }
@@ -375,6 +390,11 @@ fun AtlasTheme(
         heroText = animateColorAsState(paletteTarget.heroText, colorSpec, label = "palette-hero-text").value,
         heroMutedText = animateColorAsState(paletteTarget.heroMutedText, colorSpec, label = "palette-hero-muted").value,
         heroPill = animateColorAsState(paletteTarget.heroPill, colorSpec, label = "palette-hero-pill").value,
+        chartSales = animateColorAsState(paletteTarget.chartSales, colorSpec, label = "palette-chart-sales").value,
+        chartIncome = animateColorAsState(paletteTarget.chartIncome, colorSpec, label = "palette-chart-income").value,
+        chartExpense = animateColorAsState(paletteTarget.chartExpense, colorSpec, label = "palette-chart-expense").value,
+        chartReceivable = animateColorAsState(paletteTarget.chartReceivable, colorSpec, label = "palette-chart-receivable").value,
+        chartPayable = animateColorAsState(paletteTarget.chartPayable, colorSpec, label = "palette-chart-payable").value,
     )
     CompositionLocalProvider(
         LocalAtlasPalette provides palette,

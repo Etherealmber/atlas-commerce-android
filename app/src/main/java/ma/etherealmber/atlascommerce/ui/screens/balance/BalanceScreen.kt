@@ -64,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -78,6 +79,7 @@ import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
+import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
 import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
@@ -85,6 +87,7 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.components.AtlasShimmer
 import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonBlock
+import ma.etherealmber.atlascommerce.ui.components.AtlasRefreshStatusShimmer
 import ma.etherealmber.atlascommerce.ui.components.CombinedReportWebViewDialog
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationSuggestion
 import ma.etherealmber.atlascommerce.ui.components.FinancePdfViewerDialog
@@ -608,7 +611,8 @@ fun BalanceScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (state.loading || state.refreshing) {
+                val hasBalanceSnapshot = state.finance != null || state.statement != null || state.periodBreakdown != null || state.rows.isNotEmpty()
+                if ((state.loading || state.refreshing) && !hasBalanceSnapshot) {
                     item(key = "balance_loading") {
                         BalanceDataLoading(
                             section = section,
@@ -618,7 +622,15 @@ fun BalanceScreen(
                             movementRowsToShow = visibleMovementRows.size.coerceAtLeast(if (state.rows.isEmpty()) 3 else 0),
                         )
                     }
-                } else when (section) {
+                } else {
+                    if (state.loading || state.refreshing) {
+                        item(key = "balance_refreshing") {
+                            AtlasRefreshStatusShimmer(
+                                label = atlasText("Actualisation des données…", "Refreshing financial data…", "جارٍ تحديث البيانات المالية…"),
+                            )
+                        }
+                    }
+                    when (section) {
                     BalanceSection.MOVEMENTS -> {
                         val finance = state.finance
                         state.periodBreakdown?.let { periodData ->
@@ -816,6 +828,7 @@ fun BalanceScreen(
                             Text(atlasText("Les chiffres proviennent des API financières du serveur sélectionné. Aucun solde n'est calculé ou codé en dur dans l'application.", "Figures come from the selected server’s financial APIs. No balance is calculated or hardcoded in the app.", "تأتي الأرقام من واجهات الخادم المالي المحدد. لا يحسب التطبيق أي رصيد ولا يضعه بشكل ثابت."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                    }
                 }
             }
         }
@@ -873,14 +886,15 @@ private fun monthLabel(month: YearMonth, locale: Locale): String {
 
 @Composable
 private fun BalanceClosingCard(closing: Double, currency: String, modifier: Modifier = Modifier) {
+    val accent = Atlas.palette.chartSales
     Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = accent)
                 Spacer(Modifier.width(8.dp))
                 Text(atlasText("SOLDE DE CLÔTURE", "CLOSING BALANCE", "الرصيد الختامي"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
-            Text(formatMoney(closing, currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(formatMoney(closing, currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(atlasText("Après les mouvements comptabilisés"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f))
         }
     }
@@ -892,31 +906,43 @@ private fun BalanceSummary(opening: Double, closing: Double, income: Double, out
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             BalanceClosingCard(closing, currency, Modifier.fillMaxWidth())
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SummaryAmountCard(atlasText("Ouverture", "Opening", "الافتتاحي"), opening, currency, icon = Icons.Outlined.AccountBalanceWallet, modifier = Modifier.weight(1f))
-                SummaryAmountCard(atlasText("Entrées", "Income", "الإيرادات"), income, currency, icon = Icons.Outlined.ArrowDownward, modifier = Modifier.weight(1f))
+                SummaryAmountCard(atlasText("Ouverture", "Opening", "الافتتاحي"), opening, currency, icon = Icons.Outlined.AccountBalanceWallet, accent = Atlas.palette.chartSales, modifier = Modifier.weight(1f))
+                SummaryAmountCard(atlasText("Entrées", "Income", "الإيرادات"), income, currency, icon = Icons.Outlined.ArrowDownward, accent = Atlas.palette.chartIncome, modifier = Modifier.weight(1f))
             }
-            SummaryAmountCard(atlasText("Sorties payées", "Paid expenses", "المصروفات المدفوعة"), outflows, currency, icon = Icons.Outlined.ArrowUpward, modifier = Modifier.fillMaxWidth())
+            SummaryAmountCard(atlasText("Sorties payées", "Paid expenses", "المصروفات المدفوعة"), outflows, currency, icon = Icons.Outlined.ArrowUpward, accent = Atlas.palette.chartExpense, modifier = Modifier.fillMaxWidth())
         }
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             BalanceClosingCard(closing, currency, Modifier.weight(1.25f))
-            SummaryAmountCard(atlasText("Ouverture", "Opening", "الافتتاحي"), opening, currency, icon = Icons.Outlined.AccountBalanceWallet, modifier = Modifier.weight(1f))
-            SummaryAmountCard(atlasText("Entrées", "Income", "الإيرادات"), income, currency, icon = Icons.Outlined.ArrowDownward, modifier = Modifier.weight(1f))
-            SummaryAmountCard(atlasText("Sorties payées", "Paid expenses", "المصروفات المدفوعة"), outflows, currency, icon = Icons.Outlined.ArrowUpward, modifier = Modifier.weight(1f))
+            SummaryAmountCard(atlasText("Ouverture", "Opening", "الافتتاحي"), opening, currency, icon = Icons.Outlined.AccountBalanceWallet, accent = Atlas.palette.chartSales, modifier = Modifier.weight(1f))
+            SummaryAmountCard(atlasText("Entrées", "Income", "الإيرادات"), income, currency, icon = Icons.Outlined.ArrowDownward, accent = Atlas.palette.chartIncome, modifier = Modifier.weight(1f))
+            SummaryAmountCard(atlasText("Sorties payées", "Paid expenses", "المصروفات المدفوعة"), outflows, currency, icon = Icons.Outlined.ArrowUpward, accent = Atlas.palette.chartExpense, modifier = Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-private fun SummaryAmountCard(title: String, amount: Double, currency: String, subtitle: String? = null, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, modifier: Modifier = Modifier) {
+private fun SummaryAmountCard(
+    title: String,
+    amount: Double,
+    currency: String,
+    subtitle: String? = null,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    accent: Color = Atlas.palette.chartReceivable,
+    modifier: Modifier = Modifier,
+) {
     Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (icon != null) Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                if (icon != null) {
+                    Surface(shape = CircleShape, color = accent.copy(alpha = 0.13f)) {
+                        Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.padding(5.dp).size(18.dp))
+                    }
+                }
                 if (icon != null) Spacer(Modifier.width(6.dp))
                 Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(formatMoney(amount, currency), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(formatMoney(amount, currency), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = accent)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

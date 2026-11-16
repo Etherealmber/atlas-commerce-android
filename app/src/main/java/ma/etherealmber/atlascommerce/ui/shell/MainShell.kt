@@ -679,6 +679,17 @@ fun MainShell(
                         surpriseIndex = nextSurprise(surpriseIndex, 5)
                         showAvatarSurprise = true
                     },
+                    agentMascot = {
+                        AtlasAgentSurpriseMascot(
+                            modifier = Modifier.size(28.dp),
+                            isTyping = agentState?.input?.isNotBlank() == true,
+                            isThinking = agentState?.sending == true,
+                            onSurprise = {
+                                surpriseIndex = nextSurprise(surpriseIndex, 5)
+                                showAgentSurprise = true
+                            },
+                        )
+                    },
                     showBrand = true,
                 )
             }

@@ -207,6 +207,7 @@ internal fun AtlasSidebarContent(
     onOpenNotifications: () -> Unit,
     onRequestSignOut: () -> Unit,
     onAvatarSurprise: () -> Unit,
+    agentMascot: @Composable () -> Unit,
     showBrand: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -223,7 +224,7 @@ internal fun AtlasSidebarContent(
         }
 
         Column(
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             roleTabs.forEach { item ->
@@ -241,6 +242,7 @@ internal fun AtlasSidebarContent(
                 label = MainTab.AGENT.localizedLabel(),
                 isSelected = selectedTab == MainTab.AGENT && !dataStorageSelected,
                 expanded = expanded,
+                leadingContent = agentMascot,
                 onClick = { onNavigate(MainTab.AGENT) },
             )
 
@@ -370,6 +372,7 @@ internal fun AtlasSidebarContent(
                 }
             }
         }
+        Spacer(Modifier.weight(1f))
     }
 }
 
@@ -415,6 +418,7 @@ private fun SidebarNavigationItem(
     isSelected: Boolean,
     expanded: Boolean,
     badgeCount: Int = 0,
+    leadingContent: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
@@ -466,12 +470,16 @@ private fun SidebarNavigationItem(
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.13f),
                         ) {}
                     }
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = if (expanded) null else label,
-                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(21.dp),
-                    )
+                    if (leadingContent != null) {
+                        leadingContent()
+                    } else {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = if (expanded) null else label,
+                            tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(21.dp),
+                        )
+                    }
                 }
             }
             if (expanded) {

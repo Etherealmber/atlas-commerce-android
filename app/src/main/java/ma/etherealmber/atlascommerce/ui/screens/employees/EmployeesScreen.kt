@@ -124,7 +124,7 @@ fun EmployeesScreen(
         return
     }
 
-    if (state.financeLoading || (state.loading && state.finance == null && state.payroll == null)) {
+    if ((state.financeLoading || state.loading) && state.finance == null && state.payroll == null) {
         AtlasPayrollSkeleton(
             modifier = Modifier.fillMaxSize(),
             payrollRows = visibleRows,

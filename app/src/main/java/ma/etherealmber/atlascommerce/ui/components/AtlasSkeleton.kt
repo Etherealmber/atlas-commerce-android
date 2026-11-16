@@ -11,6 +11,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -266,74 +267,77 @@ fun AtlasCatalogSkeleton(
 ) {
     val itemCount = products.size.takeIf { it > 0 } ?: rows.coerceAtLeast(1)
     AtlasShimmer {
-        LazyVerticalGrid(
-            columns = if (listLayout) GridCells.Fixed(1) else GridCells.Adaptive(minSize = 320.dp),
-            modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = bottomPadding),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (showRoleBanner) {
-                item(span = { GridItemSpan(maxLineSpan) }, key = "catalog_role_banner_skeleton") {
-                    Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                            .background(MaterialTheme.colorScheme.surface).padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.56f).height(14.dp))
-                        AtlasSkeletonBlock(Modifier.fillMaxWidth(0.76f).height(11.dp))
+        BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+            val wideLayout = maxWidth >= 760.dp
+            LazyVerticalGrid(
+                columns = if (listLayout) GridCells.Fixed(1) else GridCells.Adaptive(minSize = if (wideLayout) 250.dp else 170.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = bottomPadding),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (showRoleBanner) {
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "catalog_role_banner_skeleton") {
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                                .background(MaterialTheme.colorScheme.surface).padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.56f).height(14.dp))
+                            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.76f).height(11.dp))
+                        }
                     }
                 }
-            }
-            items(itemCount, key = { index -> products.getOrNull(index)?.let { "product_card_skeleton_${it.id}" } ?: "product_card_skeleton_$index" }) { index ->
-                val product = products.getOrNull(index)
-                AtlasCard(modifier = Modifier.fillMaxWidth(), padding = 14.dp, animateSize = false) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (listLayout) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                AtlasSkeletonBlock(Modifier.size(64.dp), RoundedCornerShape(14.dp))
-                                Spacer(Modifier.width(10.dp))
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.76f else 0.58f).height(18.dp))
-                                    if (product?.subtitle?.isNotBlank() == true || product == null) {
-                                        AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 3 == 0) 0.68f else 0.45f).height(16.dp))
+                items(itemCount, key = { index -> products.getOrNull(index)?.let { "product_card_skeleton_${it.id}" } ?: "product_card_skeleton_$index" }) { index ->
+                    val product = products.getOrNull(index)
+                    AtlasCard(modifier = Modifier.fillMaxWidth(), padding = 14.dp, animateSize = false) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (listLayout) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    AtlasSkeletonBlock(Modifier.size(64.dp), RoundedCornerShape(14.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.76f else 0.58f).height(18.dp))
+                                        if (product?.subtitle?.isNotBlank() == true || product == null) {
+                                            AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 3 == 0) 0.68f else 0.45f).height(16.dp))
+                                        }
+                                    }
+                                    if (showCartButton) {
+                                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                            AtlasSkeletonBlock(Modifier.size(24.dp), CircleShape)
+                                        }
                                     }
                                 }
-                                if (showCartButton) {
-                                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                                        AtlasSkeletonBlock(Modifier.size(24.dp), CircleShape)
+                            } else {
+                                AtlasSkeletonBlock(
+                                    Modifier.fillMaxWidth().aspectRatio(1f),
+                                    RoundedCornerShape(14.dp),
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.76f else 0.58f).height(18.dp))
+                                        if (product?.subtitle?.isNotBlank() == true || product == null) {
+                                            AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 3 == 0) 0.68f else 0.45f).height(13.dp))
+                                        }
+                                    }
+                                    if (showCartButton) {
+                                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                            AtlasSkeletonBlock(Modifier.size(24.dp), CircleShape)
+                                        }
                                     }
                                 }
                             }
-                        } else {
-                            AtlasSkeletonBlock(
-                                Modifier.fillMaxWidth().aspectRatio(1f),
-                                RoundedCornerShape(14.dp),
-                            )
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                    AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 2 == 0) 0.76f else 0.58f).height(18.dp))
-                                    if (product?.subtitle?.isNotBlank() == true || product == null) {
-                                        AtlasSkeletonBlock(Modifier.fillMaxWidth(if (index % 3 == 0) 0.68f else 0.45f).height(13.dp))
-                                    }
+                            Row(
+                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AtlasSkeletonBlock(Modifier.width(92.dp).height(24.dp), MaterialTheme.shapes.extraSmall)
+                                if (product?.neededQuantity?.let { it > 0.0 } == true) {
+                                    AtlasSkeletonBlock(Modifier.width(88.dp).height(24.dp), MaterialTheme.shapes.extraSmall)
                                 }
-                                if (showCartButton) {
-                                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                                        AtlasSkeletonBlock(Modifier.size(24.dp), CircleShape)
-                                    }
-                                }
+                                AtlasSkeletonBlock(Modifier.width(76.dp).height(24.dp), MaterialTheme.shapes.extraSmall)
                             }
-                        }
-                        Row(
-                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            AtlasSkeletonBlock(Modifier.width(92.dp).height(24.dp), MaterialTheme.shapes.extraSmall)
-                            if (product?.neededQuantity?.let { it > 0.0 } == true) {
-                                AtlasSkeletonBlock(Modifier.width(88.dp).height(24.dp), MaterialTheme.shapes.extraSmall)
-                            }
-                            AtlasSkeletonBlock(Modifier.width(76.dp).height(24.dp), MaterialTheme.shapes.extraSmall)
                         }
                     }
                 }
