@@ -336,17 +336,10 @@ class AppUpdateManager internal constructor(
      */
     fun pingMirrors() {
         if (pingJob?.isActive == true) return
-        val activeInfo = when (val st = _state.value) {
-            is UpdateState.Available -> st.info
-            is UpdateState.Downloading -> st.info
-            is UpdateState.ReadyToInstall -> st.info
-            is UpdateState.Error -> st.info
-            else -> null
-        }
-        val cdnTarget = activeInfo?.cdn1Url?.takeIf { it.isNotBlank() }
-            ?: UpdateDefaults.CDN1_LATEST_APK_URL
-        val ghTarget = activeInfo?.githubUrl?.takeIf { it.isNotBlank() }
-            ?: UpdateDefaults.GITHUB_LATEST_APK_URL
+        // The Settings UI calls CDN 1 “Atlas API”; probe its small manifest rather
+        // than a version-specific APK URL so this tests the actual CDN mirror path.
+        val cdnTarget = UpdateDefaults.CDN1_LATEST_JSON_URL
+        val ghTarget = UpdateDefaults.GITHUB_LATEST_JSON_URL
 
         pingJob = scope.launch(ioDispatcher) {
             try {

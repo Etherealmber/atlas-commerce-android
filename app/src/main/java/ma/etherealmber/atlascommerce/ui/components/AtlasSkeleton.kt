@@ -262,13 +262,14 @@ fun AtlasCatalogSkeleton(
     rows: Int = 5,
     showRoleBanner: Boolean = false,
     showCartButton: Boolean = true,
+    listLayout: Boolean = true,
     bottomPadding: Dp = 24.dp,
     products: List<ProductDto> = emptyList(),
 ) {
     val itemCount = products.size.takeIf { it > 0 } ?: rows.coerceAtLeast(1)
     AtlasShimmer {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 320.dp),
+            columns = if (listLayout) GridCells.Fixed(1) else GridCells.Adaptive(minSize = 320.dp),
             modifier = modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = bottomPadding),
             horizontalArrangement = Arrangement.spacedBy(12.dp),

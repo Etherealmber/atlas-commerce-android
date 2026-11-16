@@ -12,10 +12,12 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.Roles
@@ -23,6 +25,7 @@ import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
 import ma.etherealmber.atlascommerce.core.net.hasDeviceInternetCapability
+import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.CartStore
@@ -41,6 +44,7 @@ class ProductsViewModel @Inject constructor(
     private val commerceRepository: CommerceRepository,
     private val cartStore: CartStore,
     private val sessionManager: SessionManager,
+    private val preferences: AtlasPreferences,
     @ApplicationContext private val applicationContext: Context,
 ) : ViewModel() {
 
@@ -94,6 +98,11 @@ class ProductsViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
+    val listLayout: StateFlow<Boolean> = preferences.productsListLayout.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = true,
+    )
 
     private val _messages = MutableSharedFlow<String>(
         extraBufferCapacity = 4,
@@ -150,6 +159,10 @@ class ProductsViewModel @Inject constructor(
     fun refresh() {
         fetchState(query = _state.value.query, initial = false)
         if (_state.value.filter == FilterMode.STOCK_ADJUSTMENTS) loadStockAdjustmentRequests()
+    }
+
+    fun setListLayout(enabled: Boolean) {
+        viewModelScope.launch { preferences.setProductsListLayout(enabled) }
     }
 
     fun setFilter(mode: FilterMode) {

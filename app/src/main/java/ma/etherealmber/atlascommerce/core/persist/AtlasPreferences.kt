@@ -111,6 +111,7 @@ class AtlasPreferences @Inject constructor(
         val PARALLEL_UPDATE_DOWNLOAD = booleanPreferencesKey("parallel_update_download")
         val FOLLOW_LATEST_RELEASE = booleanPreferencesKey("follow_latest_release")
         val UPDATE_SOURCE = stringPreferencesKey("update_download_source")
+        val PRODUCTS_LIST_LAYOUT = booleanPreferencesKey("products_list_layout")
         val ROLE_NOTIFICATIONS_ENABLED = booleanPreferencesKey("role_notifications_enabled")
         val SESSION_SERVER = stringPreferencesKey("session_server_url")
         val SESSION_TOKEN = stringPreferencesKey("session_token")
@@ -267,6 +268,10 @@ class AtlasPreferences @Inject constructor(
 
     val updateDownloadSource: Flow<String> = safeData
         .map { it.safeString(Keys.UPDATE_SOURCE.name)?.takeIf { s -> s.isNotBlank() } ?: "auto" }
+        .distinctUntilChanged()
+
+    val productsListLayout: Flow<Boolean> = safeData
+        .map { it.safeBoolean(Keys.PRODUCTS_LIST_LAYOUT.name) ?: true }
         .distinctUntilChanged()
 
     val roleNotificationsEnabled: Flow<Boolean> = safeData
@@ -492,6 +497,10 @@ class AtlasPreferences @Inject constructor(
 
     suspend fun setUpdateDownloadSource(sourceKey: String) {
         safeEdit { prefs -> prefs.putClean(Keys.UPDATE_SOURCE, sourceKey.trim().lowercase()) }
+    }
+
+    suspend fun setProductsListLayout(enabled: Boolean) {
+        safeEdit { prefs -> prefs.putClean(Keys.PRODUCTS_LIST_LAYOUT, enabled) }
     }
 
     suspend fun setRoleNotificationsEnabled(enabled: Boolean) {

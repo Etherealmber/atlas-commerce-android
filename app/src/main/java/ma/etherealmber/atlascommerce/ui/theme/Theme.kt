@@ -66,8 +66,8 @@ data class AtlasPalette(
 )
 
 val LightPalette = AtlasPalette(
-    positive = Color(0xFFA16207),
-    positiveSoft = Color(0xFFFEF3C7),
+    positive = Color(0xFF15803D),
+    positiveSoft = Color(0xFFDCFCE7),
     warning = Color(0xFFB45309),
     warningSoft = Color(0xFFFEF3C7),
     danger = Color(0xFFB91C1C),
@@ -83,8 +83,8 @@ val LightPalette = AtlasPalette(
 )
 
 val DarkPalette = AtlasPalette(
-    positive = Color(0xFFFBBF24),
-    positiveSoft = Color(0xFF3A2A0B),
+    positive = Color(0xFF86EFAC),
+    positiveSoft = Color(0xFF163322),
     warning = Color(0xFFFBBF24),
     warningSoft = Color(0xFF3A2A0B),
     danger = Color(0xFFF87171),
@@ -324,8 +324,8 @@ fun AtlasAuthTheme(content: @Composable () -> Unit) {
         onError = Color(0xFF450A0A),
     )
     val authPalette = DarkPalette.copy(
-        positive = Color(0xFF94AAA1),
-        positiveSoft = Color(0xFF252C29),
+        positive = Color(0xFF86EFAC),
+        positiveSoft = Color(0xFF163322),
         cardBorder = Color(0xFF3C4047),
         mutedText = Color(0xFFB8BBC2),
         heroStart = Color(0xFF000000),

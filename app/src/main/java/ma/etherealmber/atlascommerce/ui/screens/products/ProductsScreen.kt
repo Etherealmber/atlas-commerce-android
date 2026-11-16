@@ -69,7 +69,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -116,11 +115,11 @@ fun ProductsScreen(
 ) {
     val dockPadding = LocalAtlasFloatingDockPadding.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val listLayout by viewModel.listLayout.collectAsStateWithLifecycle()
     val density = Atlas.density
     var selected by remember { mutableStateOf<ProductDto?>(null) }
     var historyTarget by remember { mutableStateOf<ProductDto?>(null) }
     var adjustTarget by remember { mutableStateOf<ProductDto?>(null) }
-    var listLayout by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var pendingFulfillRequest by remember { mutableStateOf<ProductCreationRequestDto?>(null) }
 
@@ -313,14 +312,14 @@ fun ProductsScreen(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    IconButton(onClick = { listLayout = false }) {
+                    IconButton(onClick = { viewModel.setListLayout(false) }) {
                         Icon(
                             Icons.Outlined.GridView,
                             contentDescription = atlasText("Affichage en grille", "Grid view", "عرض شبكي"),
                             tint = if (!listLayout) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = { listLayout = true }) {
+                    IconButton(onClick = { viewModel.setListLayout(true) }) {
                         Icon(
                             Icons.Outlined.ViewList,
                             contentDescription = atlasText("Affichage en liste", "List view", "عرض القائمة"),
@@ -473,6 +472,7 @@ fun ProductsScreen(
                 rows = 6,
                 showRoleBanner = !isAdmin,
                 showCartButton = canSell,
+                listLayout = listLayout,
                 bottomPadding = 24.dp + dockPadding,
                 products = state.visibleProducts,
             )
