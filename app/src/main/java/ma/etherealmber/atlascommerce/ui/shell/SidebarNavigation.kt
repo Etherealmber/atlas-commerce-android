@@ -63,6 +63,70 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
+internal fun AtlasSidebarBrand(
+    expanded: Boolean,
+    canCollapse: Boolean,
+    onToggleCollapse: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val logoDescription = when {
+        !canCollapse -> atlasText("Logo Atlas Commerce", "Atlas Commerce logo", "شعار أطلس كوميرس")
+        expanded -> atlasText(
+            "Logo Atlas Commerce. Appuyez deux fois pour réduire le menu",
+            "Atlas Commerce logo. Double-tap to collapse navigation",
+            "شعار أطلس كوميرس. انقر مرتين لتصغير القائمة",
+        )
+        else -> atlasText(
+            "Logo Atlas Commerce. Appuyez deux fois pour développer le menu",
+            "Atlas Commerce logo. Double-tap to expand navigation",
+            "شعار أطلس كوميرس. انقر مرتين لتوسيع القائمة",
+        )
+    }
+    val brandModifier = if (canCollapse) {
+        Modifier
+            .combinedClickable(onClick = {}, onDoubleClick = onToggleCollapse)
+            .semantics { contentDescription = logoDescription }
+    } else {
+        Modifier
+    }
+
+    if (expanded) {
+        Row(
+            modifier = modifier.fillMaxWidth().heightIn(min = 54.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AtlasMark(
+                modifier = brandModifier,
+                size = 42.dp,
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.width(9.dp))
+            Text(
+                "Atlas Commerce",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    } else {
+        Box(
+            modifier = modifier.fillMaxWidth().heightIn(min = 54.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            AtlasMark(
+                modifier = brandModifier,
+                size = 32.dp,
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 internal fun AtlasSidebarContent(
     user: SessionUser,
     serverBaseUrl: String?,
@@ -80,69 +144,19 @@ internal fun AtlasSidebarContent(
     onOpenNotifications: () -> Unit,
     onRequestSignOut: () -> Unit,
     onAvatarSurprise: () -> Unit,
+    showBrand: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val logoDescription = when {
-        !canCollapse -> atlasText("Logo Atlas Commerce", "Atlas Commerce logo", "شعار أطلس كوميرس")
-        expanded -> atlasText(
-            "Logo Atlas Commerce. Appuyez deux fois pour réduire le menu",
-            "Atlas Commerce logo. Double-tap to collapse navigation",
-            "شعار أطلس كوميرس. انقر مرتين لتصغير القائمة",
-        )
-        else -> atlasText(
-            "Logo Atlas Commerce. Appuyez deux fois pour développer le menu",
-            "Atlas Commerce logo. Double-tap to expand navigation",
-            "شعار أطلس كوميرس. انقر مرتين لتوسيع القائمة",
-        )
-    }
     Column(
         modifier = modifier.fillMaxSize().padding(horizontal = if (expanded) 12.dp else 8.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (expanded) {
-            Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AtlasMark(
-                    modifier = if (canCollapse) {
-                        Modifier
-                            .combinedClickable(onClick = {}, onDoubleClick = onToggleCollapse)
-                            .semantics { contentDescription = logoDescription }
-                    } else {
-                        Modifier
-                    },
-                    size = 42.dp,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.width(9.dp))
-                Text(
-                    "Atlas Commerce",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        } else {
-            Box(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                AtlasMark(
-                    modifier = if (canCollapse) {
-                        Modifier
-                            .combinedClickable(onClick = {}, onDoubleClick = onToggleCollapse)
-                            .semantics { contentDescription = logoDescription }
-                    } else {
-                        Modifier
-                    },
-                    size = 32.dp,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
+        if (showBrand) {
+            AtlasSidebarBrand(
+                expanded = expanded,
+                canCollapse = canCollapse,
+                onToggleCollapse = onToggleCollapse,
+            )
         }
 
         Column(

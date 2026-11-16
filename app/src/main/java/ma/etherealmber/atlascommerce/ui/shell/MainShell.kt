@@ -454,6 +454,7 @@ fun MainShell(
         )
     }
 
+    val showShellTopBar = isForeground && !productHistoryActive && tab != MainTab.NOTIFICATIONS
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val floatingBarWidth by animateDpAsState(
         targetValue = maxWidth,
@@ -468,7 +469,7 @@ fun MainShell(
         modifier = Modifier.fillMaxSize(),
         containerColor = Color.Transparent,
         topBar = {
-            if (isForeground && !productHistoryActive && tab != MainTab.NOTIFICATIONS) {
+            if (showShellTopBar) {
                 AtlasTopBar(
                     title = if (!useRail || tab == MainTab.AGENT) tab.localizedLabel() else "",
                     subtitle = if (!useRail) agentState?.let { state ->
@@ -483,22 +484,45 @@ fun MainShell(
                         listOf(thread, status).filter { it.isNotBlank() }.joinToString(" · ")
                     } else null,
                     containerColor = if (useRail) Color.Transparent else MaterialTheme.colorScheme.background,
-                    titleLeading = if (tab == MainTab.AGENT) {
-                        {
-                            // The top app bar spans over the tablet rail; place the Agent
-                            // title in the content pane instead of making it look like sidebar content.
-                            if (useRail) Spacer(Modifier.width(sidebarWidth))
-                            AtlasAgentMascot(
-                                modifier = Modifier.size(32.dp).combinedClickable(
-                                    onClick = {},
-                                    onLongClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
-                                    onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAgentSurprise = true },
-                                ),
-                                isTyping = agentState?.input?.isNotBlank() == true,
-                                isThinking = agentState?.sending == true,
-                            )
+                    titleLeading = when {
+                        useRail -> {
+                            {
+                                // Use the otherwise-empty rail area above the page content for
+                                // the brand, instead of leaving a tall blank gap above the logo.
+                                AtlasSidebarBrand(
+                                    expanded = sidebarExpanded,
+                                    canCollapse = true,
+                                    onToggleCollapse = { onSidebarCollapsedChange(!sidebarCollapsed) },
+                                    modifier = Modifier.width(sidebarWidth),
+                                )
+                                if (tab == MainTab.AGENT) {
+                                    AtlasAgentMascot(
+                                        modifier = Modifier.size(32.dp).combinedClickable(
+                                            onClick = {},
+                                            onLongClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
+                                            onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAgentSurprise = true },
+                                        ),
+                                        isTyping = agentState?.input?.isNotBlank() == true,
+                                        isThinking = agentState?.sending == true,
+                                    )
+                                }
+                            }
                         }
-                    } else null,
+                        tab == MainTab.AGENT -> {
+                            {
+                                AtlasAgentMascot(
+                                    modifier = Modifier.size(32.dp).combinedClickable(
+                                        onClick = {},
+                                        onLongClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
+                                        onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAgentSurprise = true },
+                                    ),
+                                    isTyping = agentState?.input?.isNotBlank() == true,
+                                    isThinking = agentState?.sending == true,
+                                )
+                            }
+                        }
+                        else -> null
+                    },
                     onBack = if (useRail) null else when (tab) {
                         MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
                         MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> ({ setTabName(lastBottomTabName) })
@@ -651,10 +675,7 @@ fun MainShell(
                     .align(Alignment.CenterStart)
                     .offset(x = sidebarEdgeOffset)
                     .width(sidebarWidth + sidebarStartInset)
-                    .fillMaxHeight()
-                    // Keep the rail (including its brand row) above full-screen destinations
-                    // such as the embedded Notifications scaffold.
-                    .zIndex(2f),
+                    .fillMaxHeight(),
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 tonalElevation = 1.dp,
             ) {
@@ -678,6 +699,7 @@ fun MainShell(
                         surpriseIndex = nextSurprise(surpriseIndex, 5)
                         showAvatarSurprise = true
                     },
+                    showBrand = !showShellTopBar,
                 )
             }
             VerticalDivider(
