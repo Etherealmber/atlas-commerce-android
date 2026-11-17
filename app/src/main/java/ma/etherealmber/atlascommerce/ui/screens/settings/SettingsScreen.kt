@@ -1717,7 +1717,7 @@ fun SettingsScreen(
         AtlasCard {
             Text(atlasText("Synchronisation des préférences", "Preference sync", "مزامنة التفضيلات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                atlasText("Synchronisez uniquement les paramètres autorisés de ce compte. Choisissez une fréquence puis touchez Synchroniser maintenant pour l'enregistrer. Les mots de passe, comptes enregistrés, serveurs, données biométriques et consentements restent locaux.", "Sync only this account’s allowlisted settings. Choose a frequency, then tap Sync now to save it. Passwords, saved accounts, servers, biometrics, and consent remain local.", "تتم مزامنة الإعدادات المسموح بها لهذا الحساب فقط. اختر التكرار ثم اضغط زامن الآن لحفظه. تبقى كلمات المرور والحسابات والخوادم والبيانات الحيوية والموافقات محلية."),
+                atlasText("Synchronisez uniquement les paramètres autorisés de ce compte. Choisissez une fréquence puis touchez Synchroniser maintenant pour l'enregistrer. Le thème et la langue restent appliqués depuis vos choix locaux, même si vous changez de serveur ou de compte. Les mots de passe, comptes enregistrés, serveurs, données biométriques et consentements restent locaux.", "Sync only this account’s allowlisted settings. Choose a frequency, then tap Sync now to save it. Your locally selected theme and language stay in effect when you switch servers or accounts. Passwords, saved accounts, servers, biometrics, and consent remain local.", "تتم مزامنة الإعدادات المسموح بها لهذا الحساب فقط. اختر التكرار ثم اضغط زامن الآن لحفظه. يظل المظهر واللغة المحددان محلياً قيد التطبيق عند تغيير الخادم أو الحساب. تبقى كلمات المرور والحسابات والخوادم والبيانات الحيوية والموافقات محلية."),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1990,15 +1990,15 @@ fun SettingsScreen(
                         title = atlasText("Rapports de plantage automatiques (Firebase)", "Automatic crash reports (Firebase)", "تقارير الأعطال التلقائية (Firebase)"),
                         subtitle = if (automaticCrashReportsEnabled) {
                             atlasText(
-                                "Firebase Crashlytics est configuré. L'envoi automatique est activé selon votre choix; aucune donnée Analytics n'est collectée.",
-                                "Firebase Crashlytics is configured. Automatic reporting is enabled by your choice; no Analytics data is collected.",
-                                "تم إعداد Firebase Crashlytics. الإرسال التلقائي مفعّل باختيارك، ولا يتم جمع بيانات Analytics.",
+                                "Firebase Crashlytics est configuré. L'envoi automatique est activé selon votre choix. Analytics possède un consentement séparé, disponible uniquement en version debug.",
+                                "Firebase Crashlytics is configured. Automatic reporting is enabled by your choice. Analytics has separate consent and is available only in debug builds.",
+                                "تم إعداد Firebase Crashlytics. الإرسال التلقائي مفعّل باختيارك. تتطلب Analytics موافقة منفصلة ولا تتوفر إلا في نسخ التصحيح.",
                             )
                         } else {
                             atlasText(
-                                "Firebase Crashlytics est configuré et prêt. Les rapports restent désactivés jusqu'à votre accord; aucune donnée Analytics n'est collectée.",
-                                "Firebase Crashlytics is configured and ready. Reports stay off until you opt in; no Analytics data is collected.",
-                                "تم إعداد Firebase Crashlytics وهو جاهز. تظل التقارير متوقفة حتى توافق؛ ولا يتم جمع بيانات Analytics.",
+                                "Firebase Crashlytics est configuré et prêt. Les rapports restent désactivés jusqu'à votre accord. Analytics possède un consentement séparé, disponible uniquement en version debug.",
+                                "Firebase Crashlytics is configured and ready. Reports stay off until you opt in. Analytics has separate consent and is available only in debug builds.",
+                                "تم إعداد Firebase Crashlytics وهو جاهز. تظل التقارير متوقفة حتى توافق. تتطلب Analytics موافقة منفصلة ولا تتوفر إلا في نسخ التصحيح.",
                             )
                         },
                         checked = automaticCrashReportsEnabled,

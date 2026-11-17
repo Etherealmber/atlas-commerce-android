@@ -100,21 +100,29 @@ fun AtlasSkeletonBlock(
         modifier = modifier
             .clip(shape)
             .drawWithCache {
-                val phase = phaseState?.value ?: 0.52f
                 val bandWidth = size.width * 1.35f
-                val startX = -bandWidth + (size.width + bandWidth) * phase
-                val brush = Brush.linearGradient(
-                    colorStops = arrayOf(
-                        0f to base,
-                        0.36f to base,
-                        0.5f to highlight,
-                        0.64f to base,
-                        1f to base,
-                    ),
-                    start = Offset(startX, 0f),
-                    end = Offset(startX + bandWidth, size.height),
+                val blockWidth = size.width
+                val blockHeight = size.height
+                val stops = arrayOf(
+                    0f to base,
+                    0.36f to base,
+                    0.5f to highlight,
+                    0.64f to base,
+                    1f to base,
                 )
-                onDrawBehind { drawRect(brush) }
+                // Read the animated phase in the draw lambda so Compose invalidates only the
+                // drawing pass on each frame instead of rebuilding this block's cache.
+                onDrawBehind {
+                    val phase = phaseState?.value ?: 0.52f
+                    val startX = -bandWidth + (blockWidth + bandWidth) * phase
+                    drawRect(
+                        Brush.linearGradient(
+                            colorStops = stops,
+                            start = Offset(startX, 0f),
+                            end = Offset(startX + bandWidth, blockHeight),
+                        ),
+                    )
+                }
             },
     )
 }

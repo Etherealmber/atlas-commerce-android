@@ -32,37 +32,39 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 // ---------------------------------------------------------------------------
 
 object AtlasNeutral {
-    // Light: white/paper at the base, descending into charcoal and near-black.
+    // The classic Atlas paper, zinc and slate palette, centralized for light and dark UI.
     val lightBase = Color(0xFFFFFFFF)
     val light50 = Color(0xFFFAFAFA)
-    val light100 = Color(0xFFF5F5F5)
-    val light200 = Color(0xFFE5E5E5)
-    val light300 = Color(0xFFD4D4D4)
+    val light100 = Color(0xFFF2F2F2)
+    val light200 = Color(0xFFE9E9E9)
+    val light300 = Color(0xFFD2D2D2)
     val light400 = Color(0xFFA3A3A3)
     val light500 = Color(0xFF737373)
-    val light600 = Color(0xFF525252)
+    val light600 = Color(0xFF475569)
     val light700 = Color(0xFF404040)
     val light800 = Color(0xFF262626)
-    val light900 = Color(0xFF171717)
+    val light900 = Color(0xFF0F172A)
     val light950 = Color(0xFF0A0A0A)
+    val lightBrandSoft = Color(0xFF171717)
+    val lightLineSoft = Color(0xFFE0E0E0)
 
-    // Dark: black base with the same neutral ramp reversed for surfaces and text.
-    val darkBase = Color(0xFF000000)
-    val dark50 = Color(0xFF0A0A0A)
-    val dark100 = Color(0xFF171717)
-    val dark200 = Color(0xFF262626)
-    val dark300 = Color(0xFF373737)
-    val dark400 = Color(0xFF525252)
-    val dark500 = Color(0xFF8A8A8A)
-    val dark600 = Color(0xFFA3A3A3)
-    val dark700 = Color(0xFFD4D4D4)
-    val dark800 = Color(0xFFE5E5E5)
-    val dark900 = Color(0xFFF5F5F5)
-    val dark950 = Color(0xFFFAFAFA)
+    // Classic blue-charcoal dark mode. Hero cards use the dark surface-to-background gradient.
+    val darkBase = Color(0xFF06141B)
+    val dark50 = Color(0xFF11212D)
+    val darkSurfaceLow = Color(0xFF0B1B25)
+    val dark100 = Color(0xFF1B2D39)
+    val dark200 = Color(0xFF253745)
+    val dark300 = Color(0xFF334956)
+    val dark400 = Color(0xFF3A4D58)
+    val darkMuted = Color(0xFFB6C2C7)
+    val darkPrimary = Color(0xFFCCD0CF)
+    val darkSecondary = Color(0xFF9BA8AB)
+    val darkOutline = Color(0xFF4A5C6A)
+    val darkOnBg = Color(0xFFE8EFF1)
 }
 
 val Brand = AtlasNeutral.light950
-val BrandSoft = AtlasNeutral.light900
+val BrandSoft = AtlasNeutral.lightBrandSoft
 val Saffron = Color(0xFFF59E0B)
 val Paper = AtlasNeutral.light100
 val Surface = AtlasNeutral.lightBase
@@ -70,34 +72,34 @@ val Elevated = AtlasNeutral.light200
 val Ink = AtlasNeutral.light900
 val InkSoft = AtlasNeutral.light600
 val Line = AtlasNeutral.light300
-val LineSoft = AtlasNeutral.light200
+val LineSoft = AtlasNeutral.lightLineSoft
 val LightPrimaryContainer = AtlasNeutral.light200
 val LightSecondaryContainer = AtlasNeutral.light200
 val LightSurfaceDim = AtlasNeutral.light300
 val LightSurfaceBright = AtlasNeutral.lightBase
 val LightContainerLowest = AtlasNeutral.lightBase
-val LightContainerLow = AtlasNeutral.light50
-val LightContainer = AtlasNeutral.light100
-val LightContainerHigh = AtlasNeutral.light200
+val LightContainerLow = AtlasNeutral.light100
+val LightContainer = AtlasNeutral.light200
+val LightContainerHigh = AtlasNeutral.lightLineSoft
 val LightContainerHighest = AtlasNeutral.light300
 
 val DarkBg = AtlasNeutral.darkBase
 val DarkSurface = AtlasNeutral.dark50
-val DarkSurfaceLow = AtlasNeutral.dark50
+val DarkSurfaceLow = AtlasNeutral.darkSurfaceLow
 val DarkSurfaceVariant = AtlasNeutral.dark100
 val DarkSurfaceBright = AtlasNeutral.dark400
 val DarkElevated = AtlasNeutral.dark200
-val DarkOnBg = AtlasNeutral.dark950
-val DarkMuted = AtlasNeutral.dark700
-val DarkOutline = AtlasNeutral.dark400
+val DarkOnBg = AtlasNeutral.darkOnBg
+val DarkMuted = AtlasNeutral.darkMuted
+val DarkOutline = AtlasNeutral.darkOutline
 val DarkOutlineSoft = AtlasNeutral.dark300
-val DarkPrimary = AtlasNeutral.dark950
-val DarkSecondary = AtlasNeutral.dark800
+val DarkPrimary = AtlasNeutral.darkPrimary
+val DarkSecondary = AtlasNeutral.darkSecondary
 val DarkError = Color(0xFFF87171)
 val DarkErrorOn = DarkBg
-val DarkContainer = AtlasNeutral.dark100
-val DarkContainerHigh = AtlasNeutral.dark200
-val DarkContainerHighest = AtlasNeutral.dark300
+val DarkContainer = AtlasNeutral.dark50
+val DarkContainerHigh = AtlasNeutral.dark100
+val DarkContainerHighest = AtlasNeutral.dark200
 
 /** Fixed artwork and camera-accent colors; kept here so UI files contain no scattered hex palette. */
 object AtlasIllustrationPalette {
@@ -128,6 +130,37 @@ object AtlasIllustrationPalette {
     val shirtBlue = Color(0xFFEAEFF5)
     val eyeDark = Color(0xFF362A26)
     val snakePupil = Color(0xFF173540)
+}
+
+/** Friendly, theme-aware character colors; facial details intentionally never use pure black. */
+@Immutable
+data class AtlasAgentMascotColors(
+    val faceGradientStart: Color,
+    val faceGradientEnd: Color,
+    val eyeWhite: Color,
+    val pupil: Color,
+    val smile: Color,
+    val sparkle: Color,
+)
+
+fun atlasAgentMascotColors(dark: Boolean): AtlasAgentMascotColors = if (dark) {
+    AtlasAgentMascotColors(
+        faceGradientStart = Color(0xFFA995FF),
+        faceGradientEnd = Color(0xFF55D5D1),
+        eyeWhite = Color(0xFFFFFBF4),
+        pupil = Color(0xFF40516F),
+        smile = Color(0xFF40516F),
+        sparkle = Color(0xFFFFFBF4),
+    )
+} else {
+    AtlasAgentMascotColors(
+        faceGradientStart = Color(0xFF8277F2),
+        faceGradientEnd = Color(0xFF36BFC2),
+        eyeWhite = Color(0xFFFFFFFF),
+        pupil = Color(0xFF40516F),
+        smile = Color(0xFF40516F),
+        sparkle = Color(0xFFFFFFFF),
+    )
 }
 
 @Immutable
@@ -191,7 +224,7 @@ val LightPalette = AtlasPalette(
     heroEnd = Color(0xFFD2D2D2),
     heroText = Ink,
     heroMutedText = InkSoft,
-    heroPill = Color.White.copy(alpha = 0.72f),
+    heroPill = Color.White.copy(alpha = 0.62f),
     chartSales = Color(0xFF2563EB),
     chartIncome = Color(0xFF15803D),
     chartExpense = Color(0xFFDC2626),
@@ -216,7 +249,7 @@ val DarkPalette = AtlasPalette(
     heroEnd = DarkBg,
     heroText = DarkOnBg,
     heroMutedText = DarkMuted,
-    heroPill = Color.White.copy(alpha = 0.10f),
+    heroPill = Color.White.copy(alpha = 0.14f),
     chartSales = Color(0xFF60A5FA),
     chartIncome = Color(0xFF86EFAC),
     chartExpense = Color(0xFFFCA5A5),

@@ -17,6 +17,26 @@ class CrashReportConsentTest {
     }
 
     @Test
+    fun syntheticAnalyticsEventRequiresDebugBuildConfigurationAndExplicitOptIn() {
+        assertFalse(canRecordDebugAnalyticsTest(false, true, true, true))
+        assertFalse(canRecordDebugAnalyticsTest(true, false, true, true))
+        assertFalse(canRecordDebugAnalyticsTest(true, true, false, true))
+        assertFalse(canRecordDebugAnalyticsTest(true, true, true, false))
+        assertTrue(canRecordDebugAnalyticsTest(true, true, true, true))
+    }
+
+    @Test
+    fun analyticsStartsOptedOutAndDisablesAdvertisingIdentifiersAndPersonalization() {
+        val manifest = java.io.File("src/main/AndroidManifest.xml").takeIf { it.isFile }
+            ?: java.io.File("app/src/main/AndroidManifest.xml")
+        assertTrue("Main manifest must exist", manifest.isFile)
+        val text = manifest.readText()
+        assertTrue(text.contains("android:name=\"firebase_analytics_collection_enabled\"\n            android:value=\"false\""))
+        assertTrue(text.contains("android:name=\"google_analytics_adid_collection_enabled\"\n            android:value=\"false\""))
+        assertTrue(text.contains("android:name=\"google_analytics_default_allow_ad_personalization_signals\"\n            android:value=\"false\""))
+    }
+
+    @Test
     fun doesNotRequestCrashlyticsWhenDefaultFirebaseAppIsMissing() {
         var factoryCalled = false
         var failureReported = false
@@ -71,6 +91,7 @@ class CrashReportConsentTest {
         assertTrue("R8 rules file must exist", rules.isFile)
         val content = rules.readText()
         assertTrue(content.contains("-keep class * implements com.google.firebase.components.ComponentRegistrar {\n    *;\n}"))
+        assertTrue(content.contains("-keep class com.google.firebase.analytics.FirebaseAnalytics"))
     }
 
     @Test

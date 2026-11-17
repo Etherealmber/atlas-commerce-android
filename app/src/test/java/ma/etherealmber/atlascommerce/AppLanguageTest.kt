@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import ma.etherealmber.atlascommerce.core.AppLanguage
+import ma.etherealmber.atlascommerce.core.shouldRefreshSystemAppLanguage
 import ma.etherealmber.atlascommerce.data.model.AssistChatRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -32,6 +33,13 @@ class AppLanguageTest {
         assertEquals(AppLanguage.ARABIC, AppLanguage.fromSystemLocale(java.util.Locale.forLanguageTag("ar-MA")))
         assertEquals(AppLanguage.ENGLISH, AppLanguage.fromSystemLocale(java.util.Locale.forLanguageTag("en-US")))
         assertEquals(AppLanguage.FRENCH, AppLanguage.fromSystemLocale(java.util.Locale.forLanguageTag("ja-JP")))
+    }
+
+    @Test
+    fun initialPlaceholderCannotOverrideSavedLanguageWithSystemLocale() {
+        assertFalse(shouldRefreshSystemAppLanguage(appearanceLoaded = false, followsSystem = true))
+        assertFalse(shouldRefreshSystemAppLanguage(appearanceLoaded = true, followsSystem = false))
+        assertTrue(shouldRefreshSystemAppLanguage(appearanceLoaded = true, followsSystem = true))
     }
 
     @Test

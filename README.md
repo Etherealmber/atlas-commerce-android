@@ -28,7 +28,7 @@
 > **This Android app is directly linked to an [Atlas Commerce Web (`Etherealmber/atlas-commerce`)](https://github.com/Etherealmber/atlas-commerce) server.**
 > It does **not** store a standalone local accounting database on your phone — **you MUST deploy and set up your [Atlas Commerce Web](https://github.com/Etherealmber/atlas-commerce) instance FIRST** before connecting this mobile app!
 >
-> **New from zero?** Follow the full [self-hosting and Android setup guide](docs/SETUP.md): Cloudflare account, D1 database/migrations, R2, mail/keys, app installation, optional Firebase crash reports, release signing, and local device-unlock setup.
+> **New from zero?** Follow the full [self-hosting and Android setup guide](docs/SETUP.md): Cloudflare account, D1 database/migrations, R2, mail/keys, app installation, optional Firebase crash reports and debug-only Analytics verification, release signing, and local device-unlock setup.
 
 ### Step-by-Step Setup for Brand-New Users
 
@@ -78,7 +78,7 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
 6. **Quick device unlock is missing or unavailable 🔐**
    - Quick sign-in is opt-in per saved account and requires an enrolled biometric or secure Android screen lock. If it is disabled or unavailable, sign in with the account password; you can review device unlock in Profile settings. Android does not use WebAuthn passkeys.
 7. **Crash reports not appearing 🐞**
-   - Official release APKs are only publishable when CI includes a validated Firebase config for `ma.etherealmber.atlascommerce`. Local/validation builds may omit Firebase; automatic upload still requires Crashlytics enabled in Firebase Console and user opt-in under Settings. In a debug build, use **Developer diagnostics → Send non-fatal test event**, then reopen the app and check Firebase Crashlytics. If Developer diagnostics says Firebase is initialized but Crashlytics is unavailable, the installed variant is missing a working Crashlytics component; capture a redacted diagnostic report and check the release workflow summary. See [Firebase setup](docs/SETUP.md#4-optional-push-notifications-and-automatic-crash-reports-firebase).
+   - Official release APKs are only publishable when CI includes a validated Firebase config for `ma.etherealmber.atlascommerce`. Local/validation builds may omit Firebase; automatic crash uploads require Crashlytics enabled in Firebase Console and user opt-in under Settings. Debug builds also offer an explicitly opt-in, synthetic Firebase Analytics test event in Developer diagnostics; it is not anonymous and enables standard SDK collection only in that debug build. See [Firebase setup](docs/SETUP.md#4-optional-push-notifications-crash-reports-and-analytics-verification-firebase) and the [Analytics privacy notes](docs/firebase-and-background-notifications.md#optional-firebase-analytics-verification-debug-builds-only).
 
 ---
 
@@ -97,7 +97,7 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
 - **Opt-in local device unlock**:
   - After a successful manual sign-in, a saved account can opt into biometrics or Android device PIN/password. Atlas unlocks the locally encrypted session token and verifies it with the selected server; the account password is never stored. Manual password sign-in remains available when this option is declined or unavailable.
 - **Automatic crash reporting is optional and consent-based**:
-  - Firebase Crashlytics uploads crash reports automatically only after the user opts in under Settings. It is off by default; builds without Firebase configuration continue to work without push or automatic crash uploads.
+  - Firebase Crashlytics uploads crash reports automatically only after the user opts in under Settings. It is off by default; builds without Firebase configuration continue to work without push or automatic crash uploads. Firebase Analytics is also off by default and available only as an explicit debug-build opt-in for synthetic testing; it is not an anonymous data stream.
 - **Temporary finance reports and local-data controls**:
   - Download/open/share combined monthly PDF reports, retain them in private app cache for up to seven days, and delete them from Settings without touching server business records.
 

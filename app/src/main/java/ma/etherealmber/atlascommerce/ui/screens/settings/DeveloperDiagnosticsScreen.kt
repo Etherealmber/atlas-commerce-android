@@ -47,6 +47,7 @@ import ma.etherealmber.atlascommerce.core.diagnostics.DeviceDiagnosticSnapshot
 import ma.etherealmber.atlascommerce.core.diagnostics.DiagnosticReporter
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.core.diagnostics.AnalyticsConsent
 import ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
@@ -70,6 +71,8 @@ fun DeveloperDiagnosticsScreen(
     val crashReportsConfigured = crashStatus.configured
     val firebaseAppConfigured = CrashReportConsent.hasDefaultFirebaseApp(context)
     val crashReportsEnabled = crashStatus.collectionEnabled
+    val analyticsConfigured = AnalyticsConsent.isConfigured(context)
+    var analyticsEnabled by remember(analyticsConfigured) { mutableStateOf(AnalyticsConsent.isEnabled(context)) }
     val developerMode by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
     val localStorage by appViewModel.localStorageSummary.collectAsStateWithLifecycle()
@@ -387,6 +390,89 @@ fun DeveloperDiagnosticsScreen(
                         )
                     }
                 }
+
+                AtlasInfoRow(
+                    atlasText("Firebase Analytics", "Firebase Analytics", "Firebase Analytics"),
+                    when {
+                        !analyticsConfigured -> atlasText("Non configuré", "Not configured", "غير مُعدّ")
+                        !BuildConfig.DEBUG -> atlasText("Désactivé dans les versions de production", "Disabled in release builds", "معطل في إصدارات الإنتاج")
+                        analyticsEnabled -> atlasText("Activé avec votre accord (debug)", "Enabled with your consent (debug)", "مُفعّل بموافقتك (تصحيح)")
+                        else -> atlasText("Désactivé · consentement requis", "Off · consent required", "متوقف · الموافقة مطلوبة")
+                    },
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            atlasText("Autoriser Analytics (version debug)", "Allow Analytics (debug build)", "السماح بـ Analytics (نسخة التصحيح)"),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            atlasText(
+                                "Désactivé par défaut. L'activation autorise aussi les événements standards du SDK et des données d'appareil/installation; l'identifiant publicitaire et la personnalisation publicitaire sont désactivés.",
+                                "Off by default. Enabling also permits standard SDK events and app/device/installation data; Advertising ID collection and ad personalization are disabled.",
+                                "متوقف افتراضياً. يسمح التفعيل أيضاً بأحداث SDK القياسية وبيانات التطبيق والجهاز والتثبيت؛ تم تعطيل المعرّف الإعلاني وتخصيص الإعلانات.",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = analyticsEnabled,
+                        enabled = BuildConfig.DEBUG && analyticsConfigured,
+                        onCheckedChange = { enabled ->
+                            scope.launch(Dispatchers.IO) {
+                                val saved = AnalyticsConsent.setEnabled(context, enabled)
+                                val nowEnabled = saved && AnalyticsConsent.isEnabled(context)
+                                withContext(Dispatchers.Main.immediate) {
+                                    analyticsEnabled = nowEnabled
+                                    onToast(
+                                        if (nowEnabled == enabled && saved) {
+                                            if (enabled) atlasText("Analytics activé avec votre accord.", "Analytics enabled with your consent.", "تم تفعيل Analytics بموافقتك.")
+                                            else atlasText("Analytics désactivé.", "Analytics disabled.", "تم تعطيل Analytics.")
+                                        } else atlasText("Impossible de modifier le réglage Analytics.", "Could not update Analytics consent.", "تعذر تحديث موافقة Analytics.")
+                                    )
+                                }
+                            }
+                        },
+                    )
+                }
+                TextButton(
+                    enabled = BuildConfig.DEBUG && analyticsConfigured && analyticsEnabled,
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            val recorded = AnalyticsConsent.recordDebugTestEvent(context)
+                            withContext(Dispatchers.Main.immediate) {
+                                onToast(
+                                    if (recorded) atlasText(
+                                        "Événement synthétique ajouté; vérifiez Firebase DebugView.",
+                                        "Synthetic event queued; check Firebase DebugView.",
+                                        "تمت إضافة الحدث الاصطناعي؛ تحقق من Firebase DebugView.",
+                                    ) else atlasText(
+                                        "Impossible d'ajouter l'événement Analytics.",
+                                        "Could not queue the Analytics event.",
+                                        "تعذرت إضافة حدث Analytics.",
+                                    ),
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(atlasText("Envoyer un événement Analytics synthétique", "Send synthetic Analytics event", "إرسال حدث Analytics اصطناعي"))
+                }
+                Text(
+                    atlasText(
+                        "L'événement ne contient que des valeurs fixes de test, sans compte, serveur, locataire, produit ni donnée commerciale. Firebase peut associer les événements aux identifiants d'installation et aux données d'appareil; ce n'est donc pas un envoi anonyme.",
+                        "The event contains fixed test values only—no account, server, tenant, product, or business data. Firebase may associate events with installation identifiers and device data, so this is not anonymous collection.",
+                        "يحتوي الحدث على قيم اختبار ثابتة فقط دون حساب أو خادم أو مؤسسة أو منتج أو بيانات عمل. قد تربط Firebase الأحداث بمعرّفات التثبيت وبيانات الجهاز، لذلك لا يُعد الجمع مجهولاً.",
+                    ),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             DeveloperCacheToolsCard(

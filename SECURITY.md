@@ -97,12 +97,13 @@ trust bypass without an explicit change to this product security decision.
 | Encrypted active session token | DataStore (app-private) | Stay signed in |
 | Auth-bound saved-account token | DataStore ciphertext (`du1:`) + per-account Android Keystore key | Quick unlock after fresh biometric/device-credential authentication |
 | Username, role, display name, email, local-unlock opt-in | DataStore | Show the profile and remember device-unlock choice without storing the account password |
-| Server address, theme, density | DataStore | Settings |
+| Server address, theme, app language, density | DataStore | Settings; theme and app language are held steady across server/account changes |
 | Last product catalogue | App-private files (`atlas-cache/products.json`) | Offline browsing |
 | Install UUID | SharedPreferences (app-private) | Stable device fingerprint |
 | Downloaded finance-report PDFs | App-private cache (`cache/finance`) | Open/share monthly combined reports; automatically pruned after 7 days and deletable in Settings |
 | Last sanitized uncaught-crash trace | App-private cache (`cache/diagnostics/last_crash.txt`) | Included only if the user later submits an in-app diagnostic report |
 | Crash-report consent | App-private SharedPreferences | Remembers the user's explicit Firebase Crashlytics opt-in/out |
+| Analytics consent | App-private SharedPreferences | Remembers the explicit, debug-build-only Firebase Analytics opt-in/out; defaults to off |
 
 The app does not maintain a local accounting database or cache server-side customer records. A finance PDF exists temporarily in private cache only when the user downloads a report; the user can open/share it or delete cached PDFs from Settings. Camera images are not stored unless explicitly attached to a user-submitted issue report.
 
@@ -119,9 +120,11 @@ No location, contacts, microphone, storage or advertising permissions are reques
 
 ### Third parties
 
-There is no advertising SDK and no Firebase Analytics dependency. Firebase is an optional build-time provider for FCM push and Firebase Crashlytics in local/self-hosted builds. **Official release publishing requires a validated Firebase Android configuration for package `ma.etherealmber.atlascommerce`; the release workflow fails rather than publishing an APK with Crashlytics silently absent.** Automatic collection remains off by default in the manifest and until the user opts in under Settings; opting out disables future automatic uploads. If opted in, Crashlytics can upload an uncaught crash report (stack trace, app/device/OS version, timestamp and Firebase installation identifiers) automatically when connectivity permits. The app does not attach session tokens, passwords, OTPs, financial records, or its redacted in-app log buffer as Crashlytics custom data. Firebase provider configuration and the exact consent flow are documented in [docs/SETUP.md](docs/SETUP.md#4-optional-push-notifications-and-automatic-crash-reports-firebase).
+There is no advertising SDK. Firebase is an optional build-time provider for FCM push, Crashlytics and (when configured) Analytics. **Official release publishing requires a validated Firebase Android configuration for package `ma.etherealmber.atlascommerce`; the release workflow fails rather than publishing an APK with Crashlytics silently absent.** Crashlytics collection stays off until the user opts in under Settings; opting out disables future automatic uploads. If opted in, Crashlytics can upload an uncaught crash report (stack trace, app/device/OS version, timestamp and Firebase installation identifiers) automatically when connectivity permits. The app does not attach session tokens, passwords, OTPs, financial records, or its redacted in-app log buffer as Crashlytics custom data.
 
-ML Kit barcode decoding runs on-device with the bundled model; per Google's ML Kit terms the SDK may report its own usage/performance metrics (app version, installation and device identifiers — never images or scanned codes). Network calls for business data go only to the selected Atlas Worker; Crashlytics/FCM use Google's Firebase services only when configured. Opening GitHub or e-mail links hands control to the user's browser/mail app.
+Firebase Analytics collection is also off by default. In debug builds only, a developer can explicitly opt in from Developer diagnostics and send a fixed synthetic verification event. Opting in enables Analytics SDK collection, including its standard events and app/device/installation-related data; the event itself carries only constant test values and no account, server, tenant, product, or business data. This is not anonymous analytics. Advertising ID collection and ad-personalization signals are disabled, but that does not disable measurement; release builds force Analytics off. Firebase provider configuration, data collection controls and the exact test-event flow are documented in [docs/firebase-and-background-notifications.md](docs/firebase-and-background-notifications.md#optional-firebase-analytics-verification-debug-builds-only).
+
+ML Kit barcode decoding runs on-device with the bundled model; per Google's ML Kit terms the SDK may report its own usage/performance metrics (app version, installation and device identifiers — never images or scanned codes). Network calls for business data go only to the selected Atlas Worker; Crashlytics/FCM use Google's Firebase services only when configured, while Analytics collection is available only after explicit debug-build opt-in. Opening GitHub or e-mail links hands control to the user's browser/mail app.
 
 ## Hardening checklist for self-hosters
 

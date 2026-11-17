@@ -256,6 +256,9 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.firebase:firebase-crashlytics")
+    if (googleServicesFile.isFile) {
+        implementation("com.google.firebase:firebase-analytics")
+    }
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     implementation("com.google.dagger:hilt-android:2.59")

@@ -53,6 +53,8 @@ public class BuildSupportTest {
         int decode = appBuildScript.indexOf("Base64.getDecoder().decode(encodedFirebaseConfig)");
         int applyGoogleServices = appBuildScript.indexOf("apply(plugin = \"com.google.gms.google-services\")");
         int applyCrashlytics = appBuildScript.indexOf("apply(plugin = \"com.google.firebase.crashlytics\")");
+        int analyticsDependency = appBuildScript.indexOf("implementation(\"com.google.firebase:firebase-analytics\")");
+        int analyticsConfigGuard = appBuildScript.lastIndexOf("if (googleServicesFile.isFile)", analyticsDependency);
 
         assertTrue(appBuildScript.contains("GOOGLE_SERVICES_JSON_BASE64"));
         assertTrue(appBuildScript.contains("import java.util.Base64"));
@@ -62,6 +64,7 @@ public class BuildSupportTest {
         assertTrue(appBuildScript.contains("generatedConfigIsOwned"));
         assertFalse(appBuildScript.contains("compactFirebaseConfig"));
         assertTrue(appBuildScript.contains("ma.etherealmber.atlascommerce"));
+        assertTrue("Analytics must be an optional dependency guarded by Firebase config", analyticsDependency > analyticsConfigGuard && analyticsConfigGuard >= 0);
         assertTrue("Firebase config must be materialized before plugin application", decode >= 0 && decode < applyGoogleServices);
         assertTrue("Crashlytics plugin must only be applied after config handling", decode < applyCrashlytics);
     }

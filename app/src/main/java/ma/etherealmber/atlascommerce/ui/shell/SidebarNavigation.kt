@@ -207,7 +207,6 @@ internal fun AtlasSidebarContent(
     onOpenNotifications: () -> Unit,
     onRequestSignOut: () -> Unit,
     onAvatarSurprise: () -> Unit,
-    agentMascot: @Composable () -> Unit,
     showBrand: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -224,7 +223,7 @@ internal fun AtlasSidebarContent(
         }
 
         Column(
-            modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             roleTabs.forEach { item ->
@@ -242,7 +241,6 @@ internal fun AtlasSidebarContent(
                 label = MainTab.AGENT.localizedLabel(),
                 isSelected = selectedTab == MainTab.AGENT && !dataStorageSelected,
                 expanded = expanded,
-                leadingContent = agentMascot,
                 onClick = { onNavigate(MainTab.AGENT) },
             )
 
