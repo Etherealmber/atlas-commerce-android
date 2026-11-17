@@ -224,7 +224,7 @@ internal fun AtlasSidebarContent(
         }
 
         Column(
-            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+            modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             roleTabs.forEach { item ->
@@ -372,7 +372,6 @@ internal fun AtlasSidebarContent(
                 }
             }
         }
-        Spacer(Modifier.weight(1f))
     }
 }
 

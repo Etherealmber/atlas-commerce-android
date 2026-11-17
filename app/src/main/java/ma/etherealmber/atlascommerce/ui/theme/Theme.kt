@@ -27,46 +27,77 @@ import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 
 // ---------------------------------------------------------------------------
-// Brand palette — zinc / paper / saffron, matching the Atlas web app.
+// Atlas neutral scale — the supplied palette defines BOTH light and dark modes.
+// Keep all surface, text, border, and chart color decisions centralized here.
 // ---------------------------------------------------------------------------
 
-val Brand = Color(0xFF0A0A0A)
-val BrandSoft = Color(0xFF171717)
-val Saffron = Color(0xFFF59E0B)
-val Paper = Color(0xFFF5F5F5)
-val Surface = Color(0xFFFFFFFF)
-val Elevated = Color(0xFFE5E5E5)
-val Ink = Color(0xFF171717)
-val InkSoft = Color(0xFF525252)
-val Line = Color(0xFFD4D4D4)
-val LineSoft = Color(0xFFE5E5E5)
-val LightPrimaryContainer = Elevated
-val LightSecondaryContainer = Elevated
-val LightSurfaceDim = Line
-val LightSurfaceBright = Surface
-val LightContainerLowest = Surface
-val LightContainerLow = Color(0xFFFAFAFA)
-val LightContainer = Paper
-val LightContainerHigh = Elevated
-val LightContainerHighest = Line
+object AtlasNeutral {
+    // Light: white/paper at the base, descending into charcoal and near-black.
+    val lightBase = Color(0xFFFFFFFF)
+    val light50 = Color(0xFFFAFAFA)
+    val light100 = Color(0xFFF5F5F5)
+    val light200 = Color(0xFFE5E5E5)
+    val light300 = Color(0xFFD4D4D4)
+    val light400 = Color(0xFFA3A3A3)
+    val light500 = Color(0xFF737373)
+    val light600 = Color(0xFF525252)
+    val light700 = Color(0xFF404040)
+    val light800 = Color(0xFF262626)
+    val light900 = Color(0xFF171717)
+    val light950 = Color(0xFF0A0A0A)
 
-val DarkBg = Color(0xFF000000)
-val DarkSurface = Color(0xFF0A0A0A)
-val DarkSurfaceLow = Color(0xFF0A0A0A)
-val DarkSurfaceVariant = Color(0xFF171717)
-val DarkSurfaceBright = Color(0xFF525252)
-val DarkElevated = Color(0xFF262626)
-val DarkOnBg = Color(0xFFFAFAFA)
-val DarkMuted = Color(0xFFD4D4D4)
-val DarkOutline = Color(0xFF525252)
-val DarkOutlineSoft = Color(0xFF404040)
-val DarkPrimary = Color(0xFFFAFAFA)
-val DarkSecondary = Color(0xFFE5E5E5)
+    // Dark: black base with the same neutral ramp reversed for surfaces and text.
+    val darkBase = Color(0xFF000000)
+    val dark50 = Color(0xFF0A0A0A)
+    val dark100 = Color(0xFF171717)
+    val dark200 = Color(0xFF262626)
+    val dark300 = Color(0xFF373737)
+    val dark400 = Color(0xFF525252)
+    val dark500 = Color(0xFF8A8A8A)
+    val dark600 = Color(0xFFA3A3A3)
+    val dark700 = Color(0xFFD4D4D4)
+    val dark800 = Color(0xFFE5E5E5)
+    val dark900 = Color(0xFFF5F5F5)
+    val dark950 = Color(0xFFFAFAFA)
+}
+
+val Brand = AtlasNeutral.light950
+val BrandSoft = AtlasNeutral.light900
+val Saffron = Color(0xFFF59E0B)
+val Paper = AtlasNeutral.light100
+val Surface = AtlasNeutral.lightBase
+val Elevated = AtlasNeutral.light200
+val Ink = AtlasNeutral.light900
+val InkSoft = AtlasNeutral.light600
+val Line = AtlasNeutral.light300
+val LineSoft = AtlasNeutral.light200
+val LightPrimaryContainer = AtlasNeutral.light200
+val LightSecondaryContainer = AtlasNeutral.light200
+val LightSurfaceDim = AtlasNeutral.light300
+val LightSurfaceBright = AtlasNeutral.lightBase
+val LightContainerLowest = AtlasNeutral.lightBase
+val LightContainerLow = AtlasNeutral.light50
+val LightContainer = AtlasNeutral.light100
+val LightContainerHigh = AtlasNeutral.light200
+val LightContainerHighest = AtlasNeutral.light300
+
+val DarkBg = AtlasNeutral.darkBase
+val DarkSurface = AtlasNeutral.dark50
+val DarkSurfaceLow = AtlasNeutral.dark50
+val DarkSurfaceVariant = AtlasNeutral.dark100
+val DarkSurfaceBright = AtlasNeutral.dark400
+val DarkElevated = AtlasNeutral.dark200
+val DarkOnBg = AtlasNeutral.dark950
+val DarkMuted = AtlasNeutral.dark700
+val DarkOutline = AtlasNeutral.dark400
+val DarkOutlineSoft = AtlasNeutral.dark300
+val DarkPrimary = AtlasNeutral.dark950
+val DarkSecondary = AtlasNeutral.dark800
 val DarkError = Color(0xFFF87171)
 val DarkErrorOn = DarkBg
-val DarkContainer = DarkSurfaceVariant
-val DarkContainerHigh = DarkElevated
-val DarkContainerHighest = Color(0xFF373737)
+val DarkContainer = AtlasNeutral.dark100
+val DarkContainerHigh = AtlasNeutral.dark200
+val DarkContainerHighest = AtlasNeutral.dark300
 
 /** Fixed artwork and camera-accent colors; kept here so UI files contain no scattered hex palette. */
 object AtlasIllustrationPalette {
