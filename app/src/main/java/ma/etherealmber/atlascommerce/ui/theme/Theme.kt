@@ -50,6 +50,7 @@ object AtlasNeutral {
     val lightHeroStart = Color(0xFF171717)
     val lightHeroEnd = Color(0xFF2B2B2B)
     val lightHeroMuted = Color(0xFFE4E4E7)
+    val lightCardBorder = Color(0xFFD5D9E0)
 
     // Original charcoal dark theme: near-black background, charcoal surfaces, soft white text.
     val darkBase = Color(0xFF0A0A0C)
@@ -66,6 +67,7 @@ object AtlasNeutral {
     val darkOnBg = Color(0xFFF4F4F5)
     val darkHeroStart = Color(0xFF1F1F23)
     val darkHeroEnd = Color(0xFF0E0E11)
+    val darkCardBorder = Color(0xFF3F3F46)
 }
 
 val Brand = AtlasNeutral.light950
@@ -223,7 +225,7 @@ val LightPalette = AtlasPalette(
     infoSoft = Color(0xFFE0EAFF),
     markFace = Brand,
     markInk = Color(0xFFFAFAFA),
-    cardBorder = Line,
+    cardBorder = AtlasNeutral.lightCardBorder,
     mutedText = InkSoft,
     heroStart = AtlasNeutral.lightHeroStart,
     heroEnd = AtlasNeutral.lightHeroEnd,
@@ -248,7 +250,7 @@ val DarkPalette = AtlasPalette(
     infoSoft = Color(0xFF16233F),
     markFace = Color(0xFFFAFAFA),
     markInk = Brand,
-    cardBorder = DarkOutline,
+    cardBorder = AtlasNeutral.darkCardBorder,
     mutedText = DarkMuted,
     heroStart = AtlasNeutral.darkHeroStart,
     heroEnd = AtlasNeutral.darkHeroEnd,

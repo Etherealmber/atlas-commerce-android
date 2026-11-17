@@ -100,7 +100,7 @@ trust bypass without an explicit change to this product security decision.
 | Server address, theme, app language, density | DataStore | Settings; theme and app language are held steady across server/account changes |
 | Last product catalogue | App-private files (`atlas-cache/products.json`) | Offline browsing |
 | Install UUID | SharedPreferences (app-private) | Stable device fingerprint |
-| Downloaded finance-report PDFs | App-private cache (`cache/finance`) | Open/share monthly combined reports; automatically pruned after 7 days and deletable in Settings |
+| Downloaded finance-report PDFs | App-private cache (`cache/finance`, isolated by server/account/role) | In-app history, preview/share/export; newest 8 per account are kept for at most 7 days and can be deleted in Settings |
 | Last sanitized uncaught-crash trace | App-private cache (`cache/diagnostics/last_crash.txt`) | Included only if the user later submits an in-app diagnostic report |
 | Crash-report consent | App-private SharedPreferences | Remembers the user's explicit Firebase Crashlytics opt-in/out |
 | Analytics consent | App-private SharedPreferences | Remembers the explicit, debug-build-only Firebase Analytics opt-in/out; defaults to off |

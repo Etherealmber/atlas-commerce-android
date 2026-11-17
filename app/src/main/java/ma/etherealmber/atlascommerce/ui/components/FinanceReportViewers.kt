@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.components
 
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import android.content.Context
@@ -29,15 +30,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.material.icons.outlined.ZoomOut
@@ -59,6 +66,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
@@ -67,6 +76,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.Closeable
 import java.io.File
+import java.text.DateFormat
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.util.Date
 
 @Composable
 fun FinancePdfViewerDialog(
@@ -381,4 +394,160 @@ private fun printReport(context: Context, webView: WebView?, title: String, lang
             PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build(),
         )
     }.onFailure { Toast.makeText(context, atlasNotice("Impossible d'ouvrir l'impression.", language), Toast.LENGTH_LONG).show() }
+}
+
+/** Full-screen, account-scoped index of recent monthly PDFs stored in app-private cache. */
+@Composable
+fun FinanceReportHistoryDialog(
+    reports: List<File>,
+    loading: Boolean,
+    onDismiss: () -> Unit,
+    onRefresh: () -> Unit,
+    onSelect: (File) -> Unit,
+) {
+    BackHandler(onBack = onDismiss)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Outlined.Close, contentDescription = atlasText("Fermer", "Close", "إغلاق"))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            atlasText("Historique des rapports", "Report history", "سجل التقارير"),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            atlasText("PDF récents enregistrés sur cet appareil", "Recent PDFs saved on this device", "ملفات PDF الأخيرة المحفوظة على هذا الجهاز"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = onRefresh, enabled = !loading) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser", "Refresh", "تحديث"))
+                    }
+                }
+                Text(
+                    atlasText(
+                        "Privé à ce compte · conservation maximale de 7 jours et 8 rapports. Touchez un rapport pour le lire, le partager ou l'exporter.",
+                        "Private to this account · kept for up to 7 days and 8 reports. Tap a report to view, share, or export it.",
+                        "خاص بهذا الحساب · يُحتفظ به حتى 7 أيام وبحد أقصى 8 تقارير. اضغط على تقرير لقراءته أو مشاركته أو تصديره.",
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                when {
+                    loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                    reports.isEmpty() -> Box(
+                        Modifier.fillMaxSize().padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Outlined.History,
+                                contentDescription = null,
+                                modifier = Modifier.size(42.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                atlasText("Aucun rapport récent", "No recent reports", "لا توجد تقارير حديثة"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                atlasText("Les relevés PDF que vous téléchargez apparaîtront ici.", "Downloaded PDF statements will appear here.", "ستظهر كشوف PDF التي تنزّلها هنا."),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    else -> LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(reports, key = { it.absolutePath }) { file ->
+                            val period = Regex("^rapport-mensuel-(\\d{4}-(?:0[1-9]|1[0-2]))(?:-\\d+)?$")
+                                .find(file.nameWithoutExtension)?.groupValues?.getOrNull(1)
+                            val periodLabel = period?.let { raw ->
+                                runCatching {
+                                    YearMonth.parse(raw).format(DateTimeFormatter.ofPattern("LLLL yyyy", atlasLocale()))
+                                }.getOrNull()
+                            } ?: file.nameWithoutExtension
+                            val generatedAt = DateFormat.getDateTimeInstance(
+                                DateFormat.MEDIUM,
+                                DateFormat.SHORT,
+                                atlasLocale(),
+                            ).format(Date(file.lastModified()))
+                            Surface(
+                                onClick = { onSelect(file) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = MaterialTheme.shapes.medium,
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.42f),
+                                ),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Surface(
+                                        shape = MaterialTheme.shapes.small,
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Description,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(10.dp).size(22.dp),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            atlasText("Relevé mensuel · $periodLabel", "Monthly statement · $periodLabel", "كشف شهري · $periodLabel"),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            atlasText("Créé le $generatedAt", "Created $generatedAt", "أُنشئ في $generatedAt"),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.Outlined.ChevronRight,
+                                        contentDescription = atlasText("Ouvrir les actions du rapport", "Open report actions", "فتح إجراءات التقرير"),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

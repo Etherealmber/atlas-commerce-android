@@ -20,6 +20,8 @@ class AtlasThemePaletteTest {
         assertEquals(Color(0xFF0E0E11), DarkPalette.heroEnd)
         assertEquals(Color(0xFF171717), LightPalette.heroStart)
         assertEquals(Color(0xFF2B2B2B), LightPalette.heroEnd)
+        assertEquals(Color(0xFF3F3F46), DarkPalette.cardBorder)
+        assertEquals(Color(0xFFD5D9E0), LightPalette.cardBorder)
     }
 
     @Test

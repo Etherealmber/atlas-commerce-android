@@ -98,8 +98,8 @@ If the app displays ***"Site introuvable"***, ***"Serveur indisponible"***, ***"
   - After a successful manual sign-in, a saved account can opt into biometrics or Android device PIN/password. Atlas unlocks the locally encrypted session token and verifies it with the selected server; the account password is never stored. Manual password sign-in remains available when this option is declined or unavailable.
 - **Automatic crash reporting is optional and consent-based**:
   - Firebase Crashlytics uploads crash reports automatically only after the user opts in under Settings. It is off by default; builds without Firebase configuration continue to work without push or automatic crash uploads. Firebase Analytics is also off by default and available only as an explicit debug-build opt-in for synthetic testing; it is not an anonymous data stream.
-- **Temporary finance reports and local-data controls**:
-  - Download/open/share combined monthly PDF reports, retain them in private app cache for up to seven days, and delete them from Settings without touching server business records.
+- **Finance-report history and local-data controls**:
+  - Generate monthly statement PDFs, review recent reports in the in-app history, then open, share, or export a copy. PDFs stay in a private per-account cache (up to eight reports or seven days) and can be deleted from Settings without touching server business records.
 
 ---
 

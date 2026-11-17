@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.PointOfSale
@@ -91,6 +92,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasStatTile
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.CombinedReportWebViewDialog
 import ma.etherealmber.atlascommerce.ui.components.FinancePdfViewerDialog
+import ma.etherealmber.atlascommerce.ui.components.FinanceReportHistoryDialog
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportActionsDialog
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelection
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelectionDialog
@@ -127,6 +129,32 @@ fun HomeScreen(
     var reportSelection by remember { mutableStateOf(FinanceReportSelection()) }
     var showReportSelection by remember { mutableStateOf(false) }
     var showCombinedReportConfirm by remember { mutableStateOf(false) }
+    var showFinanceReportHistory by remember { mutableStateOf(false) }
+    var financeReportHistory by remember(user.scopeIdentity) { mutableStateOf<List<java.io.File>>(emptyList()) }
+    var financeReportHistoryLoading by remember { mutableStateOf(false) }
+
+    val refreshFinanceReportHistory = {
+        financeReportHistoryLoading = true
+        viewModel.loadFinanceReportHistory(context.cacheDir) { result ->
+            financeReportHistoryLoading = false
+            when (result) {
+                is ApiResult.Failure -> {
+                    financeReportHistory = emptyList()
+                    onToast(atlasNotice(result.message, LocalAtlasLanguage.current))
+                }
+                is ApiResult.Success -> financeReportHistory = result.data
+            }
+        }
+    }
+
+    LaunchedEffect(user.scopeIdentity) {
+        showFinanceReportHistory = false
+        financeReportHistoryLoading = false
+        pendingReportFile = null
+        showReportActions = false
+        pdfViewerFile = null
+        combinedReportUrl = null
+    }
 
     if (showReportSelection) {
         FinanceReportSelectionDialog(
@@ -170,6 +198,19 @@ fun HomeScreen(
     combinedReportUrl?.let { url ->
         CombinedReportWebViewDialog(url = url, selectedSections = reportSelection.sectionKeys, onDismiss = { combinedReportUrl = null })
     }
+    if (showFinanceReportHistory) {
+        FinanceReportHistoryDialog(
+            reports = financeReportHistory,
+            loading = financeReportHistoryLoading,
+            onDismiss = { showFinanceReportHistory = false },
+            onRefresh = refreshFinanceReportHistory,
+            onSelect = { file ->
+                showFinanceReportHistory = false
+                pendingReportFile = file
+                showReportActions = true
+            },
+        )
+    }
     val saveReportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf"),
     ) { destinationUri ->
@@ -187,7 +228,7 @@ fun HomeScreen(
 
     pendingReportFile?.takeIf { showReportActions }?.let { reportFile ->
         FinanceReportActionsDialog(
-            fileName = reportFile.name,
+            fileName = financeReportTitle(reportFile),
             onDismiss = { showReportActions = false },
             onRead = {
                 showReportActions = false
@@ -210,7 +251,7 @@ fun HomeScreen(
             },
             onSave = {
                 showReportActions = false
-                saveReportLauncher.launch(reportFile.name)
+                saveReportLauncher.launch(financeReportExportFileName(reportFile))
             },
             onDelete = {
                 showReportActions = false
@@ -236,7 +277,7 @@ fun HomeScreen(
                     context.startActivity(Intent.createChooser(shareIntent, shareReportChooserTitle))
                 }.onFailure { onToast("Impossible de partager le PDF.") }
             },
-            onSave = { pendingReportFile = reportFile; saveReportLauncher.launch(reportFile.name) },
+            onSave = { pendingReportFile = reportFile; saveReportLauncher.launch(financeReportExportFileName(reportFile)) },
             onDelete = { reportFile.delete(); pdfViewerFile = null; onToast("Rapport temporaire supprimé.") },
         )
     }
@@ -293,6 +334,10 @@ fun HomeScreen(
                 }
             },
             onOpenCombinedReport = { showReportSelection = true },
+            onOpenFinanceReportHistory = {
+                showFinanceReportHistory = true
+                refreshFinanceReportHistory()
+            },
         )
     }
 }
@@ -383,6 +428,7 @@ private fun HomeContent(
     onSelectFinancePeriod: (String) -> Unit,
     onExportFinanceReport: (String) -> Unit,
     onOpenCombinedReport: () -> Unit,
+    onOpenFinanceReportHistory: () -> Unit,
 ) {
     val density = Atlas.density
     val dockPadding = LocalAtlasFloatingDockPadding.current
@@ -634,6 +680,7 @@ private fun HomeContent(
                         onLoadMorePayroll = onLoadMorePayroll,
                         onExportReport = onExportFinanceReport,
                         onOpenCombinedReport = onOpenCombinedReport,
+                        onOpenReportHistory = onOpenFinanceReportHistory,
                     )
                 }
             }
@@ -847,6 +894,7 @@ private fun FinanceAdminCard(
     onLoadMorePayroll: () -> Unit,
     onExportReport: (String) -> Unit,
     onOpenCombinedReport: () -> Unit,
+    onOpenReportHistory: () -> Unit,
 ) {
     val financeTimezone = summary?.timezone?.takeIf { it.isNotBlank() } ?: "Africa/Casablanca"
     val currentFinancePeriod = financeCurrentPeriod(financeTimezone)
@@ -919,6 +967,14 @@ private fun FinanceAdminCard(
             enabled = !reportGenerating && !loading,
             modifier = Modifier.fillMaxWidth(),
             icon = Icons.Outlined.ReceiptLong,
+        )
+        Spacer(Modifier.height(6.dp))
+        AtlasOutlinedButton(
+            text = atlasText("Historique des rapports", "Report history", "سجل التقارير"),
+            onClick = onOpenReportHistory,
+            enabled = !reportGenerating,
+            modifier = Modifier.fillMaxWidth(),
+            icon = Icons.Outlined.History,
         )
         Text(
             atlasText("Choisissez les rubriques et la période : mois, année en cours, derniers mois ou dates personnalisées. Le PDF bancaire reste mensuel."),
@@ -1122,6 +1178,20 @@ private fun financeMonthLabel(period: String, locale: Locale): String = runCatch
         .format(DateTimeFormatter.ofPattern("LLLL yyyy", locale))
         .replaceFirstChar { it.titlecase(locale) }
 }.getOrDefault(period)
+
+@Composable
+private fun financeReportTitle(file: java.io.File): String {
+    val period = Regex("^rapport-mensuel-(\\d{4}-(?:0[1-9]|1[0-2]))(?:-\\d+)?$")
+        .find(file.nameWithoutExtension)?.groupValues?.getOrNull(1)
+    val label = period?.let { financeMonthLabel(it, atlasLocale()) } ?: file.nameWithoutExtension
+    return atlasText("Relevé mensuel · $label", "Monthly statement · $label", "كشف شهري · $label")
+}
+
+private fun financeReportExportFileName(file: java.io.File): String {
+    val period = Regex("^rapport-mensuel-(\\d{4}-(?:0[1-9]|1[0-2]))(?:-\\d+)?$")
+        .find(file.nameWithoutExtension)?.groupValues?.getOrNull(1)
+    return period?.let { "atlas-releve-$it.pdf" } ?: file.name
+}
 
 @Composable
 private fun FinanceObligationsList(

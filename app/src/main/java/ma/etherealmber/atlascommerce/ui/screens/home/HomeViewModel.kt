@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,6 +15,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ApiRunner
@@ -436,18 +439,50 @@ class HomeViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _state.update { it.copy(reportGenerating = true) }
-            val directory = File(
-                File(cacheDirectory, "finance"),
-                scopeCacheKey(requestedScope),
-            ).apply { mkdirs() }
+            val directory = financeReportDirectory(cacheDirectory, requestedScope).apply { mkdirs() }
             ma.etherealmber.atlascommerce.data.FinanceReportCache.pruneAccount(directory)
-            val destination = File(directory, "rapport-mensuel-$period.pdf")
+            val destination = File(directory, "rapport-mensuel-$period-${System.currentTimeMillis()}.pdf")
             val result = commerceRepository.downloadFinanceReport(period, destination)
+            if (result is ApiResult.Success) {
+                withContext(Dispatchers.IO) {
+                    ma.etherealmber.atlascommerce.data.FinanceReportCache.pruneAccount(directory)
+                }
+            }
             _state.update { it.copy(reportGenerating = false) }
             val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
             if (currentScope != requestedScope) {
                 (result as? ApiResult.Success)?.data?.delete()
                 onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Relancez le téléchargement avec le bon compte."))
+            } else {
+                onResult(result)
+            }
+        }
+    }
+
+    fun loadFinanceReportHistory(cacheDirectory: File, onResult: (ApiResult<List<File>>) -> Unit) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+        if (activeUser == null || !Roles.isAdmin(activeUser.role)) {
+            onResult(ApiResult.Failure("FIN_FORBIDDEN", "Réservé aux administrateurs (owner/admin)."))
+            return
+        }
+        val requestedScope = activeUser.scopeIdentity
+        viewModelScope.launch {
+            val result: ApiResult<List<File>> = try {
+                ApiResult.Success(
+                    withContext(Dispatchers.IO) {
+                        ma.etherealmber.atlascommerce.data.FinanceReportCache.listAccount(
+                            financeReportDirectory(cacheDirectory, requestedScope),
+                        )
+                    },
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                ApiResult.Failure("REPORT_HISTORY", "Impossible de lire l'historique des rapports.")
+            }
+            val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+            if (currentScope != requestedScope) {
+                onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Rouvrez l'historique avec le bon compte."))
             } else {
                 onResult(result)
             }
@@ -479,6 +514,9 @@ class HomeViewModel @Inject constructor(
             }
         }
     }
+
+    private fun financeReportDirectory(cacheDirectory: File, scopeIdentity: String): File =
+        File(File(cacheDirectory, "finance"), scopeCacheKey(scopeIdentity))
 
     private fun scopeCacheKey(scopeIdentity: String): String =
         MessageDigest.getInstance("SHA-256")
