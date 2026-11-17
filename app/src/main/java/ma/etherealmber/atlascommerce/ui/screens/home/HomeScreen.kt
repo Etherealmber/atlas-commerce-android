@@ -736,7 +736,7 @@ private fun MonthlySalesTrendCard(points: List<MonthlyPointDto>, currency: Strin
                                 .fillMaxWidth(0.52f)
                                 .fillMaxHeight(barFraction)
                                 .clip(RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp))
-                                .background(Brush.verticalGradient(listOf(palette.heroStart, palette.heroEnd))),
+                                .background(Brush.verticalGradient(listOf(palette.chartSales.copy(alpha = 0.58f), palette.chartSales))),
                         )
                     }
                     Spacer(Modifier.height(4.dp))
@@ -817,18 +817,18 @@ private fun FinanceAdminCharts(summary: FinanceMonthlyDto) {
         title = atlasText("Trésorerie · ouverture et clôture", "Cash position · opening and closing", "النقد المتاح · الافتتاح والإغلاق"),
         currency = summary.currency,
         entries = listOf(
-            FinanceChartEntry(atlasText("Solde d'ouverture", "Opening balance", "رصيد الافتتاح"), summary.openingBalance, MaterialTheme.colorScheme.primary),
-            FinanceChartEntry(atlasText("Solde de clôture", "Closing balance", "رصيد الإغلاق"), summary.closingBalance, palette.positive),
+            FinanceChartEntry(atlasText("Solde d'ouverture", "Opening balance", "رصيد الافتتاح"), summary.openingBalance, palette.chartSales),
+            FinanceChartEntry(atlasText("Solde de clôture", "Closing balance", "رصيد الإغلاق"), summary.closingBalance, palette.chartIncome),
         ),
     )
     FinanceMiniBarChart(
         title = atlasText("Factures ouvertes · clients et fournisseurs", "Open invoices · receivables and payables", "الفواتير المفتوحة · العملاء والموردون"),
         currency = summary.currency,
         entries = listOf(
-            FinanceChartEntry(atlasText("Clients · encours", "Receivables · outstanding", "مستحقات العملاء"), summary.receivables.totalOutstanding, MaterialTheme.colorScheme.primary),
-            FinanceChartEntry(atlasText("Clients · en retard", "Receivables · overdue", "مستحقات العملاء المتأخرة"), summary.receivables.totalOverdue, palette.danger),
-            FinanceChartEntry(atlasText("Fournisseurs · encours", "Payables · outstanding", "مستحقات الموردين"), summary.payables.totalOutstanding, palette.warning),
-            FinanceChartEntry(atlasText("Fournisseurs · en retard", "Payables · overdue", "مستحقات الموردين المتأخرة"), summary.payables.totalOverdue, palette.danger),
+            FinanceChartEntry(atlasText("Clients · encours", "Receivables · outstanding", "مستحقات العملاء"), summary.receivables.totalOutstanding, palette.chartReceivable),
+            FinanceChartEntry(atlasText("Clients · en retard", "Receivables · overdue", "مستحقات العملاء المتأخرة"), summary.receivables.totalOverdue, palette.chartExpense),
+            FinanceChartEntry(atlasText("Fournisseurs · encours", "Payables · outstanding", "مستحقات الموردين"), summary.payables.totalOutstanding, palette.chartPayable),
+            FinanceChartEntry(atlasText("Fournisseurs · en retard", "Payables · overdue", "مستحقات الموردين المتأخرة"), summary.payables.totalOverdue, palette.chartExpense),
         ),
     )
 }

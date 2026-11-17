@@ -468,7 +468,7 @@ fun ProductsScreen(
                     )
                 }
 
-            (state.loading || state.refreshing || state.checkingCachedCatalog) && state.filter != ProductsViewModel.FilterMode.REQUESTS -> AtlasCatalogSkeleton(
+            (state.loading || state.refreshing || state.checkingCachedCatalog) && state.filter != ProductsViewModel.FilterMode.REQUESTS && state.visibleProducts.isEmpty() -> AtlasCatalogSkeleton(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 rows = 6,
                 showRoleBanner = !isAdmin,
@@ -478,7 +478,7 @@ fun ProductsScreen(
                 products = state.visibleProducts,
             )
 
-            !state.error.isNullOrBlank() && state.filter != ProductsViewModel.FilterMode.REQUESTS -> {
+            !state.error.isNullOrBlank() && state.filter != ProductsViewModel.FilterMode.REQUESTS && state.visibleProducts.isEmpty() -> {
                 Column(Modifier.padding(horizontal = density.screenPadding)) {
                     AtlasErrorCard(message = atlasNotice(state.error.orEmpty(), LocalAtlasLanguage.current), onRetry = viewModel::refresh)
                 }

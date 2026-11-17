@@ -190,7 +190,7 @@ fun ScanScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .background(ArtPalette.scanIdleBackdrop),
+                .background(if (hardwareActive) ArtPalette.scanIdleBackdrop else MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
             if (hardwareActive) {
                 BarcodeCameraView(
@@ -225,13 +225,13 @@ fun ScanScreen(
                             modifier = Modifier
                                 .size(68.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)),
+                                .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Videocam,
                                 contentDescription = null,
-                                tint = ArtPalette.white,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.size(32.dp),
                             )
                         }
@@ -241,14 +241,14 @@ fun ScanScreen(
                         text = atlasText("Caméra en veille", "Camera is paused", "الكاميرا متوقفة مؤقتًا"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = ArtPalette.white,
+                        color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = atlasText("La caméra ne s'ouvre plus automatiquement. Appuyez ci-dessous pour scanner un code-barres, ou saisissez le code manuellement.", "The camera will no longer open automatically. Tap below to scan a barcode, or enter the code manually.", "لن تفتح الكاميرا تلقائيًا بعد الآن. اضغط أدناه لمسح الرمز الشريطي أو أدخل الرمز يدويًا."),
                         style = MaterialTheme.typography.bodySmall,
-                        color = ArtPalette.white.copy(alpha = 0.78f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(16.dp))
@@ -829,27 +829,27 @@ private fun CameraPermissionPane(
         Icon(
             imageVector = Icons.Outlined.CameraAlt,
             contentDescription = null,
-            tint = ArtPalette.white,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(40.dp),
         )
         Spacer(Modifier.height(12.dp))
         Text(
             text = atlasText("Accès caméra requis", "Camera access required", "يلزم الوصول إلى الكاميرا"),
             style = MaterialTheme.typography.titleMedium,
-            color = ArtPalette.white,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(6.dp))
         Text(
             text = atlasText("La caméra sert uniquement à lire les codes-barres et se coupe automatiquement dès que vous quittez l'onglet Scan.", "The camera is used only to read barcodes and turns off automatically when you leave the Scan tab.", "تُستخدم الكاميرا لقراءة الرموز الشريطية فقط، وتتوقف تلقائيًا عند مغادرة علامة تبويب المسح."),
             style = MaterialTheme.typography.bodySmall,
-            color = ArtPalette.white.copy(alpha = 0.75f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(14.dp))
         AtlasButton(text = atlasText("Autoriser la caméra", "Allow camera", "السماح بالكاميرا"), onClick = onRequest)
         if (askedOnce) {
             Spacer(Modifier.height(6.dp))
             TextButton(onClick = onOpenSettings) {
-                Text(atlasText("Ouvrir les réglages", "Open settings", "فتح الإعدادات"), color = ArtPalette.white)
+                Text(atlasText("Ouvrir les réglages", "Open settings", "فتح الإعدادات"), color = MaterialTheme.colorScheme.primary)
             }
         }
     }
