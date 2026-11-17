@@ -8,19 +8,18 @@ import org.junit.Test
 
 class AtlasThemePaletteTest {
     @Test
-    fun earlierAtlasPaletteAndThemeElementGradientsAreRestored() {
+    fun originalCharcoalThemeAndHeroGradientsAreRestored() {
         assertEquals(Color.White, AtlasNeutral.lightBase)
-        assertEquals(Color(0xFFF2F2F2), Paper)
-        assertEquals(Color(0xFF06141B), DarkBg)
-        assertEquals(Color(0xFF11212D), DarkSurface)
-        assertEquals(Color(0xFF0B1B25), DarkSurfaceLow)
+        assertEquals(Color(0xFFF5F2EB), Paper)
+        assertEquals(Color(0xFF0A0A0C), DarkBg)
+        assertEquals(Color(0xFF141414), DarkSurface)
+        assertEquals(Color(0xFF1A1A1A), DarkElevated)
         assertNotEquals(DarkBg, DarkSurface)
-        assertNotEquals(DarkSurface, DarkSurfaceVariant)
         assertTrue(DarkOnBg != DarkBg)
-        assertEquals(DarkSurface, DarkPalette.heroStart)
-        assertEquals(DarkBg, DarkPalette.heroEnd)
-        assertEquals(Color(0xFFE9E9E9), LightPalette.heroStart)
-        assertEquals(Color(0xFFD2D2D2), LightPalette.heroEnd)
+        assertEquals(Color(0xFF1F1F23), DarkPalette.heroStart)
+        assertEquals(Color(0xFF0E0E11), DarkPalette.heroEnd)
+        assertEquals(Color(0xFF171717), LightPalette.heroStart)
+        assertEquals(Color(0xFF2B2B2B), LightPalette.heroEnd)
     }
 
     @Test

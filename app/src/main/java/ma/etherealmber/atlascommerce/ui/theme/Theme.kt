@@ -32,35 +32,40 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 // ---------------------------------------------------------------------------
 
 object AtlasNeutral {
-    // The classic Atlas paper, zinc and slate palette, centralized for light and dark UI.
+    // The original Atlas paper, zinc and saffron palette, centralized for both themes.
     val lightBase = Color(0xFFFFFFFF)
     val light50 = Color(0xFFFAFAFA)
-    val light100 = Color(0xFFF2F2F2)
-    val light200 = Color(0xFFE9E9E9)
-    val light300 = Color(0xFFD2D2D2)
-    val light400 = Color(0xFFA3A3A3)
-    val light500 = Color(0xFF737373)
+    val light100 = Color(0xFFF5F2EB)
+    val light200 = Color(0xFFFAF8F4)
+    val light300 = Color(0xFFE8EAEF)
+    val light400 = Color(0xFFDDE1E8)
+    val light500 = Color(0xFFA1A1AA)
     val light600 = Color(0xFF475569)
-    val light700 = Color(0xFF404040)
-    val light800 = Color(0xFF262626)
+    val light700 = Color(0xFF27272A)
+    val light800 = Color(0xFF1A1A1A)
     val light900 = Color(0xFF0F172A)
     val light950 = Color(0xFF0A0A0A)
     val lightBrandSoft = Color(0xFF171717)
-    val lightLineSoft = Color(0xFFE0E0E0)
+    val lightLineSoft = Color(0xFFDDE1E8)
+    val lightHeroStart = Color(0xFF171717)
+    val lightHeroEnd = Color(0xFF2B2B2B)
+    val lightHeroMuted = Color(0xFFE4E4E7)
 
-    // Classic blue-charcoal dark mode. Hero cards use the dark surface-to-background gradient.
-    val darkBase = Color(0xFF06141B)
-    val dark50 = Color(0xFF11212D)
-    val darkSurfaceLow = Color(0xFF0B1B25)
-    val dark100 = Color(0xFF1B2D39)
-    val dark200 = Color(0xFF253745)
-    val dark300 = Color(0xFF334956)
-    val dark400 = Color(0xFF3A4D58)
-    val darkMuted = Color(0xFFB6C2C7)
-    val darkPrimary = Color(0xFFCCD0CF)
-    val darkSecondary = Color(0xFF9BA8AB)
-    val darkOutline = Color(0xFF4A5C6A)
-    val darkOnBg = Color(0xFFE8EFF1)
+    // Original charcoal dark theme: near-black background, charcoal surfaces, soft white text.
+    val darkBase = Color(0xFF0A0A0C)
+    val dark50 = Color(0xFF141414)
+    val darkSurfaceLow = Color(0xFF141414)
+    val dark100 = Color(0xFF1A1A1A)
+    val dark200 = Color(0xFF1A1A1A)
+    val dark300 = Color(0xFF27272A)
+    val dark400 = Color(0xFF3F3F46)
+    val darkMuted = Color(0xFFA1A1AA)
+    val darkPrimary = Color(0xFFFAFAFA)
+    val darkSecondary = Color(0xFFA1A1AA)
+    val darkOutline = Color(0xFF27272A)
+    val darkOnBg = Color(0xFFF4F4F5)
+    val darkHeroStart = Color(0xFF1F1F23)
+    val darkHeroEnd = Color(0xFF0E0E11)
 }
 
 val Brand = AtlasNeutral.light950
@@ -73,15 +78,15 @@ val Ink = AtlasNeutral.light900
 val InkSoft = AtlasNeutral.light600
 val Line = AtlasNeutral.light300
 val LineSoft = AtlasNeutral.lightLineSoft
-val LightPrimaryContainer = AtlasNeutral.light200
-val LightSecondaryContainer = AtlasNeutral.light200
+val LightPrimaryContainer = Color(0xFFF1F5F9)
+val LightSecondaryContainer = Color(0xFFEDE9E1)
 val LightSurfaceDim = AtlasNeutral.light300
 val LightSurfaceBright = AtlasNeutral.lightBase
 val LightContainerLowest = AtlasNeutral.lightBase
-val LightContainerLow = AtlasNeutral.light100
-val LightContainer = AtlasNeutral.light200
-val LightContainerHigh = AtlasNeutral.lightLineSoft
-val LightContainerHighest = AtlasNeutral.light300
+val LightContainerLow = Paper
+val LightContainer = Surface
+val LightContainerHigh = Elevated
+val LightContainerHighest = Elevated
 
 val DarkBg = AtlasNeutral.darkBase
 val DarkSurface = AtlasNeutral.dark50
@@ -92,7 +97,7 @@ val DarkElevated = AtlasNeutral.dark200
 val DarkOnBg = AtlasNeutral.darkOnBg
 val DarkMuted = AtlasNeutral.darkMuted
 val DarkOutline = AtlasNeutral.darkOutline
-val DarkOutlineSoft = AtlasNeutral.dark300
+val DarkOutlineSoft = AtlasNeutral.dark400
 val DarkPrimary = AtlasNeutral.darkPrimary
 val DarkSecondary = AtlasNeutral.darkSecondary
 val DarkError = Color(0xFFF87171)
@@ -208,8 +213,8 @@ data class AtlasPalette(
 )
 
 val LightPalette = AtlasPalette(
-    positive = Color(0xFF15803D),
-    positiveSoft = Color(0xFFDCFCE7),
+    positive = Color(0xFF0F7B4F),
+    positiveSoft = Color(0xFFE6F6EC),
     warning = Color(0xFFB45309),
     warningSoft = Color(0xFFFEF3C7),
     danger = Color(0xFFB91C1C),
@@ -220,11 +225,11 @@ val LightPalette = AtlasPalette(
     markInk = Color(0xFFFAFAFA),
     cardBorder = Line,
     mutedText = InkSoft,
-    heroStart = Color(0xFFE9E9E9),
-    heroEnd = Color(0xFFD2D2D2),
-    heroText = Ink,
-    heroMutedText = InkSoft,
-    heroPill = Color.White.copy(alpha = 0.62f),
+    heroStart = AtlasNeutral.lightHeroStart,
+    heroEnd = AtlasNeutral.lightHeroEnd,
+    heroText = Color.White,
+    heroMutedText = AtlasNeutral.lightHeroMuted,
+    heroPill = Color.White.copy(alpha = 0.10f),
     chartSales = Color(0xFF2563EB),
     chartIncome = Color(0xFF15803D),
     chartExpense = Color(0xFFDC2626),
@@ -233,23 +238,23 @@ val LightPalette = AtlasPalette(
 )
 
 val DarkPalette = AtlasPalette(
-    positive = Color(0xFF86EFAC),
-    positiveSoft = Color(0xFF163322),
+    positive = Color(0xFF34D399),
+    positiveSoft = Color(0xFF10362A),
     warning = Color(0xFFFBBF24),
     warningSoft = Color(0xFF3A2A0B),
     danger = DarkError,
     dangerSoft = Color(0xFF3A1414),
-    info = Color(0xFF9BC8DF),
-    infoSoft = Color(0xFF193543),
+    info = Color(0xFF93C5FD),
+    infoSoft = Color(0xFF16233F),
     markFace = Color(0xFFFAFAFA),
     markInk = Brand,
     cardBorder = DarkOutline,
     mutedText = DarkMuted,
-    heroStart = DarkSurface,
-    heroEnd = DarkBg,
+    heroStart = AtlasNeutral.darkHeroStart,
+    heroEnd = AtlasNeutral.darkHeroEnd,
     heroText = DarkOnBg,
     heroMutedText = DarkMuted,
-    heroPill = Color.White.copy(alpha = 0.14f),
+    heroPill = Color.White.copy(alpha = 0.10f),
     chartSales = Color(0xFF60A5FA),
     chartIncome = Color(0xFF86EFAC),
     chartExpense = Color(0xFFFCA5A5),
