@@ -24,6 +24,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.material.icons.outlined.ZoomOut
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -405,6 +407,8 @@ fun FinanceReportHistoryDialog(
     onRefresh: () -> Unit,
     onSelect: (File) -> Unit,
 ) {
+    var selectedPath by remember(reports) { mutableStateOf(reports.firstOrNull()?.absolutePath) }
+    val selectedReport = reports.firstOrNull { it.absolutePath == selectedPath }
     BackHandler(onBack = onDismiss)
     Dialog(
         onDismissRequest = onDismiss,
@@ -439,9 +443,9 @@ fun FinanceReportHistoryDialog(
                 }
                 Text(
                     atlasText(
-                        "Privé à ce compte · conservation maximale de 7 jours et 8 rapports. Touchez un rapport pour le lire, le partager ou l'exporter.",
-                        "Private to this account · kept for up to 7 days and 8 reports. Tap a report to view, share, or export it.",
-                        "خاص بهذا الحساب · يُحتفظ به حتى 7 أيام وبحد أقصى 8 تقارير. اضغط على تقرير لقراءته أو مشاركته أو تصديره.",
+                        "Privé à ce compte · conservation maximale de 7 jours et 8 rapports. Touchez un rapport pour afficher tout son contenu, le partager ou l'exporter.",
+                        "Private to this account · kept for up to 7 days and 8 reports. Select a report to view all pages, share it, or export a copy.",
+                        "خاص بهذا الحساب · يُحتفظ به حتى 7 أيام وبحد أقصى 8 تقارير. اختر تقريراً لعرض جميع صفحاته أو مشاركته أو تصدير نسخة.",
                     ),
                     modifier = Modifier.fillMaxWidth()
                         .background(MaterialTheme.colorScheme.surfaceContainerLow)
@@ -477,76 +481,186 @@ fun FinanceReportHistoryDialog(
                             )
                         }
                     }
-                    else -> LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        items(reports, key = { it.absolutePath }) { file ->
-                            val period = Regex("^rapport-mensuel-(\\d{4}-(?:0[1-9]|1[0-2]))(?:-\\d+)?$")
-                                .find(file.nameWithoutExtension)?.groupValues?.getOrNull(1)
-                            val periodLabel = period?.let { raw ->
-                                runCatching {
-                                    YearMonth.parse(raw).format(DateTimeFormatter.ofPattern("LLLL yyyy", atlasLocale()))
-                                }.getOrNull()
-                            } ?: file.nameWithoutExtension
-                            val generatedAt = DateFormat.getDateTimeInstance(
-                                DateFormat.MEDIUM,
-                                DateFormat.SHORT,
-                                atlasLocale(),
-                            ).format(Date(file.lastModified()))
-                            Surface(
-                                onClick = { onSelect(file) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = MaterialTheme.shapes.medium,
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                border = androidx.compose.foundation.BorderStroke(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.42f),
-                                ),
+                    else -> BoxWithConstraints(Modifier.fillMaxSize()) {
+                        val tabletLayout = maxWidth >= 720.dp
+                        if (tabletLayout) {
+                            Row(
+                                modifier = Modifier.fillMaxSize().padding(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
+                                LazyColumn(
+                                    modifier = Modifier.weight(0.38f).fillMaxHeight(),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
                                 ) {
-                                    Surface(
-                                        shape = MaterialTheme.shapes.small,
-                                        color = MaterialTheme.colorScheme.primaryContainer,
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.Description,
-                                            contentDescription = null,
-                                            modifier = Modifier.padding(10.dp).size(22.dp),
-                                            tint = MaterialTheme.colorScheme.primary,
+                                    items(reports, key = { it.absolutePath }) { file ->
+                                        FinanceReportHistoryRow(
+                                            file = file,
+                                            selected = file.absolutePath == selectedReport?.absolutePath,
+                                            onClick = { selectedPath = file.absolutePath },
                                         )
                                     }
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            atlasText("Relevé mensuel · $periodLabel", "Monthly statement · $periodLabel", "كشف شهري · $periodLabel"),
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                        Text(
-                                            atlasText("Créé le $generatedAt", "Created $generatedAt", "أُنشئ في $generatedAt"),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
+                                }
+                                Column(
+                                    modifier = Modifier.weight(0.62f).fillMaxHeight(),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    if (selectedReport == null) {
+                                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                            Text(
+                                                atlasText("Sélectionnez un rapport pour afficher son contenu.", "Select a report to view its contents.", "اختر تقريراً لعرض محتواه."),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    } else {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth()
+                                                .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.medium)
+                                                .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text(
+                                                    financeReportPeriodTitle(selectedReport),
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                                Text(
+                                                    financeReportCreatedAt(selectedReport),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                            Button(onClick = { onSelect(selectedReport) }) {
+                                                Text(atlasText("Actions / exporter", "Actions / export", "إجراءات / تصدير"))
+                                            }
+                                        }
+                                        FinanceReportInlinePreview(
+                                            file = selectedReport,
+                                            modifier = Modifier.weight(1f).fillMaxWidth(),
                                         )
                                     }
-                                    Icon(
-                                        Icons.Outlined.ChevronRight,
-                                        contentDescription = atlasText("Ouvrir les actions du rapport", "Open report actions", "فتح إجراءات التقرير"),
-                                        tint = MaterialTheme.colorScheme.primary,
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                items(reports, key = { it.absolutePath }) { file ->
+                                    FinanceReportHistoryRow(
+                                        file = file,
+                                        selected = false,
+                                        onClick = { onSelect(file) },
                                     )
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FinanceReportHistoryRow(file: File, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = if (selected) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(
+            if (selected) 1.5.dp else 1.dp,
+            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.78f)
+            else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Icon(
+                    Icons.Outlined.Description,
+                    contentDescription = null,
+                    modifier = Modifier.padding(9.dp).size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    financeReportPeriodTitle(file),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    financeReportCreatedAt(file),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(
+                Icons.Outlined.ChevronRight,
+                contentDescription = atlasText("Ouvrir le rapport", "Open report", "فتح التقرير"),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun financeReportPeriodTitle(file: File): String {
+    val period = Regex("^rapport-mensuel-(\\d{4}-(?:0[1-9]|1[0-2]))(?:-\\d+)?$")
+        .find(file.nameWithoutExtension)?.groupValues?.getOrNull(1)
+    val label = period?.let { raw ->
+        runCatching { YearMonth.parse(raw).format(DateTimeFormatter.ofPattern("LLLL yyyy", atlasLocale())) }
+            .getOrNull()
+    } ?: file.nameWithoutExtension
+    return atlasText("Relevé mensuel · $label", "Monthly statement · $label", "كشف شهري · $label")
+}
+
+@Composable
+private fun financeReportCreatedAt(file: File): String {
+    val createdAt = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, atlasLocale())
+        .format(Date(file.lastModified()))
+    return atlasText("Créé le $createdAt", "Created $createdAt", "أُنشئ في $createdAt")
+}
+
+@Composable
+private fun FinanceReportInlinePreview(file: File, modifier: Modifier = Modifier) {
+    val result by produceState<Result<PdfRenderSession>?>(null, file.absolutePath) {
+        value = withContext(Dispatchers.IO) { runCatching { PdfRenderSession.open(file) } }
+    }
+    val session = result?.getOrNull()
+    DisposableEffect(session) {
+        onDispose { session?.closeQuietly() }
+    }
+    when {
+        result == null -> Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        session == null -> Box(modifier.padding(20.dp), contentAlignment = Alignment.Center) {
+            Text(
+                atlasText("Impossible de prévisualiser ce PDF.", "Could not preview this PDF.", "تعذرت معاينة ملف PDF هذا."),
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        else -> LazyColumn(
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(session.dimensions.indices.toList(), key = { it }) { index ->
+                PdfPage(session = session, pageIndex = index, zoom = 1f)
             }
         }
     }
