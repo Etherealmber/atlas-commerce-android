@@ -56,6 +56,7 @@ import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
 import ma.etherealmber.atlascommerce.core.update.UpdateInfo
 import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
+import ma.etherealmber.atlascommerce.core.update.GitHubRateLimitStatus
 import ma.etherealmber.atlascommerce.core.update.ReleaseChangelogEntry
 import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateState
@@ -284,6 +285,9 @@ class AppViewModel @Inject constructor(
     val mirrorPing: StateFlow<MirrorPingResult> = updateManager.mirrorPing
     val releaseChangelog: StateFlow<List<ReleaseChangelogEntry>> = updateManager.changelog
     val releaseChangelogLoading: StateFlow<Boolean> = updateManager.changelogLoading
+    val githubRateLimits: StateFlow<GitHubRateLimitStatus?> = updateManager.githubRateLimits
+    val githubRateLimitsLoading: StateFlow<Boolean> = updateManager.githubRateLimitsLoading
+    val githubRateLimitsError: StateFlow<Boolean> = updateManager.githubRateLimitsError
     val updateDownloadSource: StateFlow<UpdateDownloadSource> = preferences.updateDownloadSource
         .map { UpdateDownloadSource.fromKey(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, UpdateDownloadSource.AUTO)
@@ -977,6 +981,10 @@ class AppViewModel @Inject constructor(
 
     fun refreshReleaseChangelog() {
         updateManager.refreshChangelog()
+    }
+
+    fun refreshGitHubRateLimits() {
+        updateManager.refreshGitHubRateLimits()
     }
 
     suspend fun submitDiagnosticReport(

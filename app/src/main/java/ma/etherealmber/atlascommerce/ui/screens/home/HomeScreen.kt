@@ -121,6 +121,7 @@ fun HomeScreen(
     val dashboard = state.dashboard
     val isAdmin = Roles.isAdmin(user.role)
     val context = LocalContext.current
+    val atlasLanguage = LocalAtlasLanguage.current
     val shareReportChooserTitle = atlasText("Partager le rapport PDF", "Share PDF report", "مشاركة تقرير PDF")
     var pendingReportFile by remember { mutableStateOf<java.io.File?>(null) }
     var showReportActions by remember { mutableStateOf(false) }
@@ -140,7 +141,7 @@ fun HomeScreen(
             when (result) {
                 is ApiResult.Failure -> {
                     financeReportHistory = emptyList()
-                    onToast(atlasNotice(result.message, LocalAtlasLanguage.current))
+                    onToast(atlasNotice(result.message, atlasLanguage))
                 }
                 is ApiResult.Success -> financeReportHistory = result.data
             }

@@ -41,6 +41,7 @@ import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
+import ma.etherealmber.atlascommerce.data.model.GitHubRateLimitDto
 import ma.etherealmber.atlascommerce.data.model.HealthDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
@@ -342,23 +343,34 @@ class AppUpdateManagerTest {
     }
 
     @Test
-    fun releaseNotesStripRawMarkdownAndKeepReadableBullets() {
+    fun releaseNotesKeepEverySectionAndRenderMarkdownReadably() {
         val rendered = formatReleaseNotesForDisplay(
             """## Atlas Commerce 1.1.1
                 |• Set version 1.1.1 (111) [skip ci]
                 |• **Version :** `v1.1.1` (`versionCode = 111`)
                 |• **Taille :** `27.83 Mo`
+                |
+                |### Correctifs
+                |- Fix item one
+                |- Fix item two
+                |- [Full details](https://github.com/Etherealmber/atlas-commerce-android/releases/tag/v1.1.1)
             """.trimMargin(),
             "v1.1.1",
         )
         assertEquals(
-            "• Set version 1.1.1 (111) [skip ci]\n" +
+            "ATLAS COMMERCE 1.1.1\n" +
+                "• Set version 1.1.1 (111) [skip ci]\n" +
                 "• Version : v1.1.1 (versionCode = 111)\n" +
-                "• Taille : 27.83 Mo",
+                "• Taille : 27.83 Mo\n\n" +
+                "CORRECTIFS\n" +
+                "• Fix item one\n" +
+                "• Fix item two\n" +
+                "• Full details (https://github.com/Etherealmber/atlas-commerce-android/releases/tag/v1.1.1)",
             rendered,
         )
         assertFalse(rendered.contains("**"))
         assertFalse(rendered.contains('`'))
+        assertTrue(rendered.contains("Fix item two"))
     }
 
     @Test
@@ -407,6 +419,12 @@ class AppUpdateManagerTest {
 
         val dashboardAdapter = moshi.adapter(DashboardDto::class.java)
         assertNotNull(dashboardAdapter.fromJson("""{"currency":"MAD","productCount":42}"""))
+
+        val githubRateLimits = moshi.adapter(GitHubRateLimitDto::class.java).fromJson(
+            """{"resources":{"core":{"limit":60,"remaining":54,"reset":1790000000},"search":{"limit":10,"remaining":8,"reset":1790000000}}}""",
+        )
+        assertEquals(54, githubRateLimits?.resources?.get("core")?.remaining)
+        assertEquals(10, githubRateLimits?.resources?.get("search")?.limit)
 
         val finance = moshi.adapter(FinanceMonthlyDto::class.java).fromJson(
             """{"period":"2026-09","timezone":"Africa/Casablanca","currency":"MAD","opening_balance":48210.5,"closing_balance":51060.25,"sales_received":18500,"refunds":650,"expenses":9200.25,"payroll_paid":6000,"supplier_paid":2200,"receivables":{"total_outstanding":12400,"total_overdue":3100,"count":1,"truncated":false,"documents":[{"id":142,"number":"F-2026-0142","party":"Client Alpha","total":5000,"paid":2000,"remaining":3000,"due_date":"2026-09-15","state":"overdue"}]},"payables":{"total_outstanding":0,"total_overdue":0,"count":0,"truncated":false,"documents":[]},"payroll":{"total_due":9000,"employees":3},"reconciliation":{"source":"d1-live","generated_at":"2026-10-01T07:35:12.480Z","rules":"docs/api-finance.md#calculation-rules","as_of_date":"2026-09-30"}}""",

@@ -92,6 +92,11 @@ fun DeveloperDiagnosticsScreen(
     val diagnosticsRefreshed = atlasText("État actualisé.", "Diagnostics refreshed.", "تم تحديث التشخيصات.")
     val crashTestQueued = atlasText("Événement Crashlytics ajouté; vérifiez Firebase après la prochaine ouverture.", "Crashlytics event queued; check Firebase after the next app launch.", "تمت إضافة حدث Crashlytics؛ تحقق من Firebase بعد فتح التطبيق مرة أخرى.")
     val crashTestFailed = atlasText("Impossible d'ajouter l'événement de test Crashlytics.", "Could not queue the Crashlytics test event.", "تعذرت إضافة حدث اختبار Crashlytics.")
+    val analyticsEnabledToast = atlasText("Analytics activé avec votre accord.", "Analytics enabled with your consent.", "تم تفعيل Analytics بموافقتك.")
+    val analyticsDisabledToast = atlasText("Analytics désactivé.", "Analytics disabled.", "تم تعطيل Analytics.")
+    val analyticsConsentFailedToast = atlasText("Impossible de modifier le réglage Analytics.", "Could not update Analytics consent.", "تعذر تحديث موافقة Analytics.")
+    val analyticsTestQueuedToast = atlasText("Événement synthétique ajouté; vérifiez Firebase DebugView.", "Synthetic event queued; check Firebase DebugView.", "تمت إضافة الحدث الاصطناعي؛ تحقق من Firebase DebugView.")
+    val analyticsTestFailedToast = atlasText("Impossible d'ajouter l'événement Analytics.", "Could not queue the Analytics event.", "تعذرت إضافة حدث Analytics.")
     val diagnosticsCopied = atlasText("Diagnostics expurgés copiés.", "Redacted diagnostics copied.", "تم نسخ التشخيصات المنقحة.")
     val diagnosticsCopyFailed = atlasText("Impossible de copier les diagnostics.", "Could not copy diagnostics.", "تعذّر نسخ التشخيصات.")
     val diagnosticsShareFailed = atlasText("Impossible de préparer le partage des diagnostics.", "Could not prepare diagnostics for sharing.", "تعذّر إعداد التشخيصات للمشاركة.")
@@ -430,9 +435,8 @@ fun DeveloperDiagnosticsScreen(
                                     analyticsEnabled = nowEnabled
                                     onToast(
                                         if (nowEnabled == enabled && saved) {
-                                            if (enabled) atlasText("Analytics activé avec votre accord.", "Analytics enabled with your consent.", "تم تفعيل Analytics بموافقتك.")
-                                            else atlasText("Analytics désactivé.", "Analytics disabled.", "تم تعطيل Analytics.")
-                                        } else atlasText("Impossible de modifier le réglage Analytics.", "Could not update Analytics consent.", "تعذر تحديث موافقة Analytics.")
+                                            if (enabled) analyticsEnabledToast else analyticsDisabledToast
+                                        } else analyticsConsentFailedToast,
                                     )
                                 }
                             }
@@ -445,17 +449,7 @@ fun DeveloperDiagnosticsScreen(
                         scope.launch(Dispatchers.IO) {
                             val recorded = AnalyticsConsent.recordDebugTestEvent(context)
                             withContext(Dispatchers.Main.immediate) {
-                                onToast(
-                                    if (recorded) atlasText(
-                                        "Événement synthétique ajouté; vérifiez Firebase DebugView.",
-                                        "Synthetic event queued; check Firebase DebugView.",
-                                        "تمت إضافة الحدث الاصطناعي؛ تحقق من Firebase DebugView.",
-                                    ) else atlasText(
-                                        "Impossible d'ajouter l'événement Analytics.",
-                                        "Could not queue the Analytics event.",
-                                        "تعذرت إضافة حدث Analytics.",
-                                    ),
-                                )
+                                onToast(if (recorded) analyticsTestQueuedToast else analyticsTestFailedToast)
                             }
                         }
                     },

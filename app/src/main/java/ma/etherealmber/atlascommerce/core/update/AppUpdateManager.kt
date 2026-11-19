@@ -37,6 +37,7 @@ import ma.etherealmber.atlascommerce.core.net.hasDeviceInternetCapability
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
+import ma.etherealmber.atlascommerce.data.model.GitHubRateLimitDto
 import ma.etherealmber.atlascommerce.data.model.GitHubReleaseDto
 import ma.etherealmber.atlascommerce.di.ApplicationScope
 import ma.etherealmber.atlascommerce.di.ProbeClient
@@ -182,6 +183,15 @@ class AppUpdateManager internal constructor(
     private val _changelogLoading = MutableStateFlow(false)
     val changelogLoading: StateFlow<Boolean> = _changelogLoading.asStateFlow()
 
+    private val _githubRateLimits = MutableStateFlow<GitHubRateLimitStatus?>(null)
+    val githubRateLimits: StateFlow<GitHubRateLimitStatus?> = _githubRateLimits.asStateFlow()
+
+    private val _githubRateLimitsLoading = MutableStateFlow(false)
+    val githubRateLimitsLoading: StateFlow<Boolean> = _githubRateLimitsLoading.asStateFlow()
+
+    private val _githubRateLimitsError = MutableStateFlow(false)
+    val githubRateLimitsError: StateFlow<Boolean> = _githubRateLimitsError.asStateFlow()
+
     @Volatile
     private var downloadJob: Job? = null
 
@@ -193,6 +203,9 @@ class AppUpdateManager internal constructor(
 
     @Volatile
     private var changelogJob: Job? = null
+
+    @Volatile
+    private var githubRateLimitJob: Job? = null
 
     @Volatile
     private var lastAutoCheckMs: Long = 0L
@@ -303,16 +316,18 @@ class AppUpdateManager internal constructor(
                         releasesListAdapter.fromJson(raw).orEmpty()
                     }
                 }
+                val latestStableTag = parsed.firstOrNull { !it.draft && !it.prerelease && it.tagName.isNotBlank() }?.tagName
                 val entries = parsed
                     .filter { !it.draft && it.tagName.isNotBlank() }
-                    .mapIndexed { idx, rel ->
+                    .map { rel ->
                         val cleanedBody = formatReleaseNotesForDisplay(rel.body.orEmpty(), rel.tagName)
                         ReleaseChangelogEntry(
                             tagName = rel.tagName.trim(),
                             title = rel.name?.trim()?.takeIf { it.isNotEmpty() }
                                 ?: "Atlas Commerce ${rel.tagName.trim()}",
                             publishedAt = rel.publishedAt?.take(10),
-                            isLatest = idx == 0,
+                            isLatest = !rel.prerelease && rel.tagName == latestStableTag,
+                            isPrerelease = rel.prerelease,
                             notes = cleanedBody,
                             htmlUrl = rel.htmlUrl,
                         )
@@ -330,6 +345,45 @@ class AppUpdateManager internal constructor(
         }
     }
 
+    /** Fetches GitHub's public REST quota snapshot only when the user explicitly requests it. */
+    fun refreshGitHubRateLimits() {
+        if (githubRateLimitJob?.isActive == true) return
+        _githubRateLimitsLoading.value = true
+        _githubRateLimitsError.value = false
+        githubRateLimitJob = scope.launch(ioDispatcher) {
+            try {
+                val request = Request.Builder()
+                    .url(UpdateDefaults.GITHUB_RATE_LIMIT_API_URL)
+                    .get()
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", "Atlas-Android-Updater")
+                    .build()
+                val parsed = updateProbeClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) error("GitHub rate-limit request failed: ${response.code}")
+                    moshi.adapter(GitHubRateLimitDto::class.java).fromJson(response.body?.string().orEmpty())
+                        ?: error("GitHub rate-limit response was empty")
+                }
+                fun bucket(name: String): GitHubRateLimitBucket? = parsed.resources[name]?.let { value ->
+                    if (value.limit <= 0) null else GitHubRateLimitBucket(
+                        limit = value.limit,
+                        remaining = value.remaining.coerceIn(0, value.limit),
+                        resetEpochSeconds = value.reset.coerceAtLeast(0L),
+                    )
+                }
+                _githubRateLimits.value = GitHubRateLimitStatus(
+                    hourly = bucket("core"),
+                    perMinute = bucket("search"),
+                    fetchedAtEpochMillis = System.currentTimeMillis(),
+                )
+            } catch (c: CancellationException) {
+                throw c
+            } catch (_: Throwable) {
+                _githubRateLimitsError.value = true
+            } finally {
+                _githubRateLimitsLoading.value = false
+            }
+        }
+    }
 
     /**
      * Measures HTTPS latency in `ms` to the Atlas API and GitHub Releases endpoints.

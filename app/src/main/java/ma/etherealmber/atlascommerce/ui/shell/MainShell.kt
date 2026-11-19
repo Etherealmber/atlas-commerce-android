@@ -278,6 +278,7 @@ fun MainShell(
     var showShakeReportPrompt by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showAgentQuotaDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showDataCacheManagerDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
+    var releaseHistorySubpageActive by remember(user.scopeIdentity) { mutableStateOf(false) }
     var showSidebarSignOutConfirmation by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var productHistoryActive by remember(user.scopeIdentity) { mutableStateOf(false) }
     var pendingAgentReportRequest by remember(user.scopeIdentity) { mutableStateOf<AgentNavigationSuggestion?>(null) }
@@ -352,6 +353,7 @@ fun MainShell(
             }
             val resolved = if (targetAllowed) externalTabRequest else MainTab.HOME.name
             showDataCacheManagerDialog = false
+            if (resolved != MainTab.SETTINGS.name) releaseHistorySubpageActive = false
             setTabName(resolved)
             if (roleTabs.any { it.name == resolved }) setLastBottomTabName(resolved)
             onExternalTabHandled()
@@ -359,6 +361,7 @@ fun MainShell(
     }
 
     LaunchedEffect(tab) {
+        if (tab != MainTab.SETTINGS) releaseHistorySubpageActive = false
         AtlasLogBuffer.log("NAVIGATION", "Main tab selected: ${tab.name}")
     }
 
@@ -373,6 +376,7 @@ fun MainShell(
     }
     val switchTab: (MainTab) -> Unit = { target ->
         showDataCacheManagerDialog = false
+        if (target != MainTab.SETTINGS) releaseHistorySubpageActive = false
         if (target == MainTab.BALANCE && Roles.normalize(user.role) == Roles.STOCK) {
             setTabName(MainTab.HOME.name)
         } else if (target == MainTab.SALE && !Roles.canCreateDocuments(user.role)) {
@@ -421,7 +425,7 @@ fun MainShell(
         }
     }
 
-    BackHandler(enabled = isForeground && tab != MainTab.HOME && !productHistoryActive) {
+    BackHandler(enabled = isForeground && tab != MainTab.HOME && !productHistoryActive && !releaseHistorySubpageActive) {
         AtlasLogBuffer.log("NAVIGATION", "System Back handled by shell on tab=${tab.name}")
         showDataCacheManagerDialog = false
         when (tab) {
@@ -439,7 +443,10 @@ fun MainShell(
     val useRail = maxWidth >= 600.dp
     val useDesktopSidebar = maxWidth >= 1000.dp
     val pageTarget = ShellPageTarget(tab = tab, isDataStorage = useRail && showDataCacheManagerDialog)
-    val sidebarExpanded = !sidebarCollapsed
+    // A full drawer consumes too much of a medium-width window (especially split-screen).
+    // Keep those windows on a compact rail; allow an expanded drawer from 840dp upward.
+    val sidebarCanExpand = maxWidth >= 840.dp
+    val sidebarExpanded = sidebarCanExpand && !sidebarCollapsed
     val sidebarWidth by animateDpAsState(
         targetValue = if (!useRail) 0.dp else if (sidebarExpanded) 264.dp else 76.dp,
         animationSpec = spring(dampingRatio = 0.86f, stiffness = 360f),
@@ -454,7 +461,7 @@ fun MainShell(
     }
 
     val showShellTopBar = isForeground && (
-        (!useRail && !productHistoryActive && tab != MainTab.NOTIFICATIONS) ||
+        (!useRail && !productHistoryActive && !releaseHistorySubpageActive && tab != MainTab.NOTIFICATIONS) ||
             (useRail && tab == MainTab.AGENT && !productHistoryActive) ||
             (useRail && showDataCacheManagerDialog)
         )
@@ -670,7 +677,7 @@ fun MainShell(
                     expanded = sidebarExpanded,
                     onOpenDataStorageManager = { showDataCacheManagerDialog = true },
                     dataStorageSelected = showDataCacheManagerDialog,
-                    canCollapse = true,
+                    canCollapse = sidebarCanExpand,
                     onToggleCollapse = { onSidebarCollapsedChange(!sidebarCollapsed) },
                     onNavigate = switchTab,
                     onOpenNotifications = openNotificationsForLayout,
@@ -714,7 +721,7 @@ fun MainShell(
                 contentAlignment = Alignment.TopCenter,
             ) {
                 Column(Modifier.widthIn(max = if (useRail) 1440.dp else 840.dp).fillMaxSize()) {
-                    if (useRail && currentTab != MainTab.NOTIFICATIONS && currentTab != MainTab.AGENT) {
+                    if (useRail && currentTab != MainTab.NOTIFICATIONS && currentTab != MainTab.AGENT && !releaseHistorySubpageActive) {
                         Text(
                             if (currentPage.isDataStorage) {
                                 atlasText("Données et cache", "Data & cache", "البيانات والذاكرة المؤقتة")
@@ -823,6 +830,7 @@ fun MainShell(
                         onOpenDeveloperTools = onOpenDeveloperTools,
                         onSignOut = onSignOut,
                         onStartUpdateDownload = onStartUpdateDownload,
+                        onReleaseHistoryVisibilityChanged = { releaseHistorySubpageActive = it },
                         onToast = onToast,
                     )
                 }

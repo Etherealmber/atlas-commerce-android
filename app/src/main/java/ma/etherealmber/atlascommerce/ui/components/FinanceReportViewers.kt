@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -625,8 +626,11 @@ private fun financeReportPeriodTitle(file: File): String {
     val period = Regex("^rapport-mensuel-(\\d{4}-(?:0[1-9]|1[0-2]))(?:-\\d+)?$")
         .find(file.nameWithoutExtension)?.groupValues?.getOrNull(1)
     val label = period?.let { raw ->
-        runCatching { YearMonth.parse(raw).format(DateTimeFormatter.ofPattern("LLLL yyyy", atlasLocale())) }
-            .getOrNull()
+        try {
+            YearMonth.parse(raw).format(DateTimeFormatter.ofPattern("LLLL yyyy", atlasLocale()))
+        } catch (_: Exception) {
+            null
+        }
     } ?: file.nameWithoutExtension
     return atlasText("Relevé mensuel · $label", "Monthly statement · $label", "كشف شهري · $label")
 }

@@ -28,6 +28,7 @@ object UpdateDefaults {
         BuildConfig.DEFAULT_DOWNLOAD_URL
     val GITHUB_RELEASES_API_URL: String =
         "${BuildConfig.PROJECT_REPO.trimEnd('/').replace("https://github.com/", "https://api.github.com/repos/")}/releases?per_page=8"
+    const val GITHUB_RATE_LIMIT_API_URL = "https://api.github.com/rate_limit"
 }
 
 enum class MirrorTestTarget { CDN1, GITHUB }
@@ -83,37 +84,47 @@ data class ReleaseChangelogEntry(
     val title: String,
     val publishedAt: String? = null,
     val isLatest: Boolean = false,
+    val isPrerelease: Boolean = false,
     val notes: String,
     val htmlUrl: String? = null,
 )
 
+data class GitHubRateLimitBucket(
+    val limit: Int,
+    val remaining: Int,
+    val resetEpochSeconds: Long,
+)
+
+data class GitHubRateLimitStatus(
+    val hourly: GitHubRateLimitBucket?,
+    val perMinute: GitHubRateLimitBucket?,
+    val fetchedAtEpochMillis: Long,
+)
+
 internal fun formatReleaseNotesForDisplay(rawBody: String, tagName: String): String {
-    val lines = rawBody.lineSequence()
-        .map(String::trim)
-        .filter { line ->
-            line.isNotEmpty() &&
-                !line.startsWith("## ") &&
-                !line.startsWith("### ") &&
-                !line.startsWith("- **SHA-256", ignoreCase = true) &&
-                !line.startsWith("- **Téléchargement", ignoreCase = true) &&
-                !line.startsWith("- **Miroir", ignoreCase = true) &&
-                !line.startsWith("**Comparatif", ignoreCase = true)
-        }
+    val rendered = rawBody.lineSequence()
+        .map(String::trimEnd)
         .map { line ->
-            line.removePrefix("- ").removePrefix("* ")
-                .replace(Regex("\\[([^]]+)]\\([^)]+\\)"), "$1")
-                .replace("**", "")
-                .replace("__", "")
-                .replace("`", "")
-                .replace(Regex("[ \\t]+"), " ")
-                .trim()
-                .let { if (it.startsWith("•")) it else "• $it" }
+            val trimmed = line.trim()
+            when {
+                trimmed.startsWith("### ") -> trimmed.removePrefix("### ").uppercase(Locale.ROOT)
+                trimmed.startsWith("## ") -> trimmed.removePrefix("## ").uppercase(Locale.ROOT)
+                trimmed.startsWith("# ") -> trimmed.removePrefix("# ").uppercase(Locale.ROOT)
+                trimmed.startsWith("- ") -> "• ${trimmed.removePrefix("- ")}"
+                trimmed.startsWith("* ") -> "• ${trimmed.removePrefix("* ")}"
+                else -> line
+            }
         }
-        .filter { it != "•" }
-        .take(6)
-        .toList()
-    return lines.takeIf { it.isNotEmpty() }?.joinToString("\n")
-        ?: "• Mise à jour $tagName — optimisations et correctifs."
+        .joinToString("\n")
+        .replace(Regex("\\[([^]]+)]\\(([^)]+)\\)")) { match ->
+            "${match.groupValues[1]} (${match.groupValues[2]})"
+        }
+        .replace("**", "")
+        .replace("__", "")
+        .replace("`", "")
+        .replace(Regex("(?m)[ \\t]+$"), "")
+        .trim()
+    return rendered.ifBlank { "• Mise à jour $tagName — optimisations et correctifs." }
 }
 
 internal fun monotonicElapsedRealtimeMs(): Long = System.nanoTime() / 1_000_000L
