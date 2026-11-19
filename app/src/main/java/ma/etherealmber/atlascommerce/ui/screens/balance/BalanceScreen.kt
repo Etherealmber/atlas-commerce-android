@@ -7,6 +7,7 @@ import android.content.ClipData
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -193,7 +194,7 @@ private fun BalanceSummarySkeleton(compact: Boolean) {
 
 @Composable
 private fun BalanceClosingSkeleton(modifier: Modifier = Modifier) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AtlasSkeletonBlock(Modifier.size(24.dp), CircleShape)
@@ -210,7 +211,7 @@ private fun BalanceSummaryAmountSkeleton(
     modifier: Modifier = Modifier,
     subtitle: Boolean = false,
 ) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 AtlasSkeletonBlock(Modifier.size(22.dp), CircleShape)
@@ -240,6 +241,7 @@ private fun BalanceCashBankRowSkeleton(count: Int, owners: Boolean, mixed: Boole
             Card(
                 modifier = Modifier.weight(1f),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                border = financeCardBorder(),
             ) {
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(if (ownerCard) 5.dp else 4.dp)) {
                     AtlasSkeletonBlock(Modifier.fillMaxWidth(0.56f).height(14.dp))
@@ -272,6 +274,7 @@ private fun BalanceFlowCardSkeleton(rows: Int) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = financeCardBorder(),
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             AtlasSkeletonBlock(Modifier.fillMaxWidth(0.72f).height(18.dp))
@@ -290,7 +293,7 @@ private fun BalanceFlowCardSkeleton(rows: Int) {
 
 @Composable
 private fun BalanceReconciliationSkeleton() {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 AtlasSkeletonBlock(Modifier.fillMaxWidth(0.58f).height(18.dp))
@@ -332,7 +335,7 @@ private fun BalanceFilterFieldSkeleton(modifier: Modifier) {
 
 @Composable
 private fun BalanceStatementRowSkeleton() {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 AtlasSkeletonBlock(Modifier.fillMaxWidth(0.74f).height(18.dp))
@@ -354,7 +357,7 @@ private fun BalanceEmptyPanelSkeleton() {
 
 @Composable
 private fun BalanceReceivableSkeleton() {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 AtlasSkeletonBlock(Modifier.weight(1f).height(18.dp))
@@ -368,7 +371,7 @@ private fun BalanceReceivableSkeleton() {
 
 @Composable
 private fun BalanceReportActionSkeleton() {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AtlasSkeletonBlock(Modifier.size(24.dp), CircleShape)
@@ -897,7 +900,7 @@ private fun monthLabel(month: YearMonth, locale: Locale): String {
 @Composable
 private fun BalanceClosingCard(closing: Double, currency: String, modifier: Modifier = Modifier) {
     val accent = Atlas.palette.chartSales
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), border = BorderStroke(1.dp, accent.copy(alpha = 0.42f))) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = accent)
@@ -941,7 +944,7 @@ private fun SummaryAmountCard(
     accent: Color = Atlas.palette.chartReceivable,
     modifier: Modifier = Modifier,
 ) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (icon != null) {
@@ -1005,7 +1008,7 @@ private fun CashBankDashboard(data: FinancePeriodDto, currency: String) {
 
 @Composable
 private fun CashAccountCard(title: String, incoming: Double, outgoing: Double, currency: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title.uppercase(atlasLocale()), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
@@ -1031,7 +1034,7 @@ private fun CashAccountCard(title: String, incoming: Double, outgoing: Double, c
 
 @Composable
 private fun OwnerMovementCard(title: String, amount: Double, count: Int, positive: Boolean, currency: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(title.uppercase(atlasLocale()), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
@@ -1061,7 +1064,7 @@ private fun FinanceFlowCard(
     modifier: Modifier = Modifier,
 ) {
     val largest = rows.maxOfOrNull { it.second.coerceAtLeast(0.0) } ?: 0.0
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             rows.forEach { (label, amount) ->
@@ -1087,7 +1090,7 @@ private fun FinanceFlowCard(
 @Composable
 private fun ReconciliationNotice(balanced: Boolean?, status: String, asOf: String) {
     val color = if (balanced == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 Text(
@@ -1121,7 +1124,7 @@ private fun StatementRowCard(row: FinanceStatementRowDto, currency: String) {
         "supplier" -> atlasText("Fournisseur", "Supplier", "المورد")
         else -> atlasText("Mouvement", "Transaction", "حركة")
     }
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(if (row.label.isNotBlank()) atlasText(row.label) else kind, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -1143,7 +1146,7 @@ private fun StatementRowCard(row: FinanceStatementRowDto, currency: String) {
 
 @Composable
 private fun ReceivableCard(document: FinanceOutstandingDocumentDto, currency: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(document.party.ifBlank { atlasText("Client") }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
@@ -1208,6 +1211,12 @@ private fun FinanceReportMiniChart(finance: ma.etherealmber.atlascommerce.data.m
 }
 
 @Composable
+private fun financeCardBorder() = BorderStroke(
+    width = 1.dp,
+    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.76f),
+)
+
+@Composable
 private fun financeFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = MaterialTheme.colorScheme.primary,
     unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.58f),
@@ -1218,7 +1227,7 @@ private fun financeFieldColors() = OutlinedTextFieldDefaults.colors(
 
 @Composable
 private fun ReportActionCard(title: String, description: String, icon: @Composable () -> Unit, actionLabel: String, enabled: Boolean, onClick: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
@@ -1238,7 +1247,12 @@ private fun ReportActionCard(title: String, description: String, icon: @Composab
 
 @Composable
 private fun EmptyPanel(message: String) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.medium) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.medium,
+        border = financeCardBorder(),
+    ) {
         Text(message, modifier = Modifier.fillMaxWidth().padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

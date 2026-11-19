@@ -246,6 +246,59 @@ class ScanViewModel @Inject constructor(
         _messages.tryEmit("${product.name} · ajouté au panier")
     }
 
+    /** Apply an authorized stock movement or submit an approval request for a scanned product. */
+    fun adjustScannedStock(product: ProductDto, quantity: Double, out: Boolean, reason: String) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+        if (activeUser == null || !Roles.canRequestStockAdjustment(activeUser.role)) {
+            _messages.tryEmit("Votre rôle ne permet pas de demander un changement de stock.")
+            return
+        }
+        if (!quantity.isFinite() || quantity <= 0.0) {
+            _messages.tryEmit("Indiquez une quantité supérieure à zéro.")
+            return
+        }
+        val requestedScope = activeUser.scopeIdentity
+        viewModelScope.launch {
+            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+            val result: ApiResult<ProductDto>? = if (Roles.canAdjustStock(activeUser.role)) {
+                commerceRepository.adjustStock(
+                    productId = product.id,
+                    quantity = quantity,
+                    type = if (out) "out" else "in",
+                    reason = reason,
+                )
+            } else {
+                commerceRepository.submitStockAdjustmentRequest(
+                    productId = product.id,
+                    quantity = quantity,
+                    direction = if (out) "out" else "in",
+                    reason = reason,
+                    idempotencyKey = java.util.UUID.randomUUID().toString(),
+                ).let { requestResult ->
+                    when (requestResult) {
+                        is ApiResult.Failure -> ApiResult.Failure(requestResult.code, requestResult.message)
+                        is ApiResult.Success -> {
+                            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+                            _messages.tryEmit("Demande de stock envoyée pour validation. Le stock ne changera qu'après approbation.")
+                            null
+                        }
+                    }
+                }
+            }
+            if (result == null) return@launch
+            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+            when (result) {
+                is ApiResult.Failure -> _messages.tryEmit(result.message)
+                is ApiResult.Success -> {
+                    _state.update { current ->
+                        if (current.product?.id == product.id) current.copy(product = result.data) else current
+                    }
+                    _messages.tryEmit("${result.data.name} · stock ${ma.etherealmber.atlascommerce.core.format.AtlasFormat.quantity(result.data.stock)}")
+                }
+            }
+        }
+    }
+
     /** Clear the finished result for another scan without undoing any cart addition. */
     fun continueScanning() {
         lookupJob?.cancel()

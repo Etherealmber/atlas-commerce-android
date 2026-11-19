@@ -45,11 +45,13 @@ import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.VideocamOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,6 +68,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -127,6 +130,7 @@ fun ScanScreen(
     )
     var showCreateDialog by remember { mutableStateOf(false) }
     var showScannedProductDialog by remember { mutableStateOf(false) }
+    var showStockAdjustDialog by remember { mutableStateOf(false) }
 
     val isAdmin = Roles.canCreateProductDirectly(user.role)
     val canSell = Roles.canCreateDocuments(user.role)
@@ -170,6 +174,11 @@ fun ScanScreen(
     }
     LaunchedEffect(state.product?.id, state.lastCode) {
         if (state.product != null) showScannedProductDialog = true
+    }
+    LaunchedEffect(state.notFound, state.lastCode, state.pendingApproval) {
+        if (state.notFound && !state.pendingApproval && !state.lastCode.isNullOrBlank()) {
+            showCreateDialog = true
+        }
     }
 
     val startCameraExplicitly: () -> Unit = {
@@ -415,6 +424,7 @@ fun ScanScreen(
     }
 
     val scannedProduct = state.product
+    val canEditScannedStock = Roles.canRequestStockAdjustment(user.role) && scannedProduct?.trackInventory == true
     if (showScannedProductDialog && scannedProduct != null) {
         AlertDialog(
             onDismissRequest = { showScannedProductDialog = false },
@@ -426,6 +436,14 @@ fun ScanScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        atlasText(
+                            "Ce produit existe déjà. Voulez-vous modifier son stock ?",
+                            "This product already exists. Would you like to edit its stock?",
+                            "هذا المنتج موجود بالفعل. هل تريد تعديل مخزونه؟",
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                     Text(
                         atlasText(
                             "Code : ${state.lastCode.orEmpty()}",
@@ -462,15 +480,27 @@ fun ScanScreen(
                 }
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        showScannedProductDialog = false
-                        viewModel.continueScanning()
-                        startCameraExplicitly()
-                    },
-                    enabled = isActive,
-                ) {
-                    Text(atlasText("Suivant", "Scan next", "التالي"))
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (canEditScannedStock) {
+                        TextButton(
+                            onClick = {
+                                showScannedProductDialog = false
+                                showStockAdjustDialog = true
+                            },
+                        ) {
+                            Text(atlasText("Modifier le stock", "Edit stock", "تعديل المخزون"))
+                        }
+                    }
+                    TextButton(
+                        onClick = {
+                            showScannedProductDialog = false
+                            viewModel.continueScanning()
+                            startCameraExplicitly()
+                        },
+                        enabled = isActive,
+                    ) {
+                        Text(atlasText("Aucun changement", "No changes", "لا تغيير"))
+                    }
                 }
             },
             dismissButton = {
@@ -485,8 +515,93 @@ fun ScanScreen(
                     }
                 } else {
                     TextButton(onClick = { showScannedProductDialog = false }) {
-                        Text(atlasText("Fermer", "Close", "إغلاق"))
+                        Text(atlasText("Aucun changement", "No changes", "لا تغيير"))
                     }
+                }
+            },
+        )
+    }
+
+    if (showStockAdjustDialog && scannedProduct != null) {
+        var rawStockChange by remember(scannedProduct.id) { mutableStateOf("") }
+        var stockOut by remember(scannedProduct.id) { mutableStateOf(false) }
+        var stockReason by remember(scannedProduct.id) { mutableStateOf("") }
+        val parsedStockChange = rawStockChange.replace(',', '.').toDoubleOrNull()
+        val directAdjustment = Roles.canAdjustStock(user.role)
+        AlertDialog(
+            onDismissRequest = { showStockAdjustDialog = false },
+            title = {
+                Text(
+                    if (directAdjustment) atlasText("Modifier le stock", "Edit stock", "تعديل المخزون")
+                    else atlasText("Demander un changement de stock", "Request a stock change", "طلب تغيير المخزون"),
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(scannedProduct.name, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        atlasText(
+                            "Stock actuel : ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
+                            "Current stock: ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
+                            "المخزون الحالي: ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (!directAdjustment) {
+                        Text(
+                            atlasText(
+                                "La demande sera appliquée après approbation.",
+                                "The request will be applied after approval.",
+                                "سيتم تطبيق الطلب بعد الموافقة.",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !stockOut,
+                            onClick = { stockOut = false },
+                            label = { Text(atlasText("Entrée", "Add", "إضافة")) },
+                        )
+                        FilterChip(
+                            selected = stockOut,
+                            onClick = { stockOut = true },
+                            label = { Text(atlasText("Sortie", "Remove", "إزالة")) },
+                        )
+                    }
+                    OutlinedTextField(
+                        value = rawStockChange,
+                        onValueChange = { value -> rawStockChange = value.filter { it.isDigit() || it == '.' || it == ',' } },
+                        label = { Text(atlasText("Quantité", "Quantity", "الكمية")) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = stockReason,
+                        onValueChange = { stockReason = it },
+                        label = { Text(atlasText("Motif (facultatif)", "Reason (optional)", "السبب (اختياري)")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        parsedStockChange?.let { viewModel.adjustScannedStock(scannedProduct, it, stockOut, stockReason) }
+                        showStockAdjustDialog = false
+                    },
+                    enabled = parsedStockChange != null && parsedStockChange > 0.0,
+                ) {
+                    Text(if (directAdjustment) atlasText("Appliquer", "Apply", "تطبيق") else atlasText("Envoyer", "Submit", "إرسال"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStockAdjustDialog = false }) {
+                    Text(atlasText("Annuler", "Cancel", "إلغاء"))
                 }
             },
         )

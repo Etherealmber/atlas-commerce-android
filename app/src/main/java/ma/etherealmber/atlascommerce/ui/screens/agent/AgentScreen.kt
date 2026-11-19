@@ -6,6 +6,15 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -612,6 +621,11 @@ fun AgentScreen(
         val showThinkingIndicator = state.sending && state.streamingReply.isBlank() && state.streamingTools.isEmpty()
         val composerSidePadding = if (isTabletLayout) 20.dp else density.screenPadding
         val composerSendTarget = if (isTabletLayout) 56.dp else 48.dp
+        val motionEnabled = LocalAtlasAnimationsEnabled.current
+        var composerVisible by remember { mutableStateOf(false) }
+        LaunchedEffect(isActive) {
+            composerVisible = isActive
+        }
         Column(Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
@@ -714,9 +728,6 @@ fun AgentScreen(
                                 onNavigate = onNavigate,
                                 onThemeChoice = { messageId, mode -> viewModel.selectThemeOption(messageId, mode) },
                             )
-                            if (!msg.fromUser) {
-                                AgentAiDisclaimer(modifier = Modifier.fillMaxWidth().padding(start = 40.dp, top = 4.dp))
-                            }
                         }
                     }
                     if (state.updateConversationActive) {
@@ -827,20 +838,37 @@ fun AgentScreen(
                 }
             }
 
-            AgentAiDisclaimer(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
+            if (!state.sending && state.messages.lastOrNull()?.fromUser == false) {
+                AgentAiDisclaimer(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
+            }
 
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(
-                    horizontal = if (isTabletLayout) 16.dp else 12.dp,
-                    vertical = 6.dp,
-                ),
-                shape = RoundedCornerShape(if (isTabletLayout) 24.dp else 28.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.82f)),
-                tonalElevation = 6.dp,
-                shadowElevation = 10.dp,
+            AnimatedVisibility(
+                visible = composerVisible,
+                enter = if (motionEnabled) {
+                    fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+                        slideInVertically(
+                            animationSpec = tween(260, easing = FastOutSlowInEasing),
+                            initialOffsetY = { height -> height / 3 },
+                        ) + scaleIn(tween(220, easing = FastOutSlowInEasing), initialScale = 0.98f)
+                } else EnterTransition.None,
+                exit = if (motionEnabled) {
+                    fadeOut(tween(140, easing = FastOutSlowInEasing)) +
+                        slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { height -> height / 5 } +
+                        scaleOut(tween(140, easing = FastOutSlowInEasing), targetScale = 0.98f)
+                } else ExitTransition.None,
             ) {
-                Row(
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(
+                        horizontal = if (isTabletLayout) 16.dp else 12.dp,
+                        vertical = 6.dp,
+                    ),
+                    shape = RoundedCornerShape(26.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 4.dp,
+                ) {
+                    Row(
                     modifier = Modifier.fillMaxWidth().padding(
                         horizontal = if (isTabletLayout) composerSidePadding else 12.dp,
                         vertical = if (compactComposer) 4.dp else 8.dp,
@@ -891,6 +919,7 @@ fun AgentScreen(
                             tint = if (quotaLocked) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
                         )
                     }
+                }
                 }
             }
         }
