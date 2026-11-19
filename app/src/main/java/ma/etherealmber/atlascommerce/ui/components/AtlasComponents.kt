@@ -338,11 +338,17 @@ fun AtlasStatTile(
     tone: AtlasTone = AtlasTone.NEUTRAL,
     icon: ImageVector? = null,
 ) {
+    val isSemanticTone = tone != AtlasTone.NEUTRAL
+    val tileBorder = if (isSemanticTone) {
+        BorderStroke(1.5.dp, toneForeground(tone).copy(alpha = 0.62f))
+    } else {
+        BorderStroke(1.dp, Atlas.palette.cardBorder)
+    }
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, Atlas.palette.cardBorder),
+        color = if (isSemanticTone) toneBackground(tone) else MaterialTheme.colorScheme.surface,
+        border = tileBorder,
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -366,7 +372,7 @@ fun AtlasStatTile(
                 text = value,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (isSemanticTone) toneForeground(tone) else MaterialTheme.colorScheme.onSurface,
             )
             if (!hint.isNullOrBlank()) {
                 Spacer(Modifier.height(2.dp))

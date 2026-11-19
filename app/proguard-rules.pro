@@ -59,6 +59,14 @@
     *;
 }
 
+# Analytics is accessed reflectively so Firebase-free builds do not need the optional SDK
+# on their compile classpath. Keep only the small public surface used by consent and test events.
+-keep class com.google.firebase.analytics.FirebaseAnalytics {
+    public static com.google.firebase.analytics.FirebaseAnalytics getInstance(android.content.Context);
+    public void setAnalyticsCollectionEnabled(boolean);
+    public void logEvent(java.lang.String, android.os.Bundle);
+}
+
 # Hilt / Dagger
 -keep class dagger.hilt.** { *; }
 -keep class javax.inject.** { *; }

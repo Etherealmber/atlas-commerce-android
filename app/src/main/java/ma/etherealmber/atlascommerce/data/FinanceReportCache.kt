@@ -34,4 +34,13 @@ object FinanceReportCache {
             if (expired || index >= MAX_REPORTS_PER_ACCOUNT) runCatching { file.delete() }
         }
     }
+
+    /** Returns recent PDFs, after applying the same private-cache retention policy. */
+    fun listAccount(directory: File, nowMs: Long = System.currentTimeMillis()): List<File> {
+        pruneAccount(directory, nowMs)
+        return directory.listFiles()
+            ?.filter { it.isFile && it.extension.equals("pdf", ignoreCase = true) }
+            ?.sortedByDescending { it.lastModified() }
+            .orEmpty()
+    }
 }

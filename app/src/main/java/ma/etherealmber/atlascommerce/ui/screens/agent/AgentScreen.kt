@@ -13,10 +13,14 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -128,6 +132,9 @@ import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
+import ma.etherealmber.atlascommerce.ui.theme.AtlasAgentMascotColors
+import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
+import ma.etherealmber.atlascommerce.ui.theme.atlasAgentMascotColors
 import java.text.NumberFormat
 import java.time.Duration
 import java.time.Instant
@@ -942,7 +949,7 @@ fun AtlasAgentMascot(
         ),
         label = "atlas-agent-mascot-tilt",
     )
-    val onMascot = MaterialTheme.colorScheme.onPrimary
+    val mascotColors = atlasAgentMascotColors(LocalAtlasDarkTheme.current)
 
     Box(
         modifier = modifier
@@ -951,38 +958,60 @@ fun AtlasAgentMascot(
                 rotationZ = if (motionEnabled) tilt else 0f
             }
             .clip(CircleShape)
-            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary))),
+            .background(Brush.linearGradient(listOf(mascotColors.faceGradientStart, mascotColors.faceGradientEnd))),
         contentAlignment = Alignment.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                Box(
-                    Modifier.size(5.dp).graphicsLayer {
-                        scaleY = eyeScale
-                        translationX = if (motionEnabled && isEngaged) gaze * 2.2f else 0f
-                    }.clip(CircleShape).background(onMascot),
-                )
-                Box(
-                    Modifier.size(5.dp).graphicsLayer {
-                        scaleY = eyeScale
-                        translationX = if (motionEnabled && isEngaged) gaze * 2.2f else 0f
-                    }.clip(CircleShape).background(onMascot),
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                repeat(2) {
+                    AtlasAgentMascotEye(
+                        colors = mascotColors,
+                        eyeScale = eyeScale,
+                        gaze = if (motionEnabled && isEngaged) gaze else 0f,
+                    )
+                }
+            }
+            Canvas(Modifier.padding(top = 1.dp).width(11.dp).height(5.dp)) {
+                val smilePath = Path().apply {
+                    moveTo(0f, size.height * 0.35f)
+                    quadraticTo(size.width * 0.5f, size.height * 1.25f, size.width, size.height * 0.35f)
+                }
+                drawPath(
+                    path = smilePath,
+                    color = mascotColors.smile,
+                    style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round),
                 )
             }
-            Box(
-                Modifier
-                    .padding(top = 1.dp)
-                    .width(12.dp)
-                    .height(5.dp)
-                    .clip(RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
-                    .background(onMascot),
-            )
         }
         Icon(
             imageVector = Icons.Outlined.AutoAwesome,
             contentDescription = null,
-            tint = onMascot.copy(alpha = 0.9f),
-            modifier = Modifier.align(Alignment.TopEnd).padding(5.dp).size(11.dp),
+            tint = mascotColors.sparkle.copy(alpha = 0.9f),
+            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(9.dp),
+        )
+    }
+}
+
+@Composable
+private fun AtlasAgentMascotEye(
+    colors: AtlasAgentMascotColors,
+    eyeScale: Float,
+    gaze: Float,
+) {
+    Box(
+        modifier = Modifier
+            .size(width = 7.dp, height = 9.dp)
+            .graphicsLayer { scaleY = eyeScale }
+            .clip(CircleShape)
+            .background(colors.eyeWhite),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 3.dp, height = 4.dp)
+                .graphicsLayer { translationX = gaze * 1.25f }
+                .clip(CircleShape)
+                .background(colors.pupil),
         )
     }
 }

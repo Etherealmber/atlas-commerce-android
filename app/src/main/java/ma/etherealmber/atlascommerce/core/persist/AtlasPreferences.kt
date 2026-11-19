@@ -45,6 +45,16 @@ private fun mobileScopeHash(scope: String): String = java.security.MessageDigest
     .take(12)
     .joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
+/** Theme and app language are device-local presentation choices, not server-owned settings. */
+internal fun preserveLocalAppearanceSettings(
+    incoming: Map<String, Any?>,
+    local: Map<String, Any?>,
+): Map<String, Any?> = incoming.toMutableMap().apply {
+    listOf("theme", "language").forEach { key ->
+        if (local.containsKey(key)) put(key, local[key])
+    }
+}
+
 private fun mobileSettingsKey(scope: String): String = "mobile_sync_settings::${mobileScopeHash(scope)}"
 private fun mobileSettingsDirtyKey(scope: String): String = "mobile_sync_settings_dirty::${mobileScopeHash(scope)}"
 private fun mobileFrequencyKey(scope: String): String = "mobile_sync_frequency::${mobileScopeHash(scope)}"
@@ -170,14 +180,24 @@ class AtlasPreferences @Inject constructor(
             persistScopedMobileSettings(previousScope, captureMobileSettings(safeData.first(), previousScope))
         }
         val current = safeData.first()
+        val localAppearance = captureMobileSettings(current, targetScope)
         val stored = decodeMobileSettings(current.safeString(mobileSettingsKey(targetScope)))
         val isLegacySeed = stored == null && current.safeString(MOBILE_SETTINGS_MIGRATION_OWNER).isNullOrBlank()
-        val settings = stored ?: if (isLegacySeed) captureMobileSettings(current, targetScope) else defaultMobileSettings()
-        if (stored == null) {
+        val settings = preserveLocalAppearanceSettings(
+            stored ?: if (isLegacySeed) localAppearance else defaultMobileSettings(),
+            localAppearance,
+        )
+        val priorDirty = decodeMobileDirtyKeys(current.safeString(mobileSettingsDirtyKey(targetScope)))
+        val appearanceBaseline = stored ?: defaultMobileSettings()
+        val appearanceDirty = setOf("theme", "language")
+            .filterTo(mutableSetOf()) { appearanceBaseline[it] != settings[it] }
+        val dirty = when {
+            isLegacySeed -> settings.keys.filterTo(mutableSetOf()) { settings[it] != defaultMobileSettings()[it] }
+            else -> priorDirty + appearanceDirty
+        }
+        if (stored == null || settings != stored || dirty != priorDirty) {
             safeEdit { prefs ->
                 prefs.putClean(stringPreferencesKey(mobileSettingsKey(targetScope)), encodeMobileSettings(settings))
-                val defaults = defaultMobileSettings()
-                val dirty = if (isLegacySeed) settings.keys.filterTo(mutableSetOf()) { settings[it] != defaults[it] } else emptySet()
                 prefs.putClean(stringPreferencesKey(mobileSettingsDirtyKey(targetScope)), encodeMobileDirtyKeys(dirty))
                 if (isLegacySeed) {
                     prefs.putClean(stringPreferencesKey(MOBILE_SETTINGS_MIGRATION_OWNER), mobileScopeHash(targetScope))
@@ -233,11 +253,16 @@ class AtlasPreferences @Inject constructor(
             check(activeScopeFlow.value == expectedScope)
             val current = captureMobileSettings(prefs, expectedScope)
             val changedDuringRequest = current.keys.filter { current[it] != submittedSettings[it] }.toSet()
-            val merged = serverSettings + changedDuringRequest.associateWith { current[it] }
+            val merged = preserveLocalAppearanceSettings(
+                serverSettings + changedDuringRequest.associateWith { current[it] },
+                current,
+            )
+            val appearanceDirty = setOf("theme", "language").filter { current[it] != serverSettings[it] }.toSet()
+            val dirty = changedDuringRequest + appearanceDirty
             check(ma.etherealmber.atlascommerce.data.model.isValidMobilePreferenceSettings(merged))
             writeMobileSettingsToPreferences(prefs, merged, expectedScope)
             prefs.putClean(stringPreferencesKey(mobileSettingsKey(expectedScope)), encodeMobileSettings(merged))
-            prefs.putClean(stringPreferencesKey(mobileSettingsDirtyKey(expectedScope)), encodeMobileDirtyKeys(changedDuringRequest))
+            prefs.putClean(stringPreferencesKey(mobileSettingsDirtyKey(expectedScope)), encodeMobileDirtyKeys(dirty))
         }
     }
 
@@ -252,11 +277,16 @@ class AtlasPreferences @Inject constructor(
             check(activeScopeFlow.value == expectedScope)
             val current = captureMobileSettings(prefs, expectedScope)
             val dirtyKeys = decodeMobileDirtyKeys(prefs.safeString(mobileSettingsDirtyKey(expectedScope)))
-            val merged = serverSettings + dirtyKeys.associateWith { current[it] }
+            val merged = preserveLocalAppearanceSettings(
+                serverSettings + dirtyKeys.associateWith { current[it] },
+                current,
+            )
+            val appearanceDirty = setOf("theme", "language").filter { current[it] != serverSettings[it] }.toSet()
+            val updatedDirtyKeys = dirtyKeys + appearanceDirty
             check(ma.etherealmber.atlascommerce.data.model.isValidMobilePreferenceSettings(merged))
             writeMobileSettingsToPreferences(prefs, merged, expectedScope)
             prefs.putClean(stringPreferencesKey(mobileSettingsKey(expectedScope)), encodeMobileSettings(merged))
-            prefs.putClean(stringPreferencesKey(mobileSettingsDirtyKey(expectedScope)), encodeMobileDirtyKeys(dirtyKeys))
+            prefs.putClean(stringPreferencesKey(mobileSettingsDirtyKey(expectedScope)), encodeMobileDirtyKeys(updatedDirtyKeys))
         }
     }
 

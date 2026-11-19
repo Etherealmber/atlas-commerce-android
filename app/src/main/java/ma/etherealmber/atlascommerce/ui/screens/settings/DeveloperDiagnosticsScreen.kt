@@ -36,7 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.BuildConfig
@@ -47,6 +49,8 @@ import ma.etherealmber.atlascommerce.core.diagnostics.DeviceDiagnosticSnapshot
 import ma.etherealmber.atlascommerce.core.diagnostics.DiagnosticReporter
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.AppDetails
+import ma.etherealmber.atlascommerce.core.diagnostics.AnalyticsConsent
+import ma.etherealmber.atlascommerce.core.diagnostics.resolveAnalyticsConsentUi
 import ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
@@ -70,6 +74,11 @@ fun DeveloperDiagnosticsScreen(
     val crashReportsConfigured = crashStatus.configured
     val firebaseAppConfigured = CrashReportConsent.hasDefaultFirebaseApp(context)
     val crashReportsEnabled = crashStatus.collectionEnabled
+    val analyticsConfigured = AnalyticsConsent.isConfigured(context)
+    var analyticsEnabled by remember(analyticsConfigured) { mutableStateOf(AnalyticsConsent.isEnabled(context)) }
+    var analyticsConsentInFlight by remember { mutableStateOf(false) }
+    var analyticsConsentError by remember { mutableStateOf(false) }
+    var analyticsConsentRetry by remember { mutableStateOf<Boolean?>(null) }
     val developerMode by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
     val localStorage by appViewModel.localStorageSummary.collectAsStateWithLifecycle()
@@ -89,6 +98,11 @@ fun DeveloperDiagnosticsScreen(
     val diagnosticsRefreshed = atlasText("État actualisé.", "Diagnostics refreshed.", "تم تحديث التشخيصات.")
     val crashTestQueued = atlasText("Événement Crashlytics ajouté; vérifiez Firebase après la prochaine ouverture.", "Crashlytics event queued; check Firebase after the next app launch.", "تمت إضافة حدث Crashlytics؛ تحقق من Firebase بعد فتح التطبيق مرة أخرى.")
     val crashTestFailed = atlasText("Impossible d'ajouter l'événement de test Crashlytics.", "Could not queue the Crashlytics test event.", "تعذرت إضافة حدث اختبار Crashlytics.")
+    val analyticsEnabledToast = atlasText("Analytics activé avec votre accord.", "Analytics enabled with your consent.", "تم تفعيل Analytics بموافقتك.")
+    val analyticsDisabledToast = atlasText("Analytics désactivé.", "Analytics disabled.", "تم تعطيل Analytics.")
+    val analyticsConsentFailedToast = atlasText("Impossible de modifier le réglage Analytics.", "Could not update Analytics consent.", "تعذر تحديث موافقة Analytics.")
+    val analyticsTestQueuedToast = atlasText("Événement synthétique ajouté; vérifiez Firebase DebugView.", "Synthetic event queued; check Firebase DebugView.", "تمت إضافة الحدث الاصطناعي؛ تحقق من Firebase DebugView.")
+    val analyticsTestFailedToast = atlasText("Impossible d'ajouter l'événement Analytics.", "Could not queue the Analytics event.", "تعذرت إضافة حدث Analytics.")
     val diagnosticsCopied = atlasText("Diagnostics expurgés copiés.", "Redacted diagnostics copied.", "تم نسخ التشخيصات المنقحة.")
     val diagnosticsCopyFailed = atlasText("Impossible de copier les diagnostics.", "Could not copy diagnostics.", "تعذّر نسخ التشخيصات.")
     val diagnosticsShareFailed = atlasText("Impossible de préparer le partage des diagnostics.", "Could not prepare diagnostics for sharing.", "تعذّر إعداد التشخيصات للمشاركة.")
@@ -97,6 +111,46 @@ fun DeveloperDiagnosticsScreen(
     val updatePackageRemoved = atlasText("Fichier de mise à jour supprimé.", "Downloaded update removed.", "تم حذف ملف التحديث المُنزّل.")
     val updatePackageRemoveFailed = atlasText("Impossible de supprimer le fichier de mise à jour maintenant.", "Could not remove the downloaded update right now.", "تعذّر حذف التحديث المُنزّل الآن.")
     val scope = rememberCoroutineScope()
+    fun updateAnalyticsConsent(requestedEnabled: Boolean) {
+        if (analyticsConsentInFlight) return
+        analyticsConsentInFlight = true
+        analyticsConsentError = false
+        analyticsConsentRetry = requestedEnabled
+        scope.launch {
+            try {
+                val saved = withContext(Dispatchers.IO) {
+                    AnalyticsConsent.setEnabled(context, requestedEnabled)
+                }
+                val nowEnabled = withContext(Dispatchers.IO) { AnalyticsConsent.isEnabled(context) }
+                withContext(Dispatchers.Main.immediate) {
+                    val resolution = resolveAnalyticsConsentUi(
+                        previousEnabled = analyticsEnabled,
+                        requestedEnabled = requestedEnabled,
+                        saved = saved,
+                        actualEnabled = nowEnabled,
+                    )
+                    analyticsEnabled = resolution.enabled
+                    analyticsConsentError = resolution.failed
+                    if (!resolution.failed) analyticsConsentRetry = null
+                    onToast(
+                        if (resolution.failed) analyticsConsentFailedToast
+                        else if (resolution.enabled) analyticsEnabledToast else analyticsDisabledToast,
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main.immediate) {
+                    analyticsConsentError = true
+                    onToast(analyticsConsentFailedToast)
+                }
+            } finally {
+                withContext(NonCancellable + Dispatchers.Main.immediate) {
+                    analyticsConsentInFlight = false
+                }
+            }
+        }
+    }
     var diagnosticSnapshot by remember(activeRole, deviceIdentityDiagnostics) {
         mutableStateOf(
             DiagnosticReporter.collectSnapshot(
@@ -387,6 +441,88 @@ fun DeveloperDiagnosticsScreen(
                         )
                     }
                 }
+
+                AtlasInfoRow(
+                    atlasText("Firebase Analytics", "Firebase Analytics", "Firebase Analytics"),
+                    when {
+                        !analyticsConfigured -> atlasText("Non configuré", "Not configured", "غير مُعدّ")
+                        !BuildConfig.DEBUG -> atlasText("Désactivé dans les versions de production", "Disabled in release builds", "معطل في إصدارات الإنتاج")
+                        analyticsEnabled -> atlasText("Activé avec votre accord (debug)", "Enabled with your consent (debug)", "مُفعّل بموافقتك (تصحيح)")
+                        else -> atlasText("Désactivé · consentement requis", "Off · consent required", "متوقف · الموافقة مطلوبة")
+                    },
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            atlasText("Autoriser Analytics (version debug)", "Allow Analytics (debug build)", "السماح بـ Analytics (نسخة التصحيح)"),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            atlasText(
+                                "Désactivé par défaut. L'activation autorise aussi les événements standards du SDK et des données d'appareil/installation; l'identifiant publicitaire et la personnalisation publicitaire sont désactivés.",
+                                "Off by default. Enabling also permits standard SDK events and app/device/installation data; Advertising ID collection and ad personalization are disabled.",
+                                "متوقف افتراضياً. يسمح التفعيل أيضاً بأحداث SDK القياسية وبيانات التطبيق والجهاز والتثبيت؛ تم تعطيل المعرّف الإعلاني وتخصيص الإعلانات.",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = analyticsEnabled,
+                        enabled = BuildConfig.DEBUG && analyticsConfigured && !analyticsConsentInFlight,
+                        onCheckedChange = ::updateAnalyticsConsent,
+                    )
+                }
+                if (analyticsConsentError) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            atlasText(
+                                "Le réglage n'a pas été confirmé; votre choix précédent reste affiché.",
+                                "The setting could not be confirmed; your previous choice remains displayed.",
+                                "تعذر تأكيد الإعداد؛ يظل اختيارك السابق معروضاً.",
+                            ),
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        TextButton(
+                            enabled = !analyticsConsentInFlight,
+                            onClick = { analyticsConsentRetry?.let(::updateAnalyticsConsent) },
+                        ) {
+                            Text(atlasText("Réessayer", "Retry", "إعادة المحاولة"))
+                        }
+                    }
+                }
+                TextButton(
+                    enabled = BuildConfig.DEBUG && analyticsConfigured && analyticsEnabled && !analyticsConsentInFlight,
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            val recorded = AnalyticsConsent.recordDebugTestEvent(context)
+                            withContext(Dispatchers.Main.immediate) {
+                                onToast(if (recorded) analyticsTestQueuedToast else analyticsTestFailedToast)
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(atlasText("Envoyer un événement Analytics synthétique", "Send synthetic Analytics event", "إرسال حدث Analytics اصطناعي"))
+                }
+                Text(
+                    atlasText(
+                        "L'événement ne contient que des valeurs fixes de test, sans compte, serveur, locataire, produit ni donnée commerciale. Firebase peut associer les événements aux identifiants d'installation et aux données d'appareil; ce n'est donc pas un envoi anonyme.",
+                        "The event contains fixed test values only—no account, server, tenant, product, or business data. Firebase may associate events with installation identifiers and device data, so this is not anonymous collection.",
+                        "يحتوي الحدث على قيم اختبار ثابتة فقط دون حساب أو خادم أو مؤسسة أو منتج أو بيانات عمل. قد تربط Firebase الأحداث بمعرّفات التثبيت وبيانات الجهاز، لذلك لا يُعد الجمع مجهولاً.",
+                    ),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             DeveloperCacheToolsCard(

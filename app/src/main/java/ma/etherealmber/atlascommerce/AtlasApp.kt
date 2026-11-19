@@ -37,9 +37,10 @@ class AtlasApp : Application() {
     override fun onCreate() {
         super.onCreate()
         ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.installCrashBreadcrumbHandler(this)
-        // FirebaseInitProvider runs before Application.onCreate. Restore the user's stored choice
-        // synchronously so Crashlytics never spends early app lifetime in the wrong collection state.
+        // FirebaseInitProvider runs before Application.onCreate. Restore each optional SDK's
+        // explicit stored choice before the first screen can enable collection.
         ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent.applyStoredConsent(this)
+        ma.etherealmber.atlascommerce.core.diagnostics.AnalyticsConsent.applyStoredConsent(this)
         if (ma.etherealmber.atlascommerce.BuildConfig.DEBUG) {
             startupIoScope.launch {
                 val status = withContext(Dispatchers.Main.immediate) {

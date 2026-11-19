@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import ma.etherealmber.atlascommerce.core.persist.preserveLocalAppearanceSettings
 
 class MobilePreferenceSchedulingTest {
     @Test fun workDelayUsesOnlyTheReturnedServerTimePair() {
@@ -21,5 +22,20 @@ class MobilePreferenceSchedulingTest {
         assertNotEquals(accountOne, accountTwo)
         assertNotEquals(accountOne, otherServer)
         assertTrue(accountOne.matches(Regex("[a-f0-9]{24}")))
+    }
+
+    @Test fun serverScopedPreferenceHydrationCannotReplaceLocalThemeOrLanguage() {
+        val remote = mapOf<String, Any?>(
+            "theme" to "dark", "language" to "fr", "density" to "compact",
+        )
+        val local = mapOf<String, Any?>(
+            "theme" to "light", "language" to "en",
+        )
+
+        val merged = preserveLocalAppearanceSettings(remote, local)
+
+        assertEquals("light", merged["theme"])
+        assertEquals("en", merged["language"])
+        assertEquals("compact", merged["density"])
     }
 }

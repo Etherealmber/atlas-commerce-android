@@ -3,6 +3,12 @@ package ma.etherealmber.atlascommerce.core
 import java.util.Locale
 
 /** Supported app interface languages. French remains the default for existing installs. */
+internal fun shouldRefreshSystemAppLanguage(
+    appearanceLoaded: Boolean,
+    followsSystemPreferenceLoaded: Boolean,
+    followsSystem: Boolean,
+): Boolean = appearanceLoaded && followsSystemPreferenceLoaded && followsSystem
+
 enum class AppLanguage(val tag: String, val nativeLabel: String) {
     FRENCH("fr", "Français"),
     ENGLISH("en", "English"),

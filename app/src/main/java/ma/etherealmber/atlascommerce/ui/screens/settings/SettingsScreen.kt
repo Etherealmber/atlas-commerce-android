@@ -3,6 +3,7 @@ package ma.etherealmber.atlascommerce.ui.screens.settings
 import android.content.Intent
 import android.provider.Settings
 import android.text.format.Formatter
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -84,6 +85,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
@@ -117,6 +119,9 @@ import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.ThemeMode
+import ma.etherealmber.atlascommerce.core.update.GitHubRateLimitBucket
+import ma.etherealmber.atlascommerce.core.update.GitHubRateLimitStatus
+import ma.etherealmber.atlascommerce.core.update.ReleaseChangelogEntry
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.core.sync.MobilePreferenceSyncState
 import ma.etherealmber.atlascommerce.core.sync.MOBILE_PREFERENCE_BACKUP_MAX_BYTES
@@ -124,11 +129,15 @@ import ma.etherealmber.atlascommerce.ui.root.MobilePreferenceImportPreview
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
+import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdown
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -139,7 +148,6 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonList
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
-import ma.etherealmber.atlascommerce.ui.i18n.localizeReleaseNotes
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.screens.legal.EtherealmberAuthorCard
@@ -1423,9 +1431,11 @@ fun SettingsScreen(
     onSignOut: () -> Unit,
     onToast: (String) -> Unit,
     onStartUpdateDownload: () -> Unit = {},
+    onReleaseHistoryVisibilityChanged: (Boolean) -> Unit = {},
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val noBrowserAvailableMessage = atlasText("Aucun navigateur disponible.", "No browser available.", "لا يوجد متصفح متاح.")
     val density = Atlas.density
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
@@ -1488,10 +1498,17 @@ fun SettingsScreen(
     val mirrorPing by appViewModel.mirrorPing.collectAsStateWithLifecycle()
     val releaseChangelog by appViewModel.releaseChangelog.collectAsStateWithLifecycle()
     val releaseChangelogLoading by appViewModel.releaseChangelogLoading.collectAsStateWithLifecycle()
+    val githubRateLimits by appViewModel.githubRateLimits.collectAsStateWithLifecycle()
+    val githubRateLimitsLoading by appViewModel.githubRateLimitsLoading.collectAsStateWithLifecycle()
+    val githubRateLimitsError by appViewModel.githubRateLimitsError.collectAsStateWithLifecycle()
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
-    var showReleaseHistoryDialog by remember { mutableStateOf(false) }
+    var showReleaseHistoryPage by remember { mutableStateOf(false) }
+    val setReleaseHistoryPage: (Boolean) -> Unit = { visible ->
+        showReleaseHistoryPage = visible
+        onReleaseHistoryVisibilityChanged(visible)
+    }
     var confirmClearUpdatePackage by remember { mutableStateOf(false) }
     var buildTapCount by remember { mutableIntStateOf(0) }
     var lastBuildTapAt by remember { mutableLongStateOf(0L) }
@@ -1532,72 +1549,6 @@ fun SettingsScreen(
         }.onFailure {
             onToast(shareFailedMessage)
         }
-    }
-
-    if (showReleaseHistoryDialog) {
-        val releaseHistoryMaxHeight = (LocalConfiguration.current.screenHeightDp.dp - 176.dp)
-            .coerceAtLeast(180.dp)
-            .coerceAtMost(520.dp)
-        AlertDialog(
-            onDismissRequest = { showReleaseHistoryDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(atlasText("Historique des versions"), modifier = Modifier.weight(1f))
-                    if (releaseChangelogLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    } else {
-                        IconButton(onClick = appViewModel::refreshReleaseChangelog) {
-                            Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique"))
-                        }
-                    }
-                }
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = releaseHistoryMaxHeight)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    if (releaseChangelog.isEmpty() && releaseChangelogLoading) {
-                        AtlasSkeletonList(Modifier.fillMaxWidth(), rows = 3, avatarSize = 32.dp)
-                    } else if (releaseChangelog.isEmpty()) {
-                        Text(
-                            atlasText("Aucune version publiée n'est disponible pour le moment."),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    releaseChangelog.forEach { entry ->
-                        AtlasCard(padding = 12.dp) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Text(
-                                    text = entry.title,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                if (entry.isLatest) AtlasChip(text = atlasText("Dernière"), tone = AtlasTone.POSITIVE)
-                                entry.publishedAt?.let { AtlasChip(text = it, tone = AtlasTone.NEUTRAL) }
-                            }
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = localizeReleaseNotes(entry.notes, appLanguage),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showReleaseHistoryDialog = false }) { Text(atlasText("Fermer")) }
-            },
-        )
     }
 
     if (confirmClearUpdatePackage) {
@@ -1701,8 +1652,19 @@ fun SettingsScreen(
         }
     }
 
-    Column(
+    BackHandler(enabled = showReleaseHistoryPage) { setReleaseHistoryPage(false) }
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    if (showReleaseHistoryPage) {
+        VersionHistoryPage(
+            releases = releaseChangelog,
+            loading = releaseChangelogLoading,
+            onBack = { setReleaseHistoryPage(false) },
+            onRefresh = appViewModel::refreshReleaseChangelog,
+            onOpenRelease = { url -> if (!openExternal(context, url)) onToast(noBrowserAvailableMessage) },
+        )
+    } else Column(
         modifier = Modifier
+            .widthIn(max = 1080.dp)
             .fillMaxSize()
             .verticalScroll(scrollState)
             .animateContentSize(spring(dampingRatio = 0.9f, stiffness = 420f))
@@ -1717,7 +1679,7 @@ fun SettingsScreen(
         AtlasCard {
             Text(atlasText("Synchronisation des préférences", "Preference sync", "مزامنة التفضيلات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                atlasText("Synchronisez uniquement les paramètres autorisés de ce compte. Choisissez une fréquence puis touchez Synchroniser maintenant pour l'enregistrer. Les mots de passe, comptes enregistrés, serveurs, données biométriques et consentements restent locaux.", "Sync only this account’s allowlisted settings. Choose a frequency, then tap Sync now to save it. Passwords, saved accounts, servers, biometrics, and consent remain local.", "تتم مزامنة الإعدادات المسموح بها لهذا الحساب فقط. اختر التكرار ثم اضغط زامن الآن لحفظه. تبقى كلمات المرور والحسابات والخوادم والبيانات الحيوية والموافقات محلية."),
+                atlasText("Synchronisez uniquement les paramètres autorisés de ce compte. Choisissez une fréquence puis touchez Synchroniser maintenant pour l'enregistrer. Le thème et la langue restent appliqués depuis vos choix locaux, même si vous changez de serveur ou de compte. Les mots de passe, comptes enregistrés, serveurs, données biométriques et consentements restent locaux.", "Sync only this account’s allowlisted settings. Choose a frequency, then tap Sync now to save it. Your locally selected theme and language stay in effect when you switch servers or accounts. Passwords, saved accounts, servers, biometrics, and consent remain local.", "تتم مزامنة الإعدادات المسموح بها لهذا الحساب فقط. اختر التكرار ثم اضغط زامن الآن لحفظه. يظل المظهر واللغة المحددان محلياً قيد التطبيق عند تغيير الخادم أو الحساب. تبقى كلمات المرور والحسابات والخوادم والبيانات الحيوية والموافقات محلية."),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1797,6 +1759,14 @@ fun SettingsScreen(
             )
         }
 
+        GitHubRateLimitCard(
+            status = githubRateLimits,
+            loading = githubRateLimitsLoading,
+            error = githubRateLimitsError,
+            appLanguage = appLanguage,
+            onRefresh = appViewModel::refreshGitHubRateLimits,
+        )
+
         AtlasCard {
             SettingsToggleRow(
                 title = atlasText("Recherche automatique des mises à jour", "Check for updates automatically", "التحقق تلقائياً من التحديثات"),
@@ -1853,7 +1823,7 @@ fun SettingsScreen(
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f).clickable { showReleaseHistoryDialog = true }) {
+                Column(Modifier.weight(1f).clickable { setReleaseHistoryPage(true) }) {
                     Text(
                         text = atlasText("Nouveautés des versions"),
                         style = MaterialTheme.typography.titleSmall,
@@ -1865,7 +1835,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                TextButton(onClick = { showReleaseHistoryDialog = true }) {
+                TextButton(onClick = { setReleaseHistoryPage(true) }) {
                     Text(atlasText("Voir"))
                 }
                 IconButton(
@@ -1990,15 +1960,15 @@ fun SettingsScreen(
                         title = atlasText("Rapports de plantage automatiques (Firebase)", "Automatic crash reports (Firebase)", "تقارير الأعطال التلقائية (Firebase)"),
                         subtitle = if (automaticCrashReportsEnabled) {
                             atlasText(
-                                "Firebase Crashlytics est configuré. L'envoi automatique est activé selon votre choix; aucune donnée Analytics n'est collectée.",
-                                "Firebase Crashlytics is configured. Automatic reporting is enabled by your choice; no Analytics data is collected.",
-                                "تم إعداد Firebase Crashlytics. الإرسال التلقائي مفعّل باختيارك، ولا يتم جمع بيانات Analytics.",
+                                "Firebase Crashlytics est configuré. L'envoi automatique est activé selon votre choix. Analytics possède un consentement séparé, disponible uniquement en version debug.",
+                                "Firebase Crashlytics is configured. Automatic reporting is enabled by your choice. Analytics has separate consent and is available only in debug builds.",
+                                "تم إعداد Firebase Crashlytics. الإرسال التلقائي مفعّل باختيارك. تتطلب Analytics موافقة منفصلة ولا تتوفر إلا في نسخ التصحيح.",
                             )
                         } else {
                             atlasText(
-                                "Firebase Crashlytics est configuré et prêt. Les rapports restent désactivés jusqu'à votre accord; aucune donnée Analytics n'est collectée.",
-                                "Firebase Crashlytics is configured and ready. Reports stay off until you opt in; no Analytics data is collected.",
-                                "تم إعداد Firebase Crashlytics وهو جاهز. تظل التقارير متوقفة حتى توافق؛ ولا يتم جمع بيانات Analytics.",
+                                "Firebase Crashlytics est configuré et prêt. Les rapports restent désactivés jusqu'à votre accord. Analytics possède un consentement séparé, disponible uniquement en version debug.",
+                                "Firebase Crashlytics is configured and ready. Reports stay off until you opt in. Analytics has separate consent and is available only in debug builds.",
+                                "تم إعداد Firebase Crashlytics وهو جاهز. تظل التقارير متوقفة حتى توافق. تتطلب Analytics موافقة منفصلة ولا تتوفر إلا في نسخ التصحيح.",
                             )
                         },
                         checked = automaticCrashReportsEnabled,
@@ -2208,6 +2178,180 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+    }
+}
+
+@Composable
+private fun VersionHistoryPage(
+    releases: List<ReleaseChangelogEntry>,
+    loading: Boolean,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit,
+    onOpenRelease: (String) -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        val wideWindow = maxWidth >= 840.dp
+        Column(Modifier.widthIn(max = 1100.dp).fillMaxSize()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(atlasText("Historique des versions", "Version history", "سجل الإصدارات"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(atlasText("Versions publiées sur GitHub Releases", "Releases published on GitHub", "الإصدارات المنشورة على GitHub"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (loading) {
+                    CircularProgressIndicator(Modifier.padding(horizontal = 12.dp).size(22.dp), strokeWidth = 2.dp)
+                } else {
+                    IconButton(onClick = onRefresh) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh releases", "تحديث الإصدارات"))
+                    }
+                }
+            }
+            AtlasDivider()
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = if (wideWindow) 24.dp else 14.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                if (releases.isEmpty() && loading) {
+                    AtlasSkeletonList(Modifier.fillMaxWidth(), rows = 4, avatarSize = 34.dp)
+                } else if (releases.isEmpty()) {
+                    AtlasCard {
+                        Text(atlasText("Aucune version publiée n'est disponible pour le moment.", "No published releases are available right now.", "لا توجد إصدارات منشورة متاحة حالياً."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                releases.forEach { release ->
+                    AtlasCard(padding = 20.dp) {
+                        Text(release.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            AtlasChip(text = release.tagName, tone = AtlasTone.NEUTRAL)
+                            if (release.isLatest) AtlasChip(text = atlasText("Dernière", "Latest", "الأحدث"), tone = AtlasTone.POSITIVE)
+                            if (release.isPrerelease) AtlasChip(text = atlasText("Préversion", "Pre-release", "نسخة تجريبية"), tone = AtlasTone.NEUTRAL)
+                        }
+                        release.publishedAt?.let { date ->
+                            Text(
+                                atlasText("Publié le $date", "Published on $date", "نُشر في $date"),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+                        }
+                        AtlasDivider(Modifier.padding(vertical = 14.dp))
+                        AtlasMarkdown(
+                            markdown = release.notes,
+                            textColor = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        release.htmlUrl
+                            ?.takeIf { it.startsWith("https://github.com/", ignoreCase = true) }
+                            ?.let { url ->
+                                TextButton(onClick = { onOpenRelease(url) }, modifier = Modifier.padding(top = 8.dp)) {
+                                    Icon(Icons.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(atlasText("Afficher sur GitHub", "View on GitHub", "عرض على GitHub"))
+                                }
+                            }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GitHubRateLimitCard(
+    status: GitHubRateLimitStatus?,
+    loading: Boolean,
+    error: Boolean,
+    appLanguage: AppLanguage,
+    onRefresh: () -> Unit,
+) {
+    val locale = when (appLanguage) {
+        AppLanguage.FRENCH -> Locale.FRANCE
+        AppLanguage.ENGLISH -> Locale.UK
+        AppLanguage.ARABIC -> Locale.forLanguageTag("ar-MA")
+    }
+    val dateFormatter = remember(appLanguage) { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale) }
+    AtlasCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(atlasText("Limites de l'API GitHub", "GitHub API limits", "حدود واجهة GitHub"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(atlasText("État public pour l'adresse réseau actuelle", "Public quota for the current network address", "الحصة العامة لعنوان الشبكة الحالي"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (loading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            IconButton(onClick = onRefresh, enabled = !loading) {
+                Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les limites GitHub", "Refresh GitHub limits", "تحديث حدود GitHub"))
+            }
+        }
+        if (status == null && !loading) {
+            Text(
+                atlasText(
+                    if (error) "Impossible de charger les limites GitHub. Touchez actualiser pour réessayer." else "Touchez actualiser pour consulter les limites actuelles.",
+                    if (error) "Could not load GitHub limits. Tap refresh to try again." else "Tap refresh to check the current limits.",
+                    if (error) "تعذر تحميل حدود GitHub. اضغط تحديث للمحاولة مرة أخرى." else "اضغط تحديث للتحقق من الحدود الحالية.",
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        status?.let { snapshot ->
+            snapshot.hourly?.let { bucket ->
+                GitHubRateLimitBucketRow(
+                    label = atlasText("REST principale · par heure", "Core REST · per hour", "REST الأساسي · لكل ساعة"),
+                    bucket = bucket,
+                    resetLabel = dateFormatter.format(Date(bucket.resetEpochSeconds * 1000L)),
+                )
+            }
+            snapshot.perMinute?.let { bucket ->
+                GitHubRateLimitBucketRow(
+                    label = atlasText("Recherche REST · par minute", "REST search · per minute", "بحث REST · لكل دقيقة"),
+                    bucket = bucket,
+                    resetLabel = dateFormatter.format(Date(bucket.resetEpochSeconds * 1000L)),
+                )
+            }
+            Text(
+                atlasText(
+                    "Aucune limite quotidienne générale n'est publiée : la limite principale est horaire. Les limites secondaires dynamiques ne peuvent pas être consultées; ralentissez si GitHub répond 403 ou 429. Ces valeurs peuvent être partagées par les appareils derrière la même adresse réseau.",
+                    "GitHub publishes no universal daily REST cap: the primary quota is hourly. Dynamic secondary limits cannot be queried; slow down if GitHub returns 403 or 429. These values can be shared by devices behind the same network address.",
+                    "لا تنشر GitHub حداً يومياً عاماً لـ REST؛ الحصة الأساسية بالساعة. لا يمكن الاستعلام عن الحدود الثانوية الديناميكية؛ خفّض الطلبات إذا أعادت GitHub الرمز 403 أو 429. قد تتشارك الأجهزة خلف عنوان الشبكة نفسه هذه القيم.",
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                atlasText("Dernière vérification : ${dateFormatter.format(Date(snapshot.fetchedAtEpochMillis))}", "Last checked: ${dateFormatter.format(Date(snapshot.fetchedAtEpochMillis))}", "آخر تحقق: ${dateFormatter.format(Date(snapshot.fetchedAtEpochMillis))}"),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GitHubRateLimitBucketRow(label: String, bucket: GitHubRateLimitBucket, resetLabel: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text("${bucket.remaining} / ${bucket.limit}", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        }
+        LinearProgressIndicator(
+            progress = { (bucket.remaining.toFloat() / bucket.limit.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth().height(6.dp),
+            color = if (bucket.remaining == 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
+        Text(atlasText("Réinitialisation : $resetLabel", "Resets: $resetLabel", "إعادة الضبط: $resetLabel"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

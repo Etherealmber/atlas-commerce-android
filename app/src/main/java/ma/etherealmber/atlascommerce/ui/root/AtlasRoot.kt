@@ -62,6 +62,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import java.util.Locale
 import ma.etherealmber.atlascommerce.core.AppLanguage
+import ma.etherealmber.atlascommerce.core.shouldRefreshSystemAppLanguage
 import ma.etherealmber.atlascommerce.core.net.VerifyLink
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
@@ -141,6 +142,7 @@ fun AtlasRoot(
     val densityMode by viewModel.densityMode.collectAsStateWithLifecycle()
     val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
     val appLanguageFollowsSystem by viewModel.appLanguageFollowsSystem.collectAsStateWithLifecycle()
+    val appLanguageFollowsSystemLoaded by viewModel.appLanguageFollowsSystemLoaded.collectAsStateWithLifecycle()
     val languageRestartNotice by viewModel.languageRestartNotice.collectAsStateWithLifecycle()
     val languageSaveFailed by viewModel.languageSaveFailed.collectAsStateWithLifecycle()
     val updateServer by viewModel.server.collectAsStateWithLifecycle()
@@ -159,8 +161,18 @@ fun AtlasRoot(
     val systemLanguage = remember(baseConfiguration) {
         AppLanguage.fromSystemLocale(baseConfiguration.locales[0] ?: Locale.getDefault())
     }
-    LaunchedEffect(appLanguageFollowsSystem, systemLanguage) {
-        if (appLanguageFollowsSystem) viewModel.refreshSystemAppLanguage(systemLanguage)
+    LaunchedEffect(appLanguageFollowsSystem, appLanguageFollowsSystemLoaded, systemLanguage, appearanceLoaded) {
+        // collectAsStateWithLifecycle starts with a placeholder value. Do not treat that
+        // temporary `true` as a real System-language preference before DataStore has loaded,
+        // or a saved English choice can be overwritten by the phone's French locale at launch.
+        if (shouldRefreshSystemAppLanguage(
+                appearanceLoaded,
+                appLanguageFollowsSystemLoaded,
+                appLanguageFollowsSystem,
+            )
+        ) {
+            viewModel.refreshSystemAppLanguage(systemLanguage)
+        }
     }
     val localizedConfiguration = remember(baseConfiguration, appLanguage) {
         Configuration(baseConfiguration).apply {
