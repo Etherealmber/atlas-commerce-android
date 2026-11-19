@@ -19,6 +19,7 @@ object AnalyticsConsent {
     private const val PREFS = "atlas_analytics"
     private const val KEY_ENABLED = "analytics_collection_enabled"
     private const val SDK_CLASS = "com.google.firebase.analytics.FirebaseAnalytics"
+    private val primitiveBooleanType: Class<*> = java.lang.Boolean.TYPE
     @Volatile private var appliedCollectionState: Boolean? = null
 
     fun isConfigured(context: Context): Boolean = analyticsOrNull(context) != null
@@ -32,14 +33,14 @@ object AnalyticsConsent {
         val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (enabled && analytics == null) return false
         val applied = if (analytics == null) !enabled else runCatching {
-            analytics.javaClass.getMethod("setAnalyticsCollectionEnabled", Boolean::class.javaPrimitiveType!!)
+            analytics.javaClass.getMethod("setAnalyticsCollectionEnabled", primitiveBooleanType)
                 .invoke(analytics, enabled)
             true
         }.getOrDefault(false)
         val saved = stored.edit().putBoolean(KEY_ENABLED, enabled && BuildConfig.DEBUG).commit()
         if (!saved && enabled && analytics != null) {
             runCatching {
-                analytics.javaClass.getMethod("setAnalyticsCollectionEnabled", Boolean::class.javaPrimitiveType!!)
+                analytics.javaClass.getMethod("setAnalyticsCollectionEnabled", primitiveBooleanType)
                     .invoke(analytics, false)
             }
             appliedCollectionState = false
@@ -60,7 +61,7 @@ object AnalyticsConsent {
             return
         }
         runCatching {
-            analytics.javaClass.getMethod("setAnalyticsCollectionEnabled", Boolean::class.javaPrimitiveType!!)
+            analytics.javaClass.getMethod("setAnalyticsCollectionEnabled", primitiveBooleanType)
                 .invoke(analytics, enabled)
             appliedCollectionState = enabled
         }.onFailure { error ->

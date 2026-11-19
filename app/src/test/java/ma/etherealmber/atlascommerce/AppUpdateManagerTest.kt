@@ -343,34 +343,23 @@ class AppUpdateManagerTest {
     }
 
     @Test
-    fun releaseNotesKeepEverySectionAndRenderMarkdownReadably() {
-        val rendered = formatReleaseNotesForDisplay(
-            """## Atlas Commerce 1.1.1
-                |• Set version 1.1.1 (111) [skip ci]
-                |• **Version :** `v1.1.1` (`versionCode = 111`)
-                |• **Taille :** `27.83 Mo`
-                |
-                |### Correctifs
-                |- Fix item one
-                |- Fix item two
-                |- [Full details](https://github.com/Etherealmber/atlas-commerce-android/releases/tag/v1.1.1)
-            """.trimMargin(),
-            "v1.1.1",
-        )
-        assertEquals(
-            "ATLAS COMMERCE 1.1.1\n" +
-                "• Set version 1.1.1 (111) [skip ci]\n" +
-                "• Version : v1.1.1 (versionCode = 111)\n" +
-                "• Taille : 27.83 Mo\n\n" +
-                "CORRECTIFS\n" +
-                "• Fix item one\n" +
-                "• Fix item two\n" +
-                "• Full details (https://github.com/Etherealmber/atlas-commerce-android/releases/tag/v1.1.1)",
-            rendered,
-        )
-        assertFalse(rendered.contains("**"))
-        assertFalse(rendered.contains('`'))
-        assertTrue(rendered.contains("Fix item two"))
+    fun releaseNotesKeepTheCompleteGitHubMarkdownBodyUnmodified() {
+        val raw = """## ✨ Atlas Commerce `v1.1.1` (build `111`)
+            |### 📦 Paquet signé (`APK`)
+            |
+            |- **Version :** `v1.1.1` (`versionCode = 111`)
+            |
+            |- **Taille :** `27.83 Mo`
+            |
+            |## What's Changed
+            |
+            |* Fix item one by @maintainer in [#111](https://github.com/example/repo/pull/111)
+            |* Fix item two by @maintainer in [#112](https://github.com/example/repo/pull/112)
+            |
+            |**Full Changelog**: [v1.1.0...v1.1.1](https://github.com/example/repo/compare/v1.1.0...v1.1.1)
+        """.trimMargin()
+        assertEquals(raw, formatReleaseNotesForDisplay(raw, "v1.1.1"))
+        assertEquals("• Mise à jour v1.1.1 — optimisations et correctifs.", formatReleaseNotesForDisplay("  ", "v1.1.1"))
     }
 
     @Test

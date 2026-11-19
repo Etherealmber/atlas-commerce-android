@@ -101,31 +101,8 @@ data class GitHubRateLimitStatus(
     val fetchedAtEpochMillis: Long,
 )
 
-internal fun formatReleaseNotesForDisplay(rawBody: String, tagName: String): String {
-    val rendered = rawBody.lineSequence()
-        .map(String::trimEnd)
-        .map { line ->
-            val trimmed = line.trim()
-            when {
-                trimmed.startsWith("### ") -> trimmed.removePrefix("### ").uppercase(Locale.ROOT)
-                trimmed.startsWith("## ") -> trimmed.removePrefix("## ").uppercase(Locale.ROOT)
-                trimmed.startsWith("# ") -> trimmed.removePrefix("# ").uppercase(Locale.ROOT)
-                trimmed.startsWith("- ") -> "• ${trimmed.removePrefix("- ")}"
-                trimmed.startsWith("* ") -> "• ${trimmed.removePrefix("* ")}"
-                else -> line
-            }
-        }
-        .joinToString("\n")
-        .replace(Regex("\\[([^]]+)]\\(([^)]+)\\)")) { match ->
-            "${match.groupValues[1]} (${match.groupValues[2]})"
-        }
-        .replace("**", "")
-        .replace("__", "")
-        .replace("`", "")
-        .replace(Regex("(?m)[ \\t]+$"), "")
-        .trim()
-    return rendered.ifBlank { "• Mise à jour $tagName — optimisations et correctifs." }
-}
+internal fun formatReleaseNotesForDisplay(rawBody: String, tagName: String): String =
+    rawBody.trim().ifBlank { "• Mise à jour $tagName — optimisations et correctifs." }
 
 internal fun monotonicElapsedRealtimeMs(): Long = System.nanoTime() / 1_000_000L
 

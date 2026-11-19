@@ -137,6 +137,7 @@ import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
+import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdown
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -147,7 +148,6 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonList
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
-import ma.etherealmber.atlascommerce.ui.i18n.localizeReleaseNotes
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.screens.legal.EtherealmberAuthorCard
@@ -1657,7 +1657,6 @@ fun SettingsScreen(
     if (showReleaseHistoryPage) {
         VersionHistoryPage(
             releases = releaseChangelog,
-            language = appLanguage,
             loading = releaseChangelogLoading,
             onBack = { setReleaseHistoryPage(false) },
             onRefresh = appViewModel::refreshReleaseChangelog,
@@ -2186,7 +2185,6 @@ fun SettingsScreen(
 @Composable
 private fun VersionHistoryPage(
     releases: List<ReleaseChangelogEntry>,
-    language: AppLanguage,
     loading: Boolean,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
@@ -2231,28 +2229,29 @@ private fun VersionHistoryPage(
                 }
                 releases.forEach { release ->
                     AtlasCard(padding = 20.dp) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(release.tagName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text(release.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            AtlasChip(text = release.tagName, tone = AtlasTone.NEUTRAL)
                             if (release.isLatest) AtlasChip(text = atlasText("Dernière", "Latest", "الأحدث"), tone = AtlasTone.POSITIVE)
                             if (release.isPrerelease) AtlasChip(text = atlasText("Préversion", "Pre-release", "نسخة تجريبية"), tone = AtlasTone.NEUTRAL)
-                        }
-                        if (release.title != release.tagName) {
-                            Text(release.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
                         }
                         release.publishedAt?.let { date ->
                             Text(
                                 atlasText("Publié le $date", "Published on $date", "نُشر في $date"),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
+                                modifier = Modifier.padding(top = 6.dp),
                             )
                         }
-                        AtlasDivider(Modifier.padding(vertical = 12.dp))
-                        Text(
-                            text = localizeReleaseNotes(release.notes, language),
-                            style = MaterialTheme.typography.bodyMedium,
-                            lineHeight = MaterialTheme.typography.bodyMedium.lineHeight,
-                            color = MaterialTheme.colorScheme.onSurface,
+                        AtlasDivider(Modifier.padding(vertical = 14.dp))
+                        AtlasMarkdown(
+                            markdown = release.notes,
+                            textColor = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                         release.htmlUrl
                             ?.takeIf { it.startsWith("https://github.com/", ignoreCase = true) }

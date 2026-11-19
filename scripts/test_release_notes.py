@@ -1,6 +1,6 @@
 import unittest
 
-from release_notes import format_in_app_notes, group_release_commits
+from release_notes import format_github_release_body, format_in_app_notes, group_release_commits
 
 
 class ReleaseNotesTest(unittest.TestCase):
@@ -33,6 +33,27 @@ class ReleaseNotesTest(unittest.TestCase):
         self.assertTrue(note.startswith("Features:"))
         self.assertLessEqual(len(note), 80)
         self.assertIn("ffffff", note)
+
+    def test_github_release_body_uses_signed_apk_template_and_preserves_github_notes(self):
+        generated = (
+            "## What's Changed\n\n"
+            "* Improve tablet navigation by @loxdpsy in [#102](https://github.com/example/repo/pull/102)\n\n"
+            "**Full Changelog**: [v1.7.0...v1.8.0](https://github.com/example/repo/compare/v1.7.0...v1.8.0)"
+        )
+        body = format_github_release_body(
+            tag="v1.8.0",
+            version_code=180,
+            size_mb=30.38,
+            sha256="a" * 64,
+            primary_url="https://cdn.example/latest.apk",
+            github_url="https://github.com/example/repo/releases/download/v1.8.0/atlas-commerce.apk",
+            generated_notes=generated,
+        )
+        self.assertTrue(body.startswith("## ✨ Atlas Commerce `v1.8.0` (build `180`)\n\n### 📦 Paquet signé (`APK`)"))
+        self.assertIn("- **Version :** `v1.8.0` (`versionCode = 180`)\n\n- **Taille :** `30.38 Mo`", body)
+        self.assertIn("- **Téléchargement :** [latest.apk](https://cdn.example/latest.apk)", body)
+        self.assertIn("## What's Changed\n\n* Improve tablet navigation by @loxdpsy in [#102](https://github.com/example/repo/pull/102)", body)
+        self.assertIn("**Full Changelog**: [v1.7.0...v1.8.0](https://github.com/example/repo/compare/v1.7.0...v1.8.0)", body)
 
     def test_empty_or_noise_only_history_does_not_claim_a_fix(self):
         groups = group_release_commits(
