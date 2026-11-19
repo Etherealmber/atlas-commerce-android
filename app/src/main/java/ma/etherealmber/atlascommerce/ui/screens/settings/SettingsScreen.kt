@@ -147,6 +147,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonList
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.screens.legal.EtherealmberAuthorCard
@@ -2176,8 +2177,8 @@ private fun compactGitHubReleaseLinks(markdown: String): String {
     val markdownLink = Regex("\\[([^]]*)]\\((https://github\\.com/[^)]+)\\)")
     return markdownLink.replace(markdown) { match ->
         val url = match.groupValues[2]
-        val pull = Regex("/pull/(\d+)(?:/|$)").find(url)
-        val issue = Regex("/issues/(\d+)(?:/|$)").find(url)
+        val pull = Regex("/pull/(\\d+)(?:/|$)").find(url)
+        val issue = Regex("/issues/(\\d+)(?:/|$)").find(url)
         val compare = Regex("/compare/([^?]+?)\\.\\.\\.([^?]+)").find(url)
         val label = when {
             pull != null -> "#${pull.groupValues[1]}"

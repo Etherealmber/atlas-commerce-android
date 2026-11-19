@@ -88,6 +88,7 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
 import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
+import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasShimmer
 import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonBlock
 import ma.etherealmber.atlascommerce.ui.components.AtlasRefreshStatusShimmer
