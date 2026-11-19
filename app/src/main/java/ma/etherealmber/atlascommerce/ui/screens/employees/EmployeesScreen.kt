@@ -65,8 +65,9 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
-import ma.etherealmber.atlascommerce.ui.components.AtlasPayrollLoadingIndicator
+import ma.etherealmber.atlascommerce.ui.components.AtlasPayrollRowsSkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasPayrollSkeleton
+import ma.etherealmber.atlascommerce.ui.components.AtlasPayrollSummarySkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.screens.home.HomeViewModel
@@ -333,22 +334,26 @@ fun EmployeesScreen(
         }
 
         item(key = "employee_summary") {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SummaryCard(
-                    label = atlasText("Employés concernés", "Employees", "الموظفون"),
-                    value = payroll?.total?.toString() ?: "—",
-                    modifier = Modifier.weight(1f),
-                )
-                SummaryCard(
-                    label = atlasText("À payer", "To pay", "مستحق الدفع"),
-                    value = payroll?.totals?.unpaidCount?.toString() ?: "—",
-                    modifier = Modifier.weight(1f),
-                )
-                SummaryCard(
-                    label = atlasText("Montant dû", "Amount due", "المبلغ المستحق"),
-                    value = payroll?.let { atlasMoneyCompact(it.totals.amountDue, it.currency) } ?: "—",
-                    modifier = Modifier.weight(1f),
-                )
+            if (payroll == null && state.financeLoading) {
+                AtlasPayrollSummarySkeleton()
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SummaryCard(
+                        label = atlasText("Employés concernés", "Employees", "الموظفون"),
+                        value = payroll?.total?.toString() ?: "—",
+                        modifier = Modifier.weight(1f),
+                    )
+                    SummaryCard(
+                        label = atlasText("À payer", "To pay", "مستحق الدفع"),
+                        value = payroll?.totals?.unpaidCount?.toString() ?: "—",
+                        modifier = Modifier.weight(1f),
+                    )
+                    SummaryCard(
+                        label = atlasText("Montant dû", "Amount due", "المبلغ المستحق"),
+                        value = payroll?.let { atlasMoneyCompact(it.totals.amountDue, it.currency) } ?: "—",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
 
@@ -379,7 +384,11 @@ fun EmployeesScreen(
 
         if (state.financeLoading && payroll == null) {
             item(key = "employee_loading") {
-                AtlasPayrollLoadingIndicator(Modifier.padding(horizontal = 8.dp))
+                AtlasPayrollRowsSkeleton(
+                    rows = 4,
+                    wideLayout = wideLayout,
+                    includeHeader = wideLayout,
+                )
             }
         } else if (visibleRows.isEmpty()) {
             item(key = "employee_empty") {
@@ -416,6 +425,11 @@ fun EmployeesScreen(
         }
 
         if (payroll?.hasMore == true) {
+            if (state.payrollLoadingMore) {
+                item(key = "employee_more_loading") {
+                    AtlasPayrollRowsSkeleton(rows = 2, wideLayout = wideLayout)
+                }
+            }
             item(key = "employee_more") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
