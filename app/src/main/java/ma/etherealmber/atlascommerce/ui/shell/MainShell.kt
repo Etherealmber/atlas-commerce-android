@@ -478,9 +478,12 @@ fun MainShell(
 
     val showShellTopBar = isForeground && (
         (!useRail && !productHistoryActive && !releaseHistorySubpageActive && tab != MainTab.NOTIFICATIONS) ||
-            (useRail && tab == MainTab.AGENT && !productHistoryActive) ||
-            (useRail && showDataCacheManagerDialog)
+            (useRail && tab == MainTab.AGENT && !productHistoryActive)
         )
+    var shellTopBarVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(showShellTopBar) {
+        shellTopBarVisible = showShellTopBar
+    }
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val floatingBarWidth by animateDpAsState(
         targetValue = maxWidth,
@@ -495,7 +498,23 @@ fun MainShell(
         modifier = Modifier.fillMaxSize(),
         containerColor = Color.Transparent,
         topBar = {
-            if (showShellTopBar) {
+            AnimatedVisibility(
+                visible = shellTopBarVisible,
+                enter = if (motionEnabled) {
+                    fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+                        slideInVertically(
+                            animationSpec = tween(260, easing = FastOutSlowInEasing),
+                            initialOffsetY = { height -> -height / 4 },
+                        ) + scaleIn(tween(220, easing = FastOutSlowInEasing), initialScale = 0.98f)
+                } else EnterTransition.None,
+                exit = if (motionEnabled) {
+                    fadeOut(tween(150, easing = FastOutSlowInEasing)) +
+                        slideOutVertically(
+                            animationSpec = tween(180, easing = FastOutSlowInEasing),
+                            targetOffsetY = { height -> -height / 5 },
+                        ) + scaleOut(tween(150, easing = FastOutSlowInEasing), targetScale = 0.98f)
+                } else ExitTransition.None,
+            ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -510,11 +529,11 @@ fun MainShell(
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(26.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.97f),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
                         contentColor = MaterialTheme.colorScheme.onSurface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)),
-                        tonalElevation = 3.dp,
-                        shadowElevation = 8.dp,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 4.dp,
                     ) {
                         AtlasTopBar(
                             title = if (!useRail || tab == MainTab.AGENT) tab.localizedLabel() else "",
@@ -523,11 +542,14 @@ fun MainShell(
                             containerColor = Color.Transparent,
                             titleLeading = if (tab == MainTab.AGENT) {
                                 {
-                                    Icon(
-                                        imageVector = Icons.Outlined.AutoAwesome,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp),
+                                    AtlasAgentSurpriseMascot(
+                                        modifier = Modifier.size(30.dp),
+                                        isTyping = agentState?.input?.isNotBlank() == true,
+                                        isThinking = agentState?.sending == true,
+                                        onSurprise = {
+                                            surpriseIndex = nextSurprise(surpriseIndex, 5)
+                                            showAgentSurprise = true
+                                        },
                                     )
                                 }
                             } else null,
@@ -562,10 +584,11 @@ fun MainShell(
                                             contentDescription = openAgentDescription
                                         },
                                     ) {
-                                        AtlasAgentMascot(
-                                            modifier = Modifier.size(32.dp),
-                                            isTyping = agentState?.input?.isNotBlank() == true,
-                                            isThinking = agentState?.sending == true,
+                                        Icon(
+                                            imageVector = Icons.Outlined.AutoAwesome,
+                                            contentDescription = openAgentDescription,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp),
                                         )
                                     }
                                 }
@@ -765,11 +788,9 @@ fun MainShell(
                 contentAlignment = Alignment.TopCenter,
             ) {
                 Column(Modifier.widthIn(max = if (useRail) 1440.dp else 840.dp).fillMaxSize()) {
-                    if (useRail && currentTab != MainTab.NOTIFICATIONS && currentTab != MainTab.AGENT && !releaseHistorySubpageActive) {
+                    if (useRail && !currentPage.isDataStorage && currentTab != MainTab.NOTIFICATIONS && currentTab != MainTab.AGENT && !releaseHistorySubpageActive) {
                         Text(
-                            if (currentPage.isDataStorage) {
-                                atlasText("Données et cache", "Data & cache", "البيانات والذاكرة المؤقتة")
-                            } else currentTab.localizedLabel(),
+                            currentTab.localizedLabel(),
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
@@ -918,41 +939,43 @@ fun MainShell(
             },
         )
     }
-    AnimatedVisibility(
-        visible = !useRail && tab !in BackStackTabs && !productHistoryActive,
-        modifier = Modifier.align(Alignment.BottomCenter).width(floatingBarWidth),
-        enter = if (motionEnabled) {
-            fadeIn(tween(260, easing = FastOutSlowInEasing)) +
-                slideInVertically(
-                    animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f),
-                    initialOffsetY = { height -> height / 2 },
-                ) +
-                scaleIn(
-                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 460f),
-                    initialScale = 0.94f,
-                )
-        } else {
-            EnterTransition.None
-        },
-        exit = if (motionEnabled) {
-            fadeOut(tween(150, easing = FastOutSlowInEasing)) +
-                slideOutVertically(
-                    animationSpec = tween(190, easing = FastOutSlowInEasing),
-                    targetOffsetY = { height -> height / 3 },
-                ) +
-                scaleOut(
-                    animationSpec = tween(170, easing = FastOutSlowInEasing),
-                    targetScale = 0.97f,
-                )
-        } else {
-            ExitTransition.None
-        },
+    if (!useRail) {
+        AnimatedVisibility(
+            visible = tab !in BackStackTabs && !productHistoryActive,
+            modifier = Modifier.align(Alignment.BottomCenter).width(floatingBarWidth),
+            enter = if (motionEnabled) {
+                fadeIn(tween(260, easing = FastOutSlowInEasing)) +
+                    slideInVertically(
+                        animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f),
+                        initialOffsetY = { height -> height / 2 },
+                    ) +
+                    scaleIn(
+                        animationSpec = spring(dampingRatio = 0.78f, stiffness = 460f),
+                        initialScale = 0.94f,
+                    )
+            } else {
+                EnterTransition.None
+            },
+            exit = if (motionEnabled) {
+                fadeOut(tween(150, easing = FastOutSlowInEasing)) +
+                    slideOutVertically(
+                        animationSpec = tween(190, easing = FastOutSlowInEasing),
+                        targetOffsetY = { height -> height / 3 },
+                    ) +
+                    scaleOut(
+                        animationSpec = tween(170, easing = FastOutSlowInEasing),
+                        targetScale = 0.97f,
+                    )
+            } else {
+                ExitTransition.None
+            },
     ) {
-        AtlasFloatingBottomBar(
-            tabs = roleTabs,
-            selected = tab,
-            onSelect = switchTab,
-        )
+            AtlasFloatingBottomBar(
+                tabs = roleTabs,
+                selected = tab,
+                onSelect = switchTab,
+            )
+        }
     }
     if (showSidebarSignOutConfirmation) {
         AlertDialog(
@@ -1021,8 +1044,8 @@ private fun AtlasFloatingBottomBar(
     val centerIndex = centerTab?.let(tabs::indexOf) ?: -1
     val leftTabs = if (centerIndex >= 0) tabs.take(centerIndex) else tabs
     val rightTabs = if (centerIndex >= 0) tabs.drop(centerIndex + 1) else emptyList()
-    // Only the dock itself is opaque; the surrounding overlay stays transparent.
-    val barColor = MaterialTheme.colorScheme.surfaceContainerLow
+    // Keep the dock visually consistent with the floating top bar while allowing the page to show through.
+    val barColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)
     val motionEnabled = LocalAtlasAnimationsEnabled.current
 
     BoxWithConstraints(
