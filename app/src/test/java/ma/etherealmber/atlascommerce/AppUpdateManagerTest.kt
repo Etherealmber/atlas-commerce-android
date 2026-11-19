@@ -31,6 +31,8 @@ import ma.etherealmber.atlascommerce.core.update.formatReleaseNotesForDisplay
 import ma.etherealmber.atlascommerce.core.update.UpdateInfo
 import ma.etherealmber.atlascommerce.core.update.UpdateCheckRateLimiter
 import ma.etherealmber.atlascommerce.core.update.ManualApiRefreshRateLimiter
+import ma.etherealmber.atlascommerce.core.update.GitHubLimitNotice
+import ma.etherealmber.atlascommerce.core.update.GitHubLimitedOperation
 import ma.etherealmber.atlascommerce.core.update.githubRateLimitRetryAfterSeconds
 import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateNotifier
@@ -419,6 +421,10 @@ class AppUpdateManagerTest {
         assertEquals(12, githubRateLimitRetryAfterSeconds(429, "12", null, null, "", 1_790_000_000L))
         assertEquals(10, githubRateLimitRetryAfterSeconds(429, "Tue, 17 Sep 2024 12:00:10 GMT", null, null, "", 1_726_574_400L))
         assertEquals(null, githubRateLimitRetryAfterSeconds(403, null, null, "4", "Forbidden", 1_790_000_000L))
+        val githubNotice = GitHubLimitNotice(1_790_000_010L, GitHubLimitedOperation.UPDATE_CHECK)
+        assertEquals(10, githubNotice.remainingSeconds(1_790_000_000L))
+        assertEquals(4, githubNotice.remainingSeconds(1_790_000_006L))
+        assertEquals(0, githubNotice.remainingSeconds(1_790_000_010L))
         assertEquals(null, ManualApiRefreshRateLimiter.acquire("products", 1_000L, 5_000L))
         assertEquals(10_000L, ManualApiRefreshRateLimiter.acquire("products", 2_000L, 5_000L))
         assertEquals(20_000L, ManualApiRefreshRateLimiter.acquire("products", 3_000L, 5_000L))

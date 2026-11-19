@@ -63,6 +63,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -301,9 +302,9 @@ fun CombinedReportWebViewDialog(
     val activeUrl = remember(url, activeKey, activeSection) {
         if (activeKey == "summary" || activeSection == null) url else reportSectionUrl(originUri, activeSection)
     }
-    var webView by remember(url) { mutableStateOf<WebView?>(null) }
-    var webPageLoading by remember(url) { mutableStateOf(true) }
-    var webPageError by remember(url) { mutableStateOf(false) }
+    var webView by remember(activeUrl) { mutableStateOf<WebView?>(null) }
+    var webPageLoading by remember(activeUrl) { mutableStateOf(true) }
+    var webPageError by remember(activeUrl) { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -347,7 +348,8 @@ fun CombinedReportWebViewDialog(
                     }
                 } else {
                     Box(Modifier.weight(1f).fillMaxWidth()) {
-                        AndroidView(
+                        key(activeUrl) {
+                            AndroidView(
                             modifier = Modifier.fillMaxSize(),
                             factory = { viewContext ->
                                 WebView(viewContext).apply {
@@ -382,6 +384,17 @@ fun CombinedReportWebViewDialog(
                                             }
                                         }
 
+                                        override fun onReceivedHttpError(
+                                            view: WebView,
+                                            request: WebResourceRequest,
+                                            errorResponse: android.webkit.WebResourceResponse,
+                                        ) {
+                                            if (request.isForMainFrame) {
+                                                webPageLoading = false
+                                                webPageError = true
+                                            }
+                                        }
+
                                         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                                             val destination = request.url
                                             val destinationPort = destination.port.takeIf { it > 0 } ?: if (destination.scheme == "https") 443 else 80
@@ -407,7 +420,8 @@ fun CombinedReportWebViewDialog(
                                 view.clearCache(true)
                                 view.destroy()
                             },
-                        )
+                            )
+                        }
                         if (webPageLoading) {
                             Surface(
                                 modifier = Modifier.align(Alignment.Center),

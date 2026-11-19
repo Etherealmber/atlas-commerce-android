@@ -393,12 +393,21 @@ class AppUpdateManager internal constructor(
             responseBody = body,
             nowEpochSeconds = nowEpochSeconds,
         ) ?: return
-        githubLimitedUntilEpochSeconds = nowEpochSeconds + retryAfter
-        val generation = githubLimitNoticeGeneration.incrementAndGet()
-        _githubLimitNotice.value = GitHubLimitNotice(retryAfter, operation)
+        val (retryAtEpochSeconds, generation) = synchronized(lock) {
+            githubLimitedUntilEpochSeconds = maxOf(githubLimitedUntilEpochSeconds, nowEpochSeconds + retryAfter)
+            val generation = githubLimitNoticeGeneration.incrementAndGet()
+            val retryAt = githubLimitedUntilEpochSeconds
+            _githubLimitNotice.value = GitHubLimitNotice(retryAt, operation)
+            retryAt to generation
+        }
         scope.launch {
-            delay(retryAfter.toLong() * 1_000L)
-            if (githubLimitNoticeGeneration.get() == generation) _githubLimitNotice.value = null
+            val delayMs = ((retryAtEpochSeconds - System.currentTimeMillis() / 1_000L).coerceAtLeast(0L) * 1_000L)
+            delay(delayMs)
+            synchronized(lock) {
+                if (githubLimitNoticeGeneration.get() == generation && githubCooldownRemainingSeconds() == 0) {
+                    _githubLimitNotice.value = null
+                }
+            }
         }
     }
 

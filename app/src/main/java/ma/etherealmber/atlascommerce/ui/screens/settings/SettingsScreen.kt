@@ -147,6 +147,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonList
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
+import ma.etherealmber.atlascommerce.ui.components.rememberGitHubLimitRemainingSeconds
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
@@ -2195,8 +2196,9 @@ private fun GitHubFallbackNotice(
     notice: ma.etherealmber.atlascommerce.core.update.GitHubLimitNotice,
     modifier: Modifier = Modifier,
 ) {
+    val retrySeconds = rememberGitHubLimitRemainingSeconds(notice)
     val text = ma.etherealmber.atlascommerce.ui.i18n.localizedGitHubLimitNotice(
-        notice.retryAfterSeconds,
+        retrySeconds,
         notice.operation,
         LocalAtlasLanguage.current,
     )

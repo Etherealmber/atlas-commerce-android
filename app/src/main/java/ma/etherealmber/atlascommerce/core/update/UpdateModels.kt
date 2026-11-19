@@ -93,9 +93,15 @@ data class ReleaseChangelogEntry(
 )
 
 data class GitHubLimitNotice(
-    val retryAfterSeconds: Int,
+    val retryAtEpochSeconds: Long,
     val operation: GitHubLimitedOperation,
-)
+) {
+    fun remainingSeconds(nowEpochSeconds: Long = System.currentTimeMillis() / 1_000L): Int =
+        (retryAtEpochSeconds - nowEpochSeconds)
+            .coerceAtLeast(0L)
+            .coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt()
+}
 
 enum class GitHubLimitedOperation { RELEASE_HISTORY, UPDATE_CHECK, SOURCE_TEST }
 

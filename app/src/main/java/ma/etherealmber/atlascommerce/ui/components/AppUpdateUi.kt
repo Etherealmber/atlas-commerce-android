@@ -76,6 +76,21 @@ import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
+@Composable
+fun rememberGitHubLimitRemainingSeconds(notice: GitHubLimitNotice): Int {
+    var seconds by remember(notice.retryAtEpochSeconds) {
+        mutableStateOf(notice.remainingSeconds())
+    }
+    LaunchedEffect(notice.retryAtEpochSeconds) {
+        while (true) {
+            seconds = notice.remainingSeconds()
+            if (seconds <= 0) break
+            delay(1_000L)
+        }
+    }
+    return seconds
+}
+
 /**
  * Persistent compact update icon shown in the Top Bar when a download or update
  * banner is hidden. Downloads retain their progress ring; dismissed available or
@@ -583,13 +598,14 @@ fun SettingsUpdateCard(
         }
         Spacer(Modifier.height(8.dp))
         githubLimitNotice?.let { notice ->
+            val retrySeconds = rememberGitHubLimitRemainingSeconds(notice)
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.tertiaryContainer,
             ) {
                 Text(
-                    localizedGitHubLimitNotice(notice.retryAfterSeconds, notice.operation, LocalAtlasLanguage.current),
+                    localizedGitHubLimitNotice(retrySeconds, notice.operation, LocalAtlasLanguage.current),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                     style = MaterialTheme.typography.bodySmall,

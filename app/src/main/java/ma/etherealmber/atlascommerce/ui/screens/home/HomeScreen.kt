@@ -280,6 +280,7 @@ fun HomeScreen(
             onDelete = {
                 showReportActions = false
                 reportFile.delete()
+                financeReportHistory = financeReportHistory.filterNot { it.absolutePath == reportFile.absolutePath }
                 pendingReportFile = null
                 onToast("Rapport temporaire supprimé.")
             },
@@ -302,7 +303,12 @@ fun HomeScreen(
                 }.onFailure { onToast("Impossible de partager le PDF.") }
             },
             onSave = { pendingReportFile = reportFile; saveReportLauncher.launch(financeReportExportFileName(reportFile)) },
-            onDelete = { reportFile.delete(); pdfViewerFile = null; onToast("Rapport temporaire supprimé.") },
+            onDelete = {
+                reportFile.delete()
+                financeReportHistory = financeReportHistory.filterNot { it.absolutePath == reportFile.absolutePath }
+                pdfViewerFile = null
+                onToast("Rapport temporaire supprimé.")
+            },
         )
     }
 

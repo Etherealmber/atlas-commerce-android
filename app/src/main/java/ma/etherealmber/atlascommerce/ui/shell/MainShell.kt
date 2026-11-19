@@ -32,6 +32,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -516,7 +519,7 @@ fun MainShell(
                         AtlasTopBar(
                             title = if (!useRail || tab == MainTab.AGENT) tab.localizedLabel() else "",
                             subtitle = null,
-                            windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+                            windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal),
                             containerColor = Color.Transparent,
                             titleLeading = if (tab == MainTab.AGENT) {
                                 {
