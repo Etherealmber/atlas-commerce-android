@@ -1,8 +1,11 @@
 package ma.etherealmber.atlascommerce.core.update
 
+import com.squareup.moshi.JsonClass
 import ma.etherealmber.atlascommerce.BuildConfig
 import java.io.File
 import java.text.NumberFormat
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 enum class UpdateDownloadSource(val key: String, val label: String) {
@@ -28,7 +31,6 @@ object UpdateDefaults {
         BuildConfig.DEFAULT_DOWNLOAD_URL
     val GITHUB_RELEASES_API_URL: String =
         "${BuildConfig.PROJECT_REPO.trimEnd('/').replace("https://github.com/", "https://api.github.com/repos/")}/releases?per_page=8"
-    const val GITHUB_RATE_LIMIT_API_URL = "https://api.github.com/rate_limit"
 }
 
 enum class MirrorTestTarget { CDN1, GITHUB }
@@ -79,6 +81,7 @@ internal suspend fun pingMirrorsSequentially(
     )
 }
 
+@JsonClass(generateAdapter = true)
 data class ReleaseChangelogEntry(
     val tagName: String,
     val title: String,
@@ -89,17 +92,40 @@ data class ReleaseChangelogEntry(
     val htmlUrl: String? = null,
 )
 
-data class GitHubRateLimitBucket(
-    val limit: Int,
-    val remaining: Int,
-    val resetEpochSeconds: Long,
+data class GitHubLimitNotice(
+    val retryAfterSeconds: Int,
+    val operation: GitHubLimitedOperation,
 )
 
-data class GitHubRateLimitStatus(
-    val hourly: GitHubRateLimitBucket?,
-    val perMinute: GitHubRateLimitBucket?,
-    val fetchedAtEpochMillis: Long,
-)
+enum class GitHubLimitedOperation { RELEASE_HISTORY, UPDATE_CHECK, SOURCE_TEST }
+
+/** Uses only response headers/body from the request that was already made; never probes /rate_limit. */
+internal fun githubRateLimitRetryAfterSeconds(
+    statusCode: Int,
+    retryAfterHeader: String?,
+    resetEpochHeader: String?,
+    remainingHeader: String?,
+    responseBody: String?,
+    nowEpochSeconds: Long,
+): Int? {
+    val looksRateLimited = statusCode == 429 || (
+        statusCode == 403 && (
+            remainingHeader?.trim() == "0" ||
+                responseBody.orEmpty().contains("rate limit", ignoreCase = true) ||
+                responseBody.orEmpty().contains("secondary limit", ignoreCase = true)
+            )
+        )
+    if (!looksRateLimited) return null
+    val retryAfter = retryAfterHeader?.trim()?.let { value ->
+        value.toLongOrNull()?.takeIf { it > 0L }
+            ?: runCatching {
+                (ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toEpochSecond() - nowEpochSeconds)
+                    .takeIf { it > 0L }
+            }.getOrNull()
+    }
+    val resetDelay = resetEpochHeader?.trim()?.toLongOrNull()?.minus(nowEpochSeconds)?.takeIf { it > 0L }
+    return (retryAfter ?: resetDelay ?: 60L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt().coerceAtLeast(1)
+}
 
 internal fun formatReleaseNotesForDisplay(rawBody: String, tagName: String): String =
     rawBody.trim().ifBlank { "• Mise à jour $tagName — optimisations et correctifs." }
@@ -113,6 +139,38 @@ internal fun updateCheckCooldownRemainingMs(
 ): Long {
     if (lastCheckElapsedMs <= 0L || nowElapsedMs < lastCheckElapsedMs || minimumIntervalMs <= 0L) return 0L
     return (minimumIntervalMs - (nowElapsedMs - lastCheckElapsedMs)).coerceAtLeast(0L)
+}
+
+internal object ManualApiRefreshRateLimiter {
+    private data class RefreshWindow(
+        val nextAllowedAtMs: Long,
+        val cooldownMs: Long,
+    )
+
+    private val refreshByKey = LinkedHashMap<String, RefreshWindow>()
+
+    @Synchronized
+    fun acquire(key: String, nowElapsedMs: Long, minimumIntervalMs: Long): Long? {
+        if (key.isBlank() || minimumIntervalMs <= 0L) return null
+        val previous = refreshByKey[key]
+        if (previous != null && nowElapsedMs < previous.nextAllowedAtMs) {
+            val increasedCooldown = (previous.cooldownMs * 2L).coerceAtMost(MAX_ADAPTIVE_COOLDOWN_MS)
+            refreshByKey[key] = RefreshWindow(
+                nextAllowedAtMs = nowElapsedMs + increasedCooldown,
+                cooldownMs = increasedCooldown,
+            )
+            return increasedCooldown.coerceAtMost(Int.MAX_VALUE.toLong())
+        }
+        val baseCooldown = minimumIntervalMs.coerceAtMost(MAX_ADAPTIVE_COOLDOWN_MS)
+        refreshByKey[key] = RefreshWindow(nowElapsedMs + baseCooldown, baseCooldown)
+        while (refreshByKey.size > 64) refreshByKey.remove(refreshByKey.keys.first())
+        return null
+    }
+
+    @Synchronized
+    fun resetForTests() = refreshByKey.clear()
+
+    private const val MAX_ADAPTIVE_COOLDOWN_MS = 30_000L
 }
 
 internal object UpdateCheckRateLimiter {

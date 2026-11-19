@@ -13,6 +13,7 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -127,6 +128,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.AtlasTypingDots
+import ma.etherealmber.atlascommerce.ui.components.rememberApiRefreshAction
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
@@ -277,6 +279,7 @@ fun AgentScreen(
     viewModel: AgentViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val refreshAgentWorkStatus = rememberApiRefreshAction("agent-work-status", 5_000L, viewModel::loadWorkStatus)
     val updateState by appViewModel.updateState.collectAsStateWithLifecycle()
     val savedAccounts by appViewModel.allSavedAccounts.collectAsStateWithLifecycle()
     val savedAccount = savedAccounts.firstOrNull {
@@ -504,7 +507,7 @@ fun AgentScreen(
             },
             confirmButton = {
                 TextButton(
-                    onClick = { viewModel.loadWorkStatus() },
+                    onClick = refreshAgentWorkStatus,
                     enabled = !state.workStatusLoading,
                 ) { Text(atlasText("Actualiser", "Refresh", "تحديث")) }
             },
@@ -646,7 +649,7 @@ fun AgentScreen(
                                 onNavigate = onNavigate,
                                 onOpenWorkStatus = {
                                     showWorkStatusDialog = true
-                                    viewModel.loadWorkStatus()
+                                    refreshAgentWorkStatus()
                                 },
                                 onOpenDeviceUnlock = { showDeviceUnlockDialog = true },
                                 onToast = onToast,
@@ -698,18 +701,23 @@ fun AgentScreen(
                     }
 
                     items(state.messages, key = { it.id }) { msg ->
-                        ChatBubbleRow(
-                            message = msg,
-                            approvingId = state.approvingId,
-                            onCopy = {
-                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                cm?.setPrimaryClip(ClipData.newPlainText("Atlas", if (msg.fromUser) msg.text else localizedAgentText(msg.text, selectedAppLanguage)))
-                                onToast("Réponse copiée.")
-                            },
-                            onApprove = { proposalId -> viewModel.approveProposal(msg.id, proposalId) },
-                            onNavigate = onNavigate,
-                            onThemeChoice = { messageId, mode -> viewModel.selectThemeOption(messageId, mode) },
-                        )
+                        Column(Modifier.fillMaxWidth()) {
+                            ChatBubbleRow(
+                                message = msg,
+                                approvingId = state.approvingId,
+                                onCopy = {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    cm?.setPrimaryClip(ClipData.newPlainText("Atlas", if (msg.fromUser) msg.text else localizedAgentText(msg.text, selectedAppLanguage)))
+                                    onToast("Réponse copiée.")
+                                },
+                                onApprove = { proposalId -> viewModel.approveProposal(msg.id, proposalId) },
+                                onNavigate = onNavigate,
+                                onThemeChoice = { messageId, mode -> viewModel.selectThemeOption(messageId, mode) },
+                            )
+                            if (!msg.fromUser) {
+                                AgentAiDisclaimer(modifier = Modifier.fillMaxWidth().padding(start = 40.dp, top = 4.dp))
+                            }
+                        }
                     }
                     if (state.updateConversationActive) {
                         item(key = "agent_update_controls") {
@@ -819,16 +827,7 @@ fun AgentScreen(
                 }
             }
 
-            Text(
-                text = atlasText(
-                    "Atlas Agent est une IA et peut se tromper. Vérifiez les informations importantes.",
-                    "Atlas Agent is AI and can make mistakes. Verify important information.",
-                    "مساعد Atlas ذكاء اصطناعي وقد يخطئ. تحقّق من المعلومات المهمة.",
-                ),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-            )
+            AgentAiDisclaimer(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
 
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(
@@ -837,6 +836,7 @@ fun AgentScreen(
                 ),
                 shape = RoundedCornerShape(if (isTabletLayout) 24.dp else 28.dp),
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.82f)),
                 tonalElevation = 6.dp,
                 shadowElevation = 10.dp,
             ) {
@@ -1723,6 +1723,27 @@ private fun ChatBubbleRow(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AgentAiDisclaimer(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 1.dp,
+    ) {
+        Text(
+            text = atlasText(
+                "Atlas Agent est une IA et peut se tromper. Vérifiez les informations importantes.",
+                "Atlas Agent is AI and can make mistakes. Verify important information.",
+                "مساعد Atlas ذكاء اصطناعي وقد يخطئ. تحقّق من المعلومات المهمة.",
+            ),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

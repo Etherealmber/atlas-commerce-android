@@ -24,11 +24,14 @@ import ma.etherealmber.atlascommerce.core.update.AppUpdateManager
 import ma.etherealmber.atlascommerce.core.update.DownloadNetworkTransport
 import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
 import ma.etherealmber.atlascommerce.core.update.MirrorTestTarget
+import ma.etherealmber.atlascommerce.core.update.ReleaseChangelogEntry
 import ma.etherealmber.atlascommerce.core.update.pingMirrorsSequentially
 import ma.etherealmber.atlascommerce.core.update.UpdateFormatter
 import ma.etherealmber.atlascommerce.core.update.formatReleaseNotesForDisplay
 import ma.etherealmber.atlascommerce.core.update.UpdateInfo
 import ma.etherealmber.atlascommerce.core.update.UpdateCheckRateLimiter
+import ma.etherealmber.atlascommerce.core.update.ManualApiRefreshRateLimiter
+import ma.etherealmber.atlascommerce.core.update.githubRateLimitRetryAfterSeconds
 import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateNotifier
 import ma.etherealmber.atlascommerce.core.update.UpdateState
@@ -41,7 +44,6 @@ import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
-import ma.etherealmber.atlascommerce.data.model.GitHubRateLimitDto
 import ma.etherealmber.atlascommerce.data.model.HealthDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
@@ -81,6 +83,7 @@ class AppUpdateManagerTest {
     @Before
     fun setUp() {
         UpdateCheckRateLimiter.resetForTests()
+        ManualApiRefreshRateLimiter.resetForTests()
         tempDir = Files.createTempDirectory("atlas-update-test").toFile()
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         moshi = Moshi.Builder()
@@ -409,11 +412,22 @@ class AppUpdateManagerTest {
         val dashboardAdapter = moshi.adapter(DashboardDto::class.java)
         assertNotNull(dashboardAdapter.fromJson("""{"currency":"MAD","productCount":42}"""))
 
-        val githubRateLimits = moshi.adapter(GitHubRateLimitDto::class.java).fromJson(
-            """{"resources":{"core":{"limit":60,"remaining":54,"reset":1790000000},"search":{"limit":10,"remaining":8,"reset":1790000000}}}""",
+        assertEquals(
+            75,
+            githubRateLimitRetryAfterSeconds(403, null, "1790000075", "0", "{\"message\":\"API rate limit exceeded\"}", 1_790_000_000L),
         )
-        assertEquals(54, githubRateLimits?.resources?.get("core")?.remaining)
-        assertEquals(10, githubRateLimits?.resources?.get("search")?.limit)
+        assertEquals(12, githubRateLimitRetryAfterSeconds(429, "12", null, null, "", 1_790_000_000L))
+        assertEquals(10, githubRateLimitRetryAfterSeconds(429, "Tue, 17 Sep 2024 12:00:10 GMT", null, null, "", 1_726_574_400L))
+        assertEquals(null, githubRateLimitRetryAfterSeconds(403, null, null, "4", "Forbidden", 1_790_000_000L))
+        assertEquals(null, ManualApiRefreshRateLimiter.acquire("products", 1_000L, 5_000L))
+        assertEquals(10_000L, ManualApiRefreshRateLimiter.acquire("products", 2_000L, 5_000L))
+        assertEquals(20_000L, ManualApiRefreshRateLimiter.acquire("products", 3_000L, 5_000L))
+        assertEquals(null, ManualApiRefreshRateLimiter.acquire("products", 31_000L, 5_000L))
+        val releaseListAdapter = moshi.adapter<List<ReleaseChangelogEntry>>(
+            Types.newParameterizedType(List::class.java, ReleaseChangelogEntry::class.java),
+        )
+        val cachedReleases = listOf(ReleaseChangelogEntry("v1.2.3", "Release 1.2.3", notes = "Notes"))
+        assertEquals(cachedReleases, releaseListAdapter.fromJson(releaseListAdapter.toJson(cachedReleases)))
 
         val finance = moshi.adapter(FinanceMonthlyDto::class.java).fromJson(
             """{"period":"2026-09","timezone":"Africa/Casablanca","currency":"MAD","opening_balance":48210.5,"closing_balance":51060.25,"sales_received":18500,"refunds":650,"expenses":9200.25,"payroll_paid":6000,"supplier_paid":2200,"receivables":{"total_outstanding":12400,"total_overdue":3100,"count":1,"truncated":false,"documents":[{"id":142,"number":"F-2026-0142","party":"Client Alpha","total":5000,"paid":2000,"remaining":3000,"due_date":"2026-09-15","state":"overdue"}]},"payables":{"total_outstanding":0,"total_overdue":0,"count":0,"truncated":false,"documents":[]},"payroll":{"total_due":9000,"employees":3},"reconciliation":{"source":"d1-live","generated_at":"2026-10-01T07:35:12.480Z","rules":"docs/api-finance.md#calculation-rules","as_of_date":"2026-09-30"}}""",

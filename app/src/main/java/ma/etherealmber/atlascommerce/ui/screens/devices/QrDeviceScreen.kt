@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.devices
 
+import ma.etherealmber.atlascommerce.ui.components.rememberApiRefreshAction
+
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -112,6 +114,7 @@ fun QrDeviceScreen(
     viewModel: QrDeviceViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val refreshTrustedDevices = rememberApiRefreshAction("trusted-devices", 5_000L, viewModel::loadDevices)
     val otherDevices = remember(state.devices, viewModel) { state.devices.filterNot(viewModel::isCurrentDevice) }
     val autoOpenCamera by viewModel.autoOpenCamera.collectAsStateWithLifecycle()
     val scanHaptic by viewModel.scanHapticEnabled.collectAsStateWithLifecycle()
@@ -543,7 +546,7 @@ fun QrDeviceScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f),
                         )
-                        IconButton(onClick = viewModel::loadDevices, enabled = !state.devicesLoading) {
+                        IconButton(onClick = refreshTrustedDevices, enabled = !state.devicesLoading) {
                             Icon(
                                 imageVector = Icons.Outlined.Refresh,
                                 contentDescription = atlasText("Actualiser les appareils", "Refresh devices", "تحديث الأجهزة"),
@@ -562,7 +565,7 @@ fun QrDeviceScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                TextButton(onClick = viewModel::loadDevices, enabled = !state.devicesLoading) {
+                                TextButton(onClick = refreshTrustedDevices, enabled = !state.devicesLoading) {
                                     Text(atlasText("Réessayer", "Retry", "إعادة المحاولة"))
                                 }
                             }

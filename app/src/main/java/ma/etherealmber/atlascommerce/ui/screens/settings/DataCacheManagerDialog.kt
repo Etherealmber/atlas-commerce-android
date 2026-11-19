@@ -196,7 +196,7 @@ fun DataCacheManagerDialog(
                 }
                 AtlasDivider()
                 Column(
-                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(18.dp),
+                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(

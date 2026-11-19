@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.home
 
+import ma.etherealmber.atlascommerce.ui.components.rememberApiRefreshAction
+
 import android.content.ClipData
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -121,6 +123,8 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val refreshDashboard = rememberApiRefreshAction("home-dashboard", 30_000L, viewModel::refresh)
+    val refreshHomeFinance = rememberApiRefreshAction("home-finance", 30_000L, viewModel::refreshFinance)
     val dashboard = state.dashboard
     val isAdmin = Roles.isAdmin(user.role)
     val context = LocalContext.current
@@ -163,6 +167,9 @@ fun HomeScreen(
             }
         }
     }
+    val gatedRefreshFinanceReportHistory = rememberApiRefreshAction(
+        "finance-report-history", 5_000L, refreshFinanceReportHistory,
+    )
 
     LaunchedEffect(user.scopeIdentity) {
         showFinanceReportHistory = false
@@ -220,7 +227,7 @@ fun HomeScreen(
             reports = financeReportHistory,
             loading = financeReportHistoryLoading,
             onDismiss = { showFinanceReportHistory = false },
-            onRefresh = refreshFinanceReportHistory,
+            onRefresh = gatedRefreshFinanceReportHistory,
             onSelect = { file ->
                 showFinanceReportHistory = false
                 pendingReportFile = file
@@ -321,7 +328,7 @@ fun HomeScreen(
             user = user,
             message = atlasNotice(state.error ?: "Vérifiez l'adresse du serveur et votre connexion.", LocalAtlasLanguage.current),
             offline = state.offline,
-            onRetry = viewModel::refresh,
+            onRetry = refreshDashboard,
             onOpenProducts = onOpenProducts,
             onOpenSale = onOpenSale,
             onOpenScan = onOpenScan,
@@ -331,8 +338,8 @@ fun HomeScreen(
             user = user,
             state = state,
             dashboard = dashboard,
-            onRefresh = viewModel::refresh,
-            onRefreshFinance = viewModel::refreshFinance,
+            onRefresh = refreshDashboard,
+            onRefreshFinance = refreshHomeFinance,
             onOpenProducts = onOpenProducts,
             onOpenSale = onOpenSale,
             onOpenScan = onOpenScan,
@@ -353,7 +360,7 @@ fun HomeScreen(
             onOpenCombinedReport = { showReportSelection = true },
             onOpenFinanceReportHistory = {
                 showFinanceReportHistory = true
-                refreshFinanceReportHistory()
+                gatedRefreshFinanceReportHistory()
             },
         )
     }

@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.balance
 
+import ma.etherealmber.atlascommerce.ui.components.rememberApiRefreshAction
+
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import android.content.ClipData
 import android.content.Intent
@@ -39,6 +41,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -47,8 +50,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -386,6 +389,7 @@ fun BalanceScreen(
 ) {
     val dockPadding = LocalAtlasFloatingDockPadding.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val refreshBalance = rememberApiRefreshAction("finance-balance", 30_000L, viewModel::refresh)
     val appLanguage = LocalAtlasLanguage.current
     val context = LocalContext.current
     val copyPdfSavedMessage = atlasText("Copie PDF enregistrée.", "PDF copy saved.", "تم حفظ نسخة PDF.")
@@ -556,7 +560,7 @@ fun BalanceScreen(
             ) {
                 Spacer(Modifier.weight(1f))
                 MonthSelector(selectedPeriod = state.selectedPeriod, onSelect = viewModel::selectPeriod)
-                IconButton(onClick = viewModel::refresh, enabled = !state.refreshing) {
+                IconButton(onClick = refreshBalance, enabled = !state.refreshing) {
                     if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
                     else Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les soldes"))
                 }
@@ -579,7 +583,7 @@ fun BalanceScreen(
                         Text(atlasText(kind.quickLabel, kind.quickEnglish, kind.quickArabic))
                     }
                 } else {
-                    OutlinedButton(onClick = open) {
+                    FilledTonalButton(onClick = open) {
                         Icon(kind.icon, contentDescription = null, modifier = Modifier.width(18.dp))
                         Spacer(Modifier.width(4.dp))
                         Text(atlasText(kind.quickLabel, kind.quickEnglish, kind.quickArabic))
@@ -701,6 +705,7 @@ fun BalanceScreen(
                                         label = { Text(atlasText("Rechercher")) },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth(),
+                                        colors = financeFieldColors(),
                                     )
                                 }
                             } else {
@@ -714,6 +719,7 @@ fun BalanceScreen(
                                         label = { Text(atlasText("Rechercher")) },
                                         singleLine = true,
                                         modifier = Modifier.weight(1.4f),
+                                        colors = financeFieldColors(),
                                     )
                                 }
                             }
@@ -741,7 +747,7 @@ fun BalanceScreen(
                         }
                         if (state.statement?.hasMore == true) {
                             item(key = "load-more") {
-                                OutlinedButton(onClick = viewModel::loadMore, enabled = !state.loadingMore, modifier = Modifier.fillMaxWidth()) {
+                                FilledTonalButton(onClick = viewModel::loadMore, enabled = !state.loadingMore, modifier = Modifier.fillMaxWidth()) {
                                     if (state.loadingMore) CircularProgressIndicator(Modifier.width(18.dp), strokeWidth = 2.dp)
                                     else Text(atlasText("Charger les mouvements suivants"))
                                 }
@@ -793,6 +799,9 @@ fun BalanceScreen(
                     BalanceSection.REPORTS -> {
                         item(key = "report-heading") {
                             Text(atlasText("Rapports financiers"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                        state.finance?.let { finance ->
+                            item(key = "report-finance-chart") { FinanceReportMiniChart(finance) }
                         }
                         item(key = "month-pdf") {
                             ReportActionCard(
@@ -864,7 +873,7 @@ private fun MonthSelector(selectedPeriod: String?, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val current = selectedPeriod?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
     Box {
-        OutlinedButton(onClick = { expanded = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp)) {
+        FilledTonalButton(onClick = { expanded = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp)) {
             Text(current?.let { monthLabel(it, locale) } ?: atlasText("Mois"), style = MaterialTheme.typography.labelLarge)
             Icon(Icons.Outlined.ExpandMore, contentDescription = atlasText("Choisir un mois"))
         }
@@ -1161,11 +1170,59 @@ private fun ReceivableCard(document: FinanceOutstandingDocumentDto, currency: St
 }
 
 @Composable
+private fun FinanceReportMiniChart(finance: ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto) {
+    val paidOut = finance.expenses + finance.payrollPaid + finance.supplierPaid
+    val maximum = maxOf(
+        kotlin.math.abs(finance.salesReceived),
+        kotlin.math.abs(paidOut),
+        kotlin.math.abs(finance.closingBalance),
+        1.0,
+    )
+    val rows = listOf(
+        Triple(atlasText("Entrées", "Income", "الإيرادات"), finance.salesReceived, Atlas.palette.chartIncome),
+        Triple(atlasText("Sorties payées", "Paid out", "المصروفات المدفوعة"), paidOut, Atlas.palette.chartExpense),
+        Triple(atlasText("Solde de clôture", "Closing balance", "الرصيد الختامي"), finance.closingBalance, Atlas.palette.chartSales),
+    )
+    AtlasCard(padding = 14.dp) {
+        Text(
+            atlasText("Aperçu de la période · ${finance.period}", "Period overview · ${finance.period}", "نظرة عامة على الفترة · ${finance.period}"),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        rows.forEach { (label, amount, accent) ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(formatMoney(amount, finance.currency), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                }
+                LinearProgressIndicator(
+                    progress = { (kotlin.math.abs(amount) / maximum).toFloat().coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                    color = accent,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun financeFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.58f),
+    errorBorderColor = MaterialTheme.colorScheme.error,
+    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+)
+
+@Composable
 private fun ReportActionCard(title: String, description: String, icon: @Composable () -> Unit, actionLabel: String, enabled: Boolean, onClick: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                icon()
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+                    Box(Modifier.size(40.dp).padding(10.dp), contentAlignment = Alignment.Center) { icon() }
+                }
                 Spacer(Modifier.width(10.dp))
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             }
@@ -1264,6 +1321,7 @@ private fun NewEntryDialog(
                         placeholder = { Text(atlasText("Ex. Loyer entrepôt octobre")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
+                        colors = financeFieldColors(),
                     )
                     if (description.isBlank()) Text(atlasText("La description est obligatoire."), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
                 } else {
@@ -1274,6 +1332,7 @@ private fun NewEntryDialog(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
+                        colors = financeFieldColors(),
                     )
                     OutlinedTextField(
                         value = date,
@@ -1283,6 +1342,7 @@ private fun NewEntryDialog(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         isError = !validDate,
+                        colors = financeFieldColors(),
                     )
                     EntryDropdown(
                         atlasText("Mode de paiement", "Payment method", "طريقة الدفع"),
@@ -1295,6 +1355,7 @@ private fun NewEntryDialog(
                         label = { Text(atlasText("Bénéficiaire / fournisseur (facultatif)")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
+                        colors = financeFieldColors(),
                     )
                     OutlinedTextField(
                         value = notes,
@@ -1302,6 +1363,7 @@ private fun NewEntryDialog(
                         label = { Text(atlasText("Notes (facultatif)")) },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
+                        colors = financeFieldColors(),
                     )
                     if (parsedAmount == null || parsedAmount <= 0.0) Text(atlasText("Saisissez un montant supérieur à zéro."), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
                     if (!validDate) Text(atlasText("La date doit être une date valide au format AAAA-MM-JJ."), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
@@ -1350,7 +1412,7 @@ private fun EntryDropdown(label: String, selected: String, options: List<String>
     Column {
         Text(atlasText(label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Box {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+            FilledTonalButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
                 Text(atlasText(selected), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Icon(
                     Icons.Outlined.ExpandMore,

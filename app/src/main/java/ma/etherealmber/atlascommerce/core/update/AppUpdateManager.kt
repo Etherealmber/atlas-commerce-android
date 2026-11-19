@@ -21,6 +21,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,12 +38,10 @@ import ma.etherealmber.atlascommerce.core.net.hasDeviceInternetCapability
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.data.model.AndroidUpdateDto
-import ma.etherealmber.atlascommerce.data.model.GitHubRateLimitDto
 import ma.etherealmber.atlascommerce.data.model.GitHubReleaseDto
 import ma.etherealmber.atlascommerce.di.ApplicationScope
 import ma.etherealmber.atlascommerce.di.ProbeClient
 import ma.etherealmber.atlascommerce.di.UpdateClient
-import okhttp3.CertificatePinner
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -178,20 +177,16 @@ class AppUpdateManager internal constructor(
     private val _mirrorPing = MutableStateFlow(MirrorPingResult())
     val mirrorPing: StateFlow<MirrorPingResult> = _mirrorPing.asStateFlow()
 
-    private val _changelog = MutableStateFlow<List<ReleaseChangelogEntry>>(defaultOfflineChangelog())
+    private val _changelog = MutableStateFlow<List<ReleaseChangelogEntry>>(emptyList())
     val changelog: StateFlow<List<ReleaseChangelogEntry>> = _changelog.asStateFlow()
 
     private val _changelogLoading = MutableStateFlow(false)
     val changelogLoading: StateFlow<Boolean> = _changelogLoading.asStateFlow()
 
-    private val _githubRateLimits = MutableStateFlow<GitHubRateLimitStatus?>(null)
-    val githubRateLimits: StateFlow<GitHubRateLimitStatus?> = _githubRateLimits.asStateFlow()
-
-    private val _githubRateLimitsLoading = MutableStateFlow(false)
-    val githubRateLimitsLoading: StateFlow<Boolean> = _githubRateLimitsLoading.asStateFlow()
-
-    private val _githubRateLimitsError = MutableStateFlow(false)
-    val githubRateLimitsError: StateFlow<Boolean> = _githubRateLimitsError.asStateFlow()
+    private val _githubLimitNotice = MutableStateFlow<GitHubLimitNotice?>(null)
+    val githubLimitNotice: StateFlow<GitHubLimitNotice?> = _githubLimitNotice.asStateFlow()
+    private val githubLimitNoticeGeneration = AtomicLong(0L)
+    @Volatile private var githubLimitedUntilEpochSeconds: Long = 0L
 
     @Volatile
     private var downloadJob: Job? = null
@@ -204,9 +199,6 @@ class AppUpdateManager internal constructor(
 
     @Volatile
     private var changelogJob: Job? = null
-
-    @Volatile
-    private var githubRateLimitJob: Job? = null
 
     @Volatile
     private var lastAutoCheckMs: Long = 0L
@@ -228,6 +220,10 @@ class AppUpdateManager internal constructor(
     private val releasesListAdapter by lazy {
         val type = Types.newParameterizedType(List::class.java, GitHubReleaseDto::class.java)
         moshi.adapter<List<GitHubReleaseDto>>(type)
+    }
+    private val cachedReleaseListAdapter by lazy {
+        val type = Types.newParameterizedType(List::class.java, ReleaseChangelogEntry::class.java)
+        moshi.adapter<List<ReleaseChangelogEntry>>(type)
     }
 
     init {
@@ -295,25 +291,36 @@ class AppUpdateManager internal constructor(
     )
 
     /**
-     * Loads full release notes directly inside Settings (`Paramètres`) from GitHub Releases,
-     * falling back gracefully to built-in version highlights when offline.
+     * Loads public release notes from a small private cache first. Fresh cache avoids a
+     * network round trip; stale cache remains visible while one background revalidation runs.
      */
-    fun refreshChangelog() {
+    fun refreshChangelog(force: Boolean = false) {
         val apiUrl = releasesApiUrl?.takeIf { it.isNotBlank() } ?: return
         if (changelogJob?.isActive == true) return
-        _changelogLoading.value = true
+        _changelogLoading.value = _changelog.value.isEmpty()
         changelogJob = scope.launch(ioDispatcher) {
             try {
+                val cache = readChangelogCache()
+                if (cache != null) _changelog.value = cache.entries
+                val cacheIsFresh = cache != null && System.currentTimeMillis() - cache.cachedAtMillis < CHANGELOG_CACHE_TTL_MS
+                if (cacheIsFresh && !force) return@launch
+                if (githubCooldownRemainingSeconds() > 0) return@launch
+
                 val request = Request.Builder()
                     .url(apiUrl)
                     .get()
                     .header("Accept", "application/vnd.github+json")
                     .header("User-Agent", "Atlas-Android-Updater")
                     .build()
-                val parsed = probeClient.newCall(request).execute().use { resp ->
-                    if (!resp.isSuccessful) emptyList()
-                    else {
-                        val raw = resp.body?.string().orEmpty()
+                val parsed = probeClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val body = runCatching { response.peekBody(64 * 1024L).string() }.getOrDefault("")
+                        if (response.code == 403 || response.code == 429) {
+                            recordGitHubLimit(response, body, GitHubLimitedOperation.RELEASE_HISTORY)
+                        }
+                        emptyList()
+                    } else {
+                        val raw = response.body?.string().orEmpty()
                         releasesListAdapter.fromJson(raw).orEmpty()
                     }
                 }
@@ -321,7 +328,6 @@ class AppUpdateManager internal constructor(
                 val entries = parsed
                     .filter { !it.draft && it.tagName.isNotBlank() }
                     .map { rel ->
-                        val cleanedBody = formatReleaseNotesForDisplay(rel.body.orEmpty(), rel.tagName)
                         ReleaseChangelogEntry(
                             tagName = rel.tagName.trim(),
                             title = rel.name?.trim()?.takeIf { it.isNotEmpty() }
@@ -329,67 +335,87 @@ class AppUpdateManager internal constructor(
                             publishedAt = rel.publishedAt?.take(10),
                             isLatest = !rel.prerelease && rel.tagName == latestStableTag,
                             isPrerelease = rel.prerelease,
-                            notes = cleanedBody,
+                            notes = formatReleaseNotesForDisplay(rel.body.orEmpty(), rel.tagName),
                             htmlUrl = rel.htmlUrl,
                         )
                     }
                 if (entries.isNotEmpty()) {
                     _changelog.value = entries
+                    writeChangelogCache(entries)
                 }
             } catch (c: CancellationException) {
                 throw c
             } catch (_: Throwable) {
-                // Keep existing / built-in changelog entries silently when offline
+                // Keep a previously cached release list; use built-in notes only as the last fallback.
             } finally {
+                if (_changelog.value.isEmpty()) _changelog.value = defaultOfflineChangelog()
                 _changelogLoading.value = false
             }
         }
     }
 
-    /** Fetches GitHub's public REST quota snapshot only when the user explicitly requests it. */
-    fun refreshGitHubRateLimits() {
-        if (githubRateLimitJob?.isActive == true) return
-        _githubRateLimitsLoading.value = true
-        _githubRateLimitsError.value = false
-        githubRateLimitJob = scope.launch(ioDispatcher) {
-            try {
-                val githubCertificatePinner = CertificatePinner.Builder()
-                    .add("api.github.com", "sha256/1EkvzibgiE3k+xdsv+7UU5vhV8kdFCQiUiFdMX5Guuk=")
-                    .add("api.github.com", "sha256/Pi2X5K2M4S5P6xwM3D7Yw8ofu5pY88MtXgFp0psNTCk=")
-                    .build()
-                val pinnedUpdateProbeClient = updateProbeClient.newBuilder()
-                    .certificatePinner(githubCertificatePinner)
-                    .build()
-                val request = Request.Builder()
-                    .url(UpdateDefaults.GITHUB_RATE_LIMIT_API_URL)
-                    .get()
-                    .header("Accept", "application/vnd.github+json")
-                    .header("User-Agent", "Atlas-Android-Updater")
-                    .build()
-                val parsed = pinnedUpdateProbeClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) error("GitHub rate-limit request failed: ${response.code}")
-                    moshi.adapter(GitHubRateLimitDto::class.java).fromJson(response.body?.string().orEmpty())
-                        ?: error("GitHub rate-limit response was empty")
-                }
-                fun bucket(name: String): GitHubRateLimitBucket? = parsed.resources[name]?.let { value ->
-                    if (value.limit <= 0) null else GitHubRateLimitBucket(
-                        limit = value.limit,
-                        remaining = value.remaining.coerceIn(0, value.limit),
-                        resetEpochSeconds = value.reset.coerceAtLeast(0L),
-                    )
-                }
-                _githubRateLimits.value = GitHubRateLimitStatus(
-                    hourly = bucket("core"),
-                    perMinute = bucket("search"),
-                    fetchedAtEpochMillis = System.currentTimeMillis(),
-                )
-            } catch (c: CancellationException) {
-                throw c
-            } catch (_: Throwable) {
-                _githubRateLimitsError.value = true
-            } finally {
-                _githubRateLimitsLoading.value = false
+    private data class ChangelogCache(val entries: List<ReleaseChangelogEntry>, val cachedAtMillis: Long)
+
+    private fun changelogCacheFile(): File {
+        val updatesDirectory = updatesDirProvider()
+        return File(updatesDirectory.parentFile ?: updatesDirectory, "release-history.json")
+    }
+
+    private fun readChangelogCache(): ChangelogCache? = runCatching {
+        val file = changelogCacheFile()
+        if (!file.isFile || file.length() !in 2L..MAX_CHANGELOG_CACHE_BYTES) return@runCatching null
+        val entries = cachedReleaseListAdapter.fromJson(file.readText())?.take(MAX_CACHED_RELEASES).orEmpty()
+        if (entries.isEmpty()) null else ChangelogCache(entries, file.lastModified())
+    }.getOrNull()
+
+    private fun writeChangelogCache(entries: List<ReleaseChangelogEntry>) {
+        runCatching {
+            val file = changelogCacheFile()
+            file.parentFile?.mkdirs()
+            val temporary = File(file.parentFile, "${file.name}.tmp")
+            temporary.writeText(cachedReleaseListAdapter.toJson(entries.take(MAX_CACHED_RELEASES)))
+            if (!temporary.renameTo(file)) {
+                file.writeText(temporary.readText())
+                temporary.delete()
             }
+        }
+    }
+
+    private fun recordGitHubLimit(response: Response, body: String, operation: GitHubLimitedOperation) {
+        val host = response.request.url.host.lowercase()
+        if (host != "github.com" && !host.endsWith(".github.com")) return
+        val nowEpochSeconds = System.currentTimeMillis() / 1_000L
+        val retryAfter = githubRateLimitRetryAfterSeconds(
+            statusCode = response.code,
+            retryAfterHeader = response.header("Retry-After"),
+            resetEpochHeader = response.header("X-RateLimit-Reset"),
+            remainingHeader = response.header("X-RateLimit-Remaining"),
+            responseBody = body,
+            nowEpochSeconds = nowEpochSeconds,
+        ) ?: return
+        githubLimitedUntilEpochSeconds = nowEpochSeconds + retryAfter
+        val generation = githubLimitNoticeGeneration.incrementAndGet()
+        _githubLimitNotice.value = GitHubLimitNotice(retryAfter, operation)
+        scope.launch {
+            delay(retryAfter.toLong() * 1_000L)
+            if (githubLimitNoticeGeneration.get() == generation) _githubLimitNotice.value = null
+        }
+    }
+
+    private fun githubCooldownRemainingSeconds(): Int =
+        (githubLimitedUntilEpochSeconds - System.currentTimeMillis() / 1_000L)
+            .coerceAtLeast(0L)
+            .coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt()
+
+    private fun isGitHubUrl(url: String): Boolean = url.toHttpUrlOrNull()?.host?.lowercase()?.let { host ->
+        host == "github.com" || host.endsWith(".github.com")
+    } == true
+
+    private fun writeLimitFromEndpoint(response: Response, operation: GitHubLimitedOperation) {
+        if (response.code == 403 || response.code == 429) {
+            val body = runCatching { response.peekBody(32 * 1024L).string() }.getOrDefault("")
+            recordGitHubLimit(response, body, operation)
         }
     }
 
@@ -423,6 +449,7 @@ class AppUpdateManager internal constructor(
     }
 
     internal fun measureEndpointMs(url: String): Pair<Boolean, Long?> {
+        if (isGitHubUrl(url) && githubCooldownRemainingSeconds() > 0) return false to null
         val startNs = System.nanoTime()
         val headReq = Request.Builder()
             .url(url)
@@ -435,6 +462,7 @@ class AppUpdateManager internal constructor(
                 if (resp.code in 200..399 || resp.code == 405) {
                     true to elapsed
                 } else {
+                    writeLimitFromEndpoint(resp, GitHubLimitedOperation.SOURCE_TEST)
                     false to elapsed
                 }
             }
@@ -481,6 +509,7 @@ class AppUpdateManager internal constructor(
 
     private fun fetchManifestJson(url: String?): AndroidUpdateDto? {
         val clean = url?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (isGitHubUrl(clean) && githubCooldownRemainingSeconds() > 0) return null
         return try {
             val req = Request.Builder()
                 .url(clean)
@@ -490,8 +519,10 @@ class AppUpdateManager internal constructor(
                 .header("User-Agent", "Atlas-Android-Updater")
                 .build()
             updateProbeClient.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) null
-                else resp.body?.string()?.let { updateAdapter.fromJson(it) }
+                if (!resp.isSuccessful) {
+                    writeLimitFromEndpoint(resp, GitHubLimitedOperation.UPDATE_CHECK)
+                    null
+                } else resp.body?.string()?.let { updateAdapter.fromJson(it) }
             }
         } catch (_: Throwable) {
             null
@@ -1595,6 +1626,9 @@ class AppUpdateManager internal constructor(
         const val STREAM_BUFFER_BYTES = 128 * 1024
         const val MIN_VALID_APK_BYTES = 1_024L
         const val RESUME_RECHECK_DEBOUNCE_MS = 5_000L
+        const val CHANGELOG_CACHE_TTL_MS = 6 * 60 * 60 * 1_000L
+        const val MAX_CHANGELOG_CACHE_BYTES = 2L * 1024L * 1024L
+        const val MAX_CACHED_RELEASES = 20
         const val UI_PROGRESS_MIN_INTERVAL_NS = 80_000_000L
         const val NOTIFY_PROGRESS_MIN_INTERVAL_NS = 200_000_000L
     }

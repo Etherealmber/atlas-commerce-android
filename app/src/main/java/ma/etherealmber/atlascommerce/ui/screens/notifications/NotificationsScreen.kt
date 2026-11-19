@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.notifications
 
+import ma.etherealmber.atlascommerce.ui.components.rememberApiRefreshAction
+
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
@@ -81,6 +83,7 @@ fun NotificationsScreen(
     viewModel: NotificationsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val refreshNotifications = rememberApiRefreshAction("notifications", 5_000L, viewModel::refresh)
     val context = LocalContext.current
     val density = Atlas.density
     val roleLabel = atlasRoleLabel(state.role)
@@ -108,7 +111,7 @@ fun NotificationsScreen(
                     IconButton(onClick = { showComposeDialog = true }) {
                         Icon(Icons.Outlined.Send, contentDescription = atlasText("Envoyer une notification"))
                     }
-                    IconButton(onClick = viewModel::refresh) {
+                    IconButton(onClick = refreshNotifications) {
                         Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser"))
                     }
                 },
@@ -219,7 +222,7 @@ fun NotificationsScreen(
 
                 !state.error.isNullOrBlank() && state.alerts.isEmpty() && state.actions.isEmpty() -> {
                     item {
-                        AtlasErrorCard(message = atlasNotice(state.error.orEmpty(), LocalAtlasLanguage.current), onRetry = viewModel::refresh)
+                        AtlasErrorCard(message = atlasNotice(state.error.orEmpty(), LocalAtlasLanguage.current), onRetry = refreshNotifications)
                     }
                 }
 
@@ -234,7 +237,7 @@ fun NotificationsScreen(
                             ),
                             icon = Icons.Outlined.NotificationsNone,
                             actionLabel = atlasText("Actualiser"),
-                            onAction = viewModel::refresh,
+                            onAction = refreshNotifications,
                         )
                     }
                 }
