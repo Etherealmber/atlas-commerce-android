@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.products
 
+import ma.etherealmber.atlascommerce.ui.components.rememberApiRefreshAction
+
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -87,6 +89,7 @@ internal fun ProductHistoryScreen(
     viewModel: ProductHistoryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val refreshProductHistory = rememberApiRefreshAction("product-history-${product.id}", 5_000L) { viewModel.loadHistory(product.id, refresh = true) }
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -287,7 +290,7 @@ internal fun ProductHistoryScreen(
                     if (!state.loading && state.error == null) {
                         AtlasChip(text = atlasQuantity(state.movements.size.toDouble()), tone = AtlasTone.NEUTRAL)
                     }
-                    IconButton(onClick = { viewModel.loadHistory(product.id, refresh = true) }, enabled = !state.loading) {
+                    IconButton(onClick = refreshProductHistory, enabled = !state.loading) {
                         Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh history", "تحديث السجل"))
                     }
                 }
@@ -296,7 +299,7 @@ internal fun ProductHistoryScreen(
                     state.loading && state.movements.isEmpty() -> AtlasSkeletonList(Modifier.fillMaxWidth(), rows = 3, avatarSize = 28.dp)
                     !state.error.isNullOrBlank() && state.movements.isEmpty() -> AtlasErrorCard(
                         message = state.error.orEmpty(),
-                        onRetry = { viewModel.loadHistory(product.id, refresh = true) },
+                        onRetry = refreshProductHistory,
                     )
                     state.movements.isEmpty() -> Text(
                         atlasText("Aucun mouvement enregistré pour ce produit.", "No movements recorded for this product.", "لا توجد حركات مسجلة لهذا المنتج."),

@@ -619,12 +619,15 @@ fun AtlasTopBar(
 ) {
     TopAppBar(
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (titleLeading != null) {
                     titleLeading()
                     Spacer(Modifier.width(8.dp))
                 }
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(
                         text = atlasText(title),
                         style = MaterialTheme.typography.titleMedium,

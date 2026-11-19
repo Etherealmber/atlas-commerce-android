@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.settings
 
+import ma.etherealmber.atlascommerce.ui.components.rememberApiRefreshAction
+
 import android.content.Intent
 import android.provider.Settings
 import android.text.format.Formatter
@@ -119,8 +121,6 @@ import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.ThemeMode
-import ma.etherealmber.atlascommerce.core.update.GitHubRateLimitBucket
-import ma.etherealmber.atlascommerce.core.update.GitHubRateLimitStatus
 import ma.etherealmber.atlascommerce.core.update.ReleaseChangelogEntry
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.core.sync.MobilePreferenceSyncState
@@ -129,7 +129,6 @@ import ma.etherealmber.atlascommerce.ui.root.MobilePreferenceImportPreview
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
@@ -148,6 +147,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonList
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
+import ma.etherealmber.atlascommerce.ui.components.rememberGitHubLimitRemainingSeconds
+import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.screens.legal.EtherealmberAuthorCard
@@ -365,7 +366,7 @@ fun ProfileScreen(
                 start = density.screenPadding,
                 end = density.screenPadding,
                 top = density.cardMargin,
-                bottom = 32.dp,
+                bottom = density.cardMargin,
             ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {
@@ -1498,9 +1499,10 @@ fun SettingsScreen(
     val mirrorPing by appViewModel.mirrorPing.collectAsStateWithLifecycle()
     val releaseChangelog by appViewModel.releaseChangelog.collectAsStateWithLifecycle()
     val releaseChangelogLoading by appViewModel.releaseChangelogLoading.collectAsStateWithLifecycle()
-    val githubRateLimits by appViewModel.githubRateLimits.collectAsStateWithLifecycle()
-    val githubRateLimitsLoading by appViewModel.githubRateLimitsLoading.collectAsStateWithLifecycle()
-    val githubRateLimitsError by appViewModel.githubRateLimitsError.collectAsStateWithLifecycle()
+    val githubLimitNotice by appViewModel.githubLimitNotice.collectAsStateWithLifecycle()
+    val refreshReleaseHistory = rememberApiRefreshAction("github-release-history", 30_000L) {
+        appViewModel.refreshReleaseChangelog(force = true)
+    }
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
@@ -1658,8 +1660,9 @@ fun SettingsScreen(
         VersionHistoryPage(
             releases = releaseChangelog,
             loading = releaseChangelogLoading,
+            githubLimitNotice = githubLimitNotice,
             onBack = { setReleaseHistoryPage(false) },
-            onRefresh = appViewModel::refreshReleaseChangelog,
+            onRefresh = refreshReleaseHistory,
             onOpenRelease = { url -> if (!openExternal(context, url)) onToast(noBrowserAvailableMessage) },
         )
     } else Column(
@@ -1747,6 +1750,7 @@ fun SettingsScreen(
                 state = updateState,
                 selectedSource = updateDownloadSource,
                 mirrorPing = mirrorPing,
+                githubLimitNotice = githubLimitNotice,
                 onSelectSource = appViewModel::setUpdateDownloadSource,
                 onPingMirrors = appViewModel::pingUpdateMirrors,
                 onCheck = { appViewModel.checkForUpdate(manual = true) },
@@ -1758,14 +1762,6 @@ fun SettingsScreen(
                 },
             )
         }
-
-        GitHubRateLimitCard(
-            status = githubRateLimits,
-            loading = githubRateLimitsLoading,
-            error = githubRateLimitsError,
-            appLanguage = appLanguage,
-            onRefresh = appViewModel::refreshGitHubRateLimits,
-        )
 
         AtlasCard {
             SettingsToggleRow(
@@ -1835,15 +1831,11 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                TextButton(onClick = { setReleaseHistoryPage(true) }) {
-                    Text(atlasText("Voir"))
-                }
-                IconButton(
-                    onClick = appViewModel::refreshReleaseChangelog,
-                    enabled = !releaseChangelogLoading,
-                ) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique des versions"))
-                }
+                AtlasButton(
+                    text = atlasText("Ouvrir", "Open", "فتح"),
+                    onClick = { setReleaseHistoryPage(true) },
+                    icon = Icons.AutoMirrored.Outlined.ArrowForward,
+                )
             }
         }
 
@@ -2182,10 +2174,48 @@ fun SettingsScreen(
     }
 }
 
+private fun compactGitHubReleaseLinks(markdown: String): String {
+    val markdownLink = Regex("\\[([^]]*)]\\((https://github\\.com/[^)]+)\\)")
+    return markdownLink.replace(markdown) { match ->
+        val url = match.groupValues[2]
+        val pull = Regex("/pull/(\\d+)(?:/|$)").find(url)
+        val issue = Regex("/issues/(\\d+)(?:/|$)").find(url)
+        val compare = Regex("/compare/([^?]+?)\\.\\.\\.([^?]+)").find(url)
+        val label = when {
+            pull != null -> "#${pull.groupValues[1]}"
+            issue != null -> "#${issue.groupValues[1]}"
+            compare != null -> "${compare.groupValues[1]}…${compare.groupValues[2]}"
+            else -> match.groupValues[1]
+        }
+        "[$label]($url)"
+    }
+}
+
+@Composable
+private fun GitHubFallbackNotice(
+    notice: ma.etherealmber.atlascommerce.core.update.GitHubLimitNotice,
+    modifier: Modifier = Modifier,
+) {
+    val retrySeconds = rememberGitHubLimitRemainingSeconds(notice)
+    val text = ma.etherealmber.atlascommerce.ui.i18n.localizedGitHubLimitNotice(
+        retrySeconds,
+        notice.operation,
+        LocalAtlasLanguage.current,
+    )
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+    ) {
+        Text(text, Modifier.padding(horizontal = 14.dp, vertical = 10.dp), color = MaterialTheme.colorScheme.onTertiaryContainer, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 @Composable
 private fun VersionHistoryPage(
     releases: List<ReleaseChangelogEntry>,
     loading: Boolean,
+    githubLimitNotice: ma.etherealmber.atlascommerce.core.update.GitHubLimitNotice?,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onOpenRelease: (String) -> Unit,
@@ -2211,6 +2241,9 @@ private fun VersionHistoryPage(
                         Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh releases", "تحديث الإصدارات"))
                     }
                 }
+            }
+            githubLimitNotice?.let { notice ->
+                GitHubFallbackNotice(notice, Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp))
             }
             AtlasDivider()
             Column(
@@ -2249,7 +2282,7 @@ private fun VersionHistoryPage(
                         }
                         AtlasDivider(Modifier.padding(vertical = 14.dp))
                         AtlasMarkdown(
-                            markdown = release.notes,
+                            markdown = compactGitHubReleaseLinks(release.notes),
                             textColor = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -2266,92 +2299,6 @@ private fun VersionHistoryPage(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun GitHubRateLimitCard(
-    status: GitHubRateLimitStatus?,
-    loading: Boolean,
-    error: Boolean,
-    appLanguage: AppLanguage,
-    onRefresh: () -> Unit,
-) {
-    val locale = when (appLanguage) {
-        AppLanguage.FRENCH -> Locale.FRANCE
-        AppLanguage.ENGLISH -> Locale.UK
-        AppLanguage.ARABIC -> Locale.forLanguageTag("ar-MA")
-    }
-    val dateFormatter = remember(appLanguage) { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale) }
-    AtlasCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(atlasText("Limites de l'API GitHub", "GitHub API limits", "حدود واجهة GitHub"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(atlasText("État public pour l'adresse réseau actuelle", "Public quota for the current network address", "الحصة العامة لعنوان الشبكة الحالي"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (loading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-            IconButton(onClick = onRefresh, enabled = !loading) {
-                Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les limites GitHub", "Refresh GitHub limits", "تحديث حدود GitHub"))
-            }
-        }
-        if (status == null && !loading) {
-            Text(
-                atlasText(
-                    if (error) "Impossible de charger les limites GitHub. Touchez actualiser pour réessayer." else "Touchez actualiser pour consulter les limites actuelles.",
-                    if (error) "Could not load GitHub limits. Tap refresh to try again." else "Tap refresh to check the current limits.",
-                    if (error) "تعذر تحميل حدود GitHub. اضغط تحديث للمحاولة مرة أخرى." else "اضغط تحديث للتحقق من الحدود الحالية.",
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        status?.let { snapshot ->
-            snapshot.hourly?.let { bucket ->
-                GitHubRateLimitBucketRow(
-                    label = atlasText("REST principale · par heure", "Core REST · per hour", "REST الأساسي · لكل ساعة"),
-                    bucket = bucket,
-                    resetLabel = dateFormatter.format(Date(bucket.resetEpochSeconds * 1000L)),
-                )
-            }
-            snapshot.perMinute?.let { bucket ->
-                GitHubRateLimitBucketRow(
-                    label = atlasText("Recherche REST · par minute", "REST search · per minute", "بحث REST · لكل دقيقة"),
-                    bucket = bucket,
-                    resetLabel = dateFormatter.format(Date(bucket.resetEpochSeconds * 1000L)),
-                )
-            }
-            Text(
-                atlasText(
-                    "Aucune limite quotidienne générale n'est publiée : la limite principale est horaire. Les limites secondaires dynamiques ne peuvent pas être consultées; ralentissez si GitHub répond 403 ou 429. Ces valeurs peuvent être partagées par les appareils derrière la même adresse réseau.",
-                    "GitHub publishes no universal daily REST cap: the primary quota is hourly. Dynamic secondary limits cannot be queried; slow down if GitHub returns 403 or 429. These values can be shared by devices behind the same network address.",
-                    "لا تنشر GitHub حداً يومياً عاماً لـ REST؛ الحصة الأساسية بالساعة. لا يمكن الاستعلام عن الحدود الثانوية الديناميكية؛ خفّض الطلبات إذا أعادت GitHub الرمز 403 أو 429. قد تتشارك الأجهزة خلف عنوان الشبكة نفسه هذه القيم.",
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                atlasText("Dernière vérification : ${dateFormatter.format(Date(snapshot.fetchedAtEpochMillis))}", "Last checked: ${dateFormatter.format(Date(snapshot.fetchedAtEpochMillis))}", "آخر تحقق: ${dateFormatter.format(Date(snapshot.fetchedAtEpochMillis))}"),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun GitHubRateLimitBucketRow(label: String, bucket: GitHubRateLimitBucket, resetLabel: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            Text("${bucket.remaining} / ${bucket.limit}", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-        }
-        LinearProgressIndicator(
-            progress = { (bucket.remaining.toFloat() / bucket.limit.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(6.dp),
-            color = if (bucket.remaining == 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-            trackColor = MaterialTheme.colorScheme.surfaceVariant,
-        )
-        Text(atlasText("Réinitialisation : $resetLabel", "Resets: $resetLabel", "إعادة الضبط: $resetLabel"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

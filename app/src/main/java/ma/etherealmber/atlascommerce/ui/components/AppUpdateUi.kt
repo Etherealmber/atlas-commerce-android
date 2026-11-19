@@ -8,6 +8,7 @@ import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSize
 import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSummary
 import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateCheckCooldown
 import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateCooldownButton
+import ma.etherealmber.atlascommerce.ui.i18n.localizedGitHubLimitNotice
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
@@ -70,9 +71,25 @@ import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
 import ma.etherealmber.atlascommerce.core.update.MirrorTestTarget
+import ma.etherealmber.atlascommerce.core.update.GitHubLimitNotice
 import ma.etherealmber.atlascommerce.core.update.UpdateDownloadSource
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
+
+@Composable
+fun rememberGitHubLimitRemainingSeconds(notice: GitHubLimitNotice): Int {
+    var seconds by remember(notice.retryAtEpochSeconds) {
+        mutableStateOf(notice.remainingSeconds())
+    }
+    LaunchedEffect(notice.retryAtEpochSeconds) {
+        while (true) {
+            seconds = notice.remainingSeconds()
+            if (seconds <= 0) break
+            delay(1_000L)
+        }
+    }
+    return seconds
+}
 
 /**
  * Persistent compact update icon shown in the Top Bar when a download or update
@@ -537,6 +554,7 @@ fun SettingsUpdateCard(
     state: UpdateState,
     selectedSource: UpdateDownloadSource = UpdateDownloadSource.AUTO,
     mirrorPing: MirrorPingResult = MirrorPingResult(),
+    githubLimitNotice: GitHubLimitNotice? = null,
     onSelectSource: (UpdateDownloadSource) -> Unit = {},
     onPingMirrors: () -> Unit = {},
     onCheck: () -> Unit,
@@ -544,6 +562,8 @@ fun SettingsUpdateCard(
     onInstall: () -> Unit,
 ) {
     val context = LocalContext.current
+    val gatedOnCheck = rememberApiRefreshAction("manual-update-check", 30_000L, onCheck)
+    val gatedOnPing = rememberApiRefreshAction("update-source-test", 30_000L, onPingMirrors)
     val notificationsEnabled = runCatching {
         NotificationManagerCompat.from(context).areNotificationsEnabled()
     }.getOrDefault(true)
@@ -577,6 +597,22 @@ fun SettingsUpdateCard(
             )
         }
         Spacer(Modifier.height(8.dp))
+        githubLimitNotice?.let { notice ->
+            val retrySeconds = rememberGitHubLimitRemainingSeconds(notice)
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+            ) {
+                Text(
+                    localizedGitHubLimitNotice(retrySeconds, notice.operation, LocalAtlasLanguage.current),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
 
         if (!notificationsEnabled) {
             Surface(
@@ -667,7 +703,7 @@ fun SettingsUpdateCard(
                         MirrorLatencyChips(mirrorPing)
                     }
                     TextButton(
-                        onClick = onPingMirrors,
+                        onClick = gatedOnPing,
                         enabled = !mirrorPing.testing,
                         modifier = Modifier.align(Alignment.End),
                     ) {
@@ -684,7 +720,7 @@ fun SettingsUpdateCard(
                 ) {
                     MirrorLatencyChips(mirrorPing)
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onPingMirrors, enabled = !mirrorPing.testing) {
+                    TextButton(onClick = gatedOnPing, enabled = !mirrorPing.testing) {
                         Icon(Icons.Outlined.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text(mirrorActionLabel)
@@ -723,20 +759,19 @@ fun SettingsUpdateCard(
                 Spacer(Modifier.height(10.dp))
                 AtlasOutlinedButton(
                     text = atlasText("Vérifier les mises à jour", "Check for updates", "التحقق من التحديثات"),
-                    onClick = onCheck,
+                    onClick = gatedOnCheck,
                     icon = Icons.Outlined.Refresh,
                 )
             }
 
             UpdateState.Checking -> {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(10.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = atlasText("Recherche de mises à jour sur le serveur…", "Checking the update service…", "جارٍ التحقق من خدمة التحديثات…"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    AtlasSkeletonList(Modifier.fillMaxWidth(), rows = 1, avatarSize = 26.dp)
                 }
             }
 
@@ -763,7 +798,7 @@ fun SettingsUpdateCard(
                 Spacer(Modifier.height(10.dp))
                 AtlasOutlinedButton(
                     text = atlasText("Vérifier à nouveau"),
-                    onClick = onCheck,
+                    onClick = gatedOnCheck,
                     icon = Icons.Outlined.Refresh,
                 )
             }
@@ -872,7 +907,7 @@ fun SettingsUpdateCard(
                         } else {
                             atlasText("Réessayer", "Check again", "التحقق مجدداً")
                         },
-                        onClick = onCheck,
+                        onClick = gatedOnCheck,
                         enabled = cooldownSeconds == 0,
                         icon = if (cooldownSeconds == 0) Icons.Outlined.Refresh else null,
                     )

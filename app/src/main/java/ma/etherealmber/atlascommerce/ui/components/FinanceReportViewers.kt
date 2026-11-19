@@ -63,10 +63,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -179,20 +181,28 @@ private fun PdfPage(session: PdfRenderSession, pageIndex: Int, zoom: Float) {
         val density = androidx.compose.ui.platform.LocalDensity.current
         val pageWidth = maxWidth * zoom
         val widthPx = with(density) { pageWidth.roundToPx().coerceIn(1, 2600) }
-        val bitmap by produceState<Bitmap?>(null, session, pageIndex, widthPx) {
-            value = withContext(Dispatchers.IO) { runCatching { session.render(pageIndex, widthPx) }.getOrNull() }
+        val renderResult by produceState<Result<Bitmap>?>(null, session, pageIndex, widthPx) {
+            value = null
+            value = withContext(Dispatchers.IO) { runCatching { session.render(pageIndex, widthPx) } }
         }
         val size = session.dimensions[pageIndex]
+        val pageModifier = Modifier.width(pageWidth).aspectRatio(size.first.toFloat() / size.second.coerceAtLeast(1))
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.Center,
         ) {
-            if (bitmap == null) {
-                Box(Modifier.width(pageWidth).aspectRatio(size.first.toFloat() / size.second.coerceAtLeast(1)), contentAlignment = Alignment.Center) {
+            when {
+                renderResult == null -> Box(pageModifier.background(Color.White), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
-            } else {
-                bitmap?.let { renderedBitmap ->
+                renderResult?.isFailure == true -> Box(pageModifier.background(MaterialTheme.colorScheme.surfaceContainerLow).padding(16.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        atlasText("Impossible d'afficher cette page. Fermez puis rouvrez le rapport.", "This page could not be rendered. Close and reopen the report.", "تعذر عرض هذه الصفحة. أغلق التقرير ثم افتحه مجدداً."),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                else -> renderResult?.getOrNull()?.let { renderedBitmap ->
                     Image(
                         bitmap = renderedBitmap.asImageBitmap(),
                         contentDescription = atlasText(
@@ -200,7 +210,7 @@ private fun PdfPage(session: PdfRenderSession, pageIndex: Int, zoom: Float) {
                             "Report page ${pageIndex + 1}, zoom ${(zoom * 100).toInt()} percent",
                             "صفحة التقرير ${pageIndex + 1}، التكبير ${(zoom * 100).toInt()} بالمئة",
                         ),
-                        modifier = Modifier.width(pageWidth).aspectRatio(size.first.toFloat() / size.second.coerceAtLeast(1)),
+                        modifier = pageModifier.background(Color.White),
                     )
                 }
             }
@@ -292,7 +302,9 @@ fun CombinedReportWebViewDialog(
     val activeUrl = remember(url, activeKey, activeSection) {
         if (activeKey == "summary" || activeSection == null) url else reportSectionUrl(originUri, activeSection)
     }
-    var webView by remember(url) { mutableStateOf<WebView?>(null) }
+    var webView by remember(activeUrl) { mutableStateOf<WebView?>(null) }
+    var webPageLoading by remember(activeUrl) { mutableStateOf(true) }
+    var webPageError by remember(activeUrl) { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -335,47 +347,114 @@ fun CombinedReportWebViewDialog(
                         Text(atlasText("Lien de rapport non sécurisé refusé."), color = MaterialTheme.colorScheme.error)
                     }
                 } else {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { viewContext ->
-                            WebView(viewContext).apply {
-                                webView = this
-                                settings.javaScriptEnabled = false
-                                settings.domStorageEnabled = false
-                                settings.apply {
-                                    allowContentAccess = false
-                                    allowFileAccess = false
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        key(activeUrl) {
+                            AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { viewContext ->
+                                WebView(viewContext).apply {
+                                    webView = this
+                                    settings.javaScriptEnabled = false
+                                    settings.domStorageEnabled = false
+                                    settings.apply {
+                                        allowContentAccess = false
+                                        allowFileAccess = false
+                                    }
+                                    settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
+                                    settings.saveFormData = false
+                                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                                    webViewClient = object : WebViewClient() {
+                                        override fun onPageStarted(view: WebView, pageUrl: String?, favicon: android.graphics.Bitmap?) {
+                                            webPageLoading = true
+                                            webPageError = false
+                                        }
+
+                                        override fun onPageFinished(view: WebView, pageUrl: String?) {
+                                            webPageLoading = false
+                                        }
+
+                                        override fun onReceivedError(
+                                            view: WebView,
+                                            request: WebResourceRequest,
+                                            error: android.webkit.WebResourceError,
+                                        ) {
+                                            if (request.isForMainFrame) {
+                                                webPageLoading = false
+                                                webPageError = true
+                                            }
+                                        }
+
+                                        override fun onReceivedHttpError(
+                                            view: WebView,
+                                            request: WebResourceRequest,
+                                            errorResponse: android.webkit.WebResourceResponse,
+                                        ) {
+                                            if (request.isForMainFrame) {
+                                                webPageLoading = false
+                                                webPageError = true
+                                            }
+                                        }
+
+                                        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                                            val destination = request.url
+                                            val destinationPort = destination.port.takeIf { it > 0 } ?: if (destination.scheme == "https") 443 else 80
+                                            val expectedPort = originUri.port.takeIf { it > 0 } ?: if (originUri.scheme == "https") 443 else 80
+                                            val sameOrigin = destination.scheme == originUri.scheme &&
+                                                destination.host?.equals(permittedHost, ignoreCase = true) == true &&
+                                                destinationPort == expectedPort
+                                            return !sameOrigin
+                                        }
+                                    }
+                                    loadUrl(activeUrl)
                                 }
-                                settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
-                                settings.saveFormData = false
-                                settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                                webViewClient = object : WebViewClient() {
-                                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                                        val destination = request.url
-                                        val destinationPort = destination.port.takeIf { it > 0 } ?: if (destination.scheme == "https") 443 else 80
-                                        val expectedPort = originUri.port.takeIf { it > 0 } ?: if (originUri.scheme == "https") 443 else 80
-                                        val sameOrigin = destination.scheme == originUri.scheme &&
-                                            destination.host?.equals(permittedHost, ignoreCase = true) == true &&
-                                            destinationPort == expectedPort
-                                        return !sameOrigin
+                            },
+                            update = { view ->
+                                webView = view
+                                if (view.url != activeUrl) view.loadUrl(activeUrl)
+                            },
+                            onRelease = { view ->
+                                webView = null
+                                view.stopLoading()
+                                view.loadUrl("about:blank")
+                                view.clearHistory()
+                                view.clearCache(true)
+                                view.destroy()
+                            },
+                            )
+                        }
+                        if (webPageLoading) {
+                            Surface(
+                                modifier = Modifier.align(Alignment.Center),
+                                shape = MaterialTheme.shapes.large,
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                tonalElevation = 3.dp,
+                            ) {
+                                Row(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(atlasText("Chargement du rapport…", "Loading report…", "جارٍ تحميل التقرير…"), style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                        if (webPageError) {
+                            Surface(
+                                modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                                shape = MaterialTheme.shapes.large,
+                                color = MaterialTheme.colorScheme.errorContainer,
+                            ) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text(
+                                        atlasText("Le serveur n'a pas pu afficher cette rubrique. Réessayez ou choisissez une autre rubrique.", "The server could not display this section. Retry or choose another section.", "تعذر على الخادم عرض هذا القسم. أعد المحاولة أو اختر قسماً آخر."),
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Button(onClick = { webView?.reload() }, enabled = webView != null) {
+                                        Text(atlasText("Réessayer", "Try again", "أعد المحاولة"))
                                     }
                                 }
-                                loadUrl(activeUrl)
                             }
-                        },
-                        update = { view ->
-                            webView = view
-                            if (view.url != activeUrl) view.loadUrl(activeUrl)
-                        },
-                        onRelease = { view ->
-                            webView = null
-                            view.stopLoading()
-                            view.loadUrl("about:blank")
-                            view.clearHistory()
-                            view.clearCache(true)
-                            view.destroy()
-                        },
-                    )
+                        }
+                    }
                 }
             }
         }

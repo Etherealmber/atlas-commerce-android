@@ -143,18 +143,6 @@ data class GitHubReleaseDto(
     @Json(name = "html_url") val htmlUrl: String? = null,
 )
 
-@JsonClass(generateAdapter = true)
-data class GitHubRateLimitDto(
-    val resources: Map<String, GitHubRateLimitBucketDto> = emptyMap(),
-)
-
-@JsonClass(generateAdapter = true)
-data class GitHubRateLimitBucketDto(
-    val limit: Int = 0,
-    val remaining: Int = 0,
-    val reset: Long = 0L,
-)
-
 // ---------------------------------------------------------------------------
 // Authentication, profile & QR / connected devices
 // ---------------------------------------------------------------------------

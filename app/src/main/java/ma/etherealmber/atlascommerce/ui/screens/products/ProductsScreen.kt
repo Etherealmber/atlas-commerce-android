@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.products
 
+import ma.etherealmber.atlascommerce.ui.components.rememberApiRefreshAction
+
 import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
@@ -116,6 +118,8 @@ fun ProductsScreen(
 ) {
     val dockPadding = LocalAtlasFloatingDockPadding.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val refreshProducts = rememberApiRefreshAction("products-list", 5_000L, viewModel::refresh)
+    val refreshStockRequests = rememberApiRefreshAction("stock-adjustment-requests", 5_000L, viewModel::loadStockAdjustmentRequests)
     val listLayout by viewModel.listLayout.collectAsStateWithLifecycle()
     val density = Atlas.density
     var selected by remember { mutableStateOf<ProductDto?>(null) }
@@ -214,7 +218,7 @@ fun ProductsScreen(
                                 Icon(if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send, contentDescription = if (isAdmin) atlasText("Créer un produit") else atlasText("Demander un produit à l'Admin"))
                             }
                             IconButton(onClick = onOpenScan) { Icon(Icons.Outlined.QrCodeScanner, contentDescription = atlasText("Scanner un code-barres")) }
-                            IconButton(onClick = viewModel::refresh) { Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser")) }
+                            IconButton(onClick = refreshProducts) { Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser")) }
                         }
                     }
                 } else {
@@ -232,7 +236,7 @@ fun ProductsScreen(
                             Icon(if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send, contentDescription = if (isAdmin) atlasText("Créer un produit") else atlasText("Demander un produit à l'Admin"))
                         }
                         IconButton(onClick = onOpenScan) { Icon(Icons.Outlined.QrCodeScanner, contentDescription = atlasText("Scanner un code-barres")) }
-                        IconButton(onClick = viewModel::refresh) { Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser")) }
+                        IconButton(onClick = refreshProducts) { Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser")) }
                     }
                 }
             }
@@ -410,7 +414,7 @@ fun ProductsScreen(
                     Column(Modifier.padding(horizontal = density.screenPadding)) {
                         AtlasErrorCard(
                             message = atlasNotice(state.stockAdjustmentError.orEmpty(), LocalAtlasLanguage.current),
-                            onRetry = viewModel::loadStockAdjustmentRequests,
+                            onRetry = refreshStockRequests,
                         )
                     }
 
@@ -464,7 +468,7 @@ fun ProductsScreen(
                 Column(Modifier.padding(horizontal = density.screenPadding)) {
                     AtlasErrorCard(
                         message = atlasNotice(state.productRequestsError.orEmpty(), LocalAtlasLanguage.current),
-                        onRetry = viewModel::refresh,
+                        onRetry = refreshProducts,
                     )
                 }
 
@@ -480,7 +484,7 @@ fun ProductsScreen(
 
             !state.error.isNullOrBlank() && state.filter != ProductsViewModel.FilterMode.REQUESTS && state.visibleProducts.isEmpty() -> {
                 Column(Modifier.padding(horizontal = density.screenPadding)) {
-                    AtlasErrorCard(message = atlasNotice(state.error.orEmpty(), LocalAtlasLanguage.current), onRetry = viewModel::refresh)
+                    AtlasErrorCard(message = atlasNotice(state.error.orEmpty(), LocalAtlasLanguage.current), onRetry = refreshProducts)
                 }
             }
 

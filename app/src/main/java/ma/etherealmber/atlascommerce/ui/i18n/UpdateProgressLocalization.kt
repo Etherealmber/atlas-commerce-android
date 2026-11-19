@@ -1,9 +1,51 @@
 package ma.etherealmber.atlascommerce.ui.i18n
 
 import ma.etherealmber.atlascommerce.core.AppLanguage
+import ma.etherealmber.atlascommerce.core.update.GitHubLimitedOperation
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import java.text.NumberFormat
 import java.util.Locale
+
+fun localizedGitHubLimitNotice(seconds: Int, operation: GitHubLimitedOperation, language: AppLanguage): String {
+    val wait = when {
+        seconds >= 60 -> {
+            val minutes = (seconds + 59) / 60
+            when (language) {
+                AppLanguage.FRENCH -> "$minutes min"
+                AppLanguage.ENGLISH -> "$minutes min"
+                AppLanguage.ARABIC -> "$minutes د"
+            }
+        }
+        else -> when (language) {
+            AppLanguage.FRENCH -> "$seconds s"
+            AppLanguage.ENGLISH -> "$seconds sec"
+            AppLanguage.ARABIC -> "$seconds ث"
+        }
+    }
+    return when (operation) {
+        GitHubLimitedOperation.RELEASE_HISTORY -> when (language) {
+            AppLanguage.FRENCH -> "Limite temporaire de GitHub atteinte. Les notes de version disponibles localement restent affichées et les mises à jour utilisent Atlas API. Réessayez GitHub dans $wait."
+            AppLanguage.ENGLISH -> "GitHub’s temporary request limit was reached. Locally available release notes remain visible and updates use Atlas API. Try GitHub again in $wait."
+            AppLanguage.ARABIC -> "تم بلوغ حد GitHub المؤقت. تظل ملاحظات الإصدار المتاحة محلياً ظاهرة وتستخدم التحديثات Atlas API. أعد المحاولة بعد $wait."
+        }
+        GitHubLimitedOperation.UPDATE_CHECK -> when (language) {
+            AppLanguage.FRENCH -> "Limite temporaire de GitHub atteinte. Atlas API est utilisé pour les mises à jour. Réessayez GitHub dans $wait."
+            AppLanguage.ENGLISH -> "GitHub’s temporary request limit was reached. Atlas API is being used for updates. Try GitHub again in $wait."
+            AppLanguage.ARABIC -> "تم بلوغ حد GitHub المؤقت. تُستخدم Atlas API للتحديثات. أعد المحاولة بعد $wait."
+        }
+        GitHubLimitedOperation.SOURCE_TEST -> when (language) {
+            AppLanguage.FRENCH -> "GitHub est temporairement limité. Atlas API reste utilisé pour les mises à jour. Réessayez GitHub dans $wait."
+            AppLanguage.ENGLISH -> "GitHub is temporarily rate-limited. Atlas API remains available for updates. Try GitHub again in $wait."
+            AppLanguage.ARABIC -> "تم تقييد GitHub مؤقتاً. تظل Atlas API متاحة للتحديثات. أعد المحاولة بعد $wait."
+        }
+    }
+}
+
+fun localizedApiRefreshWait(seconds: Int, language: AppLanguage): String = when (language) {
+    AppLanguage.FRENCH -> "Trop de demandes d’actualisation. Réessayez dans $seconds s."
+    AppLanguage.ENGLISH -> "Too many refresh requests. Please slow down and try again in $seconds sec."
+    AppLanguage.ARABIC -> "طلبات التحديث كثيرة. يرجى التمهل والمحاولة بعد $seconds ث."
+}
 
 fun localizedUpdateCheckCooldown(seconds: Int, language: AppLanguage): String = when (language) {
     AppLanguage.FRENCH -> if (seconds > 0) "La vérification est limitée. Réessayez dans $seconds s." else "Vous pouvez vérifier les mises à jour maintenant."

@@ -1,5 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.employees
 
+import ma.etherealmber.atlascommerce.ui.components.rememberApiRefreshAction
+
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
@@ -87,6 +89,7 @@ fun EmployeesScreen(
 ) {
     val dockPadding = LocalAtlasFloatingDockPadding.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val refreshEmployees = rememberApiRefreshAction("employees-payroll", 30_000L, viewModel::refreshFinance)
     val isAdmin = Roles.isAdmin(user.role)
     val language = LocalAtlasLanguage.current
     val locale = when (language) { AppLanguage.FRENCH -> Locale.FRANCE; AppLanguage.ENGLISH -> Locale.UK; AppLanguage.ARABIC -> Locale.forLanguageTag("ar-MA") }
@@ -234,7 +237,7 @@ fun EmployeesScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    IconButton(onClick = viewModel::refreshFinance, enabled = !state.financeLoading) {
+                    IconButton(onClick = refreshEmployees, enabled = !state.financeLoading) {
                         if (state.refreshing || state.financeLoading) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         } else {
@@ -329,7 +332,7 @@ fun EmployeesScreen(
 
         state.financeError?.let { error ->
             item(key = "employees_error") {
-                AtlasErrorCard(title = atlasText("Données indisponibles"), message = atlasNotice(error, language), onRetry = viewModel::refreshFinance)
+                AtlasErrorCard(title = atlasText("Données indisponibles"), message = atlasNotice(error, language), onRetry = refreshEmployees)
             }
         }
 
