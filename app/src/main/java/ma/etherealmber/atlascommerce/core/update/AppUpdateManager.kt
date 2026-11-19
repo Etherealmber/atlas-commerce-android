@@ -42,6 +42,7 @@ import ma.etherealmber.atlascommerce.data.model.GitHubReleaseDto
 import ma.etherealmber.atlascommerce.di.ApplicationScope
 import ma.etherealmber.atlascommerce.di.ProbeClient
 import ma.etherealmber.atlascommerce.di.UpdateClient
+import okhttp3.CertificatePinner
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -352,13 +353,20 @@ class AppUpdateManager internal constructor(
         _githubRateLimitsError.value = false
         githubRateLimitJob = scope.launch(ioDispatcher) {
             try {
+                val githubCertificatePinner = CertificatePinner.Builder()
+                    .add("api.github.com", "sha256/1EkvzibgiE3k+xdsv+7UU5vhV8kdFCQiUiFdMX5Guuk=")
+                    .add("api.github.com", "sha256/Pi2X5K2M4S5P6xwM3D7Yw8ofu5pY88MtXgFp0psNTCk=")
+                    .build()
+                val pinnedUpdateProbeClient = updateProbeClient.newBuilder()
+                    .certificatePinner(githubCertificatePinner)
+                    .build()
                 val request = Request.Builder()
                     .url(UpdateDefaults.GITHUB_RATE_LIMIT_API_URL)
                     .get()
                     .header("Accept", "application/vnd.github+json")
                     .header("User-Agent", "Atlas-Android-Updater")
                     .build()
-                val parsed = updateProbeClient.newCall(request).execute().use { response ->
+                val parsed = pinnedUpdateProbeClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) error("GitHub rate-limit request failed: ${response.code}")
                     moshi.adapter(GitHubRateLimitDto::class.java).fromJson(response.body?.string().orEmpty())
                         ?: error("GitHub rate-limit response was empty")
