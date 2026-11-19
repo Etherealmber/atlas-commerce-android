@@ -402,7 +402,7 @@ jobs:
           CDN1_LATEST_URL="$CDN1_LATEST_URL" GITHUB_VERSIONED_URL="$GITHUB_VERSIONED_URL" \
           PRIMARY_APK_URL="$PRIMARY_APK_URL" PUBLISHED_AT="$PUBLISHED_AT" python3 - <<'PYEOF'
           import base64, json, os, re, subprocess
-          from scripts.release_notes import format_github_release_body, format_in_app_notes, group_release_commits
+          from scripts.release_notes import format_github_release_body, format_in_app_notes, group_release_commits, should_generate_github_release_notes
 
           version_name = os.environ["VERSION_NAME"].strip()
           version_code = int(os.environ["VERSION_CODE"])
@@ -434,6 +434,35 @@ jobs:
           if is_bare_version(custom_raw):
               custom_raw = ""
 
+          build_commit = sh("git", "rev-parse", "HEAD")
+          try:
+              remote_tag_check = subprocess.run(
+                  ["git", "ls-remote", "origin", f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}"],
+                  text=True,
+                  capture_output=True,
+                  timeout=30,
+              )
+          except Exception:
+              remote_tag_check = None
+          remote_tag_refs = {}
+          if remote_tag_check is not None and remote_tag_check.returncode == 0:
+              for line in remote_tag_check.stdout.splitlines():
+                  fields = line.split(None, 1)
+                  if len(fields) == 2:
+                      commit, ref = fields
+                      remote_tag_refs[ref.strip()] = commit.strip()
+          remote_tag_commit = remote_tag_refs.get(f"refs/tags/{tag}^{{}}", remote_tag_refs.get(f"refs/tags/{tag}"))
+          can_generate_github_notes = (
+              remote_tag_check is not None
+              and remote_tag_check.returncode == 0
+              and should_generate_github_release_notes(remote_tag_commit, build_commit)
+          )
+          if remote_tag_check is None or remote_tag_check.returncode != 0:
+              print("Could not verify the remote release tag; using commit-based fallback notes.")
+          elif remote_tag_commit and remote_tag_commit.lower() != build_commit.lower():
+              print("Remote release tag points to a different commit; using commit-based fallback notes.")
+          compare_target = tag if can_generate_github_notes else build_commit[:12]
+
           tags = [t for t in sh("git", "tag", "--sort=-creatordate").splitlines() if t.strip()]
           prev_tag = None
           for t in tags:
@@ -447,10 +476,10 @@ jobs:
                       prev_tag = t
                       break
 
-          rev_range = f"{prev_tag}..HEAD" if prev_tag else "HEAD~8..HEAD"
+          rev_range = f"{prev_tag}..{build_commit}" if prev_tag else f"{build_commit}~8..{build_commit}"
           raw_log = sh("git", "log", rev_range, "--no-merges", "--format=%H%x1f%s%x1f%b%x1e")
           if not raw_log:
-              raw_log = sh("git", "log", "-n", "5", "--no-merges", "--format=%H%x1f%s%x1f%b%x1e")
+              raw_log = sh("git", "log", build_commit, "-n", "5", "--no-merges", "--format=%H%x1f%s%x1f%b%x1e")
 
           release_groups = group_release_commits(raw_log)
           visible_groups = {name: values for name, values in release_groups.items() if values}
@@ -470,14 +499,16 @@ jobs:
               for item in items:
                   fallback_lines.append(f"* {item.markdown(repo_base_url)}")
           if prev_tag:
-              fallback_lines += ["", f"**Full Changelog**: [{prev_tag}...{tag}]({repo_base_url}/compare/{prev_tag}...{tag})"]
+              fallback_lines += ["", f"**Full Changelog**: [{prev_tag}...{compare_target}]({repo_base_url}/compare/{prev_tag}...{compare_target})"]
           generated_notes = "\n".join(fallback_lines).strip()
           try:
+              if not can_generate_github_notes:
+                  raise RuntimeError("remote tag does not match the build commit or could not be verified")
               generate_args = [
                   "gh", "api", "--method", "POST",
                   f"repos/{repo}/releases/generate-notes",
                   "-f", f"tag_name={tag}",
-                  "-f", f"target_commitish={os.environ.get('GITHUB_SHA', 'HEAD')}",
+                  "-f", f"target_commitish={build_commit}",
               ]
               if prev_tag:
                   generate_args += ["-f", f"previous_tag_name={prev_tag}"]

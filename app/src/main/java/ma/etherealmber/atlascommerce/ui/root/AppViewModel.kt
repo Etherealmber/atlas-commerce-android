@@ -180,6 +180,9 @@ class AppViewModel @Inject constructor(
     val appLanguage: StateFlow<AppLanguage> = (applicationContext as ma.etherealmber.atlascommerce.AtlasApp).activeLanguage
     val appLanguageFollowsSystem: StateFlow<Boolean> = preferences.appLanguageFollowsSystem
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val appLanguageFollowsSystemLoaded: StateFlow<Boolean> = preferences.appLanguageFollowsSystem
+        .map { true }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
     private val _languageRestartNotice = MutableStateFlow<AppLanguage?>(null)
     val languageRestartNotice = _languageRestartNotice.asStateFlow()
     private val _languageSaveFailed = MutableStateFlow(false)
@@ -775,7 +778,9 @@ class AppViewModel @Inject constructor(
     }
 
     fun refreshSystemAppLanguage(language: AppLanguage) {
-        if (appLanguageFollowsSystem.value) {
+        // StateFlow's initial `true` is only a placeholder; wait for persisted appearance and
+        // language preferences before interpreting it as an actual system-language choice.
+        if (appearanceLoaded.value && appLanguageFollowsSystemLoaded.value && appLanguageFollowsSystem.value) {
             (applicationContext as ma.etherealmber.atlascommerce.AtlasApp).activateSavedLanguage(language)
         }
     }

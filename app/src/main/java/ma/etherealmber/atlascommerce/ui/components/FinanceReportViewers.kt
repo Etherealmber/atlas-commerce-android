@@ -75,7 +75,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.io.Closeable
 import java.io.File
@@ -83,6 +85,7 @@ import java.text.DateFormat
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Date
+import java.util.Locale
 
 @Composable
 fun FinancePdfViewerDialog(
@@ -95,7 +98,8 @@ fun FinancePdfViewerDialog(
     BackHandler(onBack = onDismiss)
     var zoom by remember(file.absolutePath) { mutableStateOf(1f) }
     val loadResult by produceState<Result<PdfRenderSession>?>(null, file.absolutePath) {
-        value = withContext(Dispatchers.IO) { runCatching { PdfRenderSession.open(file) } }
+        value = null
+        value = openPdfRenderSession(file)
     }
     val session = loadResult?.getOrNull()
     DisposableEffect(session) {
@@ -522,7 +526,7 @@ fun FinanceReportHistoryDialog(
                                         ) {
                                             Column(Modifier.weight(1f)) {
                                                 Text(
-                                                    financeReportPeriodTitle(selectedReport),
+                                                    financeReportTitle(selectedReport),
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.SemiBold,
                                                     maxLines = 1,
@@ -598,7 +602,7 @@ private fun FinanceReportHistoryRow(file: File, selected: Boolean, onClick: () -
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    financeReportPeriodTitle(file),
+                    financeReportTitle(file),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -622,15 +626,26 @@ private fun FinanceReportHistoryRow(file: File, selected: Boolean, onClick: () -
 }
 
 @Composable
-private fun financeReportPeriodTitle(file: File): String {
+internal fun financeReportTitle(file: File): String =
+    financeReportTitle(file, LocalAtlasLanguage.current)
+
+internal fun financeMonthLabel(period: String, locale: Locale): String = runCatching {
+    YearMonth.parse(period)
+        .format(DateTimeFormatter.ofPattern("LLLL yyyy", locale))
+        .replaceFirstChar { it.titlecase(locale) }
+}.getOrDefault(period)
+
+internal fun financeReportTitle(file: File, language: AppLanguage): String {
     val period = Regex("^rapport-mensuel-(\\d{4}-(?:0[1-9]|1[0-2]))(?:-\\d+)?$")
         .find(file.nameWithoutExtension)?.groupValues?.getOrNull(1)
-    val locale = atlasLocale()
-    val label = period?.let { raw ->
-        runCatching { YearMonth.parse(raw).format(DateTimeFormatter.ofPattern("LLLL yyyy", locale)) }
-            .getOrNull()
-    } ?: file.nameWithoutExtension
-    return atlasText("Relevé mensuel · $label", "Monthly statement · $label", "كشف شهري · $label")
+    val locale = Locale.forLanguageTag(language.tag)
+    val label = period?.let { financeMonthLabel(it, locale) } ?: file.nameWithoutExtension
+    val prefix = when (language) {
+        AppLanguage.FRENCH -> "Relevé mensuel"
+        AppLanguage.ENGLISH -> "Monthly statement"
+        AppLanguage.ARABIC -> "كشف شهري"
+    }
+    return "$prefix · $label"
 }
 
 @Composable
@@ -640,10 +655,27 @@ private fun financeReportCreatedAt(file: File): String {
     return atlasText("Créé le $createdAt", "Created $createdAt", "أُنشئ في $createdAt")
 }
 
+
+private suspend fun openPdfRenderSession(file: File): Result<PdfRenderSession> {
+    var openedSession: PdfRenderSession? = null
+    return try {
+        val session = withContext(Dispatchers.IO) {
+            PdfRenderSession.open(file).also { openedSession = it }
+        }
+        Result.success(session)
+    } catch (cancelled: CancellationException) {
+        withContext(NonCancellable + Dispatchers.IO) { openedSession?.closeQuietly() }
+        throw cancelled
+    } catch (error: Exception) {
+        Result.failure(error)
+    }
+}
+
 @Composable
 private fun FinanceReportInlinePreview(file: File, modifier: Modifier = Modifier) {
     val result by produceState<Result<PdfRenderSession>?>(null, file.absolutePath) {
-        value = withContext(Dispatchers.IO) { runCatching { PdfRenderSession.open(file) } }
+        value = null
+        value = openPdfRenderSession(file)
     }
     val session = result?.getOrNull()
     DisposableEffect(session) {

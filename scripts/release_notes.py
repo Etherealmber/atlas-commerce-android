@@ -92,6 +92,11 @@ def format_in_app_notes(groups: dict[str, list[ReleaseNoteItem]], limit: int = 4
     return note if len(note) <= limit else note[: limit - 1].rstrip() + "…"
 
 
+def should_generate_github_release_notes(remote_tag_commit: str | None, build_commit: str) -> bool:
+    """Avoid GitHub's tag-based generator when an existing tag points at different code."""
+    return remote_tag_commit is None or remote_tag_commit.strip().lower() == build_commit.strip().lower()
+
+
 def format_github_release_body(
     *,
     tag: str,

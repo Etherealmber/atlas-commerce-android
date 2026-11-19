@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -96,6 +97,8 @@ import ma.etherealmber.atlascommerce.ui.components.FinanceReportHistoryDialog
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportActionsDialog
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelection
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelectionDialog
+import ma.etherealmber.atlascommerce.ui.components.financeMonthLabel as sharedFinanceMonthLabel
+import ma.etherealmber.atlascommerce.ui.components.financeReportTitle as sharedFinanceReportTitle
 import ma.etherealmber.atlascommerce.ui.components.StatusChip
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
@@ -132,11 +135,24 @@ fun HomeScreen(
     var showCombinedReportConfirm by remember { mutableStateOf(false) }
     var showFinanceReportHistory by remember { mutableStateOf(false) }
     var financeReportHistory by remember(user.scopeIdentity) { mutableStateOf<List<java.io.File>>(emptyList()) }
-    var financeReportHistoryLoading by remember { mutableStateOf(false) }
+    var financeReportHistoryLoading by remember(user.scopeIdentity) { mutableStateOf(false) }
 
+    val activeScope = rememberUpdatedState(user.scopeIdentity)
+    var latestFinanceHistoryRequest by remember { mutableStateOf(0L) }
     val refreshFinanceReportHistory = {
+        val requestScope = user.scopeIdentity
+        val requestId = ++latestFinanceHistoryRequest
         financeReportHistoryLoading = true
         viewModel.loadFinanceReportHistory(context.cacheDir) { result ->
+            if (!isCurrentFinanceReportHistoryRequest(
+                    requestId = requestId,
+                    latestRequestId = latestFinanceHistoryRequest,
+                    requestedScope = requestScope,
+                    activeScope = activeScope.value,
+                )
+            ) {
+                return@loadFinanceReportHistory
+            }
             financeReportHistoryLoading = false
             when (result) {
                 is ApiResult.Failure -> {
@@ -1168,25 +1184,24 @@ private fun FinancePeriodPicker(
     }
 }
 
+internal fun isCurrentFinanceReportHistoryRequest(
+    requestId: Long,
+    latestRequestId: Long,
+    requestedScope: String,
+    activeScope: String,
+): Boolean = requestId == latestRequestId && requestedScope == activeScope
+
 private fun financeCurrentPeriod(timezone: String): String = runCatching {
     YearMonth.now(ZoneId.of(timezone)).toString()
 }.getOrElse {
     YearMonth.now(ZoneId.of("Africa/Casablanca")).toString()
 }
 
-private fun financeMonthLabel(period: String, locale: Locale): String = runCatching {
-    YearMonth.parse(period)
-        .format(DateTimeFormatter.ofPattern("LLLL yyyy", locale))
-        .replaceFirstChar { it.titlecase(locale) }
-}.getOrDefault(period)
+private fun financeMonthLabel(period: String, locale: Locale): String =
+    sharedFinanceMonthLabel(period, locale)
 
 @Composable
-private fun financeReportTitle(file: java.io.File): String {
-    val period = Regex("^rapport-mensuel-(\\d{4}-(?:0[1-9]|1[0-2]))(?:-\\d+)?$")
-        .find(file.nameWithoutExtension)?.groupValues?.getOrNull(1)
-    val label = period?.let { financeMonthLabel(it, atlasLocale()) } ?: file.nameWithoutExtension
-    return atlasText("Relevé mensuel · $label", "Monthly statement · $label", "كشف شهري · $label")
-}
+private fun financeReportTitle(file: java.io.File): String = sharedFinanceReportTitle(file)
 
 private fun financeReportExportFileName(file: java.io.File): String {
     val period = Regex("^rapport-mensuel-(\\d{4}-(?:0[1-9]|1[0-2]))(?:-\\d+)?$")

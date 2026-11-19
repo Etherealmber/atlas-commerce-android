@@ -1,6 +1,6 @@
 import unittest
 
-from release_notes import format_github_release_body, format_in_app_notes, group_release_commits
+from release_notes import format_github_release_body, format_in_app_notes, group_release_commits, should_generate_github_release_notes
 
 
 class ReleaseNotesTest(unittest.TestCase):
@@ -33,6 +33,12 @@ class ReleaseNotesTest(unittest.TestCase):
         self.assertTrue(note.startswith("Features:"))
         self.assertLessEqual(len(note), 80)
         self.assertIn("ffffff", note)
+
+    def test_github_generation_only_uses_new_or_matching_remote_tags(self):
+        build_commit = "a" * 40
+        self.assertTrue(should_generate_github_release_notes(None, build_commit))
+        self.assertTrue(should_generate_github_release_notes(build_commit.upper(), build_commit))
+        self.assertFalse(should_generate_github_release_notes("b" * 40, build_commit))
 
     def test_github_release_body_uses_signed_apk_template_and_preserves_github_notes(self):
         generated = (

@@ -386,6 +386,14 @@ fun MainShell(
             setTabName(target.name)
         }
     }
+    val openDataCacheManager: () -> Unit = {
+        releaseHistorySubpageActive = false
+        showDataCacheManagerDialog = true
+    }
+    val closeDataCacheManager: () -> Unit = {
+        showDataCacheManagerDialog = false
+        releaseHistorySubpageActive = false
+    }
     val openNotificationsForLayout: () -> Unit = {
         if (tabletWindow) switchTab(MainTab.NOTIFICATIONS)
         else onOpenNotifications()
@@ -421,7 +429,7 @@ fun MainShell(
             AgentNavigationDestination.NOTIFICATIONS -> openNotificationsForLayout()
             AgentNavigationDestination.SETTINGS -> switchTab(MainTab.SETTINGS)
             AgentNavigationDestination.PROFILE -> switchTab(MainTab.PROFILE)
-            AgentNavigationDestination.DATA_STORAGE -> showDataCacheManagerDialog = true
+            AgentNavigationDestination.DATA_STORAGE -> openDataCacheManager()
         }
     }
 
@@ -454,7 +462,7 @@ fun MainShell(
     )
     if (showDataCacheManagerDialog && !useRail) {
         DataCacheManagerDialog(
-            onDismiss = { showDataCacheManagerDialog = false },
+            onDismiss = closeDataCacheManager,
             onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
             appViewModel = appViewModel,
         )
@@ -577,7 +585,7 @@ fun MainShell(
                             MainTab.PROFILE -> {
                                 // On tablets these destinations already live in the sidebar.
                                 if (!useRail) {
-                                    IconButton(onClick = { showDataCacheManagerDialog = true }) {
+                                    IconButton(onClick = openDataCacheManager) {
                                         Icon(
                                             imageVector = Icons.Outlined.Inventory2,
                                             contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
@@ -675,7 +683,7 @@ fun MainShell(
                     notificationCount = notificationCount,
                     updateState = updateState,
                     expanded = sidebarExpanded,
-                    onOpenDataStorageManager = { showDataCacheManagerDialog = true },
+                    onOpenDataStorageManager = openDataCacheManager,
                     dataStorageSelected = showDataCacheManagerDialog,
                     canCollapse = sidebarCanExpand,
                     onToggleCollapse = { onSidebarCollapsedChange(!sidebarCollapsed) },
@@ -734,7 +742,7 @@ fun MainShell(
                     }
                     if (useRail && currentPage.isDataStorage) {
                         DataCacheManagerDialog(
-                            onDismiss = { showDataCacheManagerDialog = false },
+                            onDismiss = closeDataCacheManager,
                             onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
                             appViewModel = appViewModel,
                             tabletSidebarWidth = 0.dp,

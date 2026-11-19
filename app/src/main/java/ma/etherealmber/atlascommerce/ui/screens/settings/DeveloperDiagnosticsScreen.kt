@@ -36,7 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ma.etherealmber.atlascommerce.BuildConfig
@@ -48,6 +50,7 @@ import ma.etherealmber.atlascommerce.core.diagnostics.DiagnosticReporter
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.diagnostics.AnalyticsConsent
+import ma.etherealmber.atlascommerce.core.diagnostics.resolveAnalyticsConsentUi
 import ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
@@ -73,6 +76,9 @@ fun DeveloperDiagnosticsScreen(
     val crashReportsEnabled = crashStatus.collectionEnabled
     val analyticsConfigured = AnalyticsConsent.isConfigured(context)
     var analyticsEnabled by remember(analyticsConfigured) { mutableStateOf(AnalyticsConsent.isEnabled(context)) }
+    var analyticsConsentInFlight by remember { mutableStateOf(false) }
+    var analyticsConsentError by remember { mutableStateOf(false) }
+    var analyticsConsentRetry by remember { mutableStateOf<Boolean?>(null) }
     val developerMode by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     val cachedProductCount by appViewModel.cachedProductCount.collectAsStateWithLifecycle()
     val localStorage by appViewModel.localStorageSummary.collectAsStateWithLifecycle()
@@ -105,6 +111,46 @@ fun DeveloperDiagnosticsScreen(
     val updatePackageRemoved = atlasText("Fichier de mise à jour supprimé.", "Downloaded update removed.", "تم حذف ملف التحديث المُنزّل.")
     val updatePackageRemoveFailed = atlasText("Impossible de supprimer le fichier de mise à jour maintenant.", "Could not remove the downloaded update right now.", "تعذّر حذف التحديث المُنزّل الآن.")
     val scope = rememberCoroutineScope()
+    fun updateAnalyticsConsent(requestedEnabled: Boolean) {
+        if (analyticsConsentInFlight) return
+        analyticsConsentInFlight = true
+        analyticsConsentError = false
+        analyticsConsentRetry = requestedEnabled
+        scope.launch {
+            try {
+                val saved = withContext(Dispatchers.IO) {
+                    AnalyticsConsent.setEnabled(context, requestedEnabled)
+                }
+                val nowEnabled = withContext(Dispatchers.IO) { AnalyticsConsent.isEnabled(context) }
+                withContext(Dispatchers.Main.immediate) {
+                    val resolution = resolveAnalyticsConsentUi(
+                        previousEnabled = analyticsEnabled,
+                        requestedEnabled = requestedEnabled,
+                        saved = saved,
+                        actualEnabled = nowEnabled,
+                    )
+                    analyticsEnabled = resolution.enabled
+                    analyticsConsentError = resolution.failed
+                    if (!resolution.failed) analyticsConsentRetry = null
+                    onToast(
+                        if (resolution.failed) analyticsConsentFailedToast
+                        else if (resolution.enabled) analyticsEnabledToast else analyticsDisabledToast,
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main.immediate) {
+                    analyticsConsentError = true
+                    onToast(analyticsConsentFailedToast)
+                }
+            } finally {
+                withContext(NonCancellable + Dispatchers.Main.immediate) {
+                    analyticsConsentInFlight = false
+                }
+            }
+        }
+    }
     var diagnosticSnapshot by remember(activeRole, deviceIdentityDiagnostics) {
         mutableStateOf(
             DiagnosticReporter.collectSnapshot(
@@ -426,25 +472,35 @@ fun DeveloperDiagnosticsScreen(
                     }
                     Switch(
                         checked = analyticsEnabled,
-                        enabled = BuildConfig.DEBUG && analyticsConfigured,
-                        onCheckedChange = { enabled ->
-                            scope.launch(Dispatchers.IO) {
-                                val saved = AnalyticsConsent.setEnabled(context, enabled)
-                                val nowEnabled = saved && AnalyticsConsent.isEnabled(context)
-                                withContext(Dispatchers.Main.immediate) {
-                                    analyticsEnabled = nowEnabled
-                                    onToast(
-                                        if (nowEnabled == enabled && saved) {
-                                            if (enabled) analyticsEnabledToast else analyticsDisabledToast
-                                        } else analyticsConsentFailedToast,
-                                    )
-                                }
-                            }
-                        },
+                        enabled = BuildConfig.DEBUG && analyticsConfigured && !analyticsConsentInFlight,
+                        onCheckedChange = ::updateAnalyticsConsent,
                     )
                 }
+                if (analyticsConsentError) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            atlasText(
+                                "Le réglage n'a pas été confirmé; votre choix précédent reste affiché.",
+                                "The setting could not be confirmed; your previous choice remains displayed.",
+                                "تعذر تأكيد الإعداد؛ يظل اختيارك السابق معروضاً.",
+                            ),
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        TextButton(
+                            enabled = !analyticsConsentInFlight,
+                            onClick = { analyticsConsentRetry?.let(::updateAnalyticsConsent) },
+                        ) {
+                            Text(atlasText("Réessayer", "Retry", "إعادة المحاولة"))
+                        }
+                    }
+                }
                 TextButton(
-                    enabled = BuildConfig.DEBUG && analyticsConfigured && analyticsEnabled,
+                    enabled = BuildConfig.DEBUG && analyticsConfigured && analyticsEnabled && !analyticsConsentInFlight,
                     onClick = {
                         scope.launch(Dispatchers.IO) {
                             val recorded = AnalyticsConsent.recordDebugTestEvent(context)

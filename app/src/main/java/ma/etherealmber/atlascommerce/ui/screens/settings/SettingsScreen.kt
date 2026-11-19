@@ -2330,7 +2330,7 @@ private fun GitHubRateLimitCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                atlasText("آخر تحقق: ${dateFormatter.format(Date(snapshot.fetchedAtEpochMillis))}", "Last checked: ${dateFormatter.format(Date(snapshot.fetchedAtEpochMillis))}", "آخر تحقق: ${dateFormatter.format(Date(snapshot.fetchedAtEpochMillis))}"),
+                atlasText("Dernière vérification : ${dateFormatter.format(Date(snapshot.fetchedAtEpochMillis))}", "Last checked: ${dateFormatter.format(Date(snapshot.fetchedAtEpochMillis))}", "آخر تحقق: ${dateFormatter.format(Date(snapshot.fetchedAtEpochMillis))}"),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

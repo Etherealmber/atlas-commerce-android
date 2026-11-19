@@ -15,6 +15,20 @@ internal fun canRecordDebugAnalyticsTest(
  * Firebase Analytics is optional, disabled by default, and may be enabled only in debug builds
  * after an explicit opt-in. Reflection keeps Firebase-free self-hosted builds compilable.
  */
+internal data class AnalyticsConsentUiResolution(val enabled: Boolean, val failed: Boolean)
+
+internal fun resolveAnalyticsConsentUi(
+    previousEnabled: Boolean,
+    requestedEnabled: Boolean,
+    saved: Boolean,
+    actualEnabled: Boolean,
+): AnalyticsConsentUiResolution =
+    if (saved && actualEnabled == requestedEnabled) {
+        AnalyticsConsentUiResolution(enabled = requestedEnabled, failed = false)
+    } else {
+        AnalyticsConsentUiResolution(enabled = previousEnabled, failed = true)
+    }
+
 object AnalyticsConsent {
     private const val PREFS = "atlas_analytics"
     private const val KEY_ENABLED = "analytics_collection_enabled"
@@ -28,26 +42,24 @@ object AnalyticsConsent {
         BuildConfig.DEBUG && hasStoredOptIn(context) && appliedCollectionState == true && analyticsOrNull(context) != null
 
     fun setEnabled(context: Context, enabled: Boolean): Boolean {
-        if (enabled && (!BuildConfig.DEBUG || analyticsOrNull(context) == null)) return false
         val analytics = analyticsOrNull(context)
+        if (enabled && (!BuildConfig.DEBUG || analytics == null)) return false
         val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (enabled && analytics == null) return false
-        val applied = if (analytics == null) !enabled else runCatching {
-            analytics.javaClass.getMethod("setAnalyticsCollectionEnabled", primitiveBooleanType)
-                .invoke(analytics, enabled)
-            true
-        }.getOrDefault(false)
-        val saved = stored.edit().putBoolean(KEY_ENABLED, enabled && BuildConfig.DEBUG).commit()
-        if (!saved && enabled && analytics != null) {
-            runCatching {
-                analytics.javaClass.getMethod("setAnalyticsCollectionEnabled", primitiveBooleanType)
-                    .invoke(analytics, false)
-            }
-            appliedCollectionState = false
-        } else if (saved && applied) {
-            appliedCollectionState = enabled
+        val previousEnabled = BuildConfig.DEBUG && stored.getBoolean(KEY_ENABLED, false)
+        val applied = applyCollectionState(analytics, enabled)
+        if (!applied) {
+            appliedCollectionState = if (analytics == null) false else
+                applyCollectionState(analytics, previousEnabled) && previousEnabled
+            return false
         }
-        return saved && applied
+        val saved = stored.edit().putBoolean(KEY_ENABLED, enabled && BuildConfig.DEBUG).commit()
+        if (!saved) {
+            val restored = applyCollectionState(analytics, previousEnabled)
+            appliedCollectionState = restored && previousEnabled
+            return false
+        }
+        appliedCollectionState = enabled
+        return true
     }
 
     /** Restore consent before UI startup; release builds always force collection off. */
@@ -86,6 +98,15 @@ object AnalyticsConsent {
         }.onFailure { error ->
             AtlasLogBuffer.log("Analytics", "Could not queue the synthetic verification event (${error.javaClass.simpleName})", "WARN")
         }.isSuccess
+    }
+
+    private fun applyCollectionState(analytics: Any?, enabled: Boolean): Boolean {
+        if (analytics == null) return !enabled
+        return runCatching {
+            analytics.javaClass.getMethod("setAnalyticsCollectionEnabled", primitiveBooleanType)
+                .invoke(analytics, enabled)
+            true
+        }.getOrDefault(false)
     }
 
     private fun hasStoredOptIn(context: Context): Boolean = context

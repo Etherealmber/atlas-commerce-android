@@ -439,8 +439,12 @@ class HomeViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _state.update { it.copy(reportGenerating = true) }
-            val directory = financeReportDirectory(cacheDirectory, requestedScope).apply { mkdirs() }
-            ma.etherealmber.atlascommerce.data.FinanceReportCache.pruneAccount(directory)
+            val directory = withContext(Dispatchers.IO) {
+                val reportDirectory = financeReportDirectory(cacheDirectory, requestedScope)
+                reportDirectory.mkdirs()
+                ma.etherealmber.atlascommerce.data.FinanceReportCache.pruneAccount(reportDirectory)
+                reportDirectory
+            }
             val destination = File(directory, "rapport-mensuel-$period-${System.currentTimeMillis()}.pdf")
             val result = commerceRepository.downloadFinanceReport(period, destination)
             if (result is ApiResult.Success) {
