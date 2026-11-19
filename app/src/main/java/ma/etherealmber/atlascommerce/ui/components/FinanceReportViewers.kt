@@ -625,12 +625,10 @@ private fun FinanceReportHistoryRow(file: File, selected: Boolean, onClick: () -
 private fun financeReportPeriodTitle(file: File): String {
     val period = Regex("^rapport-mensuel-(\\d{4}-(?:0[1-9]|1[0-2]))(?:-\\d+)?$")
         .find(file.nameWithoutExtension)?.groupValues?.getOrNull(1)
+    val locale = atlasLocale()
     val label = period?.let { raw ->
-        try {
-            YearMonth.parse(raw).format(DateTimeFormatter.ofPattern("LLLL yyyy", atlasLocale()))
-        } catch (_: Exception) {
-            null
-        }
+        runCatching { YearMonth.parse(raw).format(DateTimeFormatter.ofPattern("LLLL yyyy", locale)) }
+            .getOrNull()
     } ?: file.nameWithoutExtension
     return atlasText("Relevé mensuel · $label", "Monthly statement · $label", "كشف شهري · $label")
 }

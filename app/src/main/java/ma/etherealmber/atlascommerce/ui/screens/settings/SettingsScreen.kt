@@ -213,7 +213,6 @@ fun ProfileScreen(
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val noBrowserAvailableMessage = atlasText("Aucun navigateur disponible.", "No browser available.", "لا يوجد متصفح متاح.")
     val density = Atlas.density
     val scrollState = rememberScrollState()
 
@@ -1436,6 +1435,7 @@ fun SettingsScreen(
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val noBrowserAvailableMessage = atlasText("Aucun navigateur disponible.", "No browser available.", "لا يوجد متصفح متاح.")
     val density = Atlas.density
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
@@ -1657,6 +1657,7 @@ fun SettingsScreen(
     if (showReleaseHistoryPage) {
         VersionHistoryPage(
             releases = releaseChangelog,
+            language = appLanguage,
             loading = releaseChangelogLoading,
             onBack = { setReleaseHistoryPage(false) },
             onRefresh = appViewModel::refreshReleaseChangelog,
@@ -2185,12 +2186,14 @@ fun SettingsScreen(
 @Composable
 private fun VersionHistoryPage(
     releases: List<ReleaseChangelogEntry>,
+    language: AppLanguage,
     loading: Boolean,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onOpenRelease: (String) -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        val wideWindow = maxWidth >= 840.dp
         Column(Modifier.widthIn(max = 1100.dp).fillMaxSize()) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -2216,7 +2219,7 @@ private fun VersionHistoryPage(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = if (maxWidth >= 840.dp) 24.dp else 14.dp, vertical = 18.dp),
+                    .padding(horizontal = if (wideWindow) 24.dp else 14.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 if (releases.isEmpty() && loading) {
@@ -2246,7 +2249,7 @@ private fun VersionHistoryPage(
                         }
                         AtlasDivider(Modifier.padding(vertical = 12.dp))
                         Text(
-                            text = localizeReleaseNotes(release.notes, LocalAtlasLanguage.current),
+                            text = localizeReleaseNotes(release.notes, language),
                             style = MaterialTheme.typography.bodyMedium,
                             lineHeight = MaterialTheme.typography.bodyMedium.lineHeight,
                             color = MaterialTheme.colorScheme.onSurface,
