@@ -582,6 +582,27 @@ fun MainShell(
                                         onClick = onShowUpdateProgress,
                                     )
                                 }
+                                if (isForeground && !useRail) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                        tonalElevation = 1.dp,
+                                    ) {
+                                        IconButton(
+                                            onClick = openDataCacheManager,
+                                            modifier = Modifier.size(40.dp).semantics {
+                                                contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة")
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Inventory2,
+                                                contentDescription = null,
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                }
                                 if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
                                 if (!useRail && tab !in BackStackTabs) {
                                     IconButton(
@@ -633,20 +654,6 @@ fun MainShell(
                                     MainTab.PROFILE -> {
                                         // On tablets these destinations already live in the sidebar.
                                         if (!useRail) {
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                tonalElevation = 1.dp,
-                                            ) {
-                                                IconButton(onClick = openDataCacheManager, modifier = Modifier.size(40.dp)) {
-                                                    Icon(
-                                                        imageVector = Icons.Outlined.Inventory2,
-                                                        contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
-                                                    )
-                                                }
-                                            }
-                                            Spacer(Modifier.width(6.dp))
                                             Surface(
                                                 shape = CircleShape,
                                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,

@@ -328,7 +328,7 @@ private fun NativeStockSection(products: List<ProductDto>, error: String?, curre
                 .take(100).forEach { product ->
                     ReportMetric(
                         product.displayName?.takeIf(String::isNotBlank) ?: product.name,
-                        "${product.stock.toString().trimEndZeroes()} ${product.unit.orEmpty()} · ${product.price.formattedMoney(currency)}",
+                        "${product.stock.trimEndZeroes()} ${product.unit.orEmpty()} · ${product.price.formattedMoney(currency)}",
                     )
                 }
             if (products.size >= 300) ReportNote(atlasText("Affichage limité aux 300 premiers articles chargés.", "Showing the first 300 loaded products.", "يقتصر العرض على أول 300 صنف تم تحميله."))

@@ -1764,6 +1764,7 @@ fun SettingsScreen(
                         onToast("Impossible d'ouvrir l'installateur sur cet appareil.")
                     }
                 },
+                onToast = onToast,
             )
         }
 
