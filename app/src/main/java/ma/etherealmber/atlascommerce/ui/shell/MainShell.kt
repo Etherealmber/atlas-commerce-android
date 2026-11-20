@@ -570,6 +570,11 @@ fun MainShell(
                                     "Open Atlas Agent",
                                     "فتح Atlas Agent",
                                 )
+                                val dataCacheDescription = atlasText(
+                                    "Données et cache",
+                                    "Data & cache manager",
+                                    "البيانات والذاكرة المؤقتة",
+                                )
                                 val hasHiddenUpdate = when (val state = updateState) {
                                     is UpdateState.Downloading -> state.hiddenInForeground && !state.info.mandatory
                                     is UpdateState.Available -> state.dismissedBanner && !state.info.mandatory
@@ -592,7 +597,7 @@ fun MainShell(
                                         IconButton(
                                             onClick = openDataCacheManager,
                                             modifier = Modifier.size(40.dp).semantics {
-                                                contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة")
+                                                contentDescription = dataCacheDescription
                                             },
                                         ) {
                                             Icon(
