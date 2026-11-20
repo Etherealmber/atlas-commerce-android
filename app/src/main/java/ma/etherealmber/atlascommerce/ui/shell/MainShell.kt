@@ -52,6 +52,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddComment
@@ -90,6 +93,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -97,6 +101,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -491,6 +496,42 @@ fun MainShell(
         shellTopBarVisible = showShellTopBar
     }
     val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val floatingBarsVisibility = remember(tab) { mutableStateOf(true) }
+    val scrollDelta = remember(tab) { mutableFloatStateOf(0f) }
+    LaunchedEffect(tab, productHistoryActive, releaseHistorySubpageActive, isForeground) {
+        floatingBarsVisibility.value = true
+        scrollDelta.floatValue = 0f
+    }
+    val scrollDirectionThresholdPx = with(LocalDensity.current) { 12.dp.toPx() }
+    val floatingBarScrollConnection = remember(tab, useRail, scrollDirectionThresholdPx) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                val verticalDelta = if (consumed.y != 0f) consumed.y else available.y
+                if ((useRail && tab != MainTab.AGENT) || verticalDelta == 0f) return Offset.Zero
+                scrollDelta.floatValue += verticalDelta
+                when {
+                    scrollDelta.floatValue <= -scrollDirectionThresholdPx -> {
+                        floatingBarsVisibility.value = false
+                        scrollDelta.floatValue = 0f
+                    }
+                    scrollDelta.floatValue >= scrollDirectionThresholdPx -> {
+                        floatingBarsVisibility.value = true
+                        scrollDelta.floatValue = 0f
+                    }
+                }
+                return Offset.Zero
+            }
+        }
+    }
+    val floatingTopClearance by animateDpAsState(
+        targetValue = if (showShellTopBar && shellTopBarVisible && floatingBarsVisibility.value) 76.dp else 0.dp,
+        animationSpec = if (motionEnabled) tween(220, easing = FastOutSlowInEasing) else tween(0),
+        label = "floating-top-bar-content-clearance",
+    )
     val floatingBarWidth by animateDpAsState(
         targetValue = maxWidth,
         animationSpec = if (motionEnabled) {
@@ -505,7 +546,7 @@ fun MainShell(
         containerColor = Color.Transparent,
         topBar = {
             AnimatedVisibility(
-                visible = shellTopBarVisible,
+                visible = shellTopBarVisible && floatingBarsVisibility.value,
                 enter = if (motionEnabled) {
                     fadeIn(tween(220, easing = FastOutSlowInEasing)) +
                         slideInVertically(
@@ -535,9 +576,8 @@ fun MainShell(
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(26.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                        color = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
                         tonalElevation = 0.dp,
                         shadowElevation = 4.dp,
                     ) {
@@ -570,11 +610,6 @@ fun MainShell(
                                     "Open Atlas Agent",
                                     "فتح Atlas Agent",
                                 )
-                                val dataCacheDescription = atlasText(
-                                    "Données et cache",
-                                    "Data & cache manager",
-                                    "البيانات والذاكرة المؤقتة",
-                                )
                                 val hasHiddenUpdate = when (val state = updateState) {
                                     is UpdateState.Downloading -> state.hiddenInForeground && !state.info.mandatory
                                     is UpdateState.Available -> state.dismissedBanner && !state.info.mandatory
@@ -586,27 +621,6 @@ fun MainShell(
                                         state = updateState,
                                         onClick = onShowUpdateProgress,
                                     )
-                                }
-                                if (isForeground && !useRail) {
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                        tonalElevation = 1.dp,
-                                    ) {
-                                        IconButton(
-                                            onClick = openDataCacheManager,
-                                            modifier = Modifier.size(40.dp).semantics {
-                                                contentDescription = dataCacheDescription
-                                            },
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Inventory2,
-                                                contentDescription = null,
-                                            )
-                                        }
-                                    }
-                                    Spacer(Modifier.width(6.dp))
                                 }
                                 if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
                                 if (!useRail && tab !in BackStackTabs) {
@@ -654,7 +668,25 @@ fun MainShell(
                                     }
                                 }
                                 when (tab) {
-                                    MainTab.AGENT, MainTab.SALE, MainTab.SETTINGS -> Unit
+                                    MainTab.AGENT, MainTab.SALE -> Unit
+
+                                    MainTab.SETTINGS -> {
+                                        if (!useRail && isForeground) {
+                                            Surface(
+                                                shape = CircleShape,
+                                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                tonalElevation = 1.dp,
+                                            ) {
+                                                IconButton(onClick = openDataCacheManager, modifier = Modifier.size(40.dp)) {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.Inventory2,
+                                                        contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
 
                                     MainTab.PROFILE -> {
                                         // On tablets these destinations already live in the sidebar.
@@ -718,6 +750,7 @@ fun MainShell(
         Box(
             Modifier
                 .fillMaxSize()
+                .nestedScroll(floatingBarScrollConnection)
                 .padding(
                     start = padding.calculateLeftPadding(layoutDirection),
                     top = safeTopInset,
@@ -802,7 +835,10 @@ fun MainShell(
             // screens add end content-padding so their final items can still scroll clear of it.
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = if (showRail) sidebarWidth else 0.dp),
+                .padding(
+                    start = if (showRail) sidebarWidth else 0.dp,
+                    top = floatingTopClearance,
+                ),
         ) { currentPage ->
             val currentTab = currentPage.tab
             Box(
@@ -966,7 +1002,7 @@ fun MainShell(
     }
     if (!useRail) {
         AnimatedVisibility(
-            visible = tab !in BackStackTabs && !productHistoryActive,
+            visible = tab !in BackStackTabs && !productHistoryActive && floatingBarsVisibility.value,
             modifier = Modifier.align(Alignment.BottomCenter).width(floatingBarWidth),
             enter = if (motionEnabled) {
                 fadeIn(tween(260, easing = FastOutSlowInEasing)) +
@@ -1069,8 +1105,7 @@ private fun AtlasFloatingBottomBar(
     val centerIndex = centerTab?.let(tabs::indexOf) ?: -1
     val leftTabs = if (centerIndex >= 0) tabs.take(centerIndex) else tabs
     val rightTabs = if (centerIndex >= 0) tabs.drop(centerIndex + 1) else emptyList()
-    // Keep the dock visually consistent with the floating top bar while allowing the page to show through.
-    val barColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)
+    val barColor = MaterialTheme.colorScheme.surface
     val motionEnabled = LocalAtlasAnimationsEnabled.current
 
     BoxWithConstraints(
@@ -1087,7 +1122,6 @@ private fun AtlasFloatingBottomBar(
             shape = RoundedCornerShape(26.dp),
             color = barColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
             tonalElevation = 0.dp,
             shadowElevation = 4.dp,
         ) {

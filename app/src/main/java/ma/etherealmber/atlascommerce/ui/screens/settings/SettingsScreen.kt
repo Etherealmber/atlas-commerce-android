@@ -2211,46 +2211,6 @@ private fun VersionHistoryPage(
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         val wideWindow = maxWidth >= 840.dp
         Column(Modifier.widthIn(max = 1100.dp).fillMaxSize()) {
-            AnimatedVisibility(
-                visibleState = headerVisibility,
-                enter = if (motionEnabled) {
-                    fadeIn(tween(220)) +
-                        slideInVertically(tween(260)) { height -> -height / 4 } +
-                        scaleIn(tween(220), initialScale = 0.98f)
-                } else EnterTransition.None,
-            ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(26.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 4.dp,
-                ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text(atlasText("Mises à jour des versions", "Version updates", "تحديثات الإصدارات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text(atlasText("Historique complet des changements publiés", "Full history of published changes", "السجل الكامل للتغييرات المنشورة"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    if (loading) {
-                        CircularProgressIndicator(Modifier.padding(horizontal = 12.dp).size(22.dp), strokeWidth = 2.dp)
-                    } else {
-                        IconButton(onClick = onRefresh) {
-                            Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh releases", "تحديث الإصدارات"))
-                        }
-                    }
-                }
-                }
-            }
-            githubLimitNotice?.let { notice ->
-                GitHubFallbackNotice(notice, Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp))
-            }
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -2258,6 +2218,45 @@ private fun VersionHistoryPage(
                     .padding(horizontal = if (wideWindow) 24.dp else 14.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                AnimatedVisibility(
+                    visibleState = headerVisibility,
+                    enter = if (motionEnabled) {
+                        fadeIn(tween(220)) +
+                            slideInVertically(tween(260)) { height -> -height / 4 } +
+                            scaleIn(tween(220), initialScale = 0.98f)
+                    } else EnterTransition.None,
+                ) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                        shape = RoundedCornerShape(26.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 4.dp,
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(atlasText("Mises à jour des versions", "Version updates", "تحديثات الإصدارات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Text(atlasText("Historique complet des changements publiés", "Full history of published changes", "السجل الكامل للتغييرات المنشورة"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            if (loading) {
+                                CircularProgressIndicator(Modifier.padding(horizontal = 12.dp).size(22.dp), strokeWidth = 2.dp)
+                            } else {
+                                IconButton(onClick = onRefresh) {
+                                    Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh releases", "تحديث الإصدارات"))
+                                }
+                            }
+                        }
+                    }
+                }
+                githubLimitNotice?.let { notice ->
+                    GitHubFallbackNotice(notice, Modifier.fillMaxWidth().padding(vertical = 6.dp))
+                }
                 if (releases.isEmpty() && loading) {
                     AtlasSkeletonList(Modifier.fillMaxWidth(), rows = 4, avatarSize = 34.dp)
                 } else if (releases.isEmpty()) {

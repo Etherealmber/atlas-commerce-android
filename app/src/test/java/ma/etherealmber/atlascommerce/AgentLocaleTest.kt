@@ -2,7 +2,9 @@ package ma.etherealmber.atlascommerce
 
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.data.repo.composeAgentPrompt
+import ma.etherealmber.atlascommerce.data.repo.localizedAgentClockContext
 import ma.etherealmber.atlascommerce.data.repo.AGENT_MAX_QUESTION_LENGTH
+import java.time.ZonedDateTime
 import ma.etherealmber.atlascommerce.ui.screens.agent.localizedAgentText
 import ma.etherealmber.atlascommerce.ui.screens.login.LoginViewModel
 import ma.etherealmber.atlascommerce.ui.screens.login.afterAuthentication
@@ -31,6 +33,23 @@ class AgentLocaleTest {
             assertTrue(result.contains(language.agentContextInstruction))
             assertTrue(result.endsWith("x"))
             assertTrue(result.startsWith(language.agentContextInstruction))
+        }
+    }
+
+    @Test fun agentClockContextIsIncludedAndLocalizedForAllSupportedLanguages() {
+        val now = ZonedDateTime.parse("2026-10-21T12:34:56+09:00[Asia/Tokyo]")
+        val expectedLeadIns = mapOf(
+            AppLanguage.FRENCH to "Heure actuelle de l'appareil",
+            AppLanguage.ENGLISH to "Current device time",
+            AppLanguage.ARABIC to "الوقت الحالي للجهاز",
+        )
+        for (language in AppLanguage.entries) {
+            val clock = localizedAgentClockContext(now, language)
+            val prompt = composeAgentPrompt("What time is it?", "", language, clock)
+            assertTrue(clock.contains("2026-10-21T12:34:56+09:00[Asia/Tokyo]"))
+            assertTrue(clock.contains(expectedLeadIns.getValue(language)))
+            assertTrue(prompt.contains("[CLOCK] $clock"))
+            assertTrue(prompt.length <= 2450)
         }
     }
 
