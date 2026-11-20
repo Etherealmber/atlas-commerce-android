@@ -2,20 +2,10 @@ package ma.etherealmber.atlascommerce.ui.components
 
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
-import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
-import android.net.Uri
 import android.os.ParcelFileDescriptor
-import android.print.PrintAttributes
-import android.print.PrintManager
-import android.widget.Toast
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
@@ -45,14 +35,12 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.material.icons.outlined.ZoomOut
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -70,11 +58,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.CancellationException
@@ -272,214 +258,6 @@ private class PdfRenderSession private constructor(
             }
         }
     }
-}
-
-@Composable
-fun CombinedReportWebViewDialog(
-    url: String,
-    onDismiss: () -> Unit,
-    selectedSections: List<String> = FinanceReportSection.entries.map { it.key },
-) {
-    BackHandler(onBack = onDismiss)
-    val context = LocalContext.current
-    val atlasLanguage = LocalAtlasLanguage.current
-    val originUri = Uri.parse(url)
-    val permittedScheme = originUri.scheme == "https" || (BuildConfig.ALLOW_CLEARTEXT && originUri.scheme == "http")
-    val permittedHost = originUri.host?.lowercase().orEmpty()
-    val sections = FinanceReportSection.entries.filter { it.key in selectedSections }
-    val showSummary = sections.size == FinanceReportSection.entries.size && originUri.getQueryParameter("period") != "custom"
-    val tabKeys = (if (showSummary) listOf("summary") else emptyList()) + sections.map { it.key }
-    var activeKey by remember(url, selectedSections) {
-        mutableStateOf(if (showSummary) "summary" else sections.firstOrNull()?.key ?: "summary")
-    }
-    val activeSection = sections.firstOrNull { it.key == activeKey }
-    val activeTitle = if (activeKey == "summary") "Synthèse" else activeSection?.label ?: "Rapport"
-    val periodSummary = FinanceReportSelection(
-        period = originUri.getQueryParameter("period") ?: "month",
-        from = originUri.getQueryParameter("from"),
-        to = originUri.getQueryParameter("to"),
-    ).shortLabel
-    val activeUrl = remember(url, activeKey, activeSection) {
-        if (activeKey == "summary" || activeSection == null) url else reportSectionUrl(originUri, activeSection)
-    }
-    var webView by remember(activeUrl) { mutableStateOf<WebView?>(null) }
-    var webPageLoading by remember(activeUrl) { mutableStateOf(true) }
-    var webPageError by remember(activeUrl) { mutableStateOf(false) }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, contentDescription = atlasText("Retour à la page précédente")) }
-                    Column(Modifier.weight(1f)) {
-                        Text(atlasText("Rapports · $activeTitle", "Reports · $activeTitle", "التقارير · $activeTitle"), style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                        Text(atlasText("$periodSummary · consultation sécurisée", "$periodSummary · secure view", "$periodSummary · عرض آمن"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                    }
-                    IconButton(onClick = { printReport(context, webView, activeTitle, atlasLanguage) }, enabled = webView != null) {
-                        Icon(Icons.Outlined.Print, contentDescription = atlasText("Imprimer ou enregistrer en PDF"))
-                    }
-                }
-                if (tabKeys.size > 1) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow).horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        tabKeys.forEach { key ->
-                            val label = if (key == "summary") "Synthèse" else sections.firstOrNull { it.key == key }?.label.orEmpty()
-                            FilterChip(selected = key == activeKey, onClick = { activeKey = key }, label = { Text(label, maxLines = 1) })
-                        }
-                    }
-                }
-                Text(
-                    atlasText("Utilisez le bouton d'impression Atlas pour enregistrer en PDF. Retour ferme le rapport et vous ramène à l'écran précédent."),
-                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 14.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (!permittedScheme || permittedHost.isBlank()) {
-                    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text(atlasText("Lien de rapport non sécurisé refusé."), color = MaterialTheme.colorScheme.error)
-                    }
-                } else {
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
-                        key(activeUrl) {
-                            AndroidView(
-                            modifier = Modifier.fillMaxSize(),
-                            factory = { viewContext ->
-                                WebView(viewContext).apply {
-                                    webView = this
-                                    settings.javaScriptEnabled = false
-                                    settings.domStorageEnabled = false
-                                    settings.apply {
-                                        allowContentAccess = false
-                                        allowFileAccess = false
-                                    }
-                                    settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
-                                    settings.saveFormData = false
-                                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                                    webViewClient = object : WebViewClient() {
-                                        override fun onPageStarted(view: WebView, pageUrl: String?, favicon: android.graphics.Bitmap?) {
-                                            webPageLoading = true
-                                            webPageError = false
-                                        }
-
-                                        override fun onPageFinished(view: WebView, pageUrl: String?) {
-                                            webPageLoading = false
-                                        }
-
-                                        override fun onReceivedError(
-                                            view: WebView,
-                                            request: WebResourceRequest,
-                                            error: android.webkit.WebResourceError,
-                                        ) {
-                                            if (request.isForMainFrame) {
-                                                webPageLoading = false
-                                                webPageError = true
-                                            }
-                                        }
-
-                                        override fun onReceivedHttpError(
-                                            view: WebView,
-                                            request: WebResourceRequest,
-                                            errorResponse: android.webkit.WebResourceResponse,
-                                        ) {
-                                            if (request.isForMainFrame) {
-                                                webPageLoading = false
-                                                webPageError = true
-                                            }
-                                        }
-
-                                        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                                            val destination = request.url
-                                            val destinationPort = destination.port.takeIf { it > 0 } ?: if (destination.scheme == "https") 443 else 80
-                                            val expectedPort = originUri.port.takeIf { it > 0 } ?: if (originUri.scheme == "https") 443 else 80
-                                            val sameOrigin = destination.scheme == originUri.scheme &&
-                                                destination.host?.equals(permittedHost, ignoreCase = true) == true &&
-                                                destinationPort == expectedPort
-                                            return !sameOrigin
-                                        }
-                                    }
-                                    loadUrl(activeUrl)
-                                }
-                            },
-                            update = { view ->
-                                webView = view
-                                if (view.url != activeUrl) view.loadUrl(activeUrl)
-                            },
-                            onRelease = { view ->
-                                webView = null
-                                view.stopLoading()
-                                view.loadUrl("about:blank")
-                                view.clearHistory()
-                                view.clearCache(true)
-                                view.destroy()
-                            },
-                            )
-                        }
-                        if (webPageLoading) {
-                            Surface(
-                                modifier = Modifier.align(Alignment.Center),
-                                shape = MaterialTheme.shapes.large,
-                                color = MaterialTheme.colorScheme.surfaceContainer,
-                                tonalElevation = 3.dp,
-                            ) {
-                                Row(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                                    Spacer(Modifier.width(10.dp))
-                                    Text(atlasText("Chargement du rapport…", "Loading report…", "جارٍ تحميل التقرير…"), style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
-                        if (webPageError) {
-                            Surface(
-                                modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                                shape = MaterialTheme.shapes.large,
-                                color = MaterialTheme.colorScheme.errorContainer,
-                            ) {
-                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text(
-                                        atlasText("Le serveur n'a pas pu afficher cette rubrique. Réessayez ou choisissez une autre rubrique.", "The server could not display this section. Retry or choose another section.", "تعذر على الخادم عرض هذا القسم. أعد المحاولة أو اختر قسماً آخر."),
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                    Button(onClick = { webView?.reload() }, enabled = webView != null) {
-                                        Text(atlasText("Réessayer", "Try again", "أعد المحاولة"))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun reportSectionUrl(origin: Uri, section: FinanceReportSection): String {
-    val prefix = origin.path.orEmpty().substringBeforeLast('/', "/api/reports")
-    val builder = origin.buildUpon().encodedPath("$prefix/${section.path}").clearQuery().fragment(null)
-    origin.queryParameterNames
-        .filterNot { it == "sections" }
-        .forEach { name -> origin.getQueryParameters(name).forEach { value -> builder.appendQueryParameter(name, value) } }
-    return builder.build().toString()
-}
-
-private fun printReport(context: Context, webView: WebView?, title: String, language: AppLanguage) {
-    val view = webView ?: return
-    runCatching {
-        val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
-        printManager.print(
-            "Atlas-${title.replace(Regex("[^A-Za-z0-9_-]"), "-")}",
-            view.createPrintDocumentAdapter(title),
-            PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build(),
-        )
-    }.onFailure { Toast.makeText(context, atlasNotice("Impossible d'ouvrir l'impression.", language), Toast.LENGTH_LONG).show() }
 }
 
 /** Full-screen, account-scoped index of recent monthly PDFs stored in app-private cache. */

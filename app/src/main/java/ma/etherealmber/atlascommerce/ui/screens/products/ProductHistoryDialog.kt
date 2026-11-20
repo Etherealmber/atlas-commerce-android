@@ -89,7 +89,11 @@ internal fun ProductHistoryScreen(
     viewModel: ProductHistoryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val refreshProductHistory = rememberApiRefreshAction("product-history-${product.id}", 5_000L) { viewModel.loadHistory(product.id, refresh = true) }
+    val refreshProductHistory = rememberApiRefreshAction(
+        key = "product-history-${product.id}",
+        cooldownMs = 5_000L,
+        onRefresh = { viewModel.loadHistory(product.id, refresh = true) },
+    )
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

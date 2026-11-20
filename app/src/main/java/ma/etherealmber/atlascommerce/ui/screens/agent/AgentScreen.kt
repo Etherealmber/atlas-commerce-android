@@ -66,6 +66,7 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -623,15 +624,13 @@ fun AgentScreen(
         val composerSendTarget = if (isTabletLayout) 56.dp else 48.dp
         val motionEnabled = LocalAtlasAnimationsEnabled.current
         var composerVisible by remember { mutableStateOf(false) }
+        var composerHeightPx by remember { mutableIntStateOf(0) }
+        val composerClearance = with(LocalDensity.current) { composerHeightPx.toDp() + 20.dp }
         LaunchedEffect(isActive) {
             composerVisible = isActive
         }
-        Column(Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            ) {
+        Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = conversationListState,
                     modifier = Modifier
@@ -641,10 +640,12 @@ fun AgentScreen(
                         start = density.screenPadding,
                         end = density.screenPadding,
                         top = density.cardMargin,
+                        // Leave enough scroll room for the floating composer, while letting
+                        // older content continue underneath its translucent rounded edges.
                         bottom = when {
-                            showThinkingIndicator -> 88.dp
-                            compactComposer -> 8.dp
-                            else -> 16.dp
+                            !composerVisible -> 16.dp
+                            showThinkingIndicator -> composerClearance + 64.dp
+                            else -> composerClearance
                         },
                     ),
                     verticalArrangement = Arrangement.spacedBy(density.itemGap),
@@ -804,6 +805,27 @@ fun AgentScreen(
                             )
                         }
                     }
+                    item(key = "agent_ai_disclaimer") {
+                        AnimatedVisibility(
+                            visible = !state.sending && state.messages.lastOrNull()?.fromUser == false,
+                            enter = if (motionEnabled) {
+                                fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+                                    slideInVertically(
+                                        animationSpec = tween(220, easing = FastOutSlowInEasing),
+                                        initialOffsetY = { height -> height / 12 },
+                                    )
+                            } else EnterTransition.None,
+                            exit = if (motionEnabled) {
+                                fadeOut(tween(100, easing = FastOutSlowInEasing)) +
+                                    slideOutVertically(
+                                        animationSpec = tween(110, easing = FastOutSlowInEasing),
+                                        targetOffsetY = { height -> height / 16 },
+                                    )
+                            } else ExitTransition.None,
+                        ) {
+                            AgentAiDisclaimer(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
+                        }
+                    }
 
                 }
                 if (showThinkingIndicator) {
@@ -813,7 +835,8 @@ fun AgentScreen(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .padding(horizontal = if (isTabletLayout) 0.dp else 10.dp, vertical = 8.dp),
+                            .padding(horizontal = if (isTabletLayout) 0.dp else 10.dp)
+                            .padding(top = 8.dp, bottom = composerClearance + 8.dp),
                     )
                 }
                 if (!showThinkingIndicator && userScrolledUp && conversationListState.canScrollForward && state.messages.isNotEmpty()) {
@@ -826,7 +849,7 @@ fun AgentScreen(
                         },
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(end = 16.dp, bottom = 14.dp),
+                            .padding(end = 16.dp, bottom = composerClearance + 8.dp),
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                     ) {
@@ -838,11 +861,8 @@ fun AgentScreen(
                 }
             }
 
-            if (!state.sending && state.messages.lastOrNull()?.fromUser == false) {
-                AgentAiDisclaimer(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
-            }
-
             AnimatedVisibility(
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
                 visible = composerVisible,
                 enter = if (motionEnabled) {
                     fadeIn(tween(220, easing = FastOutSlowInEasing)) +
@@ -861,9 +881,9 @@ fun AgentScreen(
                     modifier = Modifier.fillMaxWidth().padding(
                         horizontal = if (isTabletLayout) 16.dp else 12.dp,
                         vertical = 6.dp,
-                    ),
+                    ).onSizeChanged { composerHeightPx = it.height },
                     shape = RoundedCornerShape(26.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
                     tonalElevation = 0.dp,
                     shadowElevation = 4.dp,

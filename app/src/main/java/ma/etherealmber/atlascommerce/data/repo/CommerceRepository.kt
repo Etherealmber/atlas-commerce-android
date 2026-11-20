@@ -1,6 +1,5 @@
 package ma.etherealmber.atlascommerce.data.repo
 
-import android.net.Uri
 import com.squareup.moshi.Moshi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -9,7 +8,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
-import java.time.LocalDate
 import kotlin.coroutines.cancellation.CancellationException
 import ma.etherealmber.atlascommerce.core.RoleTarget
 import ma.etherealmber.atlascommerce.core.AppLanguage
@@ -121,57 +119,6 @@ class CommerceRepository @Inject constructor(
         pageSize: Int = 50,
     ): ApiResult<FinanceStatementDto> =
         runner.envelope { apiProvider.api().financeStatement(period, page, pageSize) }
-
-    /** Create a private, short-lived HMAC report link for a selected period; no session JWT enters the URL. */
-    suspend fun createCombinedReportUrl(
-        period: String = "month",
-        from: String? = null,
-        to: String? = null,
-        sections: List<String> = emptyList(),
-    ): ApiResult<String> {
-        val supportedPeriods = setOf("month", "3m", "6m", "9m", "12m", "24m", "36m", "48m", "year", "ytd", "custom")
-        if (period !in supportedPeriods) return ApiResult.Failure("BAD_PERIOD", "Période de rapport invalide.")
-        val datePattern = Regex("\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])")
-        val validCustomRange = runCatching {
-            from != null && to != null && datePattern.matches(from) && datePattern.matches(to) &&
-                !LocalDate.parse(to).isBefore(LocalDate.parse(from))
-        }.getOrDefault(false)
-        if (period == "custom" && !validCustomRange) {
-            return ApiResult.Failure("BAD_PERIOD", "La période personnalisée doit comporter deux dates valides, dans l'ordre.")
-        }
-        val validSections = setOf("balance", "stock", "receivables", "payables", "employees", "aging", "tva")
-        val chosenSections = sections.filter { it in validSections }.distinct()
-        if (chosenSections.isEmpty()) return ApiResult.Failure("BAD_REPORT_SELECTION", "Sélectionnez au moins une rubrique.")
-        return when (val result = runner.envelope { apiProvider.api().reportLinkTicket() }) {
-            is ApiResult.Failure -> result
-            is ApiResult.Success -> {
-                val ticket = result.data
-                if (ticket.expiresIn !in 1..1800 ||
-                    !ticket.rt.matches(Regex("\\d{9,}\\.[A-Za-z0-9_-]{20,}"))
-                ) {
-                    ApiResult.Failure("INVALID_REPORT_TICKET", "Le serveur n'a pas fourni de lien temporaire valide.")
-                } else {
-                    val url = Uri.parse(apiProvider.baseUrl())
-                        .buildUpon()
-                        .appendPath("api")
-                        .appendPath("reports")
-                        .appendPath("combined")
-                        .appendQueryParameter("rt", ticket.rt)
-                        .appendQueryParameter("period", period)
-                        .appendQueryParameter("sections", chosenSections.joinToString(","))
-                        .apply {
-                            if (period == "custom") {
-                                appendQueryParameter("from", from.orEmpty())
-                                appendQueryParameter("to", to.orEmpty())
-                            }
-                        }
-                        .build()
-                        .toString()
-                    ApiResult.Success(url)
-                }
-            }
-        }
-    }
 
     suspend fun employeePayroll(
         period: String,

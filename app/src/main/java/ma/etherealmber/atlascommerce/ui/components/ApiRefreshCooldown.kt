@@ -15,10 +15,11 @@ fun rememberApiRefreshAction(
     key: String,
     cooldownMs: Long = 5_000L,
     onRefresh: () -> Unit,
+    onCooldownMessage: ((String) -> Unit)? = null,
 ): () -> Unit {
     val context = LocalContext.current
     val language = LocalAtlasLanguage.current
-    return remember(key, cooldownMs, onRefresh, context, language) {
+    return remember(key, cooldownMs, onRefresh, onCooldownMessage, context, language) {
         {
             val remaining = ManualApiRefreshRateLimiter.acquire(
                 key = key,
@@ -29,7 +30,12 @@ fun rememberApiRefreshAction(
                 onRefresh()
             } else {
                 val retrySeconds = ((remaining + 999L) / 1_000L).coerceAtLeast(1L).toInt()
-                Toast.makeText(context, localizedApiRefreshWait(retrySeconds, language), Toast.LENGTH_SHORT).show()
+                val message = localizedApiRefreshWait(retrySeconds, language)
+                if (onCooldownMessage != null) {
+                    onCooldownMessage(message)
+                } else {
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

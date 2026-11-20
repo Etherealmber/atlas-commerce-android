@@ -211,7 +211,13 @@ internal fun AtlasSidebarContent(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.fillMaxSize().padding(horizontal = if (expanded) 12.dp else 8.dp, vertical = 14.dp),
+        modifier = modifier.fillMaxSize().padding(
+            horizontal = if (expanded) 12.dp else 8.dp,
+            top = 14.dp,
+            // Scaffold already keeps sidebar controls above the navigation-bar inset.
+            // Don't add a second large gap below the account/profile button.
+            bottom = 0.dp,
+        ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (showBrand) {
