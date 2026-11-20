@@ -93,12 +93,12 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasStatTile
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
-import ma.etherealmber.atlascommerce.ui.components.CombinedReportWebViewDialog
 import ma.etherealmber.atlascommerce.ui.components.FinancePdfViewerDialog
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportHistoryDialog
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportActionsDialog
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelection
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelectionDialog
+import ma.etherealmber.atlascommerce.ui.components.NativeFinanceReportDialog
 import ma.etherealmber.atlascommerce.ui.components.financeMonthLabel as sharedFinanceMonthLabel
 import ma.etherealmber.atlascommerce.ui.components.financeReportTitle as sharedFinanceReportTitle
 import ma.etherealmber.atlascommerce.ui.components.StatusChip
@@ -133,10 +133,9 @@ fun HomeScreen(
     var pendingReportFile by remember { mutableStateOf<java.io.File?>(null) }
     var showReportActions by remember { mutableStateOf(false) }
     var pdfViewerFile by remember { mutableStateOf<java.io.File?>(null) }
-    var combinedReportUrl by remember { mutableStateOf<String?>(null) }
+    var showNativeFinanceReport by remember { mutableStateOf(false) }
     var reportSelection by remember { mutableStateOf(FinanceReportSelection()) }
     var showReportSelection by remember { mutableStateOf(false) }
-    var showCombinedReportConfirm by remember { mutableStateOf(false) }
     var showFinanceReportHistory by remember { mutableStateOf(false) }
     var financeReportHistory by remember(user.scopeIdentity) { mutableStateOf<List<java.io.File>>(emptyList()) }
     var financeReportHistoryLoading by remember(user.scopeIdentity) { mutableStateOf(false) }
@@ -177,7 +176,7 @@ fun HomeScreen(
         pendingReportFile = null
         showReportActions = false
         pdfViewerFile = null
-        combinedReportUrl = null
+        showNativeFinanceReport = false
     }
 
     if (showReportSelection) {
@@ -187,40 +186,17 @@ fun HomeScreen(
             onGenerate = { selection ->
                 reportSelection = selection
                 showReportSelection = false
-                showCombinedReportConfirm = true
+                showNativeFinanceReport = true
             },
         )
     }
 
-    if (showCombinedReportConfirm) {
-        AlertDialog(
-            onDismissRequest = { showCombinedReportConfirm = false },
-            title = { Text(atlasText("Ouvrir le pack de rapports ?")) },
-            text = {
-                Text(
-                    atlasText(
-                        "${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. Atlas ouvrira les rubriques choisies avec un ticket temporaire de 30 minutes. Ne partagez pas le lien ni l'écran.",
-                        "${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. Atlas will open the selected sections using a temporary 30-minute access token. Do not share the link or screen.",
-                        "${reportSelection.shortLabel} · ${reportSelection.selectedSections().joinToString { it.label }}. سيفتح Atlas الأقسام المحددة برمز وصول مؤقت لمدة 30 دقيقة. لا تشارك الرابط أو الشاشة.",
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showCombinedReportConfirm = false
-                    viewModel.createCombinedReportUrl(reportSelection.period, reportSelection.from, reportSelection.to, reportSelection.sectionKeys) { result ->
-                        when (result) {
-                            is ApiResult.Failure -> onToast(result.message)
-                            is ApiResult.Success -> combinedReportUrl = result.data
-                        }
-                    }
-                }) { Text(atlasText("Continuer")) }
-            },
-            dismissButton = { TextButton(onClick = { showCombinedReportConfirm = false }) { Text(atlasText("Annuler")) } },
+    if (showNativeFinanceReport) {
+        NativeFinanceReportDialog(
+            selection = reportSelection,
+            onDismiss = { showNativeFinanceReport = false },
+            fallbackCurrency = state.currency,
         )
-    }
-    combinedReportUrl?.let { url ->
-        CombinedReportWebViewDialog(url = url, selectedSections = reportSelection.sectionKeys, onDismiss = { combinedReportUrl = null })
     }
     if (showFinanceReportHistory) {
         FinanceReportHistoryDialog(

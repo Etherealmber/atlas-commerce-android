@@ -493,32 +493,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun createCombinedReportUrl(
-        period: String,
-        from: String?,
-        to: String?,
-        sections: List<String>,
-        onResult: (ApiResult<String>) -> Unit,
-    ) {
-        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
-        if (activeUser == null || !Roles.isAdmin(activeUser.role)) {
-            onResult(ApiResult.Failure("FIN_FORBIDDEN", "Réservé aux administrateurs (owner/admin)."))
-            return
-        }
-        val requestedScope = activeUser.scopeIdentity
-        viewModelScope.launch {
-            _state.update { it.copy(reportGenerating = true) }
-            val result = commerceRepository.createCombinedReportUrl(period, from, to, sections)
-            _state.update { it.copy(reportGenerating = false) }
-            val currentScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
-            if (currentScope != requestedScope) {
-                onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Relancez l'ouverture avec le bon compte."))
-            } else {
-                onResult(result)
-            }
-        }
-    }
-
     private fun financeReportDirectory(cacheDirectory: File, scopeIdentity: String): File =
         File(File(cacheDirectory, "finance"), scopeCacheKey(scopeIdentity))
 

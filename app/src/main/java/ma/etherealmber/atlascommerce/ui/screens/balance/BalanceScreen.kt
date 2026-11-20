@@ -93,11 +93,11 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasShimmer
 import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonBlock
 import ma.etherealmber.atlascommerce.ui.components.AtlasRefreshStatusShimmer
-import ma.etherealmber.atlascommerce.ui.components.CombinedReportWebViewDialog
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentNavigationSuggestion
 import ma.etherealmber.atlascommerce.ui.components.FinancePdfViewerDialog
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelection
 import ma.etherealmber.atlascommerce.ui.components.FinanceReportSelectionDialog
+import ma.etherealmber.atlascommerce.ui.components.NativeFinanceReportDialog
 import java.io.File
 import java.time.YearMonth
 import java.time.format.TextStyle
@@ -393,7 +393,12 @@ fun BalanceScreen(
 ) {
     val dockPadding = LocalAtlasFloatingDockPadding.current
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val refreshBalance = rememberApiRefreshAction("finance-balance", 30_000L, viewModel::refresh)
+    val refreshBalance = rememberApiRefreshAction(
+        key = "finance-balance",
+        cooldownMs = 30_000L,
+        onRefresh = viewModel::refresh,
+        onCooldownMessage = onToast,
+    )
     val appLanguage = LocalAtlasLanguage.current
     val context = LocalContext.current
     val copyPdfSavedMessage = atlasText("Copie PDF enregistrée.", "PDF copy saved.", "تم حفظ نسخة PDF.")
@@ -406,10 +411,9 @@ fun BalanceScreen(
     var section by remember { mutableStateOf(BalanceSection.MOVEMENTS) }
     var pdfViewerFile by remember { mutableStateOf<File?>(null) }
     var pendingPdfFile by remember { mutableStateOf<File?>(null) }
-    var combinedUrl by remember { mutableStateOf<String?>(null) }
+    var showNativeFinanceReport by remember { mutableStateOf(false) }
     var reportSelection by remember { mutableStateOf(FinanceReportSelection()) }
     var showReportSelection by remember { mutableStateOf(false) }
-    var confirmCombined by remember { mutableStateOf(false) }
     var showEntryDialog by remember { mutableStateOf(false) }
     var entryKind by remember { mutableStateOf(EntryKind.EXPENSE) }
     var movementFilter by remember { mutableStateOf("Toutes les écritures") }
@@ -458,41 +462,17 @@ fun BalanceScreen(
             onGenerate = { selection ->
                 reportSelection = selection
                 showReportSelection = false
-                confirmCombined = true
+                showNativeFinanceReport = true
             },
         )
     }
 
-    if (confirmCombined) {
-        AlertDialog(
-            onDismissRequest = { confirmCombined = false },
-            title = { Text(atlasText("Ouvrir le rapport combiné ?", "Open the combined report?", "هل تريد فتح التقرير الموحّد؟")) },
-            text = {
-                Text(
-                    atlasText(
-                        "${localizedFinancePeriodLabel(reportSelection)} · ${reportSelection.selectedSections().joinToString { localizedReportSectionLabel(it, appLanguage) }}. Le lien HMAC est temporaire (30 min) et privé : ne le partagez pas.",
-                        "${localizedFinancePeriodLabel(reportSelection)} · ${reportSelection.selectedSections().joinToString { localizedReportSectionLabel(it, appLanguage) }}. The HMAC link is private and expires in 30 minutes. Do not share it.",
-                        "${localizedFinancePeriodLabel(reportSelection)} · ${reportSelection.selectedSections().joinToString { localizedReportSectionLabel(it, appLanguage) }}. رابط HMAC خاص ومؤقت لمدة 30 دقيقة. لا تشاركه.",
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmCombined = false
-                    viewModel.createCombinedReportUrl(reportSelection.period, reportSelection.from, reportSelection.to, reportSelection.sectionKeys) { result ->
-                        when (result) {
-                            is ApiResult.Success -> combinedUrl = result.data
-                            is ApiResult.Failure -> onToast(result.message)
-                        }
-                    }
-                }) { Text(atlasText("Continuer")) }
-            },
-            dismissButton = { TextButton(onClick = { confirmCombined = false }) { Text(atlasText("Annuler")) } },
+    if (showNativeFinanceReport) {
+        NativeFinanceReportDialog(
+            selection = reportSelection,
+            onDismiss = { showNativeFinanceReport = false },
+            fallbackCurrency = state.finance?.currency ?: "MAD",
         )
-    }
-
-    combinedUrl?.let { url ->
-        CombinedReportWebViewDialog(url = url, selectedSections = reportSelection.sectionKeys, onDismiss = { combinedUrl = null })
     }
     pdfViewerFile?.let { file ->
         FinancePdfViewerDialog(
@@ -846,27 +826,6 @@ fun BalanceScreen(
             }
         }
     }
-}
-
-private fun localizedReportSectionLabel(section: ma.etherealmber.atlascommerce.ui.components.FinanceReportSection, language: AppLanguage): String = when (section) {
-    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.BALANCE -> when (language) { AppLanguage.FRENCH -> "Balance"; AppLanguage.ENGLISH -> "Balance"; AppLanguage.ARABIC -> "الرصيد" }
-    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.STOCK -> when (language) { AppLanguage.FRENCH -> "Stock"; AppLanguage.ENGLISH -> "Inventory"; AppLanguage.ARABIC -> "المخزون" }
-    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.RECEIVABLES -> when (language) { AppLanguage.FRENCH -> "Créances clients"; AppLanguage.ENGLISH -> "Customer receivables"; AppLanguage.ARABIC -> "مستحقات العملاء" }
-    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.PAYABLES -> when (language) { AppLanguage.FRENCH -> "Fournisseurs"; AppLanguage.ENGLISH -> "Suppliers"; AppLanguage.ARABIC -> "الموردون" }
-    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.EMPLOYEES -> when (language) { AppLanguage.FRENCH -> "Employés & paie"; AppLanguage.ENGLISH -> "Employees & payroll"; AppLanguage.ARABIC -> "الموظفون والرواتب" }
-    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.AGING -> when (language) { AppLanguage.FRENCH -> "Balance âgée"; AppLanguage.ENGLISH -> "Aging report"; AppLanguage.ARABIC -> "تقرير أعمار الديون" }
-    ma.etherealmber.atlascommerce.ui.components.FinanceReportSection.TVA -> when (language) { AppLanguage.FRENCH -> "TVA"; AppLanguage.ENGLISH -> "VAT"; AppLanguage.ARABIC -> "ضريبة القيمة المضافة" }
-}
-
-@Composable
-private fun localizedFinancePeriodLabel(selection: FinanceReportSelection): String = when (selection.period) {
-    "month" -> atlasText("Mois en cours", "Current month", "الشهر الحالي")
-    "3m" -> atlasText("3 derniers mois", "Last 3 months", "آخر 3 أشهر")
-    "6m" -> atlasText("6 derniers mois", "Last 6 months", "آخر 6 أشهر")
-    "12m" -> atlasText("12 derniers mois", "Last 12 months", "آخر 12 شهراً")
-    "year" -> atlasText("Année en cours", "Current year", "السنة الحالية")
-    "custom" -> if (selection.from != null && selection.to != null) "${atlasShortDate(selection.from)} → ${atlasShortDate(selection.to)}" else atlasText("Période personnalisée", "Custom period", "فترة مخصصة")
-    else -> selection.period
 }
 
 @Composable

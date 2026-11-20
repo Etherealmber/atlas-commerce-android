@@ -1502,9 +1502,11 @@ fun SettingsScreen(
     val releaseChangelog by appViewModel.releaseChangelog.collectAsStateWithLifecycle()
     val releaseChangelogLoading by appViewModel.releaseChangelogLoading.collectAsStateWithLifecycle()
     val githubLimitNotice by appViewModel.githubLimitNotice.collectAsStateWithLifecycle()
-    val refreshReleaseHistory = rememberApiRefreshAction("github-release-history", 30_000L) {
-        appViewModel.refreshReleaseChangelog(force = true)
-    }
+    val refreshReleaseHistory = rememberApiRefreshAction(
+        key = "github-release-history",
+        cooldownMs = 30_000L,
+        onRefresh = { appViewModel.refreshReleaseChangelog(force = true) },
+    )
     val animationsEnabled by appViewModel.animationsEnabled.collectAsStateWithLifecycle()
     val developerModeEnabled by appViewModel.developerModeEnabled.collectAsStateWithLifecycle()
     var showProblemReportDialog by remember { mutableStateOf(false) }
@@ -1762,6 +1764,7 @@ fun SettingsScreen(
                         onToast("Impossible d'ouvrir l'installateur sur cet appareil.")
                     }
                 },
+                onToast = onToast,
             )
         }
 
@@ -1813,32 +1816,12 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.Description,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f).clickable { setReleaseHistoryPage(true) }) {
-                    Text(
-                        text = atlasText("Nouveautés des versions"),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = atlasText("Ouvrir l'historique complet des changements publiés"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                AtlasButton(
-                    text = atlasText("Ouvrir", "Open", "فتح"),
-                    onClick = { setReleaseHistoryPage(true) },
-                    icon = Icons.AutoMirrored.Outlined.ArrowForward,
-                )
-            }
+            SettingsRow(
+                icon = Icons.Outlined.Description,
+                title = atlasText("Nouveautés des versions"),
+                subtitle = atlasText("Ouvrir l'historique complet des changements publiés"),
+                onClick = { setReleaseHistoryPage(true) },
+            )
         }
 
         // 4. Active Server & Saved Servers Management

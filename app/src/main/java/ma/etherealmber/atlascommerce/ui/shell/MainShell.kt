@@ -31,10 +31,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -279,7 +281,11 @@ fun MainShell(
     var showAgentSurprise by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var agentHistoryRequested by remember { mutableStateOf(false) }
     val agentViewModel: AgentViewModel? = if (tab == MainTab.AGENT) hiltViewModel() else null
-    val refreshAgentContext = rememberApiRefreshAction("agent-context", 5_000L) { agentViewModel?.refreshContext() }
+    val refreshAgentContext = rememberApiRefreshAction(
+        key = "agent-context",
+        cooldownMs = 5_000L,
+        onRefresh = { agentViewModel?.refreshContext() },
+    )
     val refreshAgentPolicy = rememberApiRefreshAction("agent-policy", 5_000L, appViewModel::refreshAgentPolicy)
     val agentState = agentViewModel?.state?.collectAsStateWithLifecycle()?.value
     var showProblemReportDialog by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
@@ -564,6 +570,11 @@ fun MainShell(
                                     "Open Atlas Agent",
                                     "فتح Atlas Agent",
                                 )
+                                val dataCacheDescription = atlasText(
+                                    "Données et cache",
+                                    "Data & cache manager",
+                                    "البيانات والذاكرة المؤقتة",
+                                )
                                 val hasHiddenUpdate = when (val state = updateState) {
                                     is UpdateState.Downloading -> state.hiddenInForeground && !state.info.mandatory
                                     is UpdateState.Available -> state.dismissedBanner && !state.info.mandatory
@@ -575,6 +586,27 @@ fun MainShell(
                                         state = updateState,
                                         onClick = onShowUpdateProgress,
                                     )
+                                }
+                                if (isForeground && !useRail) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                        tonalElevation = 1.dp,
+                                    ) {
+                                        IconButton(
+                                            onClick = openDataCacheManager,
+                                            modifier = Modifier.size(40.dp).semantics {
+                                                contentDescription = dataCacheDescription
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Inventory2,
+                                                contentDescription = null,
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.width(6.dp))
                                 }
                                 if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
                                 if (!useRail && tab !in BackStackTabs) {
@@ -633,20 +665,6 @@ fun MainShell(
                                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                                 tonalElevation = 1.dp,
                                             ) {
-                                                IconButton(onClick = openDataCacheManager, modifier = Modifier.size(40.dp)) {
-                                                    Icon(
-                                                        imageVector = Icons.Outlined.Inventory2,
-                                                        contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
-                                                    )
-                                                }
-                                            }
-                                            Spacer(Modifier.width(6.dp))
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                tonalElevation = 1.dp,
-                                            ) {
                                                 IconButton(onClick = { switchTab(MainTab.SETTINGS) }, modifier = Modifier.size(40.dp)) {
                                                     Icon(
                                                         imageVector = Icons.Outlined.Settings,
@@ -695,24 +713,31 @@ fun MainShell(
             }
         },
     ) { padding ->
+        val layoutDirection = LocalLayoutDirection.current
+        val safeTopInset = with(LocalDensity.current) { WindowInsets.statusBars.getTop(this).toDp() }
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(
+                    start = padding.calculateLeftPadding(layoutDirection),
+                    top = safeTopInset,
+                    end = padding.calculateRightPadding(layoutDirection),
+                    bottom = padding.calculateBottomPadding(),
+                )
                 .background(MaterialTheme.colorScheme.background),
         ) {
         val showRail = useRail
-        val layoutDirection = LocalLayoutDirection.current
         val sidebarStartInset = if (layoutDirection == LayoutDirection.Ltr) {
             padding.calculateLeftPadding(layoutDirection)
         } else {
             padding.calculateRightPadding(layoutDirection)
         }
         val sidebarEdgeOffset = if (layoutDirection == LayoutDirection.Ltr) -sidebarStartInset else sidebarStartInset
-        val sidebarTopInset = padding.calculateTopPadding()
+        val sidebarTopInset = safeTopInset
         val sidebarBottomInset = padding.calculateBottomPadding()
         val sidebarContentTopLift = if (useRail && showShellTopBar) sidebarTopInset else 0.dp
         val sidebarHeight = (shellMaxHeight - sidebarBottomInset).coerceAtLeast(0.dp)
+        val sidebarBackgroundHeight = shellMaxHeight
         if (showRail) {
             // Extend the rail surface behind the top bar. On tablet destinations with
             // a top bar, lift the contents into its transparent sidebar region as well.
@@ -721,7 +746,7 @@ fun MainShell(
                     .align(Alignment.CenterStart)
                     .offset(x = sidebarEdgeOffset, y = -sidebarTopInset)
                     .width(sidebarWidth + sidebarStartInset)
-                    .height(sidebarHeight),
+                    .requiredHeight(sidebarBackgroundHeight),
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
             ) {}
             Surface(

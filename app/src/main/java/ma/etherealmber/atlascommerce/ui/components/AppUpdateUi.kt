@@ -560,10 +560,21 @@ fun SettingsUpdateCard(
     onCheck: () -> Unit,
     onDownload: () -> Unit,
     onInstall: () -> Unit,
+    onToast: (String) -> Unit,
 ) {
     val context = LocalContext.current
-    val gatedOnCheck = rememberApiRefreshAction("manual-update-check", 30_000L, onCheck)
-    val gatedOnPing = rememberApiRefreshAction("update-source-test", 30_000L, onPingMirrors)
+    val gatedOnCheck = rememberApiRefreshAction(
+        key = "manual-update-check",
+        cooldownMs = 30_000L,
+        onRefresh = onCheck,
+        onCooldownMessage = onToast,
+    )
+    val gatedOnPing = rememberApiRefreshAction(
+        key = "update-source-test",
+        cooldownMs = 30_000L,
+        onRefresh = onPingMirrors,
+        onCooldownMessage = onToast,
+    )
     val notificationsEnabled = runCatching {
         NotificationManagerCompat.from(context).areNotificationsEnabled()
     }.getOrDefault(true)

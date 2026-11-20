@@ -49,7 +49,6 @@ import ma.etherealmber.atlascommerce.data.model.QrSessionStatusDto
 import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
 import ma.etherealmber.atlascommerce.data.model.RejectMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.RevokeDeviceRequest
-import ma.etherealmber.atlascommerce.data.model.ReportLinkTicketDto
 import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
 import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestBody
 import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
@@ -352,10 +351,6 @@ interface AtlasApi {
         @Query("page_size") pageSize: Int = 50,
         @Query("due_before") dueBefore: String? = null,
     ): ApiEnvelope<PayrollPageDto>
-
-    /** Short-lived signed report ticket; never a JWT and never stored by the app. */
-    @GET("api/reports/link-ticket")
-    suspend fun reportLinkTicket(): ApiEnvelope<ReportLinkTicketDto>
 
     @Streaming
     @GET("api/admin/finance/monthly/report.pdf")
