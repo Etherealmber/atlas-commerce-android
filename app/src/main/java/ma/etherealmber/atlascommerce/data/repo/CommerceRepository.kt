@@ -8,6 +8,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import kotlin.coroutines.cancellation.CancellationException
 import ma.etherealmber.atlascommerce.core.RoleTarget
 import ma.etherealmber.atlascommerce.core.AppLanguage
@@ -570,6 +572,7 @@ class CommerceRepository @Inject constructor(
                 AssistChatRequest(
                     message = outboundPrompt,
                     userMessage = cleanQuestion,
+                    timezone = ZoneId.systemDefault().id,
                     threadId = threadId,
                     responseLanguage = responseLanguage.tag,
                     images = images.take(4),
@@ -596,6 +599,7 @@ class CommerceRepository @Inject constructor(
         val request = AssistChatRequest(
             message = buildAssistOutboundPrompt(cleanQuestion, role, username, responseLanguage),
             userMessage = cleanQuestion,
+            timezone = ZoneId.systemDefault().id,
             threadId = threadId,
             responseLanguage = responseLanguage.tag,
             images = images.take(4),
@@ -696,7 +700,12 @@ class CommerceRepository @Inject constructor(
                 ""
             }
         }
-        return composeAgentPrompt(cleanQuestion, snapshot, responseLanguage)
+        return composeAgentPrompt(
+            question = cleanQuestion,
+            snapshot = snapshot,
+            language = responseLanguage,
+            localTimeContext = localizedAgentClockContext(ZonedDateTime.now(), responseLanguage),
+        )
     }
 
     private suspend fun buildLiveBusinessSnapshot(
