@@ -28,6 +28,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -54,6 +55,7 @@ import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
+import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import java.time.LocalDate
 import kotlin.math.abs
@@ -146,21 +148,31 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
         }
     }
 
-    Scaffold(topBar = {
-        AtlasFloatingTopBar(
-            title = when (page) {
-                SnakePage.MENU, SnakePage.PLAY -> atlasText("Atlas Snake", "Atlas Snake", "ثعبان Atlas")
-                SnakePage.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
-                SnakePage.DAILY -> atlasText("Défi du jour", "Daily challenge", "تحدي اليوم")
-            },
-            onBack = {
-                if (page == SnakePage.MENU) onClose() else {
-                    running = false
-                    page = SnakePage.MENU
-                }
-            },
-        )
-    }) { padding ->
+    var headerExpanded by remember(page) { mutableStateOf(true) }
+    val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(
+        expanded = headerExpanded,
+        onExpandedChange = { headerExpanded = it },
+    )
+
+    Scaffold(
+        modifier = Modifier.nestedScroll(headerScrollConnection),
+        topBar = {
+            AtlasFloatingTopBar(
+                title = when (page) {
+                    SnakePage.MENU, SnakePage.PLAY -> atlasText("Atlas Snake", "Atlas Snake", "ثعبان Atlas")
+                    SnakePage.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
+                    SnakePage.DAILY -> atlasText("Défi du jour", "Daily challenge", "تحدي اليوم")
+                },
+                onBack = {
+                    if (page == SnakePage.MENU) onClose() else {
+                        running = false
+                        page = SnakePage.MENU
+                    }
+                },
+                expanded = headerExpanded,
+            )
+        },
+    ) { padding ->
         when (page) {
             SnakePage.PLAY -> GameplayPage(
                 modifier = Modifier.fillMaxSize().padding(padding),
