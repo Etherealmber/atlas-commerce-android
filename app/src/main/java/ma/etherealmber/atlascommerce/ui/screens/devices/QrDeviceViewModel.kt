@@ -214,11 +214,12 @@ class QrDeviceViewModel @Inject constructor(
     }
 
     fun consumeInitialToken(token: String?, mode: QrDeviceMode) {
-        if (DesktopPhoneQrParser.isCandidate(token)) {
-            handleRawScan(token, mode)
+        val raw = token ?: return
+        if (DesktopPhoneQrParser.isCandidate(raw)) {
+            handleRawScan(raw, mode)
             return
         }
-        val clean = QrTokenParser.extractQrToken(token) ?: return
+        val clean = QrTokenParser.extractQrToken(raw) ?: return
         if (clean != _state.value.activeToken) {
             handleRawScan(clean, mode)
         }
