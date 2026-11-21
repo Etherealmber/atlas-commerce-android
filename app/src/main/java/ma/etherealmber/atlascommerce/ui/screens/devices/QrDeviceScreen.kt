@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -76,6 +77,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -388,7 +390,22 @@ fun QrDeviceScreen(
                         },
                     )
 
-                    QrDeviceViewModel.Step.IDLE -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    QrDeviceViewModel.Step.IDLE -> if (state.loading) {
+                        SecurityCard {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                                Text(
+                                    statusMessage ?: atlasText("Vérification en cours…", "Verification in progress…", "جارٍ التحقق…"),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    } else Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(
                             modifier = Modifier
                                 .widthIn(max = if (shouldRunCamera) 440.dp else 560.dp)
@@ -708,8 +725,18 @@ private fun DesktopV2ApprovalCard(
                     fontWeight = FontWeight.Bold,
                 )
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = approval.comparisonConfirmed, onCheckedChange = onComparisonChanged, enabled = !loading)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = approval.comparisonConfirmed,
+                        enabled = !loading,
+                        role = Role.Checkbox,
+                        onValueChange = onComparisonChanged,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = approval.comparisonConfirmed, onCheckedChange = null, enabled = !loading)
                 Text(
                     atlasText("J'ai comparé les codes sur les deux appareils.", "I compared the codes on both devices.", "قارنت الرمزين على الجهازين."),
                     modifier = Modifier.weight(1f),

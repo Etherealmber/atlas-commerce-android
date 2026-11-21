@@ -78,6 +78,9 @@ class QrDevicesAndModelsTest {
         assertNull(DesktopPhoneQrParser.parse(valid, "https://shop.example:9443"))
         assertNull(DesktopPhoneQrParser.parse(valid, "https://shop.example"))
         assertNull(DesktopPhoneQrParser.parse("http://shop.example:8443/login/desktop-phone#request_id=$id", "https://shop.example:8443"))
+        val trailingSlashVariant = "https://shop.example:8443/login/desktop-phone/?token=legacytoken#request_id=$id"
+        assertTrue(DesktopPhoneQrParser.isCandidate(trailingSlashVariant))
+        assertNull(DesktopPhoneQrParser.parse(trailingSlashVariant, "https://shop.example:8443"))
         assertNull(DesktopPhoneQrParser.parse("https://shop.example:8443/login/desktop-phone/?#request_id=$id", "https://shop.example:8443"))
         assertNull(DesktopPhoneQrParser.parse("https://shop.example:8443/login/desktop-phone?x=1#request_id=$id", "https://shop.example:8443"))
         assertNull(DesktopPhoneQrParser.parse("https://shop.example:8443/login/desktop-phone#request_id=$id&extra=1", "https://shop.example:8443"))
@@ -96,6 +99,22 @@ class QrDevicesAndModelsTest {
         assertFalse(DesktopPhoneApprovalRules.canDecide(true, requestExpiry, "not-a-date", now))
         assertFalse(DesktopPhoneApprovalRules.isValidWindow(requestExpiry, "2032-01-01T00:00:00Z", now))
         assertFalse(DesktopPhoneApprovalRules.isValidWindow(requestExpiry, "2031-03-17T17:48:41Z", now))
+        val fixedRequestExpiry = java.time.Instant.ofEpochMilli(now + 300_000L).toString()
+        assertTrue(DesktopPhoneApprovalRules.isValidWindow(
+            fixedRequestExpiry,
+            java.time.Instant.ofEpochMilli(now + 120_000L).toString(),
+            now,
+        ))
+        assertFalse(DesktopPhoneApprovalRules.isValidWindow(
+            fixedRequestExpiry,
+            java.time.Instant.ofEpochMilli(now + 120_001L).toString(),
+            now,
+        ))
+        assertFalse(DesktopPhoneApprovalRules.isValidWindow(
+            fixedRequestExpiry,
+            java.time.Instant.ofEpochMilli(now).toString(),
+            now,
+        ))
         assertTrue(DesktopPhoneApprovalRules.matchesResponse(true, "approved"))
         assertFalse(DesktopPhoneApprovalRules.matchesResponse(true, "denied"))
         assertTrue(DesktopPhoneApprovalRules.matchesResponse(false, "denied"))

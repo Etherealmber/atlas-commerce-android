@@ -10,6 +10,12 @@ data class DesktopPhoneQr(val origin: String, val requestId: String)
 object DesktopPhoneQrParser {
     private val fragmentPattern = Regex("^request_id=([A-Fa-f0-9]{64})$")
 
+    /** Broad route recognition prevents malformed v2 links from being reinterpreted as legacy QR tokens. */
+    fun isCandidate(raw: String?): Boolean = runCatching {
+        val value = raw?.trim().orEmpty()
+        value.isNotEmpty() && URI(value).rawPath.orEmpty().trimEnd('/') == "/login/desktop-phone"
+    }.getOrDefault(false)
+
     /** Accepts only the fixed v2 URL structure, pinned to the currently selected HTTPS origin. */
     fun parse(raw: String?, selectedServer: String?): DesktopPhoneQr? {
         val value = raw ?: return null
@@ -29,7 +35,7 @@ object DesktopPhoneQrParser {
     /** Preserve explicit ports (including :443) rather than normalizing them away. */
     private fun strictHttpsOrigin(uri: URI): String? {
         if (!uri.scheme.equals("https", ignoreCase = true) || uri.rawUserInfo != null ||
-            uri.rawQuery != null || uri.rawFragment != null || uri.rawPath.orEmpty().let { it.isNotEmpty() && it != "/" }
+            uri.rawQuery != null || uri.rawPath.orEmpty().let { it.isNotEmpty() && it != "/" }
         ) return null
         val host = uri.host ?: return null
         val authority = uri.rawAuthority ?: return null

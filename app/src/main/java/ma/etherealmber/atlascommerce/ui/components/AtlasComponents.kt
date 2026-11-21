@@ -702,7 +702,7 @@ fun AtlasFloatingTopBar(
                     } else {
                         EnterTransition.None togetherWith ExitTransition.None
                     }
-                    contentTransform.using(SizeTransform(clip = false))
+                    contentTransform.using(if (motionEnabled) SizeTransform(clip = false) else null)
                 },
                 label = "atlas-floating-page-header",
             ) { showExpanded ->

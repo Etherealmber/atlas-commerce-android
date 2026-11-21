@@ -126,20 +126,53 @@ class QrDeviceViewModel @Inject constructor(
     private var pollJob: Job? = null
     private var desktopDecisionGate = SingleUseDecisionGate()
     private var desktopPrepareJob: Job? = null
+    private var desktopDecisionJob: Job? = null
+    private var desktopOperationId = 0L
+    private var desktopOperationSessionIdentity: String? = null
+    private var desktopOperationServer: String? = null
     private var initializedRoute: Pair<String?, QrDeviceMode>? = null
     private var devicesLoadGeneration = 0L
+
+    private fun beginDesktopOperation(sessionIdentity: String, server: String): Long {
+        invalidateDesktopOperation()
+        desktopOperationSessionIdentity = sessionIdentity
+        desktopOperationServer = server
+        return desktopOperationId
+    }
+
+    private fun invalidateDesktopOperation() {
+        desktopOperationId += 1L
+        desktopPrepareJob?.cancel()
+        desktopPrepareJob = null
+        desktopDecisionJob?.cancel()
+        desktopDecisionJob = null
+        desktopOperationSessionIdentity = null
+        desktopOperationServer = null
+        desktopDecisionGate = SingleUseDecisionGate()
+    }
+
+    private fun finishDesktopOperation(operationId: Long) {
+        if (operationId != desktopOperationId) return
+        desktopOperationId += 1L
+        desktopPrepareJob = null
+        desktopDecisionJob = null
+        desktopOperationSessionIdentity = null
+        desktopOperationServer = null
+    }
+
+    private fun abortDesktopOperation(message: String) {
+        invalidateDesktopOperation()
+        _state.update {
+            it.copy(step = Step.IDLE, desktopV2 = null, loading = false, statusMessage = null, error = message)
+        }
+    }
 
     init {
         viewModelScope.launch {
             serverConfig.selection.map { it?.baseUrl }.distinctUntilChanged().collect { selected ->
-                val pending = _state.value.desktopV2
-                if (pending != null && ServerUrl.normalize(selected) != ServerUrl.normalize(pending.serverSnapshot)) {
-                    _state.update {
-                        it.copy(
-                            step = Step.IDLE, desktopV2 = null, loading = false,
-                            error = "Le serveur a changé. La demande d'approbation a été abandonnée.",
-                        )
-                    }
+                val expectedServer = desktopOperationServer ?: _state.value.desktopV2?.serverSnapshot
+                if (expectedServer != null && ServerUrl.normalize(selected) != ServerUrl.normalize(expectedServer)) {
+                    abortDesktopOperation("Le serveur a changé. La demande d'approbation a été abandonnée.")
                 }
             }
         }
@@ -149,14 +182,9 @@ class QrDeviceViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collect { scopeIdentity ->
                     devicesLoadGeneration += 1
-                    val pendingV2 = _state.value.desktopV2
-                    if (pendingV2 != null && pendingV2.sessionIdentity != scopeIdentity) {
-                        _state.update {
-                            it.copy(
-                                step = Step.IDLE, desktopV2 = null, loading = false,
-                                error = "Le compte a changé. La demande d'approbation a été abandonnée.",
-                            )
-                        }
+                    val expectedIdentity = desktopOperationSessionIdentity ?: _state.value.desktopV2?.sessionIdentity
+                    if (expectedIdentity != null && expectedIdentity != scopeIdentity) {
+                        abortDesktopOperation("Le compte a changé. La demande d'approbation a été abandonnée.")
                     }
                     _state.update { it.copy(devices = emptyList(), devicesLoading = false, devicesLoadError = null, revokingId = null) }
                     if (scopeIdentity != null) loadDevices()
@@ -186,7 +214,7 @@ class QrDeviceViewModel @Inject constructor(
     }
 
     fun consumeInitialToken(token: String?, mode: QrDeviceMode) {
-        if (token != null && runCatching { java.net.URI(token).rawPath == "/login/desktop-phone" }.getOrDefault(false)) {
+        if (DesktopPhoneQrParser.isCandidate(token)) {
             handleRawScan(token, mode)
             return
         }
@@ -226,8 +254,7 @@ class QrDeviceViewModel @Inject constructor(
             return
         }
 
-        val desktopPath = runCatching { java.net.URI(raw).rawPath == "/login/desktop-phone" }.getOrDefault(false)
-        if (desktopPath) {
+        if (DesktopPhoneQrParser.isCandidate(raw)) {
             val qr = DesktopPhoneQrParser.parse(raw, serverConfig.selection.value?.baseUrl)
             if (qr == null) {
                 _state.update { it.copy(error = "QR d'approbation desktop invalide ou provenant d'un autre serveur. Vérifiez le serveur HTTPS sélectionné.") }
@@ -274,11 +301,17 @@ class QrDeviceViewModel @Inject constructor(
         }
         val identity = active.user.scopeIdentity
         val expectedUsername = active.user.username
+        val operationId = beginDesktopOperation(identity, selected)
         desktopPrepareJob = viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null, statusMessage = "Vérification de la demande desktop v2…") }
-            when (val result = authRepository.desktopPhonePrepare(qr.origin, qr.requestId, bearer)) {
-                is ApiResult.Failure -> _state.update {
-                    it.copy(loading = false, step = Step.IDLE, statusMessage = null, error = result.message)
+            val result = authRepository.desktopPhonePrepare(qr.origin, qr.requestId, bearer)
+            if (operationId != desktopOperationId) return@launch
+            when (result) {
+                is ApiResult.Failure -> {
+                    _state.update {
+                        it.copy(loading = false, step = Step.IDLE, statusMessage = null, error = result.message)
+                    }
+                    finishDesktopOperation(operationId)
                 }
                 is ApiResult.Success -> {
                     val data = result.data
@@ -293,12 +326,13 @@ class QrDeviceViewModel @Inject constructor(
                     if (!stillSameSession || !stillSameServer || !validData) {
                         _state.update {
                             it.copy(
-                                loading = false, step = Step.IDLE,
+                                loading = false, step = Step.IDLE, desktopV2 = null,
                                 error = if (!stillSameSession) "Le compte a changé pendant la préparation. Scannez un nouveau QR."
                                 else if (!stillSameServer) "Le serveur a changé pendant la préparation. Scannez un nouveau QR."
                                 else "Réponse de préparation invalide ou expirée. Aucune décision n'a été envoyée.",
                             )
                         }
+                        finishDesktopOperation(operationId)
                         return@launch
                     }
                     desktopDecisionGate = SingleUseDecisionGate()
@@ -328,9 +362,8 @@ class QrDeviceViewModel @Inject constructor(
 
     /** Local cancellation deliberately sends no request; the server-side consent nonce expires. */
     fun cancelDesktopApproval() {
-        if (_state.value.desktopV2 == null && desktopPrepareJob == null) return
-        desktopPrepareJob?.cancel()
-        desktopPrepareJob = null
+        if (_state.value.desktopV2 == null && desktopPrepareJob == null && desktopDecisionJob == null) return
+        invalidateDesktopOperation()
         _state.update { it.copy(step = Step.IDLE, desktopV2 = null, loading = false, error = null, statusMessage = null) }
     }
 
@@ -362,13 +395,16 @@ class QrDeviceViewModel @Inject constructor(
             _state.update { it.copy(error = "La demande ou le consentement a expiré. Scannez un nouveau QR.") }
             return
         }
+        val operationId = desktopOperationId
         _state.update { it.copy(loading = true, error = null) }
-        viewModelScope.launch {
-            when (val result = authRepository.desktopPhoneDecision(
+        desktopDecisionJob = viewModelScope.launch {
+            val result = authRepository.desktopPhoneDecision(
                 origin = pending.origin, requestId = pending.requestId,
                 nonce = pending.consentNonce, decision = if (approve) "approve" else "deny",
                 bearerToken = pending.bearerSnapshot,
-            )) {
+            )
+            if (operationId != desktopOperationId) return@launch
+            when (result) {
                 is ApiResult.Failure -> {
                     // A lost response can follow a committed one-time decision; never replay it.
                     _state.update {
@@ -392,6 +428,7 @@ class QrDeviceViewModel @Inject constructor(
                     }
                 }
             }
+            finishDesktopOperation(operationId)
         }
     }
 
@@ -621,6 +658,7 @@ class QrDeviceViewModel @Inject constructor(
 
     fun resetScan() {
         pollJob?.cancel()
+        invalidateDesktopOperation()
         _state.update {
             it.copy(
                 step = Step.IDLE,

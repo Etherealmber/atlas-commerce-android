@@ -25,8 +25,8 @@ val LocalAtlasFloatingTopBarExpanded = staticCompositionLocalOf { true }
 @Composable
 fun rememberAtlasFloatingTopBarScrollConnection(
     expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
     threshold: Dp = 12.dp,
+    onExpandedChange: (Boolean) -> Unit,
 ): NestedScrollConnection {
     val thresholdPx = with(LocalDensity.current) { threshold.toPx() }
     val scrollDelta = remember { mutableFloatStateOf(0f) }
@@ -44,12 +44,12 @@ fun rememberAtlasFloatingTopBarScrollConnection(
                 if (verticalDelta == 0f) return Offset.Zero
                 scrollDelta.floatValue += verticalDelta
                 when {
-                    scrollDelta.floatValue <= -thresholdPx && currentExpanded.value -> {
-                        currentOnExpandedChange.value(false)
+                    scrollDelta.floatValue <= -thresholdPx -> {
+                        if (currentExpanded.value) currentOnExpandedChange.value(false)
                         scrollDelta.floatValue = 0f
                     }
-                    scrollDelta.floatValue >= thresholdPx && !currentExpanded.value -> {
-                        currentOnExpandedChange.value(true)
+                    scrollDelta.floatValue >= thresholdPx -> {
+                        if (!currentExpanded.value) currentOnExpandedChange.value(true)
                         scrollDelta.floatValue = 0f
                     }
                 }

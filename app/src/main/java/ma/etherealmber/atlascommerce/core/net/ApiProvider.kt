@@ -5,6 +5,7 @@ import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Response
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
@@ -75,7 +76,10 @@ class ApiProvider @Inject constructor(
             .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
             .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
             .callTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-            .apply { interceptors().add(0, DesktopOriginGuardInterceptor(serverConfig, selectedOrigin, tokenHolder, expectedBearer)) }
+            .apply {
+                interceptors().add(0, DesktopOriginGuardInterceptor(serverConfig, selectedOrigin, tokenHolder, expectedBearer))
+                interceptors().add(1, DesktopDecisionOneShotInterceptor())
+            }
             .build()
         return Retrofit.Builder()
             .baseUrl("$selectedOrigin/")
@@ -150,16 +154,16 @@ private class DesktopOriginGuardInterceptor(
         val currentOrigin = if (uri.scheme.equals("https", true)) {
             "https://${host.lowercase()}" + if (explicitPort && uri.port in 1..65535) ":${uri.port}" else ""
         } else ""
-        val expected = java.net.URI(expectedOrigin)
+        val expectedUrl = expectedOrigin.toHttpUrlOrNull()
+            ?: throw java.io.IOException("Desktop approval origin is invalid")
         val requestUrl = chain.request().url
-        val expectedPort = expected.port.takeIf { it > 0 } ?: 443
         if (tokenHolder.token != expectedBearer || currentOrigin != expectedOrigin || requestUrl.scheme != "https" ||
-            requestUrl.host.lowercase() != expected.host.lowercase() || requestUrl.port != expectedPort
+            requestUrl.host != expectedUrl.host || requestUrl.port != expectedUrl.port
         ) throw java.io.IOException("Desktop approval origin changed; request blocked")
         val response = chain.proceed(chain.request())
         val finalUrl = response.request.url
-        if (finalUrl.scheme != "https" || finalUrl.host.lowercase() != expected.host.lowercase() ||
-            finalUrl.port != expectedPort
+        if (finalUrl.scheme != "https" || finalUrl.host != expectedUrl.host ||
+            finalUrl.port != expectedUrl.port
         ) {
             response.close()
             throw java.io.IOException("Desktop approval response origin mismatch")
