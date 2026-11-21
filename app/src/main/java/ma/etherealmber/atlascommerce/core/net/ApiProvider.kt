@@ -5,6 +5,7 @@ import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Response
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
@@ -28,6 +29,7 @@ class ApiProvider @Inject constructor(
     private val moshi: Moshi,
     private val client: OkHttpClient,
     private val deviceIdentity: DeviceIdentity,
+    private val tokenHolder: TokenHolder,
 ) {
 
     private val lock = Any()
@@ -50,6 +52,41 @@ class ApiProvider @Inject constructor(
             if (selectedBase != expectedBase) return@synchronized null
             apiForBaseUrl(selectedBase)
         }
+    }
+
+    /** A one-purpose client pinned to the selected HTTPS origin; redirects are never followed. */
+    fun desktopPhoneApiForOrigin(origin: String, expectedBearer: String): AtlasApi? {
+        if (expectedBearer.isBlank() || tokenHolder.token != expectedBearer) return null
+        val selected = ServerUrl.normalize(serverConfig.baseUrl()) ?: return null
+        val selectedUri = runCatching { java.net.URI(selected) }.getOrNull() ?: return null
+        if (!selectedUri.scheme.equals("https", true) || selectedUri.rawPath.orEmpty().let { it.isNotEmpty() && it != "/" } ||
+            selectedUri.rawQuery != null || selectedUri.rawFragment != null || selectedUri.rawUserInfo != null
+        ) return null
+        val host = selectedUri.host ?: return null
+        val authority = selectedUri.rawAuthority ?: return null
+        val explicitPort = if (host.startsWith("[")) authority.substringAfter(']', "").startsWith(":")
+            else authority.substring(host.length).startsWith(":")
+        if (explicitPort && selectedUri.port !in 1..65535) return null
+        val selectedOrigin = "https://${host.lowercase()}" + if (explicitPort) ":${selectedUri.port}" else ""
+        if (origin != selectedOrigin) return null
+        val pinnedClient = client.newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .callTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .apply {
+                interceptors().add(0, DesktopOriginGuardInterceptor(serverConfig, selectedOrigin, tokenHolder, expectedBearer))
+                interceptors().add(1, DesktopDecisionOneShotInterceptor())
+            }
+            .build()
+        return Retrofit.Builder()
+            .baseUrl("$selectedOrigin/")
+            .client(pinnedClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(AtlasApi::class.java)
     }
 
     private fun apiForBaseUrl(base: String): AtlasApi {
@@ -96,6 +133,42 @@ class ApiProvider @Inject constructor(
             builtApi = null
             builtFor = null
         }
+    }
+}
+
+private class DesktopOriginGuardInterceptor(
+    private val serverConfig: ServerConfig,
+    private val expectedOrigin: String,
+    private val tokenHolder: TokenHolder,
+    private val expectedBearer: String,
+) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val selected = ServerUrl.normalize(serverConfig.baseUrl())
+            ?: throw java.io.IOException("Desktop approval server selection is invalid")
+        val uri = runCatching { java.net.URI(selected) }.getOrNull()
+            ?: throw java.io.IOException("Desktop approval server selection is invalid")
+        val host = uri.host ?: throw java.io.IOException("Desktop approval server selection is invalid")
+        val authority = uri.rawAuthority ?: throw java.io.IOException("Desktop approval server selection is invalid")
+        val explicitPort = if (host.startsWith("[")) authority.substringAfter(']', "").startsWith(":")
+            else authority.substring(host.length).startsWith(":")
+        val currentOrigin = if (uri.scheme.equals("https", true)) {
+            "https://${host.lowercase()}" + if (explicitPort && uri.port in 1..65535) ":${uri.port}" else ""
+        } else ""
+        val expectedUrl = expectedOrigin.toHttpUrlOrNull()
+            ?: throw java.io.IOException("Desktop approval origin is invalid")
+        val requestUrl = chain.request().url
+        if (tokenHolder.token != expectedBearer || currentOrigin != expectedOrigin || requestUrl.scheme != "https" ||
+            requestUrl.host != expectedUrl.host || requestUrl.port != expectedUrl.port
+        ) throw java.io.IOException("Desktop approval origin changed; request blocked")
+        val response = chain.proceed(chain.request())
+        val finalUrl = response.request.url
+        if (finalUrl.scheme != "https" || finalUrl.host != expectedUrl.host ||
+            finalUrl.port != expectedUrl.port
+        ) {
+            response.close()
+            throw java.io.IOException("Desktop approval response origin mismatch")
+        }
+        return response
     }
 }
 

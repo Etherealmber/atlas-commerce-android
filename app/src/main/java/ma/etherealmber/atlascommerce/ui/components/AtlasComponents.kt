@@ -34,6 +34,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -671,13 +672,16 @@ fun AtlasFloatingTopBar(
     onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     applyStatusBarInsets: Boolean = true,
+    expanded: Boolean = true,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
     Box(
         modifier = modifier
             .fillMaxWidth()
             .then(if (applyStatusBarInsets) Modifier.statusBarsPadding() else Modifier)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 18.dp, vertical = 18.dp)
+            .graphicsLayer { clip = false },
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth().graphicsLayer { clip = false },
@@ -687,14 +691,59 @@ fun AtlasFloatingTopBar(
             tonalElevation = 0.dp,
             shadowElevation = 8.dp,
         ) {
-            AtlasTopBar(
-                title = title,
-                subtitle = subtitle,
-                onBack = onBack,
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                containerColor = Color.Transparent,
-                actions = actions,
-            )
+            AnimatedContent(
+                targetState = expanded,
+                transitionSpec = {
+                    val contentTransform = if (motionEnabled) {
+                        (fadeIn(tween(160, easing = FastOutSlowInEasing)) +
+                            scaleIn(tween(200, easing = FastOutSlowInEasing), initialScale = 0.96f)) togetherWith
+                            (fadeOut(tween(120, easing = FastOutSlowInEasing)) +
+                                scaleOut(tween(140, easing = FastOutSlowInEasing), targetScale = 0.97f))
+                    } else {
+                        EnterTransition.None togetherWith ExitTransition.None
+                    }
+                    contentTransform.using(if (motionEnabled) SizeTransform(clip = false) else null)
+                },
+                label = "atlas-floating-page-header",
+            ) { showExpanded ->
+                if (showExpanded) {
+                    AtlasTopBar(
+                        title = title,
+                        subtitle = subtitle,
+                        onBack = onBack,
+                        windowInsets = WindowInsets(0, 0, 0, 0),
+                        containerColor = Color.Transparent,
+                        actions = actions,
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 10.dp),
+                    ) {
+                        if (onBack != null) {
+                            IconButton(
+                                onClick = onBack,
+                                modifier = Modifier.align(Alignment.CenterStart),
+                            ) {
+                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour"))
+                            }
+                        }
+                        Text(
+                            text = atlasText(title),
+                            modifier = Modifier.align(Alignment.Center).padding(horizontal = 58.dp),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Row(
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                            verticalAlignment = Alignment.CenterVertically,
+                            content = actions,
+                        )
+                    }
+                }
+            }
         }
     }
 }

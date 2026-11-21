@@ -8,7 +8,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -18,6 +17,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -549,6 +549,7 @@ fun MainShell(
         topBar = {
             AnimatedVisibility(
                 visible = shellTopBarVisible,
+                modifier = Modifier.graphicsLayer { clip = false },
                 enter = if (motionEnabled) {
                     fadeIn(tween(220, easing = FastOutSlowInEasing)) +
                         slideInVertically(
@@ -569,22 +570,16 @@ fun MainShell(
                         .fillMaxWidth()
                         .statusBarsPadding()
                         .padding(
-                            start = if (useRail) sidebarWidth + 16.dp else 16.dp,
-                            end = 16.dp,
-                            top = 14.dp,
-                            bottom = 14.dp,
-                        ),
+                            start = if (useRail) sidebarWidth + 20.dp else 20.dp,
+                            end = 20.dp,
+                            top = 18.dp,
+                            bottom = 18.dp,
+                        )
+                        .graphicsLayer { clip = false },
                 ) {
                     Surface(
                         modifier = Modifier
                             .graphicsLayer { clip = false }
-                            .animateContentSize(
-                                animationSpec = if (motionEnabled) {
-                                    spring(dampingRatio = 0.82f, stiffness = 340f)
-                                } else {
-                                    tween(0)
-                                },
-                            )
                             .then(
                                 if (floatingTopBarExpanded.value) {
                                     Modifier.fillMaxWidth()
@@ -609,7 +604,7 @@ fun MainShell(
                         AnimatedContent(
                             targetState = floatingTopBarExpanded.value,
                             transitionSpec = {
-                                if (motionEnabled) {
+                                val contentTransform = if (motionEnabled) {
                                     (fadeIn(tween(180, easing = FastOutSlowInEasing)) +
                                         scaleIn(tween(220, easing = FastOutSlowInEasing), initialScale = 0.94f)) togetherWith
                                         (fadeOut(tween(130, easing = FastOutSlowInEasing)) +
@@ -617,6 +612,7 @@ fun MainShell(
                                 } else {
                                     EnterTransition.None togetherWith ExitTransition.None
                                 }
+                                contentTransform.using(if (motionEnabled) SizeTransform(clip = false) else null)
                             },
                             label = "floating-top-bar-content",
                         ) { expanded ->
@@ -933,7 +929,7 @@ fun MainShell(
         }
         val navigationInset = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
         CompositionLocalProvider(
-            LocalAtlasFloatingDockPadding provides if (showBottomNavigation) 112.dp + navigationInset else 0.dp,
+            LocalAtlasFloatingDockPadding provides if (showBottomNavigation) 116.dp + navigationInset else 0.dp,
             LocalAtlasFloatingTopBarPadding provides if (showShellTopBar && shellTopBarVisible) 76.dp else 0.dp,
             LocalAtlasFloatingTopBarExpanded provides floatingTopBarExpanded.value,
         ) {
@@ -1219,7 +1215,7 @@ private fun AtlasFloatingBottomBar(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 14.dp, vertical = 14.dp)
+            .padding(horizontal = 18.dp, vertical = 18.dp)
             .height(100.dp)
             .graphicsLayer { clip = false },
     ) {

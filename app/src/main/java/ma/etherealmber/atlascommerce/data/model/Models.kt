@@ -276,6 +276,36 @@ data class RevokeDeviceRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class DesktopPhonePrepareRequest(
+    val origin: String,
+    @Json(name = "request_id") val requestId: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class DesktopPhonePrepareDto(
+    @Json(name = "request_id") val requestId: String = "",
+    val origin: String = "",
+    val username: String = "",
+    @Json(name = "device_label") val deviceLabel: String = "",
+    @Json(name = "pairing_code") val pairingCode: String = "",
+    @Json(name = "consent_nonce") val consentNonce: String = "",
+    @Json(name = "expires_at") val expiresAt: String = "",
+    @Json(name = "consent_expires_at") val consentExpiresAt: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class DesktopPhoneDecisionRequest(
+    val origin: String,
+    @Json(name = "request_id") val requestId: String,
+    @Json(name = "consent_nonce") val consentNonce: String,
+    val decision: String,
+    @Json(name = "compare_confirmed") val compareConfirmed: Boolean,
+)
+
+@JsonClass(generateAdapter = true)
+data class DesktopPhoneDecisionDto(val status: String = "")
+
+@JsonClass(generateAdapter = true)
 data class QrClaimRequest(
     val fingerprint: String,
     @Json(name = "user_agent") val userAgent: String,
