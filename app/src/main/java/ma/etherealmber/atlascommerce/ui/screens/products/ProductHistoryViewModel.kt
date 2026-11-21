@@ -69,7 +69,12 @@ class ProductHistoryViewModel @Inject constructor(
 
         historyJob?.cancel()
         moreJob?.cancel()
-        _state.value = UiState(productId = productId, scopeIdentity = scope, loading = true)
+        _state.value = UiState(
+            productId = productId,
+            scopeIdentity = scope,
+            loading = true,
+            deletingProduct = current.deletingProduct && current.productId == productId,
+        )
         historyJob = viewModelScope.launch {
             when (val result = commerceRepository.productMovements(productId = productId, limit = PAGE_SIZE, offset = 0)) {
                 is ApiResult.Failure -> {
@@ -132,11 +137,15 @@ class ProductHistoryViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = commerceRepository.deleteProduct(productId, password)) {
                 is ApiResult.Success -> if (activeScope() == scope) {
-                    _state.update { it.copy(deletingProduct = false, error = null) }
+                    _state.update { current ->
+                        if (current.productId == productId) current.copy(deletingProduct = false, error = null) else current
+                    }
                     onComplete(true, result.data)
                 } else onComplete(false, "Le compte actif a changé. Réessayez.")
                 is ApiResult.Failure -> if (activeScope() == scope) {
-                    _state.update { it.copy(deletingProduct = false, error = result.message) }
+                    _state.update { current ->
+                        if (current.productId == productId) current.copy(deletingProduct = false, error = result.message) else current
+                    }
                     onComplete(false, result.message)
                 } else onComplete(false, "Le compte actif a changé. Réessayez.")
             }

@@ -55,7 +55,7 @@ class BalanceViewModel @Inject constructor(
         viewModelScope.launch {
             sessionManager.state
                 .map { (it as? SessionState.Active)?.user }
-                .distinctUntilChanged { old, new -> old?.scopeIdentity == new?.scopeIdentity }
+                .distinctUntilChanged { old, new -> old?.scopeIdentity == new?.scopeIdentity && old?.role == new?.role }
                 .collect { user ->
                     _state.value = UiState(isAdmin = user?.let { Roles.isAdmin(it.role) } == true)
                     if (user != null && Roles.isAdmin(user.role)) load(period = null, initial = true)
@@ -86,12 +86,12 @@ class BalanceViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(savingEntry = true, error = null) }
             val result = repository.createFinanceEntry(request)
-            val sameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
-            _state.update { it.copy(savingEntry = false) }
+            val sameScope = isActiveAdminScope(scopeIdentity)
             if (!sameScope) {
                 onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Vérifiez l'écriture avant de la renvoyer."))
                 return@launch
             }
+            _state.update { it.copy(savingEntry = false) }
             when (result) {
                 is ApiResult.Success -> {
                     onResult(result)
@@ -116,12 +116,12 @@ class BalanceViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(deletingExpenseIds = it.deletingExpenseIds + id, error = null) }
             val result = repository.deleteFinanceEntry(id, password)
-            val sameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
-            _state.update { it.copy(deletingExpenseIds = it.deletingExpenseIds - id) }
+            val sameScope = isActiveAdminScope(scopeIdentity)
             if (!sameScope) {
                 onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Vérifiez l’écriture avant de la renvoyer."))
                 return@launch
             }
+            _state.update { it.copy(deletingExpenseIds = it.deletingExpenseIds - id) }
             when (result) {
                 is ApiResult.Success -> {
                     onResult(result)
@@ -146,7 +146,7 @@ class BalanceViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(loadingMore = true, error = null) }
             val result = repository.financeStatement(period, nextPage, statement.pageSize)
-            val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
+            val stillSameScope = isActiveAdminScope(scopeIdentity)
             if (!stillSameScope) return@launch
             when (result) {
                 is ApiResult.Success -> _state.update { state ->
@@ -177,7 +177,7 @@ class BalanceViewModel @Inject constructor(
             val file = File(directory, "rapport-mensuel-$period.pdf")
             val result = repository.downloadFinanceReport(period, file)
             _state.update { it.copy(reportGenerating = false) }
-            val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
+            val stillSameScope = isActiveAdminScope(scopeIdentity)
             if (!stillSameScope) {
                 (result as? ApiResult.Success)?.data?.delete()
                 onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Relancez le téléchargement avec le bon compte."))
@@ -189,6 +189,11 @@ class BalanceViewModel @Inject constructor(
         MessageDigest.getInstance("SHA-256")
             .digest(scopeIdentity.toByteArray(Charsets.UTF_8))
             .joinToString(separator = "") { byte -> "%02x".format(byte) }
+
+    private fun isActiveAdminScope(scopeIdentity: String): Boolean {
+        val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return false
+        return Roles.isAdmin(user.role) && user.scopeIdentity == scopeIdentity
+    }
 
     private fun load(period: String?, initial: Boolean) {
         val active = sessionManager.state.value as? SessionState.Active ?: return
@@ -217,7 +222,7 @@ class BalanceViewModel @Inject constructor(
             val breakdownDeferred = periodKey?.let { key -> async { repository.financePeriod(key) } }
             val statementResult = statementDeferred?.await()
             val breakdownResult = breakdownDeferred?.await()
-            val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
+            val stillSameScope = isActiveAdminScope(scopeIdentity)
             if (!stillSameScope) return@launch
             val selectionStillCurrent = if (period == null) _state.value.selectedPeriod == null else _state.value.selectedPeriod == period
             if (!selectionStillCurrent) return@launch

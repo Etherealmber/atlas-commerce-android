@@ -126,6 +126,9 @@ fun EmployeesScreen(
     val monthLabel = formattedMonth
         ?: atlasText("Chargement du mois…", "Loading month…", "جارٍ تحميل الشهر…")
     val payroll = state.payroll
+    val employeeCurrency = payroll?.currency?.takeIf(String::isNotBlank)
+        ?: state.finance?.currency?.takeIf(String::isNotBlank)
+        ?: "MAD"
     val visibleEmployees = remember(directoryState.employees, directoryQuery) {
         val needle = directoryQuery.trim()
         directoryState.employees.filter { employee ->
@@ -220,6 +223,7 @@ fun EmployeesScreen(
     directoryState.selectedEmployee?.let { employee ->
         EmployeeDetailsDialog(
             employee = employee,
+            currency = employeeCurrency,
             loading = directoryState.detailsLoading,
             deleting = directoryState.deleting,
             saving = directoryState.saving,
@@ -236,6 +240,7 @@ fun EmployeesScreen(
     editingEmployee?.let { employee ->
         EmployeeEditDialog(
             employee = employee,
+            currency = employeeCurrency,
             saving = directoryState.saving,
             error = directoryState.actionError,
             onDismiss = { editingEmployee = null },
@@ -778,6 +783,7 @@ private fun EmployeeDirectoryRow(employee: ma.etherealmber.atlascommerce.data.mo
 @Composable
 private fun EmployeeDetailsDialog(
     employee: ma.etherealmber.atlascommerce.data.model.EmployeeDto,
+    currency: String,
     loading: Boolean,
     deleting: Boolean,
     saving: Boolean,
@@ -794,7 +800,7 @@ private fun EmployeeDetailsDialog(
         onExpandedChange = { headerExpanded = it },
     )
     Dialog(
-        onDismissRequest = { if (!deleting) onDismiss() },
+        onDismissRequest = { if (!deleting && !saving) onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -802,14 +808,14 @@ private fun EmployeeDetailsDialog(
                 AtlasFloatingTopBar(
                     title = displayName,
                     subtitle = atlasText("Détails et historique de paie", "Details and payroll history", "التفاصيل وسجل الرواتب"),
-                    onBack = onDismiss,
+                    onBack = { if (!deleting && !saving) onDismiss() },
                     expanded = headerExpanded,
                     actions = {
-                        IconButton(onClick = onEdit) {
+                        IconButton(onClick = onEdit, enabled = !deleting && !saving) {
                             Icon(Icons.Outlined.Edit, contentDescription = atlasText("Modifier l’employé", "Edit employee", "تعديل الموظف"))
                         }
                         if (employee.active == 0) {
-                            IconButton(onClick = onDelete, enabled = !deleting) {
+                            IconButton(onClick = onDelete, enabled = !deleting && !saving) {
                                 if (deleting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                                 else Icon(Icons.Outlined.Delete, contentDescription = atlasText("Supprimer l’employé", "Delete employee", "حذف الموظف"), tint = MaterialTheme.colorScheme.error)
                             }
@@ -830,7 +836,7 @@ private fun EmployeeDetailsDialog(
                                 employee.email.takeIf(String::isNotBlank)?.let { "Email: $it" },
                                 employee.phone.takeIf(String::isNotBlank)?.let { "${atlasText("Téléphone", "Phone", "الهاتف")}: $it" },
                                 employee.joinedDate.takeIf(String::isNotBlank)?.let { "${atlasText("Date d’entrée", "Joined", "تاريخ الانضمام")}: ${atlasShortDate(it)}" },
-                                "${atlasText("Salaire prévu", "Pay rate", "الأجر")}: ${atlasMoney(employee.payAmount, "MAD")}",
+                                "${atlasText("Salaire prévu", "Pay rate", "الأجر")}: ${atlasMoney(employee.payAmount, currency)}",
                                 atlasText("Statut : ${if (employee.active == 0) "Ancien" else "Actif"}", "Status: ${if (employee.active == 0) "Former" else "Active"}", "الحالة: ${if (employee.active == 0) "سابق" else "نشط"}"),
                             ).forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
                             if (employee.active != 0) {
@@ -865,7 +871,7 @@ private fun EmployeeDetailsDialog(
                         items(employee.payments, key = { "employee-payment-${it.id}" }) { payment ->
                             val paymentDate = if (payment.paidAt.isNotBlank()) atlasShortDate(payment.paidAt) else null
                             AtlasCard {
-                                Text(atlasMoney(payment.amount, "MAD"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Text(atlasMoney(payment.amount, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                 Text(
                                     listOf(payment.periodLabel, paymentDate, payment.note)
                                         .filterNotNull().filter(String::isNotBlank).joinToString(" · "),
@@ -884,6 +890,7 @@ private fun EmployeeDetailsDialog(
 @Composable
 private fun EmployeeEditDialog(
     employee: ma.etherealmber.atlascommerce.data.model.EmployeeDto,
+    currency: String,
     saving: Boolean,
     error: String?,
     onDismiss: () -> Unit,
@@ -918,7 +925,7 @@ private fun EmployeeEditDialog(
                 OutlinedTextField(category, { category = it }, label = { Text(atlasText("Catégorie", "Category", "الفئة")) }, singleLine = true)
                 OutlinedTextField(employmentStatus, { employmentStatus = it }, label = { Text(atlasText("Statut professionnel", "Employment status", "حالة العمل")) }, singleLine = true)
                 OutlinedTextField(joinedDate, { joinedDate = it }, label = { Text(atlasText("Date d’entrée (AAAA-MM-JJ)", "Join date (YYYY-MM-DD)", "تاريخ الانضمام (YYYY-MM-DD)")) }, singleLine = true)
-                OutlinedTextField(payAmount, { payAmount = it }, label = { Text(atlasText("Salaire prévu (MAD)", "Pay rate (MAD)", "الأجر (درهم)")) }, singleLine = true)
+                OutlinedTextField(payAmount, { payAmount = it }, label = { Text(atlasText("Salaire prévu ($currency)", "Pay rate ($currency)", "الأجر ($currency)")) }, singleLine = true)
                 if (!error.isNullOrBlank()) Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
         },
