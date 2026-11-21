@@ -71,7 +71,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonList
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
-import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
+import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 @Composable
@@ -99,7 +99,7 @@ fun NotificationsScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            AtlasTopBar(
+            AtlasFloatingTopBar(
                 title = atlasText("Info Box & Notifications", "Info Box & Notifications", "صندوق المعلومات والإشعارات"),
                 subtitle = atlasText(
                     "${roleLabel} · ${state.alerts.size} alerte(s) · ${state.pendingCount} en attente · ${state.sentNotificationCount} envoyée(s)",

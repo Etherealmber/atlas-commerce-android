@@ -88,7 +88,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -99,7 +98,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -126,7 +124,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer
 import ma.etherealmber.atlascommerce.core.session.SessionUser
@@ -220,11 +217,11 @@ internal fun MainTab.localizedLabel(): String = when (this) {
 }
 
 private val BackStackTabs = setOf(MainTab.AGENT, MainTab.SALE, MainTab.PROFILE, MainTab.SETTINGS, MainTab.NOTIFICATIONS)
+private val FloatingDockTabs = setOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.EMPLOYEES)
 
 @Composable
 fun MainShell(
     user: SessionUser,
-    snackbarHostState: SnackbarHostState,
     defaultStartTab: String = MainTab.HOME.name,
     activeTabOverride: String? = null,
     onActiveTabChange: ((String) -> Unit)? = null,
@@ -289,7 +286,6 @@ fun MainShell(
         rawTab == MainTab.BALANCE && Roles.normalize(user.role) == Roles.STOCK -> MainTab.HOME
         else -> rawTab
     }
-    val scope = rememberCoroutineScope()
     var surpriseIndex by rememberSaveable(user.scopeIdentity) { mutableStateOf(-1) }
     var showAvatarSurprise by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showAgentSurprise by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
@@ -505,6 +501,8 @@ fun MainShell(
         shellTopBarVisible = showShellTopBar
     }
     val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val showBottomNavigation = !useRail && tab in FloatingDockTabs &&
+        !productHistoryActive && !releaseHistorySubpageActive
     val floatingTopBarExpanded = remember(tab) { mutableStateOf(true) }
     val scrollDelta = remember(tab) { mutableFloatStateOf(0f) }
     LaunchedEffect(tab, productHistoryActive, releaseHistorySubpageActive, isForeground) {
@@ -571,14 +569,15 @@ fun MainShell(
                         .fillMaxWidth()
                         .statusBarsPadding()
                         .padding(
-                            start = if (useRail) sidebarWidth + 12.dp else 10.dp,
-                            end = 10.dp,
-                            top = 8.dp,
-                            bottom = 4.dp,
+                            start = if (useRail) sidebarWidth + 16.dp else 16.dp,
+                            end = 16.dp,
+                            top = 14.dp,
+                            bottom = 14.dp,
                         ),
                 ) {
                     Surface(
                         modifier = Modifier
+                            .graphicsLayer { clip = false }
                             .animateContentSize(
                                 animationSpec = if (motionEnabled) {
                                     spring(dampingRatio = 0.82f, stiffness = 340f)
@@ -605,7 +604,7 @@ fun MainShell(
                             BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.42f))
                         } else null,
                         tonalElevation = 0.dp,
-                        shadowElevation = 4.dp,
+                        shadowElevation = 8.dp,
                     ) {
                         AnimatedContent(
                             targetState = floatingTopBarExpanded.value,
@@ -934,7 +933,7 @@ fun MainShell(
         }
         val navigationInset = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
         CompositionLocalProvider(
-            LocalAtlasFloatingDockPadding provides if (!useRail && tab !in BackStackTabs && !productHistoryActive) 96.dp + navigationInset else 0.dp,
+            LocalAtlasFloatingDockPadding provides if (showBottomNavigation) 112.dp + navigationInset else 0.dp,
             LocalAtlasFloatingTopBarPadding provides if (showShellTopBar && shellTopBarVisible) 76.dp else 0.dp,
             LocalAtlasFloatingTopBarExpanded provides floatingTopBarExpanded.value,
         ) {
@@ -1110,8 +1109,8 @@ fun MainShell(
     }
     if (!useRail) {
         AnimatedVisibility(
-            visible = true,
-            modifier = Modifier.align(Alignment.BottomCenter).width(floatingBarWidth),
+            visible = showBottomNavigation,
+            modifier = Modifier.align(Alignment.BottomCenter).width(floatingBarWidth).graphicsLayer { clip = false },
             enter = if (motionEnabled) {
                 fadeIn(tween(260, easing = FastOutSlowInEasing)) +
                     slideInVertically(
@@ -1220,8 +1219,9 @@ private fun AtlasFloatingBottomBar(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 10.dp, vertical = 10.dp)
-            .height(96.dp),
+            .padding(horizontal = 14.dp, vertical = 14.dp)
+            .height(100.dp)
+            .graphicsLayer { clip = false },
     ) {
         val compactWidth = maxWidth < 360.dp
         val dockWidth = if (maxWidth >= 680.dp) 640.dp else maxWidth

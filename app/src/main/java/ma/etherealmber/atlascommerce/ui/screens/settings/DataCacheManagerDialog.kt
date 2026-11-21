@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Refresh
@@ -64,6 +63,7 @@ import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
+import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.root.roundUpTo50MiB
@@ -166,34 +166,20 @@ fun DataCacheManagerDialog(
             color = MaterialTheme.colorScheme.background,
         ) {
             Column(Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 10.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (tabletSidebarWidth == null) {
-                        IconButton(onClick = onDismiss) {
-                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
+                AtlasFloatingTopBar(
+                    title = atlasText("Données et cache", "Data & cache manager", "مدير البيانات والذاكرة المؤقتة"),
+                    subtitle = atlasText("Stockage privé de cet appareil", "This device's private storage", "التخزين الخاص بهذا الجهاز"),
+                    onBack = if (tabletSidebarWidth == null) onDismiss else null,
+                    applyStatusBarInsets = false,
+                    actions = {
+                        IconButton(onClick = {
+                            appViewModel.refreshLocalStorageSummary()
+                            appViewModel.refreshCachedProductCount()
+                        }) {
+                            Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser le stockage", "Refresh storage", "تحديث التخزين"))
                         }
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            atlasText("Données et cache", "Data & cache manager", "مدير البيانات والذاكرة المؤقتة"),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            atlasText("Stockage privé de cet appareil", "This device's private storage", "التخزين الخاص بهذا الجهاز"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    IconButton(onClick = {
-                        appViewModel.refreshLocalStorageSummary()
-                        appViewModel.refreshCachedProductCount()
-                    }) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser le stockage", "Refresh storage", "تحديث التخزين"))
-                    }
-                }
+                    },
+                )
                 AtlasDivider()
                 Column(
                     modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 10.dp),

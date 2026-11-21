@@ -2,6 +2,7 @@ package ma.etherealmber.atlascommerce.ui.root
 
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateCheckCooldown
 import android.Manifest
 import android.content.res.Configuration
 import android.content.pm.PackageManager
@@ -28,8 +29,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -39,7 +38,6 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,7 +57,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
 import java.util.Locale
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.shouldRefreshSystemAppLanguage
@@ -296,8 +293,6 @@ private fun AtlasGate(
     val autoCheckUpdates by viewModel.autoCheckUpdates.collectAsStateWithLifecycle()
     val allSavedAccounts by viewModel.allSavedAccounts.collectAsStateWithLifecycle()
 
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     var bootSplashFinished by rememberSaveable { mutableStateOf(false) }
     var overlay by rememberSaveable { mutableStateOf<String?>(null) }
     val internetAvailable = rememberInternetAvailable()
@@ -321,7 +316,6 @@ private fun AtlasGate(
     var pendingQrMode by rememberSaveable { mutableStateOf(QrDeviceMode.SIGN_IN_PHONE) }
     var requestedTab by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingNotificationInstallInfo by remember { mutableStateOf<UpdateInfo?>(null) }
-    var notificationPermissionPrompted by rememberSaveable { mutableStateOf(false) }
     var deviceUnlockSetupRequest by remember { mutableStateOf<DeviceUnlockSetupPrompt.Request?>(null) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -329,18 +323,6 @@ private fun AtlasGate(
     ) { granted ->
         if (granted) {
             viewModel.repostUpdateNotification()
-        }
-    }
-
-    LaunchedEffect(session) {
-        if (session is SessionState.Active &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            !notificationPermissionPrompted &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            notificationPermissionPrompted = true
-            kotlinx.coroutines.delay(700)
-            runCatching { notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
         }
     }
 
@@ -428,6 +410,14 @@ private fun AtlasGate(
 
     val showToast: (String) -> Unit = { message ->
         android.widget.Toast.makeText(context, atlasNotice(message, atlasLanguage), android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    LaunchedEffect(updateState) {
+        val error = updateState as? UpdateState.Error ?: return@LaunchedEffect
+        val message = error.retryAfterSeconds?.let { seconds ->
+            localizedUpdateCheckCooldown(seconds, atlasLanguage)
+        } ?: error.message
+        showToast(message)
     }
 
     LaunchedEffect(notificationDownloadInfo) {
@@ -627,7 +617,6 @@ private fun AtlasGate(
                         if (activeUser != null) {
                             MainShell(
                                 user = activeUser,
-                                snackbarHostState = snackbarHostState,
                                 defaultStartTab = defaultStartTab,
                                 activeTabOverride = savedShellTab,
                                 onActiveTabChange = { savedShellTab = it },
@@ -647,7 +636,6 @@ private fun AtlasGate(
                                     overlay = Overlay.QR_DEVICE
                                 },
                                 onOpenNotifications = {
-                                    requestNotificationPermissionIfNeeded()
                                     if (tabletWindow) {
                                         overlay = null
                                         requestedTab = MainTab.NOTIFICATIONS.name
@@ -777,7 +765,6 @@ private fun AtlasGate(
                     onInstall = triggerInstall,
                     onDismiss = viewModel::dismissUpdateBanner,
                     onHideDownload = {
-                        requestNotificationPermissionIfNeeded()
                         viewModel.hideUpdateDownloadBanner()
                         showToast(
                             "Barre réduite à côté du profil — progression aussi visible dans Paramètres et Notifications.",
@@ -799,13 +786,6 @@ private fun AtlasGate(
                     },
                 )
             }
-
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 88.dp),
-            )
 
             LaunchedEffect(internetAvailable, baseStage, overlay) {
                 if (internetAvailable == false && !offlineOfferShown && overlay == null &&

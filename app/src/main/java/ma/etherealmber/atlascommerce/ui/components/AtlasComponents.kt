@@ -663,6 +663,42 @@ fun AtlasTopBar(
     )
 }
 
+/** Shared floating page header with extra shadow-safe gutters so rounded corners never clip. */
+@Composable
+fun AtlasFloatingTopBar(
+    title: String,
+    subtitle: String? = null,
+    onBack: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    applyStatusBarInsets: Boolean = true,
+    actions: @Composable RowScope.() -> Unit = {},
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (applyStatusBarInsets) Modifier.statusBarsPadding() else Modifier)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().graphicsLayer { clip = false },
+            shape = RoundedCornerShape(26.dp),
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 0.dp,
+            shadowElevation = 8.dp,
+        ) {
+            AtlasTopBar(
+                title = title,
+                subtitle = subtitle,
+                onBack = onBack,
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                containerColor = Color.Transparent,
+                actions = actions,
+            )
+        }
+    }
+}
+
 @Composable
 fun AtlasServerChip(host: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     OutlinedButton(
