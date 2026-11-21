@@ -106,6 +106,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -151,6 +152,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonList
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.SettingsUpdateCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
+import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
 import ma.etherealmber.atlascommerce.ui.components.rememberGitHubLimitRemainingSeconds
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
@@ -2209,8 +2212,10 @@ private fun VersionHistoryPage(
     onRefresh: () -> Unit,
     onOpenRelease: (String) -> Unit,
 ) {
-    val headerVisibility = remember { MutableTransitionState(false) }
-    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    var headerExpanded by remember { mutableStateOf(true) }
+    val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(headerExpanded) {
+        headerExpanded = it
+    }
     val noticeLanguage = LocalAtlasLanguage.current
     LaunchedEffect(githubLimitNotice, noticeLanguage) {
         val notice = githubLimitNotice ?: return@LaunchedEffect
@@ -2222,48 +2227,32 @@ private fun VersionHistoryPage(
             ),
         )
     }
-    LaunchedEffect(Unit) { headerVisibility.targetState = true }
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         val wideWindow = maxWidth >= 840.dp
-        Column(Modifier.widthIn(max = 1100.dp).fillMaxSize()) {
-            AnimatedVisibility(
-                    visibleState = headerVisibility,
-                    enter = if (motionEnabled) {
-                        fadeIn(tween(220)) +
-                            slideInVertically(tween(260)) { height -> -height / 4 } +
-                            scaleIn(tween(220), initialScale = 0.98f)
-                    } else EnterTransition.None,
-                ) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = if (wideWindow) 24.dp else 14.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(26.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 8.dp,
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            IconButton(onClick = onBack) {
-                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
-                            }
-                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(atlasText("Mises à jour des versions", "Version updates", "تحديثات الإصدارات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
-                                Text(atlasText("Historique complet des changements publiés", "Full history of published changes", "السجل الكامل للتغييرات المنشورة"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-                            }
-                            Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                                if (loading) {
-                                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                                } else {
-                                    IconButton(onClick = onRefresh) {
-                                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh releases", "تحديث الإصدارات"))
-                                    }
-                                }
-                            }
+        Column(
+            Modifier
+                .widthIn(max = 1100.dp)
+                .fillMaxSize()
+                .nestedScroll(headerScrollConnection),
+        ) {
+            AtlasFloatingTopBar(
+                title = atlasText("Mises à jour des versions", "Version updates", "تحديثات الإصدارات"),
+                subtitle = atlasText("Historique complet des changements publiés", "Full history of published changes", "السجل الكامل للتغييرات المنشورة"),
+                onBack = onBack,
+                expanded = headerExpanded,
+                modifier = Modifier.padding(horizontal = if (wideWindow) 10.dp else 0.dp),
+                actions = {
+                    if (loading) {
+                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                        }
+                    } else {
+                        IconButton(onClick = onRefresh) {
+                            Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh releases", "تحديث الإصدارات"))
                         }
                     }
-            }
+                },
+            )
             Column(
                 modifier = Modifier
                     .weight(1f)

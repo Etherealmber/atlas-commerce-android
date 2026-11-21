@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -81,6 +82,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
+import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
@@ -632,8 +634,17 @@ private fun LegalPage(
     onBack: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        AtlasFloatingTopBar(title = title, subtitle = subtitle, onBack = onBack)
+    var headerExpanded by remember { mutableStateOf(true) }
+    val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(headerExpanded) {
+        headerExpanded = it
+    }
+    Column(modifier = Modifier.fillMaxSize().nestedScroll(headerScrollConnection)) {
+        AtlasFloatingTopBar(
+            title = title,
+            subtitle = subtitle,
+            onBack = onBack,
+            expanded = headerExpanded,
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
