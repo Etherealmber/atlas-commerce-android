@@ -504,6 +504,7 @@ fun MainShell(
         ?: roleTabs.firstOrNull()
         ?: MainTab.HOME
     val floatingTopBarExpanded = remember(tab) { mutableStateOf(true) }
+    val collapsedHeaderDescription = atlasText("Développer l’en-tête", "Expand header", "توسيع الرأس")
     val scrollDelta = remember(tab) { mutableFloatStateOf(0f) }
     LaunchedEffect(tab, productHistoryActive, releaseHistorySubpageActive, isForeground) {
         floatingTopBarExpanded.value = true
@@ -591,8 +592,7 @@ fun MainShell(
                                             floatingTopBarExpanded.value = true
                                         }
                                         .semantics {
-                                            contentDescription = atlasText("Développer l’en-tête", "Expand header", "توسيع الرأس")
-                                            role = Role.Button
+                                            contentDescription = collapsedHeaderDescription
                                         }
                                 },
                             ),
