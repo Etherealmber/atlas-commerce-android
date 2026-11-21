@@ -33,6 +33,7 @@ class ProductHistoryViewModel @Inject constructor(
         val canLoadMore: Boolean = false,
         val error: String? = null,
         val imageSaving: Boolean = false,
+        val deletingProduct: Boolean = false,
         val imageError: String? = null,
         val updatedImageUrl: String? = null,
     )
@@ -116,6 +117,28 @@ class ProductHistoryViewModel @Inject constructor(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    fun deleteProduct(productId: Long, password: String, onComplete: (Boolean, String?) -> Unit) {
+        val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return
+        if (!Roles.isAdmin(user.role) || _state.value.deletingProduct) {
+            onComplete(false, "Réservé aux administrateurs.")
+            return
+        }
+        val scope = user.scopeIdentity
+        _state.update { it.copy(deletingProduct = true, error = null) }
+        viewModelScope.launch {
+            when (val result = commerceRepository.deleteProduct(productId, password)) {
+                is ApiResult.Success -> if (activeScope() == scope) {
+                    _state.update { it.copy(deletingProduct = false, error = null) }
+                    onComplete(true, result.data)
+                } else onComplete(false, "Le compte actif a changé. Réessayez.")
+                is ApiResult.Failure -> if (activeScope() == scope) {
+                    _state.update { it.copy(deletingProduct = false, error = result.message) }
+                    onComplete(false, result.message)
+                } else onComplete(false, "Le compte actif a changé. Réessayez.")
             }
         }
     }

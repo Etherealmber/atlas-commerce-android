@@ -44,6 +44,7 @@ class BalanceViewModel @Inject constructor(
         val loadingMore: Boolean = false,
         val reportGenerating: Boolean = false,
         val savingEntry: Boolean = false,
+        val deletingExpenseIds: Set<Long> = emptySet(),
         val error: String? = null,
     )
 
@@ -89,6 +90,36 @@ class BalanceViewModel @Inject constructor(
             _state.update { it.copy(savingEntry = false) }
             if (!sameScope) {
                 onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Vérifiez l'écriture avant de la renvoyer."))
+                return@launch
+            }
+            when (result) {
+                is ApiResult.Success -> {
+                    onResult(result)
+                    load(_state.value.selectedPeriod, initial = false)
+                }
+                is ApiResult.Failure -> {
+                    _state.update { it.copy(error = result.message) }
+                    onResult(result)
+                }
+            }
+        }
+    }
+
+    fun deleteExpense(id: Long, password: String, onResult: (ApiResult<String>) -> Unit) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+        if (activeUser == null || !Roles.isAdmin(activeUser.role)) {
+            onResult(ApiResult.Failure("FIN_FORBIDDEN", "Réservé aux administrateurs (owner/admin)."))
+            return
+        }
+        if (id <= 0 || password.isBlank() || id in _state.value.deletingExpenseIds) return
+        val scopeIdentity = activeUser.scopeIdentity
+        viewModelScope.launch {
+            _state.update { it.copy(deletingExpenseIds = it.deletingExpenseIds + id, error = null) }
+            val result = repository.deleteFinanceEntry(id, password)
+            val sameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
+            _state.update { it.copy(deletingExpenseIds = it.deletingExpenseIds - id) }
+            if (!sameScope) {
+                onResult(ApiResult.Failure("SESSION_CHANGED", "Le compte actif a changé. Vérifiez l’écriture avant de la renvoyer."))
                 return@launch
             }
             when (result) {

@@ -30,16 +30,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,6 +56,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,6 +70,8 @@ import ma.etherealmber.atlascommerce.data.model.PayrollRowDto
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
+import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
@@ -79,8 +87,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Read-only employee/payroll view backed by the server-authorized payroll endpoint.
- * Employee CRUD is intentionally not simulated in the client because no such API exists here.
+ * Admin-only employee directory and read-only payroll view backed by the server-authorized worker APIs.
  */
 @Composable
 fun EmployeesScreen(
@@ -90,11 +97,17 @@ fun EmployeesScreen(
 ) {
     val dockPadding = LocalAtlasFloatingDockPadding.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val directoryViewModel: EmployeeDirectoryViewModel = hiltViewModel()
+    val directoryState by directoryViewModel.state.collectAsStateWithLifecycle()
     val refreshEmployees = rememberApiRefreshAction("employees-payroll", 30_000L, viewModel::refreshFinance)
     val isAdmin = Roles.isAdmin(user.role)
     val language = LocalAtlasLanguage.current
     val locale = when (language) { AppLanguage.FRENCH -> Locale.FRANCE; AppLanguage.ENGLISH -> Locale.UK; AppLanguage.ARABIC -> Locale.forLanguageTag("ar-MA") }
     var query by rememberSaveable(user.scopeIdentity) { mutableStateOf("") }
+    var directoryQuery by rememberSaveable(user.scopeIdentity) { mutableStateOf("") }
+    var editingEmployee by remember { mutableStateOf<ma.etherealmber.atlascommerce.data.model.EmployeeDto?>(null) }
+    var confirmEmployeeDelete by remember { mutableStateOf(false) }
+    var confirmEmployeeResign by remember { mutableStateOf(false) }
     var paymentFilter by rememberSaveable(user.scopeIdentity) { mutableStateOf("Tous") }
     var payrollInfoOpen by remember { mutableStateOf(false) }
 
@@ -112,6 +125,13 @@ fun EmployeesScreen(
     val monthLabel = formattedMonth
         ?: atlasText("Chargement du mois…", "Loading month…", "جارٍ تحميل الشهر…")
     val payroll = state.payroll
+    val visibleEmployees = remember(directoryState.employees, directoryQuery) {
+        val needle = directoryQuery.trim()
+        directoryState.employees.filter { employee ->
+            needle.isBlank() || listOf(employee.displayName, employee.name, employee.employeeNumber, employee.roleTitle, employee.department)
+                .any { it.contains(needle, ignoreCase = true) }
+        }
+    }
     val visibleRows = remember(payroll?.rows, query, paymentFilter) {
         payroll?.rows.orEmpty().filter { row ->
             val matchesName = query.isBlank() || row.displayName.contains(query.trim(), ignoreCase = true) || row.employeeId.toString().contains(query.trim())
@@ -177,6 +197,109 @@ fun EmployeesScreen(
                     Text(atlasText("Fermer", "Close", "إغلاق"))
                 }
             },
+        )
+    }
+
+    if (directoryState.detailsLoading && directoryState.selectedEmployee == null) {
+        AlertDialog(
+            onDismissRequest = directoryViewModel::clearDetails,
+            title = { Text(atlasText("Chargement de l’employé…", "Loading employee…", "جارٍ تحميل الموظف…")) },
+            text = { CircularProgressIndicator() },
+            confirmButton = { TextButton(onClick = directoryViewModel::clearDetails) { Text(atlasText("Fermer", "Close", "إغلاق")) } },
+        )
+    }
+    if (!directoryState.detailsLoading && directoryState.selectedEmployee == null && !directoryState.actionError.isNullOrBlank() && editingEmployee == null) {
+        AlertDialog(
+            onDismissRequest = directoryViewModel::clearDetails,
+            title = { Text(atlasText("Détails indisponibles", "Details unavailable", "التفاصيل غير متاحة")) },
+            text = { Text(atlasNotice(directoryState.actionError.orEmpty(), language)) },
+            confirmButton = { TextButton(onClick = directoryViewModel::clearDetails) { Text(atlasText("Fermer", "Close", "إغلاق")) } },
+        )
+    }
+    directoryState.selectedEmployee?.let { employee ->
+        EmployeeDetailsDialog(
+            employee = employee,
+            loading = directoryState.detailsLoading,
+            deleting = directoryState.deleting,
+            saving = directoryState.saving,
+            error = directoryState.actionError,
+            onDismiss = directoryViewModel::clearDetails,
+            onEdit = {
+                editingEmployee = employee
+                directoryViewModel.clearDetails()
+            },
+            onDelete = { confirmEmployeeDelete = true },
+            onMarkFormer = { confirmEmployeeResign = true },
+        )
+    }
+    editingEmployee?.let { employee ->
+        EmployeeEditDialog(
+            employee = employee,
+            saving = directoryState.saving,
+            error = directoryState.actionError,
+            onDismiss = { editingEmployee = null },
+            onSave = { request ->
+                directoryViewModel.updateEmployee(employee.id, request) { saved ->
+                    if (saved) editingEmployee = null
+                }
+            },
+        )
+    }
+    if (confirmEmployeeResign) {
+        val employee = directoryState.selectedEmployee
+        AlertDialog(
+            onDismissRequest = { if (!directoryState.saving) confirmEmployeeResign = false },
+            title = { Text(atlasText("Marquer comme ancien employé ?", "Mark as former employee?", "تحديد الموظف كسابق؟")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(atlasText(
+                        "Cette action arrête les obligations de paie futures. Elle ne verse pas de solde de départ; enregistrez tout paiement final séparément. Vous pourrez ensuite supprimer la fiche.",
+                        "This stops future payroll obligations. It does not pay a final settlement; record any final payment separately. You can then delete the record.",
+                        "يوقف هذا الإجراء التزامات الرواتب المستقبلية. لا يتم دفع مستحقات نهائية؛ سجّل أي دفعة نهائية بشكل منفصل. بعد ذلك يمكنك حذف الملف.",
+                    ))
+                    directoryState.actionError?.takeIf(String::isNotBlank)?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !directoryState.saving && employee?.active != 0,
+                    onClick = {
+                        employee?.let { target ->
+                            directoryViewModel.markEmployeeFormer(target.id) { success ->
+                                if (success) confirmEmployeeResign = false
+                            }
+                        }
+                    },
+                ) {
+                    if (directoryState.saving) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text(atlasText("Confirmer", "Confirm", "تأكيد"))
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmEmployeeResign = false }, enabled = !directoryState.saving) { Text(atlasText("Annuler", "Cancel", "إلغاء")) } },
+        )
+    }
+    if (confirmEmployeeDelete) {
+        val employee = directoryState.selectedEmployee
+        AlertDialog(
+            onDismissRequest = { if (!directoryState.deleting) confirmEmployeeDelete = false },
+            title = { Text(atlasText("Supprimer l’employé ?", "Delete employee?", "حذف الموظف؟")) },
+            text = {
+                Text(atlasText(
+                    "La fiche sera supprimée définitivement. Son historique de paiements est conservé. Seuls les employés ayant quitté l’entreprise peuvent être supprimés.",
+                    "This permanently removes the employee record. Their payment history is retained. Only former employees can be deleted.",
+                    "سيتم حذف ملف الموظف نهائياً مع الاحتفاظ بسجل المدفوعات. يمكن حذف الموظفين السابقين فقط.",
+                ))
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !directoryState.deleting && employee?.active == 0,
+                    onClick = {
+                        employee?.let(directoryViewModel::deleteEmployee)
+                        confirmEmployeeDelete = false
+                    },
+                ) { Text(if (directoryState.deleting) atlasText("Suppression…", "Deleting…", "جارٍ الحذف…") else atlasText("Supprimer", "Delete", "حذف")) }
+            },
+            dismissButton = { TextButton(onClick = { confirmEmployeeDelete = false }) { Text(atlasText("Annuler", "Cancel", "إلغاء")) } },
         )
     }
 
@@ -300,6 +423,53 @@ fun EmployeesScreen(
                     }
                 }
 
+            }
+        }
+
+        item(key = "employee_directory_header") {
+            AtlasCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(atlasText("Équipe", "Employee directory", "دليل الموظفين"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            atlasText("${directoryState.employees.size} fiche(s) · appuyez pour les détails et l’historique", "${directoryState.employees.size} records · tap for details and payment history", "${directoryState.employees.size} ملف · اضغط للتفاصيل وسجل المدفوعات"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = directoryViewModel::load, enabled = !directoryState.loading) {
+                        if (directoryState.loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l’équipe", "Refresh employee directory", "تحديث دليل الموظفين"))
+                    }
+                }
+                AtlasTextField(
+                    value = directoryQuery,
+                    onValueChange = { directoryQuery = it },
+                    label = atlasText("Rechercher dans l’équipe", "Search employees", "ابحث عن موظف"),
+                    placeholder = atlasText("Nom, numéro, poste ou service", "Name, number, role or department", "الاسم أو الرقم أو المنصب أو القسم"),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        if (directoryState.loading && directoryState.employees.isEmpty()) {
+            item(key = "employee_directory_loading") {
+                AtlasPayrollRowsSkeleton(rows = 2, wideLayout = wideLayout)
+            }
+        } else if (!directoryState.error.isNullOrBlank() && directoryState.employees.isEmpty()) {
+            item(key = "employee_directory_error") {
+                AtlasErrorCard(title = atlasText("Équipe indisponible", "Directory unavailable", "الدليل غير متاح"), message = atlasNotice(directoryState.error.orEmpty(), language), onRetry = directoryViewModel::load)
+            }
+        } else if (visibleEmployees.isEmpty()) {
+            item(key = "employee_directory_empty") {
+                AtlasEmptyState(
+                    icon = Icons.Outlined.Groups,
+                    title = atlasText("Aucun employé trouvé", "No employees found", "لم يتم العثور على موظفين"),
+                    message = atlasText("Aucune fiche d’employé ne correspond à cette recherche.", "No employee record matches this search.", "لا يوجد ملف موظف يطابق هذا البحث."),
+                )
+            }
+        } else {
+            items(visibleEmployees, key = { "directory-${it.id}" }) { employee ->
+                EmployeeDirectoryRow(employee = employee, onClick = { directoryViewModel.showDetails(employee.id) })
             }
         }
 
@@ -570,6 +740,203 @@ private fun EmployeePayrollCard(row: PayrollRowDto, asOf: String, currency: Stri
             }
         }
     }
+}
+
+@Composable
+private fun EmployeeDirectoryRow(employee: ma.etherealmber.atlascommerce.data.model.EmployeeDto, onClick: () -> Unit) {
+    val displayName = employee.displayName.ifBlank { employee.name.ifBlank { "#${employee.id}" } }
+    AtlasCard(onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(displayName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                val detail = listOf(employee.employeeNumber, employee.roleTitle, employee.department)
+                    .filter(String::isNotBlank)
+                    .joinToString(" · ")
+                if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (employee.email.isNotBlank() || employee.phone.isNotBlank()) {
+                    Text(listOf(employee.email, employee.phone).filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            AtlasChip(
+                text = if (employee.active == 0) atlasText("Ancien", "Former", "سابق") else atlasText("Actif", "Active", "نشط"),
+                tone = if (employee.active == 0) AtlasTone.NEUTRAL else AtlasTone.POSITIVE,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmployeeDetailsDialog(
+    employee: ma.etherealmber.atlascommerce.data.model.EmployeeDto,
+    loading: Boolean,
+    deleting: Boolean,
+    saving: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onMarkFormer: () -> Unit,
+) {
+    val displayName = employee.displayName.ifBlank { employee.name.ifBlank { "#${employee.id}" } }
+    var headerExpanded by remember(employee.id) { mutableStateOf(true) }
+    val scrollConnection = ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection(
+        expanded = headerExpanded,
+        onExpandedChange = { headerExpanded = it },
+    )
+    Dialog(
+        onDismissRequest = { if (!deleting) onDismiss() },
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize().nestedScroll(scrollConnection)) {
+                AtlasFloatingTopBar(
+                    title = displayName,
+                    subtitle = atlasText("Détails et historique de paie", "Details and payroll history", "التفاصيل وسجل الرواتب"),
+                    onBack = onDismiss,
+                    expanded = headerExpanded,
+                    actions = {
+                        IconButton(onClick = onEdit) {
+                            Icon(Icons.Outlined.Edit, contentDescription = atlasText("Modifier l’employé", "Edit employee", "تعديل الموظف"))
+                        }
+                        if (employee.active == 0) {
+                            IconButton(onClick = onDelete, enabled = !deleting) {
+                                if (deleting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                else Icon(Icons.Outlined.Delete, contentDescription = atlasText("Supprimer l’employé", "Delete employee", "حذف الموظف"), tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    },
+                )
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    item(key = "employee_profile") {
+                        AtlasCard {
+                            listOfNotNull(
+                                employee.employeeNumber.takeIf(String::isNotBlank)?.let { "${atlasText("Numéro", "Number", "الرقم")}: $it" },
+                                employee.roleTitle.takeIf(String::isNotBlank)?.let { "${atlasText("Poste", "Role", "المنصب")}: $it" },
+                                employee.department.takeIf(String::isNotBlank)?.let { "${atlasText("Service", "Department", "القسم")}: $it" },
+                                employee.email.takeIf(String::isNotBlank)?.let { "Email: $it" },
+                                employee.phone.takeIf(String::isNotBlank)?.let { "${atlasText("Téléphone", "Phone", "الهاتف")}: $it" },
+                                employee.joinedDate.takeIf(String::isNotBlank)?.let { "${atlasText("Date d’entrée", "Joined", "تاريخ الانضمام")}: ${atlasShortDate(it)}" },
+                                "${atlasText("Salaire prévu", "Pay rate", "الأجر")}: ${atlasMoney(employee.payAmount, "MAD")}",
+                                atlasText("Statut : ${if (employee.active == 0) "Ancien" else "Actif"}", "Status: ${if (employee.active == 0) "Former" else "Active"}", "الحالة: ${if (employee.active == 0) "سابق" else "نشط"}"),
+                            ).forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                            if (employee.active != 0) {
+                                AtlasDivider(Modifier.padding(vertical = 4.dp))
+                                Text(
+                                    atlasText("Marquez d’abord l’employé comme ancien. Cela n’enregistre aucun paiement final.", "Mark the employee as former first. This does not record a final payment.", "حدّد الموظف كسابق أولاً. لا يسجّل هذا أي دفعة نهائية."),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                TextButton(onClick = onMarkFormer, enabled = !saving) {
+                                    if (saving) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    else Text(atlasText("Marquer comme ancien", "Mark as former", "تحديد كسابق"))
+                                }
+                            }
+                            if (!error.isNullOrBlank()) Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    item(key = "employee_payments_title") {
+                        Text(atlasText("Historique des paiements", "Payment history", "سجل المدفوعات"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    }
+                    if (loading) {
+                        item(key = "employee_payments_loading") { CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp) }
+                    } else if (employee.payments.isEmpty()) {
+                        item(key = "employee_payments_empty") {
+                            AtlasEmptyState(
+                                icon = Icons.Outlined.Groups,
+                                title = atlasText("Aucun paiement enregistré", "No payments recorded", "لا توجد مدفوعات مسجلة"),
+                                message = atlasText("Aucun historique de paiement n’est disponible pour cet employé.", "No payment history is available for this employee.", "لا يتوفر سجل مدفوعات لهذا الموظف."),
+                            )
+                        }
+                    } else {
+                        items(employee.payments, key = { "employee-payment-${it.id}" }) { payment ->
+                            AtlasCard {
+                                Text(atlasMoney(payment.amount, "MAD"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    listOf(payment.periodLabel, payment.paidAt.takeIf(String::isNotBlank)?.let(::atlasShortDate), payment.note)
+                                        .filterNotNull().filter(String::isNotBlank).joinToString(" · "),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmployeeEditDialog(
+    employee: ma.etherealmber.atlascommerce.data.model.EmployeeDto,
+    saving: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onSave: (ma.etherealmber.atlascommerce.data.model.EmployeeUpdateRequest) -> Unit,
+) {
+    var firstName by remember(employee.id) { mutableStateOf(employee.firstName.ifBlank { employee.name }) }
+    var lastName by remember(employee.id) { mutableStateOf(employee.lastName) }
+    var phone by remember(employee.id) { mutableStateOf(employee.phone) }
+    var email by remember(employee.id) { mutableStateOf(employee.email) }
+    var roleTitle by remember(employee.id) { mutableStateOf(employee.roleTitle) }
+    var department by remember(employee.id) { mutableStateOf(employee.department) }
+    var category by remember(employee.id) { mutableStateOf(employee.category) }
+    var employmentStatus by remember(employee.id) { mutableStateOf(employee.employmentStatus) }
+    var joinedDate by remember(employee.id) { mutableStateOf(employee.joinedDate) }
+    var payAmount by remember(employee.id) { mutableStateOf(employee.payAmount.toString()) }
+    val parsedPay = payAmount.toDoubleOrNull()
+    val fullName = listOf(firstName.trim(), lastName.trim()).filter(String::isNotBlank).joinToString(" ")
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text(atlasText("Modifier l’employé", "Edit employee", "تعديل الموظف")) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(firstName, { firstName = it }, label = { Text(atlasText("Prénom", "First name", "الاسم الأول")) }, singleLine = true)
+                OutlinedTextField(lastName, { lastName = it }, label = { Text(atlasText("Nom", "Last name", "اسم العائلة")) }, singleLine = true)
+                OutlinedTextField(phone, { phone = it }, label = { Text(atlasText("Téléphone", "Phone", "الهاتف")) }, singleLine = true)
+                OutlinedTextField(email, { email = it }, label = { Text("Email") }, singleLine = true)
+                OutlinedTextField(roleTitle, { roleTitle = it }, label = { Text(atlasText("Poste", "Role", "المنصب")) }, singleLine = true)
+                OutlinedTextField(department, { department = it }, label = { Text(atlasText("Service", "Department", "القسم")) }, singleLine = true)
+                OutlinedTextField(category, { category = it }, label = { Text(atlasText("Catégorie", "Category", "الفئة")) }, singleLine = true)
+                OutlinedTextField(employmentStatus, { employmentStatus = it }, label = { Text(atlasText("Statut professionnel", "Employment status", "حالة العمل")) }, singleLine = true)
+                OutlinedTextField(joinedDate, { joinedDate = it }, label = { Text(atlasText("Date d’entrée (AAAA-MM-JJ)", "Join date (YYYY-MM-DD)", "تاريخ الانضمام (YYYY-MM-DD)")) }, singleLine = true)
+                OutlinedTextField(payAmount, { payAmount = it }, label = { Text(atlasText("Salaire prévu (MAD)", "Pay rate (MAD)", "الأجر (درهم)")) }, singleLine = true)
+                if (!error.isNullOrBlank()) Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !saving && fullName.isNotBlank() && parsedPay != null && parsedPay >= 0,
+                onClick = {
+                    val amount = parsedPay ?: return@TextButton
+                    onSave(ma.etherealmber.atlascommerce.data.model.EmployeeUpdateRequest(
+                        firstName = firstName.trim(),
+                        lastName = lastName.trim(),
+                        name = fullName,
+                        phone = phone.trim(),
+                        email = email.trim(),
+                        roleTitle = roleTitle.trim(),
+                        department = department.trim(),
+                        category = category.trim(),
+                        employmentStatus = employmentStatus.trim(),
+                        joinedDate = joinedDate.trim(),
+                        payAmount = amount,
+                    ))
+                },
+            ) {
+                if (saving) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                else Text(atlasText("Enregistrer", "Save", "حفظ"))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text(atlasText("Annuler", "Cancel", "إلغاء")) } },
+    )
 }
 
 private fun payrollStatus(row: PayrollRowDto, asOf: String): String = when {

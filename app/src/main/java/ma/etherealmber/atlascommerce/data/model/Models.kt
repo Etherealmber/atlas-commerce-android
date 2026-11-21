@@ -402,6 +402,59 @@ data class DashboardDto(
 // ---------------------------------------------------------------------------
 
 @JsonClass(generateAdapter = true)
+data class EmployeeDto(
+    val id: Long = 0,
+    @Json(name = "emp_number") val employeeNumber: String = "",
+    val name: String = "",
+    @Json(name = "display_name") val displayName: String = "",
+    @Json(name = "first_name") val firstName: String = "",
+    @Json(name = "last_name") val lastName: String = "",
+    val phone: String = "",
+    val email: String = "",
+    @Json(name = "role_title") val roleTitle: String = "",
+    val department: String = "",
+    val category: String = "",
+    @Json(name = "employment_status") val employmentStatus: String = "",
+    @Json(name = "joined_date") val joinedDate: String = "",
+    val active: Int = 1,
+    @Json(name = "pay_amount") val payAmount: Double = 0.0,
+    @Json(name = "pay_cycle_type") val payCycleType: String = "monthly",
+    @Json(name = "pay_cycle_days") val payCycleDays: Int = 30,
+    val notes: String = "",
+    val payments: List<EmployeePaymentDto> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class EmployeePaymentDto(
+    val id: Long = 0,
+    val amount: Double = 0.0,
+    @Json(name = "paid_at") val paidAt: String = "",
+    @Json(name = "period_label") val periodLabel: String = "",
+    val note: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class EmployeeResignRequest(
+    val reason: String = "Démission",
+    @Json(name = "settle_pay") val settlePay: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class EmployeeUpdateRequest(
+    @Json(name = "first_name") val firstName: String,
+    @Json(name = "last_name") val lastName: String,
+    val name: String,
+    val phone: String,
+    val email: String,
+    @Json(name = "role_title") val roleTitle: String,
+    val department: String,
+    val category: String,
+    @Json(name = "employment_status") val employmentStatus: String,
+    @Json(name = "joined_date") val joinedDate: String,
+    @Json(name = "pay_amount") val payAmount: Double,
+)
+
+@JsonClass(generateAdapter = true)
 data class FinanceMonthlyDto(
     val period: String = "",
     val timezone: String = "",
@@ -541,6 +594,12 @@ data class CreateFinanceEntryRequest(
     val reference: String = "",
     val notes: String = "",
     @Json(name = "entry_type") val entryType: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class ExpenseDeleteRequest(
+    @Json(name = "confirm_password") val confirmPassword: String,
+    @Json(name = "cascade_linked") val cascadeLinked: Boolean = false,
 )
 
 @JsonClass(generateAdapter = true)
@@ -713,6 +772,11 @@ data class ProductImageUploadRequest(
     @Json(name = "data_url") val dataUrl: String,
     @Json(name = "is_primary") val isPrimary: Boolean = true,
     @Json(name = "alt_text") val altText: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class ProductDeleteRequest(
+    @Json(name = "confirm_password") val confirmPassword: String,
 )
 
 @JsonClass(generateAdapter = true)
