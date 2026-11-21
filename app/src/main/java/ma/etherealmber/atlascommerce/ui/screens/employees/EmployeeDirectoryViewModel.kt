@@ -43,6 +43,7 @@ class EmployeeDirectoryViewModel @Inject constructor(
     private var detailsJob: Job? = null
     private var actionJob: Job? = null
     private var deleteJob: Job? = null
+    private var directoryGeneration: Long = 0L
     private var detailGeneration: Long = 0L
 
     init {
@@ -59,6 +60,7 @@ class EmployeeDirectoryViewModel @Inject constructor(
                     detailsJob = null
                     actionJob = null
                     deleteJob = null
+                    directoryGeneration += 1
                     detailGeneration += 1
                     _state.value = UiState(scopeIdentity = user?.scopeIdentity)
                     if (user != null && Roles.isAdmin(user.role)) load()
@@ -70,14 +72,15 @@ class EmployeeDirectoryViewModel @Inject constructor(
         val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return
         if (!Roles.isAdmin(user.role)) return
         val scope = user.scopeIdentity
+        val generation = ++directoryGeneration
         directoryJob?.cancel()
         _state.update { it.copy(loading = true, error = null) }
         directoryJob = viewModelScope.launch {
             when (val result = repository.employees(status = "all")) {
-                is ApiResult.Success -> if (activeAdminScope() == scope) {
+                is ApiResult.Success -> if (activeAdminScope() == scope && directoryGeneration == generation) {
                     _state.update { it.copy(loading = false, employees = result.data, error = null) }
                 }
-                is ApiResult.Failure -> if (activeAdminScope() == scope) {
+                is ApiResult.Failure -> if (activeAdminScope() == scope && directoryGeneration == generation) {
                     _state.update { it.copy(loading = false, error = result.message) }
                 }
             }
