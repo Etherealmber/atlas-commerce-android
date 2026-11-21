@@ -113,6 +113,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -2241,15 +2242,17 @@ private fun VersionHistoryPage(
                             IconButton(onClick = onBack) {
                                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
                             }
-                            Column(Modifier.weight(1f)) {
-                                Text(atlasText("Mises à jour des versions", "Version updates", "تحديثات الإصدارات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                Text(atlasText("Historique complet des changements publiés", "Full history of published changes", "السجل الكامل للتغييرات المنشورة"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(atlasText("Mises à jour des versions", "Version updates", "تحديثات الإصدارات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+                                Text(atlasText("Historique complet des changements publiés", "Full history of published changes", "السجل الكامل للتغييرات المنشورة"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
                             }
-                            if (loading) {
-                                CircularProgressIndicator(Modifier.padding(horizontal = 12.dp).size(22.dp), strokeWidth = 2.dp)
-                            } else {
-                                IconButton(onClick = onRefresh) {
-                                    Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh releases", "تحديث الإصدارات"))
+                            Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                if (loading) {
+                                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                                } else {
+                                    IconButton(onClick = onRefresh) {
+                                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh releases", "تحديث الإصدارات"))
+                                    }
                                 }
                             }
                         }

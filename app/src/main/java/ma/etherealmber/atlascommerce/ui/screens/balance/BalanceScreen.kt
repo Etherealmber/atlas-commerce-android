@@ -71,6 +71,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -537,18 +538,20 @@ fun BalanceScreen(
                 bottom = 8.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
                 atlasText("Trésorerie · créances · mouvements", "Cash · receivables · transactions", "الخزينة · المستحقات · الحركات"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
             ) {
-                Spacer(Modifier.weight(1f))
                 MonthSelector(selectedPeriod = state.selectedPeriod, onSelect = viewModel::selectPeriod)
                 IconButton(onClick = refreshBalance, enabled = !state.refreshing) {
                     if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
