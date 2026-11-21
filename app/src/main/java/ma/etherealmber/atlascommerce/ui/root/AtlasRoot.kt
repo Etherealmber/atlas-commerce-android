@@ -2,6 +2,7 @@ package ma.etherealmber.atlascommerce.ui.root
 
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
+import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateCheckCooldown
 import android.Manifest
 import android.content.res.Configuration
 import android.content.pm.PackageManager
@@ -414,11 +415,7 @@ private fun AtlasGate(
     LaunchedEffect(updateState) {
         val error = updateState as? UpdateState.Error ?: return@LaunchedEffect
         val message = error.retryAfterSeconds?.let { seconds ->
-            atlasText(
-                "Vérification limitée. Réessayez dans $seconds s.",
-                "Update checks are rate-limited. Try again in $seconds sec.",
-                "تم تقييد فحص التحديثات. أعد المحاولة بعد $seconds ث.",
-            )
+            localizedUpdateCheckCooldown(seconds, atlasLanguage)
         } ?: error.message
         showToast(message)
     }
