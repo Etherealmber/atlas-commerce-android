@@ -62,6 +62,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
@@ -84,7 +85,11 @@ fun SaleScreen(
         viewModel.messages.collect { message -> onToast(message) }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = LocalAtlasFloatingDockPadding.current),
+    ) {
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(

@@ -218,6 +218,7 @@ internal fun MainTab.localizedLabel(): String = when (this) {
 
 private val BackStackTabs = setOf(MainTab.AGENT, MainTab.SALE, MainTab.PROFILE, MainTab.SETTINGS, MainTab.NOTIFICATIONS)
 private val FloatingDockTabs = setOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.EMPLOYEES)
+private val FloatingDockOverlayTabs = setOf(MainTab.SALE, MainTab.NOTIFICATIONS)
 
 @Composable
 fun MainShell(
@@ -462,7 +463,7 @@ fun MainShell(
         showDataCacheManagerDialog = false
         when (tab) {
             MainTab.SETTINGS -> setTabName(MainTab.PROFILE.name)
-            MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> setTabName(lastBottomTabName)
+            MainTab.PROFILE, MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS -> setTabName(lastBottomTabName)
             else -> switchTab(MainTab.HOME)
         }
     }
@@ -493,16 +494,19 @@ fun MainShell(
     }
 
     val showShellTopBar = isForeground && (
-        (!useRail && !productHistoryActive && !releaseHistorySubpageActive && tab != MainTab.NOTIFICATIONS) ||
-            (useRail && tab == MainTab.AGENT && !productHistoryActive)
+        (!useRail && !productHistoryActive && !releaseHistorySubpageActive) ||
+            (useRail && tab in setOf(MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS) && !productHistoryActive)
         )
     var shellTopBarVisible by remember { mutableStateOf(false) }
     LaunchedEffect(showShellTopBar) {
         shellTopBarVisible = showShellTopBar
     }
     val motionEnabled = LocalAtlasAnimationsEnabled.current
-    val showBottomNavigation = !useRail && tab in FloatingDockTabs &&
+    val showBottomNavigation = !useRail && (tab in FloatingDockTabs || tab in FloatingDockOverlayTabs) &&
         !productHistoryActive && !releaseHistorySubpageActive
+    val dockSelectedTab = roleTabs.firstOrNull { it.name == lastBottomTabName }
+        ?: roleTabs.firstOrNull()
+        ?: MainTab.HOME
     val floatingTopBarExpanded = remember(tab) { mutableStateOf(true) }
     val scrollDelta = remember(tab) { mutableFloatStateOf(0f) }
     LaunchedEffect(tab, productHistoryActive, releaseHistorySubpageActive, isForeground) {
@@ -618,7 +622,7 @@ fun MainShell(
                         ) { expanded ->
                             if (expanded) {
                                 AtlasTopBar(
-                                    title = if (!useRail || tab == MainTab.AGENT) tab.localizedLabel() else "",
+                                    title = if (!useRail || tab in setOf(MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS)) tab.localizedLabel() else "",
                                     subtitle = null,
                                     windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal),
                                     containerColor = Color.Transparent,
@@ -637,7 +641,7 @@ fun MainShell(
                                     } else null,
                                     onBack = if (useRail) null else when (tab) {
                                         MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
-                                        MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> ({ setTabName(lastBottomTabName) })
+                                        MainTab.PROFILE, MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS -> ({ setTabName(lastBottomTabName) })
                                         else -> null
                                     },
                                     actions = {
@@ -1034,8 +1038,6 @@ fun MainShell(
                     )
 
                     MainTab.NOTIFICATIONS -> NotificationsScreen(
-                        embeddedInTabletPane = useRail,
-                        onBack = { switchTab(MainTab.HOME) },
                         onNavigateHref = { href ->
                             val route = href.orEmpty().lowercase()
                             switchTab(when {
@@ -1136,7 +1138,7 @@ fun MainShell(
     ) {
             AtlasFloatingBottomBar(
                 tabs = roleTabs,
-                selected = tab,
+                selected = dockSelectedTab,
                 onSelect = switchTab,
             )
         }

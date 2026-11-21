@@ -86,7 +86,6 @@ import ma.etherealmber.atlascommerce.ui.screens.legal.SecurityScreen
 import ma.etherealmber.atlascommerce.ui.screens.login.LoginScreen
 import ma.etherealmber.atlascommerce.ui.screens.snake.SnakeScreen
 import ma.etherealmber.atlascommerce.ui.screens.snake.rememberInternetAvailable
-import ma.etherealmber.atlascommerce.ui.screens.notifications.NotificationsScreen
 import ma.etherealmber.atlascommerce.ui.screens.server.ServerSetupScreen
 import ma.etherealmber.atlascommerce.ui.shell.MainShell
 import ma.etherealmber.atlascommerce.ui.shell.MainTab
@@ -98,7 +97,6 @@ private object Overlay {
     const val SNAKE = "snake"
     const val SERVER = "server"
     const val QR_DEVICE = "qr_device"
-    const val NOTIFICATIONS = "notifications"
     const val LICENSE = "license"
     const val SECURITY = "security"
     const val ABOUT = "about"
@@ -277,7 +275,6 @@ private fun AtlasGate(
 ) {
     val context = LocalContext.current
     val atlasLanguage = LocalAtlasLanguage.current
-    val tabletWindow = LocalConfiguration.current.screenWidthDp >= 600
     val lifecycleOwner = LocalLifecycleOwner.current
     val session by viewModel.session.collectAsStateWithLifecycle()
     val server by viewModel.server.collectAsStateWithLifecycle()
@@ -390,12 +387,8 @@ private fun AtlasGate(
 
     LaunchedEffect(openNotificationsRequested, session) {
         if (openNotificationsRequested && session is SessionState.Active) {
-            if (tabletWindow) {
-                overlay = null
-                requestedTab = MainTab.NOTIFICATIONS.name
-            } else {
-                overlay = Overlay.NOTIFICATIONS
-            }
+            overlay = null
+            requestedTab = MainTab.NOTIFICATIONS.name
             onOpenNotificationsConsumed()
         }
     }
@@ -481,7 +474,6 @@ private fun AtlasGate(
     }
     LaunchedEffect(session) {
         if (session is SessionState.SignedOut) {
-            if (overlay == Overlay.NOTIFICATIONS) overlay = null
             deviceUnlockSetupRequest = null
         }
     }
@@ -636,12 +628,8 @@ private fun AtlasGate(
                                     overlay = Overlay.QR_DEVICE
                                 },
                                 onOpenNotifications = {
-                                    if (tabletWindow) {
-                                        overlay = null
-                                        requestedTab = MainTab.NOTIFICATIONS.name
-                                    } else {
-                                        overlay = Overlay.NOTIFICATIONS
-                                    }
+                                    overlay = null
+                                    requestedTab = MainTab.NOTIFICATIONS.name
                                 },
                                 onOpenLicense = { overlay = Overlay.LICENSE },
                                 onOpenSecurity = { overlay = Overlay.SECURITY },
@@ -665,20 +653,13 @@ private fun AtlasGate(
             }
 
             // Full-screen overlay host layered above MainShell so opening License, Security,
-            // About, Devices (QR), Server Setup, or Notifications NEVER destroys MainShell's
+            // About, Devices (QR), or Server Setup NEVER destroys MainShell's
             // active tab (e.g. Paramètres) or scroll position when tapping Retour / Back!
             var lastOverlay by remember { mutableStateOf<String?>(null) }
             if (overlay != null) {
                 lastOverlay = overlay
             }
             val visibleOverlay = overlay ?: lastOverlay
-            val notificationRailInset = if (
-                visibleOverlay == Overlay.NOTIFICATIONS && LocalConfiguration.current.screenWidthDp >= 600
-            ) {
-                if (sidebarCollapsed) 76.dp else 264.dp
-            } else {
-                0.dp
-            }
             AnimatedVisibility(
                 visible = bootSplashFinished && onboardingDone && !loadingBackend && overlay != null,
                 enter = slideInHorizontally(initialOffsetX = { it / 6 }) + fadeIn(),
@@ -686,7 +667,7 @@ private fun AtlasGate(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Surface(
-                    modifier = Modifier.fillMaxSize().padding(start = notificationRailInset),
+                    modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     when (visibleOverlay) {
@@ -700,23 +681,6 @@ private fun AtlasGate(
                             onClose = {
                                 overlay = null
                                 pendingQrToken = null
-                            },
-                            onToast = showToast,
-                        )
-
-                        Overlay.NOTIFICATIONS -> NotificationsScreen(
-                            embeddedInTabletPane = notificationRailInset > 0.dp,
-                            onBack = { overlay = null },
-                            onNavigateHref = { href ->
-                                overlay = null
-                                val h = href.orEmpty().lowercase()
-                                requestedTab = when {
-                                    h.contains("product") || h.contains("stock") -> MainTab.PRODUCTS.name
-                                    h.contains("invoice") || h.contains("sale") -> MainTab.SALE.name
-                                    h.contains("scan") -> MainTab.SCAN.name
-                                    h.contains("assist") || h.contains("agent") -> MainTab.AGENT.name
-                                    else -> MainTab.HOME.name
-                                }
                             },
                             onToast = showToast,
                         )
