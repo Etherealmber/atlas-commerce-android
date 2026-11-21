@@ -95,12 +95,14 @@ fun rememberGitHubLimitRemainingSeconds(notice: GitHubLimitNotice): Int {
  * Persistent compact update icon shown in the Top Bar when a download or update
  * banner is hidden. Downloads retain their progress ring; dismissed available or
  * install-ready notices show an update glyph. Tapping it reopens the banner.
+ * Shell compact bars can force the indicator visible while an update is active.
  */
 @Composable
 fun UpdateMiniProgressBall(
     state: UpdateState,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    forceVisible: Boolean = false,
 ) {
     val downloading = state as? UpdateState.Downloading
     val hiddenNotice = when (state) {
@@ -108,7 +110,7 @@ fun UpdateMiniProgressBall(
         is UpdateState.ReadyToInstall -> state.dismissedBanner && !state.info.mandatory
         else -> false
     }
-    val visible = (downloading?.let { it.hiddenInForeground && !it.info.mandatory } == true) || hiddenNotice
+    val visible = forceVisible || (downloading?.let { it.hiddenInForeground && !it.info.mandatory } == true) || hiddenNotice
 
     AnimatedVisibility(
         visible = visible,

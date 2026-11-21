@@ -337,6 +337,9 @@ class AppUpdateManager internal constructor(
                             isPrerelease = rel.prerelease,
                             notes = formatReleaseNotesForDisplay(rel.body.orEmpty(), rel.tagName),
                             htmlUrl = rel.htmlUrl,
+                            authorLogin = rel.author?.login,
+                            authorUrl = rel.author?.htmlUrl,
+                            targetCommitish = rel.targetCommitish,
                         )
                     }
                 if (entries.isNotEmpty()) {

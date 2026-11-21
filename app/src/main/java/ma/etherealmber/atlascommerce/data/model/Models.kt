@@ -141,7 +141,12 @@ data class GitHubReleaseDto(
     val prerelease: Boolean = false,
     @Json(name = "published_at") val publishedAt: String? = null,
     @Json(name = "html_url") val htmlUrl: String? = null,
+    val author: GitHubReleaseAuthorDto? = null,
+    @Json(name = "target_commitish") val targetCommitish: String? = null,
 )
+
+@JsonClass(generateAdapter = true)
+data class GitHubReleaseAuthorDto(val login: String? = null, @Json(name = "html_url") val htmlUrl: String? = null)
 
 // ---------------------------------------------------------------------------
 // Authentication, profile & QR / connected devices
