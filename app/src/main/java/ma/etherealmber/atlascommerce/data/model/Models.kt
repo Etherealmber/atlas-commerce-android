@@ -435,7 +435,7 @@ data class EmployeePaymentDto(
 
 @JsonClass(generateAdapter = true)
 data class EmployeeResignRequest(
-    val reason: String = "Démission",
+    val reason: String = "Départ",
     @Json(name = "settle_pay") val settlePay: Boolean = false,
 )
 

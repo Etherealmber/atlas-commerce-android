@@ -39,16 +39,25 @@ class EmployeeDirectoryViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
+    private var directoryJob: Job? = null
     private var detailsJob: Job? = null
+    private var actionJob: Job? = null
+    private var deleteJob: Job? = null
 
     init {
         viewModelScope.launch {
             sessionManager.state
                 .map { (it as? SessionState.Active)?.user }
-                .distinctUntilChanged { a, b -> a?.scopeIdentity == b?.scopeIdentity }
+                .distinctUntilChanged { a, b -> a?.scopeIdentity == b?.scopeIdentity && a?.role == b?.role }
                 .collect { user ->
+                    directoryJob?.cancel()
                     detailsJob?.cancel()
+                    actionJob?.cancel()
+                    deleteJob?.cancel()
+                    directoryJob = null
                     detailsJob = null
+                    actionJob = null
+                    deleteJob = null
                     _state.value = UiState(scopeIdentity = user?.scopeIdentity)
                     if (user != null && Roles.isAdmin(user.role)) load()
                 }
@@ -59,13 +68,14 @@ class EmployeeDirectoryViewModel @Inject constructor(
         val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return
         if (!Roles.isAdmin(user.role)) return
         val scope = user.scopeIdentity
+        directoryJob?.cancel()
         _state.update { it.copy(loading = true, error = null) }
-        viewModelScope.launch {
+        directoryJob = viewModelScope.launch {
             when (val result = repository.employees(status = "all")) {
-                is ApiResult.Success -> if (activeScope() == scope) {
+                is ApiResult.Success -> if (activeAdminScope() == scope) {
                     _state.update { it.copy(loading = false, employees = result.data, error = null) }
                 }
-                is ApiResult.Failure -> if (activeScope() == scope) {
+                is ApiResult.Failure -> if (activeAdminScope() == scope) {
                     _state.update { it.copy(loading = false, error = result.message) }
                 }
             }
@@ -80,10 +90,10 @@ class EmployeeDirectoryViewModel @Inject constructor(
         _state.update { it.copy(detailsLoading = true, actionError = null) }
         detailsJob = viewModelScope.launch {
             when (val result = repository.employee(id)) {
-                is ApiResult.Success -> if (activeScope() == scope) {
+                is ApiResult.Success -> if (activeAdminScope() == scope) {
                     _state.update { it.copy(detailsLoading = false, selectedEmployee = result.data, actionError = null) }
                 }
-                is ApiResult.Failure -> if (activeScope() == scope) {
+                is ApiResult.Failure -> if (activeAdminScope() == scope) {
                     _state.update { it.copy(detailsLoading = false, actionError = result.message) }
                 }
             }
@@ -101,14 +111,14 @@ class EmployeeDirectoryViewModel @Inject constructor(
         if (!Roles.isAdmin(user.role) || _state.value.saving) return
         val scope = user.scopeIdentity
         _state.update { it.copy(saving = true, actionError = null) }
-        viewModelScope.launch {
+        actionJob = viewModelScope.launch {
             when (val result = repository.updateEmployee(id, request)) {
-                is ApiResult.Success -> if (activeScope() == scope) {
+                is ApiResult.Success -> if (activeAdminScope() == scope) {
                     _state.update { it.copy(saving = false, selectedEmployee = result.data, actionError = null) }
                     load()
                     onComplete(true)
                 } else onComplete(false)
-                is ApiResult.Failure -> if (activeScope() == scope) {
+                is ApiResult.Failure -> if (activeAdminScope() == scope) {
                     _state.update { it.copy(saving = false, actionError = result.message) }
                     onComplete(false)
                 } else onComplete(false)
@@ -116,19 +126,19 @@ class EmployeeDirectoryViewModel @Inject constructor(
         }
     }
 
-    fun markEmployeeFormer(id: Long, onComplete: (Boolean) -> Unit = {}) {
+    fun markEmployeeFormer(id: Long, reason: String, onComplete: (Boolean) -> Unit = {}) {
         val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return
         if (!Roles.isAdmin(user.role) || _state.value.saving) return
         val scope = user.scopeIdentity
         _state.update { it.copy(saving = true, actionError = null) }
-        viewModelScope.launch {
-            when (val result = repository.markEmployeeFormer(id)) {
-                is ApiResult.Success -> if (activeScope() == scope) {
+        actionJob = viewModelScope.launch {
+            when (val result = repository.markEmployeeFormer(id, reason.trim().ifBlank { "Départ" })) {
+                is ApiResult.Success -> if (activeAdminScope() == scope) {
                     _state.update { it.copy(saving = false, selectedEmployee = result.data, actionError = null) }
                     load()
                     onComplete(true)
                 } else onComplete(false)
-                is ApiResult.Failure -> if (activeScope() == scope) {
+                is ApiResult.Failure -> if (activeAdminScope() == scope) {
                     _state.update { it.copy(saving = false, actionError = result.message) }
                     onComplete(false)
                 } else onComplete(false)
@@ -146,19 +156,21 @@ class EmployeeDirectoryViewModel @Inject constructor(
         }
         val scope = user.scopeIdentity
         _state.update { it.copy(deleting = true, actionError = null) }
-        viewModelScope.launch {
+        deleteJob = viewModelScope.launch {
             when (val result = repository.deleteEmployee(id)) {
-                is ApiResult.Success -> if (activeScope() == scope) {
+                is ApiResult.Success -> if (activeAdminScope() == scope) {
                     _state.update { it.copy(deleting = false, selectedEmployee = null, actionError = null) }
                     load()
                 }
-                is ApiResult.Failure -> if (activeScope() == scope) {
+                is ApiResult.Failure -> if (activeAdminScope() == scope) {
                     _state.update { it.copy(deleting = false, actionError = result.message) }
                 }
             }
         }
     }
 
-    private fun activeScope(): String? =
-        (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
+    private fun activeAdminScope(): String? =
+        (sessionManager.state.value as? SessionState.Active)?.user
+            ?.takeIf { Roles.isAdmin(it.role) }
+            ?.scopeIdentity
 }

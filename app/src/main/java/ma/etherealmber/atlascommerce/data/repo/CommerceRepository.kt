@@ -160,7 +160,7 @@ class CommerceRepository @Inject constructor(
     suspend fun updateEmployee(id: Long, body: EmployeeUpdateRequest): ApiResult<EmployeeDto> =
         runner.envelope { apiProvider.api().updateEmployee(id, body) }
 
-    suspend fun markEmployeeFormer(id: Long, reason: String = "Démission"): ApiResult<EmployeeDto> =
+    suspend fun markEmployeeFormer(id: Long, reason: String = "Départ"): ApiResult<EmployeeDto> =
         runner.envelope { apiProvider.api().markEmployeeFormer(id, EmployeeResignRequest(reason = reason)) }
 
     suspend fun deleteEmployee(id: Long): ApiResult<Unit> {

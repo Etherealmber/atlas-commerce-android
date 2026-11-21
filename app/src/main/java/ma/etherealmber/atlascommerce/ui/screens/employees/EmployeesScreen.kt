@@ -108,6 +108,7 @@ fun EmployeesScreen(
     var editingEmployee by remember { mutableStateOf<ma.etherealmber.atlascommerce.data.model.EmployeeDto?>(null) }
     var confirmEmployeeDelete by remember { mutableStateOf(false) }
     var confirmEmployeeResign by remember { mutableStateOf(false) }
+    var formerEmployeeReason by remember(user.scopeIdentity) { mutableStateOf("") }
     var paymentFilter by rememberSaveable(user.scopeIdentity) { mutableStateOf("Tous") }
     var payrollInfoOpen by remember { mutableStateOf(false) }
 
@@ -257,6 +258,15 @@ fun EmployeesScreen(
                         "This stops future payroll obligations. It does not pay a final settlement; record any final payment separately. You can then delete the record.",
                         "يوقف هذا الإجراء التزامات الرواتب المستقبلية. لا يتم دفع مستحقات نهائية؛ سجّل أي دفعة نهائية بشكل منفصل. بعد ذلك يمكنك حذف الملف.",
                     ))
+                    OutlinedTextField(
+                        value = formerEmployeeReason,
+                        onValueChange = { formerEmployeeReason = it },
+                        label = { Text(atlasText("Motif de départ", "Reason for leaving", "سبب المغادرة")) },
+                        placeholder = { Text(atlasText("Ex. fin de contrat", "For example, contract ended", "مثال: انتهاء العقد")) },
+                        singleLine = true,
+                        enabled = !directoryState.saving,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     directoryState.actionError?.takeIf(String::isNotBlank)?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 }
             },
@@ -265,7 +275,7 @@ fun EmployeesScreen(
                     enabled = !directoryState.saving && employee?.active != 0,
                     onClick = {
                         employee?.let { target ->
-                            directoryViewModel.markEmployeeFormer(target.id) { success ->
+                            directoryViewModel.markEmployeeFormer(target.id, formerEmployeeReason) { success ->
                                 if (success) confirmEmployeeResign = false
                             }
                         }
