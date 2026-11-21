@@ -217,7 +217,7 @@ internal fun MainTab.localizedLabel(): String = when (this) {
 
 private val BackStackTabs = setOf(MainTab.AGENT, MainTab.SALE, MainTab.PROFILE, MainTab.SETTINGS, MainTab.NOTIFICATIONS)
 private val FloatingDockTabs = setOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.EMPLOYEES)
-private val FloatingDockOverlayTabs = setOf(MainTab.SALE, MainTab.NOTIFICATIONS)
+private val FloatingDockOverlayTabs = setOf(MainTab.SALE)
 
 @Composable
 fun MainShell(
@@ -590,14 +590,15 @@ fun MainShell(
                                             scrollDelta.floatValue = 0f
                                             floatingTopBarExpanded.value = true
                                         }
+                                        .semantics {
+                                            contentDescription = atlasText("Développer l’en-tête", "Expand header", "توسيع الرأس")
+                                            role = Role.Button
+                                        }
                                 },
                             ),
                         shape = RoundedCornerShape(26.dp),
                         color = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface,
-                        border = if (LocalAtlasDarkTheme.current) {
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.42f))
-                        } else null,
                         tonalElevation = 0.dp,
                         shadowElevation = 8.dp,
                     ) {
@@ -1286,7 +1287,8 @@ private fun AtlasFloatingBottomBar(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .width(if (compactWidth) 52.dp else 64.dp)
-                    .height(64.dp),
+                    .height(64.dp)
+                    .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {

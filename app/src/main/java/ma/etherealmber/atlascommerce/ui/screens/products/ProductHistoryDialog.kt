@@ -23,6 +23,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,6 +54,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -164,31 +168,16 @@ internal fun ProductHistoryScreen(
         onExpandedChange = { headerExpanded = it },
     )
 
-    Column(Modifier.fillMaxSize().nestedScroll(headerScrollConnection)) {
-        AtlasFloatingTopBar(
-            title = atlasText("Historique du produit", "Product history", "سجل المنتج"),
-            subtitle = atlasText("Détails et mouvements de stock", "Product details and stock movements", "تفاصيل المنتج وحركات المخزون"),
-            onBack = onBack,
-            expanded = headerExpanded,
-            actions = {
-                IconButton(onClick = refreshProductHistory, enabled = !state.loading) {
-                    if (state.loading) {
-                        androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh history", "تحديث السجل"))
-                    }
-                }
-                if (canDeleteProduct) {
-                    IconButton(onClick = { deletePassword = ""; confirmDelete = true }, enabled = !state.deletingProduct) {
-                        Icon(Icons.Outlined.Delete, contentDescription = atlasText("Supprimer le produit", "Delete product", "حذف المنتج"), tint = MaterialTheme.colorScheme.error)
-                    }
-                }
-            },
-        )
+    Box(Modifier.fillMaxSize().nestedScroll(headerScrollConnection)) {
         Column(
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(18.dp),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 100.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
             AtlasCard(padding = 16.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(76.dp)) {
@@ -345,6 +334,26 @@ internal fun ProductHistoryScreen(
                 }
             }
         }
+        }
+        AtlasFloatingTopBar(
+            title = atlasText("Historique du produit", "Product history", "سجل المنتج"),
+            subtitle = atlasText("Détails et mouvements de stock", "Product details and stock movements", "تفاصيل المنتج وحركات المخزون"),
+            onBack = onBack,
+            expanded = headerExpanded,
+            onCollapsedClick = { headerExpanded = true },
+            modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
+            actions = {
+                IconButton(onClick = refreshProductHistory, enabled = !state.loading) {
+                    if (state.loading) androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh history", "تحديث السجل"))
+                }
+                if (canDeleteProduct) {
+                    IconButton(onClick = { deletePassword = ""; confirmDelete = true }, enabled = !state.deletingProduct) {
+                        Icon(Icons.Outlined.Delete, contentDescription = atlasText("Supprimer le produit", "Delete product", "حذف المنتج"), tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+        )
     }
     if (confirmDelete) {
         AlertDialog(

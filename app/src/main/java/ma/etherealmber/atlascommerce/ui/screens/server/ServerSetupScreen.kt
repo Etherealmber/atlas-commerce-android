@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -123,29 +127,20 @@ private fun ServerSetupScreenContent(
         onExpandedChange = { headerExpanded = it },
     )
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surface)))
             .nestedScroll(headerScrollConnection),
     ) {
-        AtlasFloatingTopBar(
-            title = if (isPickingSaved) atlasText("Choisissez un serveur", "Choose a server", "اختر خادماً") else atlasText("Connectez votre serveur", "Connect your server", "اربط الخادم الخاص بك"),
-            subtitle = if (isPickingSaved) atlasText("Sélectionnez un espace enregistré ou ajoutez une nouvelle adresse.", "Choose a saved workspace or add a new server address.", "اختر مساحة محفوظة أو أضف عنوان خادم جديداً.") else atlasText("Entrez l'adresse de votre organisation.", "Enter your organization's server address.", "أدخل عنوان خادم مؤسستك."),
-            onBack = if (onClose != null) ({
-                if (!isPickingSaved && savedServers.isNotEmpty()) step = ServerSetupStep.PICK_SAVED
-                else onClose()
-            }) else null,
-            expanded = headerExpanded,
-            actions = { AtlasLanguageSelector(contentColor = foreground) },
-        )
         Column(
             modifier = Modifier
-                .weight(1f)
+                .fillMaxSize()
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = density.screenPadding, vertical = 6.dp),
         ) {
+        Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 100.dp))
         Spacer(Modifier.height(8.dp))
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -384,6 +379,18 @@ private fun ServerSetupScreenContent(
         }
 
         }
+        AtlasFloatingTopBar(
+            title = if (isPickingSaved) atlasText("Choisissez un serveur", "Choose a server", "اختر خادماً") else atlasText("Connectez votre serveur", "Connect your server", "اربط الخادم الخاص بك"),
+            subtitle = if (isPickingSaved) atlasText("Sélectionnez un espace enregistré ou ajoutez une nouvelle adresse.", "Choose a saved workspace or add a new server address.", "اختر مساحة محفوظة أو أضف عنوان خادم جديداً.") else atlasText("Entrez l'adresse de votre organisation.", "Enter your organization's server address.", "أدخل عنوان خادم مؤسستك."),
+            onBack = if (onClose != null) ({
+                if (!isPickingSaved && savedServers.isNotEmpty()) step = ServerSetupStep.PICK_SAVED
+                else onClose()
+            }) else null,
+            expanded = headerExpanded,
+            onCollapsedClick = { headerExpanded = true },
+            modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
+            actions = { AtlasLanguageSelector(contentColor = foreground) },
+        )
     }
 
     forgetTarget?.let { target ->

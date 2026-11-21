@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -172,27 +173,13 @@ fun DataCacheManagerDialog(
             },
             color = MaterialTheme.colorScheme.background,
         ) {
-            Column(Modifier.fillMaxSize().nestedScroll(headerScrollConnection)) {
-                AtlasFloatingTopBar(
-                    title = atlasText("Données et cache", "Data & cache manager", "مدير البيانات والذاكرة المؤقتة"),
-                    subtitle = atlasText("Stockage privé de cet appareil", "This device's private storage", "التخزين الخاص بهذا الجهاز"),
-                    onBack = if (tabletSidebarWidth == null) onDismiss else null,
-                    applyStatusBarInsets = false,
-                    expanded = headerExpanded,
-                    actions = {
-                        IconButton(onClick = {
-                            appViewModel.refreshLocalStorageSummary()
-                            appViewModel.refreshCachedProductCount()
-                        }) {
-                            Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser le stockage", "Refresh storage", "تحديث التخزين"))
-                        }
-                    },
-                )
-                AtlasDivider()
+            Box(Modifier.fillMaxSize().nestedScroll(headerScrollConnection)) {
                 Column(
-                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 10.dp),
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 18.dp, top = 0.dp, end = 18.dp, bottom = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    Spacer(Modifier.height(100.dp))
+                    AtlasDivider()
                     Text(
                         atlasText(
                             "Gérez uniquement les éléments conservés sur cet appareil. Les données de l'entreprise sur le serveur ne sont ni affichées ni modifiées. Les mots de passe et jetons ne sont jamais montrés.",
@@ -414,6 +401,23 @@ fun DataCacheManagerDialog(
                         )
                     }
                 }
+                AtlasFloatingTopBar(
+                    title = atlasText("Données et cache", "Data & cache manager", "مدير البيانات والذاكرة المؤقتة"),
+                    subtitle = atlasText("Stockage privé de cet appareil", "This device's private storage", "التخزين الخاص بهذا الجهاز"),
+                    onBack = if (tabletSidebarWidth == null) onDismiss else null,
+                    applyStatusBarInsets = false,
+                    expanded = headerExpanded,
+                    onCollapsedClick = { headerExpanded = true },
+                    modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
+                    actions = {
+                        IconButton(onClick = {
+                            appViewModel.refreshLocalStorageSummary()
+                            appViewModel.refreshCachedProductCount()
+                        }) {
+                            Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser le stockage", "Refresh storage", "تحديث التخزين"))
+                        }
+                    },
+                )
             }
         }
     }

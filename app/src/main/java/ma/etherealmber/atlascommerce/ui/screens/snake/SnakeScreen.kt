@@ -29,6 +29,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -154,28 +155,11 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
         onExpandedChange = { headerExpanded = it },
     )
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(headerScrollConnection),
-        topBar = {
-            AtlasFloatingTopBar(
-                title = when (page) {
-                    SnakePage.MENU, SnakePage.PLAY -> atlasText("Atlas Snake", "Atlas Snake", "ثعبان Atlas")
-                    SnakePage.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
-                    SnakePage.DAILY -> atlasText("Défi du jour", "Daily challenge", "تحدي اليوم")
-                },
-                onBack = {
-                    if (page == SnakePage.MENU) onClose() else {
-                        running = false
-                        page = SnakePage.MENU
-                    }
-                },
-                expanded = headerExpanded,
-            )
-        },
-    ) { padding ->
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).nestedScroll(headerScrollConnection)) {
+        Box(Modifier.fillMaxSize().padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 100.dp)) {
         when (page) {
             SnakePage.PLAY -> GameplayPage(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 game = game,
                 bestScore = bestScore,
                 bestCrowns = bestCrowns,
@@ -195,7 +179,7 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                 onSettings = { running = false; page = SnakePage.SETTINGS },
             )
             SnakePage.MENU -> MenuPage(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 bestScore = bestScore,
                 bestCrowns = bestCrowns,
                 syncStatus = personalBestState.syncStatus,
@@ -204,7 +188,7 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                 onDaily = { page = SnakePage.DAILY },
             )
             SnakePage.SETTINGS -> SettingsPage(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 speedMillis = speedMillis,
                 wrapWalls = wrapWalls,
                 onSpeed = { speedMillis = it; preferences.edit().putInt("snake_speed_ms_v2", it).apply() },
@@ -215,12 +199,29 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                 },
             )
             SnakePage.DAILY -> DailyPage(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 target = dailyTarget,
                 dailyBest = dailyBest,
                 onStart = { startGame(true) },
             )
         }
+        }
+        AtlasFloatingTopBar(
+            title = when (page) {
+                SnakePage.MENU, SnakePage.PLAY -> atlasText("Atlas Snake", "Atlas Snake", "ثعبان Atlas")
+                SnakePage.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
+                SnakePage.DAILY -> atlasText("Défi du jour", "Daily challenge", "تحدي اليوم")
+            },
+            onBack = {
+                if (page == SnakePage.MENU) onClose() else {
+                    running = false
+                    page = SnakePage.MENU
+                }
+            },
+            expanded = headerExpanded,
+            onCollapsedClick = { headerExpanded = true },
+            modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
+        )
     }
 }
 
