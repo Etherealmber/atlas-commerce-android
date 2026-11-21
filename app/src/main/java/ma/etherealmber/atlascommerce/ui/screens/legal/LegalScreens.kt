@@ -635,9 +635,10 @@ private fun LegalPage(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     var headerExpanded by remember { mutableStateOf(true) }
-    val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(headerExpanded) {
-        headerExpanded = it
-    }
+    val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(
+        expanded = headerExpanded,
+        onExpandedChange = { headerExpanded = it },
+    )
     Column(modifier = Modifier.fillMaxSize().nestedScroll(headerScrollConnection)) {
         AtlasFloatingTopBar(
             title = title,

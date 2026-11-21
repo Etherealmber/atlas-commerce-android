@@ -2213,9 +2213,10 @@ private fun VersionHistoryPage(
     onOpenRelease: (String) -> Unit,
 ) {
     var headerExpanded by remember { mutableStateOf(true) }
-    val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(headerExpanded) {
-        headerExpanded = it
-    }
+    val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(
+        expanded = headerExpanded,
+        onExpandedChange = { headerExpanded = it },
+    )
     val noticeLanguage = LocalAtlasLanguage.current
     LaunchedEffect(githubLimitNotice, noticeLanguage) {
         val notice = githubLimitNotice ?: return@LaunchedEffect
