@@ -111,6 +111,7 @@ internal fun ProductHistoryScreen(
     var deletePassword by remember(product.id) { mutableStateOf("") }
     val imageUpdatedMessage = atlasText("Photo du produit mise à jour.", "Product image updated.", "تم تحديث صورة المنتج.")
     val imageReadErrorMessage = atlasText("Impossible de lire cette image.", "Could not read this image.", "تعذرت قراءة هذه الصورة.")
+    val productDeletedMessage = atlasText("Produit supprimé ou archivé.", "Product deleted or archived.", "تم حذف المنتج أو أرشفته.")
 
     LaunchedEffect(product.id, state.scopeIdentity) {
         viewModel.loadHistory(product.id)
@@ -376,7 +377,7 @@ internal fun ProductHistoryScreen(
                             confirmDelete = false
                             deletePassword = ""
                             if (deleted) {
-                                onToast(message ?: atlasText("Produit supprimé ou archivé.", "Product deleted or archived.", "تم حذف المنتج أو أرشفته."))
+                                onToast(message ?: productDeletedMessage)
                                 onProductDeleted()
                             } else if (!message.isNullOrBlank()) onToast(message)
                         }

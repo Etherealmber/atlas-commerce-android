@@ -294,7 +294,7 @@ fun EmployeesScreen(
                 TextButton(
                     enabled = !directoryState.deleting && employee?.active == 0,
                     onClick = {
-                        employee?.let(directoryViewModel::deleteEmployee)
+                        employee?.let { directoryViewModel.deleteEmployee(it.id) }
                         confirmEmployeeDelete = false
                     },
                 ) { Text(if (directoryState.deleting) atlasText("Suppression…", "Deleting…", "جارٍ الحذف…") else atlasText("Supprimer", "Delete", "حذف")) }
@@ -853,10 +853,11 @@ private fun EmployeeDetailsDialog(
                         }
                     } else {
                         items(employee.payments, key = { "employee-payment-${it.id}" }) { payment ->
+                            val paymentDate = if (payment.paidAt.isNotBlank()) atlasShortDate(payment.paidAt) else null
                             AtlasCard {
                                 Text(atlasMoney(payment.amount, "MAD"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                 Text(
-                                    listOf(payment.periodLabel, payment.paidAt.takeIf(String::isNotBlank)?.let(::atlasShortDate), payment.note)
+                                    listOf(payment.periodLabel, paymentDate, payment.note)
                                         .filterNotNull().filter(String::isNotBlank).joinToString(" · "),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
