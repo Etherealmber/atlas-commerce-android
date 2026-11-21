@@ -91,6 +91,7 @@ import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
 import ma.etherealmber.atlascommerce.ui.components.ProductArtwork
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
@@ -184,7 +185,7 @@ fun ProductsScreen(
                 onToast = onToast,
             )
         } else {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().padding(top = LocalAtlasFloatingTopBarPadding.current)) {
         if (showPageTitle) {
             Text(
                 text = atlasText("Produits", "Products", "المنتجات"),

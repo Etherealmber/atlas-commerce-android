@@ -62,6 +62,7 @@ import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.PayrollRowDto
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
@@ -181,7 +182,7 @@ fun EmployeesScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp + dockPadding),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + LocalAtlasFloatingTopBarPadding.current, bottom = 24.dp + dockPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "employees_intro") {

@@ -78,6 +78,7 @@ import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.data.model.MonthlyPointDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -301,7 +302,7 @@ fun HomeScreen(
             contentPadding = PaddingValues(
                 start = Atlas.density.screenPadding,
                 end = Atlas.density.screenPadding,
-                top = Atlas.density.cardMargin,
+                top = Atlas.density.cardMargin + LocalAtlasFloatingTopBarPadding.current,
                 bottom = 48.dp + LocalAtlasFloatingDockPadding.current,
             ),
             itemGap = Atlas.density.itemGap,
@@ -365,7 +366,7 @@ private fun HomeErrorContent(
         contentPadding = PaddingValues(
             start = density.screenPadding,
             end = density.screenPadding,
-            top = density.cardMargin,
+            top = density.cardMargin + LocalAtlasFloatingTopBarPadding.current,
             bottom = 28.dp + dockPadding,
         ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
@@ -456,7 +457,7 @@ private fun HomeContent(
         contentPadding = PaddingValues(
             start = density.screenPadding,
             end = density.screenPadding,
-            top = density.cardMargin,
+            top = density.cardMargin + LocalAtlasFloatingTopBarPadding.current,
             // Keep the final cards scrollable clear of the floating dock while intermediate content passes behind it.
             bottom = 48.dp + dockPadding,
         ),

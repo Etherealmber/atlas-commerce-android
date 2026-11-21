@@ -3,10 +3,12 @@ package ma.etherealmber.atlascommerce.ui.shell
 import ma.etherealmber.atlascommerce.ui.components.rememberApiRefreshAction
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -18,6 +20,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -132,6 +135,9 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.AtlasSurpriseDialog
 import ma.etherealmber.atlascommerce.ui.components.nextSurprise
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarExpanded
+import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
@@ -527,11 +533,6 @@ fun MainShell(
             }
         }
     }
-    val floatingTopClearance by animateDpAsState(
-        targetValue = if (showShellTopBar && shellTopBarVisible && floatingBarsVisibility.value) 76.dp else 0.dp,
-        animationSpec = if (motionEnabled) tween(220, easing = FastOutSlowInEasing) else tween(0),
-        label = "floating-top-bar-content-clearance",
-    )
     val floatingBarWidth by animateDpAsState(
         targetValue = maxWidth,
         animationSpec = if (motionEnabled) {
@@ -546,7 +547,7 @@ fun MainShell(
         containerColor = Color.Transparent,
         topBar = {
             AnimatedVisibility(
-                visible = shellTopBarVisible && floatingBarsVisibility.value,
+                visible = shellTopBarVisible,
                 enter = if (motionEnabled) {
                     fadeIn(tween(220, easing = FastOutSlowInEasing)) +
                         slideInVertically(
@@ -574,172 +575,232 @@ fun MainShell(
                         ),
                 ) {
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .animateContentSize(
+                                animationSpec = if (motionEnabled) {
+                                    spring(dampingRatio = 0.82f, stiffness = 340f)
+                                } else {
+                                    tween(0)
+                                },
+                            )
+                            .then(
+                                if (floatingBarsVisibility.value) Modifier.fillMaxWidth()
+                                else Modifier.align(Alignment.Center),
+                            ),
                         shape = RoundedCornerShape(26.dp),
                         color = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface,
+                        border = if (LocalAtlasDarkTheme.current) {
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.42f))
+                        } else null,
                         tonalElevation = 0.dp,
                         shadowElevation = 4.dp,
                     ) {
-                        AtlasTopBar(
-                            title = if (!useRail || tab == MainTab.AGENT) tab.localizedLabel() else "",
-                            subtitle = null,
-                            windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal),
-                            containerColor = Color.Transparent,
-                            titleLeading = if (tab == MainTab.AGENT) {
-                                {
-                                    AtlasAgentSurpriseMascot(
-                                        modifier = Modifier.size(30.dp),
-                                        isTyping = agentState?.input?.isNotBlank() == true,
-                                        isThinking = agentState?.sending == true,
-                                        onSurprise = {
-                                            surpriseIndex = nextSurprise(surpriseIndex, 5)
-                                            showAgentSurprise = true
-                                        },
-                                    )
+                        AnimatedContent(
+                            targetState = floatingBarsVisibility.value,
+                            transitionSpec = {
+                                if (motionEnabled) {
+                                    (fadeIn(tween(180, easing = FastOutSlowInEasing)) +
+                                        scaleIn(tween(220, easing = FastOutSlowInEasing), initialScale = 0.94f)) togetherWith
+                                        (fadeOut(tween(130, easing = FastOutSlowInEasing)) +
+                                            scaleOut(tween(150, easing = FastOutSlowInEasing), targetScale = 0.96f))
+                                } else {
+                                    EnterTransition.None togetherWith ExitTransition.None
                                 }
-                            } else null,
-                            onBack = if (useRail) null else when (tab) {
-                                MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
-                                MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> ({ setTabName(lastBottomTabName) })
-                                else -> null
                             },
-                            actions = {
-                                val openAgentDescription = atlasText(
-                                    "Ouvrir Atlas Agent",
-                                    "Open Atlas Agent",
-                                    "فتح Atlas Agent",
+                            label = "floating-top-bar-content",
+                        ) { expanded ->
+                            if (expanded) {
+                                AtlasTopBar(
+                                    title = if (!useRail || tab == MainTab.AGENT) tab.localizedLabel() else "",
+                                    subtitle = null,
+                                    windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal),
+                                    containerColor = Color.Transparent,
+                                    titleLeading = if (tab == MainTab.AGENT) {
+                                        {
+                                            AtlasAgentSurpriseMascot(
+                                                modifier = Modifier.size(30.dp),
+                                                isTyping = agentState?.input?.isNotBlank() == true,
+                                                isThinking = agentState?.sending == true,
+                                                onSurprise = {
+                                                    surpriseIndex = nextSurprise(surpriseIndex, 5)
+                                                    showAgentSurprise = true
+                                                },
+                                            )
+                                        }
+                                    } else null,
+                                    onBack = if (useRail) null else when (tab) {
+                                        MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
+                                        MainTab.PROFILE, MainTab.AGENT, MainTab.SALE -> ({ setTabName(lastBottomTabName) })
+                                        else -> null
+                                    },
+                                    actions = {
+                                        val openAgentDescription = atlasText(
+                                            "Ouvrir Atlas Agent",
+                                            "Open Atlas Agent",
+                                            "فتح Atlas Agent",
+                                        )
+                                        val hasHiddenUpdate = when (val state = updateState) {
+                                            is UpdateState.Downloading -> state.hiddenInForeground && !state.info.mandatory
+                                            is UpdateState.Available -> state.dismissedBanner && !state.info.mandatory
+                                            is UpdateState.ReadyToInstall -> state.dismissedBanner && !state.info.mandatory
+                                            else -> false
+                                        }
+                                        if (isForeground && !useRail && tab != MainTab.AGENT) {
+                                            UpdateMiniProgressBall(
+                                                state = updateState,
+                                                onClick = onShowUpdateProgress,
+                                            )
+                                        }
+                                        if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
+                                        if (!useRail && tab !in BackStackTabs) {
+                                            IconButton(
+                                                onClick = { switchTab(MainTab.AGENT) },
+                                                modifier = Modifier.semantics {
+                                                    contentDescription = openAgentDescription
+                                                },
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.AutoAwesome,
+                                                    contentDescription = openAgentDescription,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(24.dp),
+                                                )
+                                            }
+                                        }
+                                        if (tab == MainTab.AGENT) {
+                                            IconButton(onClick = { agentHistoryRequested = true }) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.History,
+                                                    contentDescription = atlasText("Historique", "Conversation history", "سجل المحادثات"),
+                                                )
+                                            }
+                                            IconButton(onClick = { agentViewModel?.startNewConversation() }) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.AddComment,
+                                                    contentDescription = atlasText("Nouvelle discussion", "New conversation", "محادثة جديدة"),
+                                                )
+                                            }
+                                            IconButton(onClick = refreshAgentContext) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Refresh,
+                                                    contentDescription = atlasText("Actualiser le contexte", "Refresh context", "تحديث السياق"),
+                                                )
+                                            }
+                                            IconButton(onClick = {
+                                                showAgentQuotaDialog = true
+                                                refreshAgentPolicy()
+                                            }) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.HourglassBottom,
+                                                    contentDescription = atlasText("Quota IA", "AI quota", "حصة الذكاء الاصطناعي"),
+                                                )
+                                            }
+                                        }
+                                        when (tab) {
+                                            MainTab.AGENT, MainTab.SALE -> Unit
+
+                                            MainTab.SETTINGS -> {
+                                                if (!useRail && isForeground) {
+                                                    Surface(
+                                                        shape = CircleShape,
+                                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                        tonalElevation = 1.dp,
+                                                    ) {
+                                                        IconButton(onClick = openDataCacheManager, modifier = Modifier.size(40.dp)) {
+                                                            Icon(
+                                                                imageVector = Icons.Outlined.Inventory2,
+                                                                contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            MainTab.PROFILE -> {
+                                                // On tablets these destinations already live in the sidebar.
+                                                if (!useRail) {
+                                                    Surface(
+                                                        shape = CircleShape,
+                                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                        tonalElevation = 1.dp,
+                                                    ) {
+                                                        IconButton(onClick = { switchTab(MainTab.SETTINGS) }, modifier = Modifier.size(40.dp)) {
+                                                            Icon(
+                                                                imageVector = Icons.Outlined.Settings,
+                                                                contentDescription = atlasText("Paramètres", "Settings", "الإعدادات"),
+                                                            )
+                                                        }
+                                                    }
+                                                    Spacer(Modifier.width(4.dp))
+                                                    if (isForeground) {
+                                                        Surface(
+                                                            shape = CircleShape,
+                                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                            tonalElevation = 1.dp,
+                                                        ) {
+                                                            IconButton(onClick = openDataCacheManager, modifier = Modifier.size(40.dp)) {
+                                                                Icon(
+                                                                    imageVector = Icons.Outlined.Inventory2,
+                                                                    contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
+                                                                )
+                                                            }
+                                                        }
+                                                        Spacer(Modifier.width(4.dp))
+                                                    }
+                                                }
+                                            }
+
+                                            else -> {
+                                                // Tablet navigation is in the sidebar; keep its notifications,
+                                                // sale, and account actions out of the top-bar dropdown.
+                                                if (!useRail) {
+                                                    TopBarQuickActionsMenu(
+                                                        notificationCount = notificationCount,
+                                                        showSale = Roles.canCreateDocuments(user.role),
+                                                        onOpenNotifications = openNotificationsForLayout,
+                                                        onOpenSale = { switchTab(MainTab.SALE) },
+                                                    )
+                                                    Spacer(Modifier.width(6.dp))
+                                                    AtlasAvatar(
+                                                        avatarUrl = user.avatarUrl,
+                                                        label = user.displayName.ifBlank { user.username },
+                                                        size = 34.dp,
+                                                        serverBaseUrl = serverBaseUrl,
+                                                        borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                                        clickContentDescription = atlasText(
+                                                            "Ouvrir le profil de ${user.displayName.ifBlank { user.username }}",
+                                                            "Open profile for ${user.displayName.ifBlank { user.username }}",
+                                                            "فتح الملف الشخصي لـ ${user.displayName.ifBlank { user.username }}",
+                                                        ),
+                                                        onClick = { switchTab(MainTab.PROFILE) },
+                                                        onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAvatarSurprise = true },
+                                                        longClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
+                                                    )
+                                                    Spacer(Modifier.width(10.dp))
+                                                }
+                                            }
+                                        }
+                                    },
                                 )
-                                val hasHiddenUpdate = when (val state = updateState) {
-                                    is UpdateState.Downloading -> state.hiddenInForeground && !state.info.mandatory
-                                    is UpdateState.Available -> state.dismissedBanner && !state.info.mandatory
-                                    is UpdateState.ReadyToInstall -> state.dismissedBanner && !state.info.mandatory
-                                    else -> false
-                                }
-                                if (isForeground && !useRail && tab != MainTab.AGENT) {
-                                    UpdateMiniProgressBall(
-                                        state = updateState,
-                                        onClick = onShowUpdateProgress,
+                            } else {
+                                Box(
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = tab.localizedLabel(),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        softWrap = false,
                                     )
                                 }
-                                if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
-                                if (!useRail && tab !in BackStackTabs) {
-                                    IconButton(
-                                        onClick = { switchTab(MainTab.AGENT) },
-                                        modifier = Modifier.semantics {
-                                            contentDescription = openAgentDescription
-                                        },
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.AutoAwesome,
-                                            contentDescription = openAgentDescription,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(24.dp),
-                                        )
-                                    }
-                                }
-                                if (tab == MainTab.AGENT) {
-                                    IconButton(onClick = { agentHistoryRequested = true }) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.History,
-                                            contentDescription = atlasText("Historique", "Conversation history", "سجل المحادثات"),
-                                        )
-                                    }
-                                    IconButton(onClick = { agentViewModel?.startNewConversation() }) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.AddComment,
-                                            contentDescription = atlasText("Nouvelle discussion", "New conversation", "محادثة جديدة"),
-                                        )
-                                    }
-                                    IconButton(onClick = refreshAgentContext) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Refresh,
-                                            contentDescription = atlasText("Actualiser le contexte", "Refresh context", "تحديث السياق"),
-                                        )
-                                    }
-                                    IconButton(onClick = {
-                                        showAgentQuotaDialog = true
-                                        refreshAgentPolicy()
-                                    }) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.HourglassBottom,
-                                            contentDescription = atlasText("Quota IA", "AI quota", "حصة الذكاء الاصطناعي"),
-                                        )
-                                    }
-                                }
-                                when (tab) {
-                                    MainTab.AGENT, MainTab.SALE -> Unit
-
-                                    MainTab.SETTINGS -> {
-                                        if (!useRail && isForeground) {
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                tonalElevation = 1.dp,
-                                            ) {
-                                                IconButton(onClick = openDataCacheManager, modifier = Modifier.size(40.dp)) {
-                                                    Icon(
-                                                        imageVector = Icons.Outlined.Inventory2,
-                                                        contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    MainTab.PROFILE -> {
-                                        // On tablets these destinations already live in the sidebar.
-                                        if (!useRail) {
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                tonalElevation = 1.dp,
-                                            ) {
-                                                IconButton(onClick = { switchTab(MainTab.SETTINGS) }, modifier = Modifier.size(40.dp)) {
-                                                    Icon(
-                                                        imageVector = Icons.Outlined.Settings,
-                                                        contentDescription = atlasText("Paramètres", "Settings", "الإعدادات"),
-                                                    )
-                                                }
-                                            }
-                                            Spacer(Modifier.width(4.dp))
-                                        }
-                                    }
-
-                                    else -> {
-                                        // Tablet navigation is in the sidebar; keep its notifications,
-                                        // sale, and account actions out of the top-bar dropdown.
-                                        if (!useRail) {
-                                            TopBarQuickActionsMenu(
-                                                notificationCount = notificationCount,
-                                                showSale = Roles.canCreateDocuments(user.role),
-                                                onOpenNotifications = openNotificationsForLayout,
-                                                onOpenSale = { switchTab(MainTab.SALE) },
-                                            )
-                                            Spacer(Modifier.width(6.dp))
-                                            AtlasAvatar(
-                                                avatarUrl = user.avatarUrl,
-                                                label = user.displayName.ifBlank { user.username },
-                                                size = 34.dp,
-                                                serverBaseUrl = serverBaseUrl,
-                                                borderColor = MaterialTheme.colorScheme.outlineVariant,
-                                                clickContentDescription = atlasText(
-                                                    "Ouvrir le profil de ${user.displayName.ifBlank { user.username }}",
-                                                    "Open profile for ${user.displayName.ifBlank { user.username }}",
-                                                    "فتح الملف الشخصي لـ ${user.displayName.ifBlank { user.username }}",
-                                                ),
-                                                onClick = { switchTab(MainTab.PROFILE) },
-                                                onLongClick = { surpriseIndex = nextSurprise(surpriseIndex, 5); showAvatarSurprise = true },
-                                                longClickLabel = atlasText("Afficher une surprise", "Show a surprise", "إظهار مفاجأة"),
-                                            )
-                                            Spacer(Modifier.width(10.dp))
-                                        }
-                                    }
-                                }
-                            },
-                        )
+                            }
+                        }
                     }
                 }
             }
@@ -826,6 +887,8 @@ fun MainShell(
         val navigationInset = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
         CompositionLocalProvider(
             LocalAtlasFloatingDockPadding provides if (!useRail && tab !in BackStackTabs && !productHistoryActive) 96.dp + navigationInset else 0.dp,
+            LocalAtlasFloatingTopBarPadding provides if (showShellTopBar && shellTopBarVisible) 76.dp else 0.dp,
+            LocalAtlasFloatingTopBarExpanded provides floatingBarsVisibility.value,
         ) {
         AtlasPageTransition(
             targetState = pageTarget,
@@ -835,10 +898,7 @@ fun MainShell(
             // screens add end content-padding so their final items can still scroll clear of it.
             modifier = Modifier
                 .fillMaxSize()
-                .padding(
-                    start = if (showRail) sidebarWidth else 0.dp,
-                    top = floatingTopClearance,
-                ),
+                .padding(start = if (showRail) sidebarWidth else 0.dp),
         ) { currentPage ->
             val currentTab = currentPage.tab
             Box(

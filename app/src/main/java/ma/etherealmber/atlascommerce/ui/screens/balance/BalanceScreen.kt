@@ -83,6 +83,7 @@ import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
@@ -594,7 +595,7 @@ fun BalanceScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     start = if (maxWidth >= 600.dp) 24.dp else 16.dp,
                     end = if (maxWidth >= 600.dp) 24.dp else 16.dp,
-                    top = 12.dp,
+                    top = 12.dp + LocalAtlasFloatingTopBarPadding.current,
                     bottom = 12.dp + dockPadding,
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
