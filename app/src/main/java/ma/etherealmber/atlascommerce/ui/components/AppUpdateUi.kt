@@ -9,8 +9,6 @@ import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSummary
 import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateCheckCooldown
 import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateCooldownButton
 import ma.etherealmber.atlascommerce.ui.i18n.localizedGitHubLimitNotice
-import android.content.Intent
-import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -43,7 +41,6 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.NetworkCheck
-import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SystemUpdateAlt
 import androidx.compose.material3.CircularProgressIndicator
@@ -62,11 +59,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.NotificationManagerCompat
 import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.core.update.MirrorPingResult
@@ -564,7 +559,6 @@ fun SettingsUpdateCard(
     onInstall: () -> Unit,
     onToast: (String) -> Unit,
 ) {
-    val context = LocalContext.current
     val gatedOnCheck = rememberApiRefreshAction(
         key = "manual-update-check",
         cooldownMs = 30_000L,
@@ -577,9 +571,11 @@ fun SettingsUpdateCard(
         onRefresh = onPingMirrors,
         onCooldownMessage = onToast,
     )
-    val notificationsEnabled = runCatching {
-        NotificationManagerCompat.from(context).areNotificationsEnabled()
-    }.getOrDefault(true)
+    val noticeLanguage = LocalAtlasLanguage.current
+    LaunchedEffect(githubLimitNotice, noticeLanguage) {
+        val notice = githubLimitNotice ?: return@LaunchedEffect
+        onToast(localizedGitHubLimitNotice(notice.remainingSeconds(), notice.operation, noticeLanguage))
+    }
     val cooldownSeed = (state as? UpdateState.Error)?.retryAfterSeconds ?: 0
     var cooldownSeconds by remember(cooldownSeed) { mutableStateOf(cooldownSeed) }
     LaunchedEffect(cooldownSeed) {
@@ -623,48 +619,6 @@ fun SettingsUpdateCard(
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                     style = MaterialTheme.typography.bodySmall,
                 )
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-
-        if (!notificationsEnabled) {
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.NotificationsActive,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = atlasText("Activez les notifications Android pour voir les alertes et le téléchargement en direct."),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(
-                        onClick = {
-                            runCatching {
-                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                context.startActivity(intent)
-                            }
-                        },
-                    ) {
-                        Text(atlasText("Activer"))
-                    }
-                }
             }
             Spacer(Modifier.height(8.dp))
         }

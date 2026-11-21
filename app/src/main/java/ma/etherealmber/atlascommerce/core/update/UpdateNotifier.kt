@@ -15,7 +15,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
-import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSize
 import ma.etherealmber.atlascommerce.ui.i18n.localizedUpdateSummary
 import ma.etherealmber.atlascommerce.ui.i18n.notificationText
@@ -131,23 +130,10 @@ class AndroidUpdateNotifier @Inject constructor(
     }
 
     override fun showError(info: UpdateInfo?, message: String) {
+        // Retry/cooldown failures are shown in-app (and as a native Toast while foregrounded),
+        // never as a second Android notification competing with the user's refresh action.
         lastNotifyRealtimeMs = 0L
-        val lang = language.value
-        val suffix = info?.displayVersion?.let { " $it" }.orEmpty()
-        postNotification(
-            NotificationCompat.Builder(context, AtlasApp.UPDATE_CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_stat_update)
-                .setContentTitle(notificationText(lang, "Échec du téléchargement$suffix", "Download failed$suffix", "فشل التنزيل$suffix"))
-                .setContentText(atlasNotice(message, lang))
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setCategory(NotificationCompat.CATEGORY_ERROR)
-                .setOngoing(false)
-                .setOnlyAlertOnce(false)
-                .setAutoCancel(true)
-                .setProgress(0, 0, false)
-                .setContentIntent(openSettingsPendingIntent()),
-        )
+        cancel()
     }
 
     override fun cancel() {

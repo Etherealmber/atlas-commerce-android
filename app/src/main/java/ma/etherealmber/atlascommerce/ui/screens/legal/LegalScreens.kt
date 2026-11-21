@@ -80,7 +80,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
-import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
+import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
@@ -633,7 +633,7 @@ private fun LegalPage(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        AtlasTopBar(title = atlasText(title), subtitle = subtitle?.let { atlasText(it) }, onBack = onBack)
+        AtlasFloatingTopBar(title = title, subtitle = subtitle, onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()

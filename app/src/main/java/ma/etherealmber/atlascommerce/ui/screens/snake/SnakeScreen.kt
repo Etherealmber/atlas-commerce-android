@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -54,6 +53,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.delay
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
+import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import java.time.LocalDate
 import kotlin.math.abs
@@ -147,22 +147,16 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
     }
 
     Scaffold(topBar = {
-        TopAppBar(
-            title = {
-                Text(when (page) {
-                    SnakePage.MENU, SnakePage.PLAY -> atlasText("Atlas Snake", "Atlas Snake", "ثعبان Atlas")
-                    SnakePage.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
-                    SnakePage.DAILY -> atlasText("Défi du jour", "Daily challenge", "تحدي اليوم")
-                })
+        AtlasFloatingTopBar(
+            title = when (page) {
+                SnakePage.MENU, SnakePage.PLAY -> atlasText("Atlas Snake", "Atlas Snake", "ثعبان Atlas")
+                SnakePage.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
+                SnakePage.DAILY -> atlasText("Défi du jour", "Daily challenge", "تحدي اليوم")
             },
-            navigationIcon = {
-                IconButton(onClick = {
-                    if (page == SnakePage.MENU) onClose() else {
-                        running = false
-                        page = SnakePage.MENU
-                    }
-                }) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
+            onBack = {
+                if (page == SnakePage.MENU) onClose() else {
+                    running = false
+                    page = SnakePage.MENU
                 }
             },
         )

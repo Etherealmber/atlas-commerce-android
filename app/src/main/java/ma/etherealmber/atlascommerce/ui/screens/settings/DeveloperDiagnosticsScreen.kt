@@ -54,7 +54,7 @@ import ma.etherealmber.atlascommerce.core.diagnostics.resolveAnalyticsConsentUi
 import ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
-import ma.etherealmber.atlascommerce.ui.components.AtlasTopBar
+import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
@@ -173,7 +173,7 @@ fun DeveloperDiagnosticsScreen(
 
     Scaffold(
         topBar = {
-            AtlasTopBar(
+            AtlasFloatingTopBar(
                 title = atlasText("Diagnostics développeur", "Developer status", "حالة المطوّر"),
                 subtitle = atlasText("État local · détails sensibles masqués", "Local status · sensitive details hidden", "حالة محلية · إخفاء التفاصيل الحساسة"),
                 onBack = onBack,

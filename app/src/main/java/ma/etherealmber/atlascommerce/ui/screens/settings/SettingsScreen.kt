@@ -1668,6 +1668,7 @@ fun SettingsScreen(
             loading = releaseChangelogLoading,
             githubLimitNotice = githubLimitNotice,
             onBack = { setReleaseHistoryPage(false) },
+            onToast = onToast,
             onRefresh = refreshReleaseHistory,
             onOpenRelease = { url -> if (!openExternal(context, url)) onToast(noBrowserAvailableMessage) },
         )
@@ -2204,23 +2205,28 @@ private fun VersionHistoryPage(
     loading: Boolean,
     githubLimitNotice: ma.etherealmber.atlascommerce.core.update.GitHubLimitNotice?,
     onBack: () -> Unit,
+    onToast: (String) -> Unit,
     onRefresh: () -> Unit,
     onOpenRelease: (String) -> Unit,
 ) {
     val headerVisibility = remember { MutableTransitionState(false) }
     val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val noticeLanguage = LocalAtlasLanguage.current
+    LaunchedEffect(githubLimitNotice, noticeLanguage) {
+        val notice = githubLimitNotice ?: return@LaunchedEffect
+        onToast(
+            ma.etherealmber.atlascommerce.ui.i18n.localizedGitHubLimitNotice(
+                notice.remainingSeconds(),
+                notice.operation,
+                noticeLanguage,
+            ),
+        )
+    }
     LaunchedEffect(Unit) { headerVisibility.targetState = true }
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         val wideWindow = maxWidth >= 840.dp
         Column(Modifier.widthIn(max = 1100.dp).fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = if (wideWindow) 24.dp else 14.dp, vertical = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                AnimatedVisibility(
+            AnimatedVisibility(
                     visibleState = headerVisibility,
                     enter = if (motionEnabled) {
                         fadeIn(tween(220)) +
@@ -2229,11 +2235,11 @@ private fun VersionHistoryPage(
                     } else EnterTransition.None,
                 ) {
                     Surface(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = if (wideWindow) 24.dp else 14.dp, vertical = 8.dp),
                         shape = RoundedCornerShape(26.dp),
                         color = MaterialTheme.colorScheme.surface,
                         tonalElevation = 0.dp,
-                        shadowElevation = 4.dp,
+                        shadowElevation = 8.dp,
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
@@ -2257,7 +2263,14 @@ private fun VersionHistoryPage(
                             }
                         }
                     }
-                }
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = if (wideWindow) 24.dp else 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                 githubLimitNotice?.let { notice ->
                     GitHubFallbackNotice(notice, Modifier.fillMaxWidth().padding(vertical = 6.dp))
                 }
