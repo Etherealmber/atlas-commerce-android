@@ -105,7 +105,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.Color
@@ -237,7 +236,6 @@ fun MainShell(
     onShowUpdateProgress: () -> Unit = {},
     onChangeServer: () -> Unit,
     onOpenQrDevice: (String?) -> Unit,
-    onOpenNotifications: () -> Unit,
     onOpenLicense: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -251,7 +249,6 @@ fun MainShell(
     val atlasLanguage = LocalAtlasLanguage.current
     val context = LocalContext.current
     val toastMessage: (String) -> Unit = { message -> android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show() }
-    val tabletWindow = LocalConfiguration.current.screenWidthDp >= 600
     val cartCount by shellViewModel.cartCount.collectAsStateWithLifecycle()
     val shakeToReportEnabled by appViewModel.shakeToReportEnabled.collectAsStateWithLifecycle()
     val notificationCount by shellViewModel.notificationCount.collectAsStateWithLifecycle()
@@ -420,8 +417,7 @@ fun MainShell(
         releaseHistorySubpageActive = false
     }
     val openNotificationsForLayout: () -> Unit = {
-        if (tabletWindow) switchTab(MainTab.NOTIFICATIONS)
-        else onOpenNotifications()
+        switchTab(MainTab.NOTIFICATIONS)
     }
     val restrictedFinanceMessage = atlasText(
         "Les rapports financiers sont réservés aux administrateurs.",
@@ -1286,14 +1282,26 @@ private fun AtlasFloatingBottomBar(
             ) {
                 Icon(centerTab.icon, contentDescription = centerTab.localizedLabel(), modifier = Modifier.size(25.dp))
             }
-            Text(
-                text = centerTab.localizedLabel(),
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 1.dp),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-            )
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .width(if (compactWidth) 52.dp else 64.dp)
+                    .height(64.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Box(Modifier.height(28.dp))
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = centerTab.localizedLabel(),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactWidth) 10.sp else MaterialTheme.typography.labelSmall.fontSize),
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

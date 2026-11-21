@@ -627,10 +627,6 @@ private fun AtlasGate(
                                     pendingQrMode = QrDeviceMode.AUTHORIZE_PC
                                     overlay = Overlay.QR_DEVICE
                                 },
-                                onOpenNotifications = {
-                                    overlay = null
-                                    requestedTab = MainTab.NOTIFICATIONS.name
-                                },
                                 onOpenLicense = { overlay = Overlay.LICENSE },
                                 onOpenSecurity = { overlay = Overlay.SECURITY },
                                 onOpenAbout = { overlay = Overlay.ABOUT },
