@@ -83,6 +83,7 @@ import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementRowDto
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
 import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
@@ -529,7 +530,12 @@ fun BalanceScreen(
     }
     Column(Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(
+                start = 16.dp,
+                end = 12.dp,
+                top = 10.dp + LocalAtlasFloatingTopBarPadding.current,
+                bottom = 8.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(

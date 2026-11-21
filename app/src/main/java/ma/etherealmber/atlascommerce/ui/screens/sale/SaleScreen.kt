@@ -62,6 +62,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 @Composable
@@ -89,7 +90,7 @@ fun SaleScreen(
             contentPadding = PaddingValues(
                 start = density.screenPadding,
                 end = density.screenPadding,
-                top = density.cardMargin,
+                top = density.cardMargin + LocalAtlasFloatingTopBarPadding.current,
                 bottom = 16.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(density.itemGap),

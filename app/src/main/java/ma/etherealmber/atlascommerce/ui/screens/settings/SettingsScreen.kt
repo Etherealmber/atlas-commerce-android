@@ -138,6 +138,7 @@ import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdown
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
@@ -367,7 +368,7 @@ fun ProfileScreen(
             .padding(
                 start = density.screenPadding,
                 end = density.screenPadding,
-                top = density.cardMargin,
+                top = density.cardMargin + LocalAtlasFloatingTopBarPadding.current,
                 bottom = density.cardMargin,
             ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
@@ -1678,7 +1679,7 @@ fun SettingsScreen(
             .padding(
                 start = density.screenPadding,
                 end = density.screenPadding,
-                top = density.cardMargin,
+                top = density.cardMargin + LocalAtlasFloatingTopBarPadding.current,
                 bottom = 32.dp,
             ),
         verticalArrangement = Arrangement.spacedBy(density.itemGap),

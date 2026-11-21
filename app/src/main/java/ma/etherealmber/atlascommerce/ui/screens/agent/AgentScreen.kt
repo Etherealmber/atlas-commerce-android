@@ -140,6 +140,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.AtlasTypingDots
 import ma.etherealmber.atlascommerce.ui.components.rememberApiRefreshAction
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
@@ -639,7 +640,7 @@ fun AgentScreen(
                     contentPadding = PaddingValues(
                         start = density.screenPadding,
                         end = density.screenPadding,
-                        top = density.cardMargin,
+                        top = density.cardMargin + LocalAtlasFloatingTopBarPadding.current,
                         // Leave enough scroll room for the floating composer, while letting
                         // older content continue underneath its translucent rounded edges.
                         bottom = when {
@@ -883,8 +884,7 @@ fun AgentScreen(
                         vertical = 6.dp,
                     ).onSizeChanged { composerHeightPx = it.height },
                     shape = RoundedCornerShape(26.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+                    color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp,
                     shadowElevation = 4.dp,
                 ) {
