@@ -14,14 +14,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
@@ -64,9 +62,9 @@ import ma.etherealmber.atlascommerce.core.net.suggestedLocalEndpoint
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
-import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
-import ma.etherealmber.atlascommerce.ui.components.AtlasBrandWordmark
+import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
+import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
 import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
@@ -119,54 +117,35 @@ private fun ServerSetupScreenContent(
 
     val isPickingSaved = step == ServerSetupStep.PICK_SAVED
     val foreground = MaterialTheme.colorScheme.onBackground
+    var headerExpanded by remember { mutableStateOf(true) }
+    val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(
+        expanded = headerExpanded,
+        onExpandedChange = { headerExpanded = it },
+    )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surface)))
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = density.screenPadding, vertical = 6.dp),
+            .nestedScroll(headerScrollConnection),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+        AtlasFloatingTopBar(
+            title = if (isPickingSaved) atlasText("Choisissez un serveur", "Choose a server", "اختر خادماً") else atlasText("Connectez votre serveur", "Connect your server", "اربط الخادم الخاص بك"),
+            subtitle = if (isPickingSaved) atlasText("Sélectionnez un espace enregistré ou ajoutez une nouvelle adresse.", "Choose a saved workspace or add a new server address.", "اختر مساحة محفوظة أو أضف عنوان خادم جديداً.") else atlasText("Entrez l'adresse de votre organisation.", "Enter your organization's server address.", "أدخل عنوان خادم مؤسستك."),
+            onBack = if (onClose != null) ({
+                if (!isPickingSaved && savedServers.isNotEmpty()) step = ServerSetupStep.PICK_SAVED
+                else onClose()
+            }) else null,
+            expanded = headerExpanded,
+            actions = { AtlasLanguageSelector(contentColor = foreground) },
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = density.screenPadding, vertical = 6.dp),
         ) {
-            if (onClose != null) {
-                IconButton(onClick = {
-                    if (!isPickingSaved && savedServers.isNotEmpty()) step = ServerSetupStep.PICK_SAVED
-                    else onClose()
-                }) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"), tint = foreground)
-                }
-            } else {
-                AtlasBrandWordmark(modifier = Modifier.widthIn(max = 190.dp), height = 38.dp, tint = foreground)
-            }
-            Spacer(Modifier.weight(1f))
-            AtlasLanguageSelector(contentColor = foreground)
-        }
-
-        AtlasEntrance(delayMillis = 55) {
-            Column {
-                Text(
-                    text = if (isPickingSaved) atlasText("Choisissez un serveur", "Choose a server", "اختر خادماً") else atlasText("Connectez votre serveur", "Connect your server", "اربط الخادم الخاص بك"),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = foreground,
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = if (isPickingSaved) {
-                        atlasText("Sélectionnez un espace enregistré ou ajoutez une nouvelle adresse.", "Choose a saved workspace or add a new server address.", "اختر مساحة محفوظة أو أضف عنوان خادم جديداً.")
-                    } else {
-                        atlasText("Entrez l'adresse de votre organisation. Vous pourrez l'enregistrer, ou continuer sans la mémoriser.", "Enter your organization's server address. Save it if you like, or continue without saving it.", "أدخل عنوان خادم مؤسستك. يمكنك حفظه أو المتابعة دون حفظه.")
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
         Spacer(Modifier.height(8.dp))
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -404,6 +383,7 @@ private fun ServerSetupScreenContent(
             }
         }
 
+        }
     }
 
     forgetTarget?.let { target ->

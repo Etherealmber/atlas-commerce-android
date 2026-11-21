@@ -43,6 +43,10 @@ import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
+import ma.etherealmber.atlascommerce.data.model.EmployeeDto
+import ma.etherealmber.atlascommerce.data.model.EmployeeUpdateRequest
+import ma.etherealmber.atlascommerce.data.model.EmployeeResignRequest
+import ma.etherealmber.atlascommerce.data.model.ExpenseDeleteRequest
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
@@ -53,6 +57,7 @@ import ma.etherealmber.atlascommerce.data.model.MobileActionStatsDto
 import ma.etherealmber.atlascommerce.data.model.MobileWorkStatusDto
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.ProductDeleteRequest
 import ma.etherealmber.atlascommerce.data.model.ProductImageDto
 import ma.etherealmber.atlascommerce.data.model.ProductImageUploadRequest
 import ma.etherealmber.atlascommerce.data.model.ProductMovementDto
@@ -115,6 +120,16 @@ class CommerceRepository @Inject constructor(
     suspend fun createFinanceEntry(request: CreateFinanceEntryRequest): ApiResult<FinanceEntryDto> =
         runner.envelope { apiProvider.api().createFinanceEntry(request) }
 
+    suspend fun deleteFinanceEntry(id: Long, password: String): ApiResult<String> {
+        val result = runner.statusRaw {
+            apiProvider.api().deleteFinanceEntry(id, ExpenseDeleteRequest(confirmPassword = password))
+        }
+        return when (result) {
+            is ApiResult.Success -> ApiResult.Success(result.data.message ?: "Écriture supprimée.")
+            is ApiResult.Failure -> result
+        }
+    }
+
     suspend fun financeStatement(
         period: String,
         page: Int = 1,
@@ -134,6 +149,26 @@ class CommerceRepository @Inject constructor(
             pageSize = pageSize,
             dueBefore = dueBefore,
         )
+    }
+
+    suspend fun employees(status: String = "active"): ApiResult<List<EmployeeDto>> =
+        runner.envelope { apiProvider.api().employees(status) }
+
+    suspend fun employee(id: Long): ApiResult<EmployeeDto> =
+        runner.envelope { apiProvider.api().employee(id) }
+
+    suspend fun updateEmployee(id: Long, body: EmployeeUpdateRequest): ApiResult<EmployeeDto> =
+        runner.envelope { apiProvider.api().updateEmployee(id, body) }
+
+    suspend fun markEmployeeFormer(id: Long, reason: String = "Départ"): ApiResult<EmployeeDto> =
+        runner.envelope { apiProvider.api().markEmployeeFormer(id, EmployeeResignRequest(reason = reason)) }
+
+    suspend fun deleteEmployee(id: Long): ApiResult<Unit> {
+        val result = runner.statusRaw { apiProvider.api().deleteEmployee(id) }
+        return when (result) {
+            is ApiResult.Success -> ApiResult.Success(Unit)
+            is ApiResult.Failure -> result
+        }
     }
 
     /** Streams an authenticated PDF response into app-private cache (never a public URL). */
@@ -211,6 +246,14 @@ class CommerceRepository @Inject constructor(
 
     suspend fun createProduct(request: CreateProductRequest): ApiResult<ProductDto> =
         runner.envelope { apiProvider.api().createProduct(request) }
+
+    suspend fun deleteProduct(productId: Long, password: String): ApiResult<String> {
+        val result = runner.statusRaw { apiProvider.api().deleteProduct(productId, ProductDeleteRequest(confirmPassword = password)) }
+        return when (result) {
+            is ApiResult.Success -> ApiResult.Success(result.data.message ?: "Produit supprimé ou archivé.")
+            is ApiResult.Failure -> result
+        }
+    }
 
     suspend fun productMovements(
         productId: Long,

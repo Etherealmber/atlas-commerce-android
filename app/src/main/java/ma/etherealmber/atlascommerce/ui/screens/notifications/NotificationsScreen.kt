@@ -41,7 +41,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -71,15 +72,12 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonList
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
-import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
 @Composable
 fun NotificationsScreen(
-    onBack: () -> Unit,
     onNavigateHref: (String?) -> Unit,
     onToast: (String) -> Unit,
-    embeddedInTabletPane: Boolean = false,
     viewModel: NotificationsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -96,40 +94,16 @@ fun NotificationsScreen(
         viewModel.messages.collect { msg -> onToast(msg) }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            AtlasFloatingTopBar(
-                title = atlasText("Info Box & Notifications", "Info Box & Notifications", "صندوق المعلومات والإشعارات"),
-                subtitle = atlasText(
-                    "${roleLabel} · ${state.alerts.size} alerte(s) · ${state.pendingCount} en attente · ${state.sentNotificationCount} envoyée(s)",
-                    "${roleLabel} · ${state.alerts.size} alert(s) · ${state.pendingCount} pending · ${state.sentNotificationCount} sent",
-                    "${roleLabel} · ${state.alerts.size} تنبيه · ${state.pendingCount} معلّق · ${state.sentNotificationCount} مُرسل",
-                ),
-                onBack = if (embeddedInTabletPane) null else onBack,
-                actions = {
-                    IconButton(onClick = { showComposeDialog = true }) {
-                        Icon(Icons.Outlined.Send, contentDescription = atlasText("Envoyer une notification"))
-                    }
-                    IconButton(onClick = refreshNotifications) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser"))
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(
-                start = density.screenPadding,
-                end = density.screenPadding,
-                top = density.cardMargin,
-                bottom = 28.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(density.itemGap),
-        ) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = density.screenPadding,
+            end = density.screenPadding,
+            top = density.cardMargin + LocalAtlasFloatingTopBarPadding.current,
+            bottom = 28.dp + LocalAtlasFloatingDockPadding.current,
+        ),
+        verticalArrangement = Arrangement.spacedBy(density.itemGap),
+    ) {
             // Role-Based Info Box Banner + Send Role Notification CTA
             if (!systemNotificationsEnabled) {
                 item {
@@ -196,11 +170,23 @@ fun NotificationsScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                Text(
+                                    text = atlasText(
+                                        "${state.alerts.size} alerte(s) · ${state.pendingCount} en attente · ${state.sentNotificationCount} envoyée(s)",
+                                        "${state.alerts.size} alert(s) · ${state.pendingCount} pending · ${state.sentNotificationCount} sent",
+                                        "${state.alerts.size} تنبيه · ${state.pendingCount} معلّق · ${state.sentNotificationCount} مُرسل",
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                             AtlasChip(
                                 text = if (state.isAdmin) atlasText("Admin") else atlasText("Filtré rôle"),
                                 tone = if (state.isAdmin) AtlasTone.POSITIVE else AtlasTone.INFO,
                             )
+                            IconButton(onClick = refreshNotifications) {
+                                Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser"))
+                            }
                         }
                         Spacer(Modifier.height(10.dp))
                         AtlasButton(
@@ -296,7 +282,6 @@ fun NotificationsScreen(
                 }
             }
         }
-    }
 
     if (showComposeDialog) {
         SendRoleNotificationDialog(

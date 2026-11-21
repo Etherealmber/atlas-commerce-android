@@ -25,6 +25,11 @@ import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.HealthDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
+import ma.etherealmber.atlascommerce.data.model.EmployeeDto
+import ma.etherealmber.atlascommerce.data.model.EmployeeUpdateRequest
+import ma.etherealmber.atlascommerce.data.model.EmployeeResignRequest
+import ma.etherealmber.atlascommerce.data.model.ExpenseDeleteRequest
+import ma.etherealmber.atlascommerce.data.model.ProductDeleteRequest
 import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
@@ -67,6 +72,7 @@ import retrofit2.http.Headers
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
+import retrofit2.http.HTTP
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
@@ -210,6 +216,12 @@ interface AtlasApi {
 
     @POST("api/products")
     suspend fun createProduct(@Body body: CreateProductRequest): ApiEnvelope<ProductDto>
+
+    @HTTP(method = "DELETE", path = "api/products/{id}", hasBody = true)
+    suspend fun deleteProduct(
+        @Path("id") id: Long,
+        @Body body: ProductDeleteRequest,
+    ): ApiEnvelope<ActionAckDto>
 
     @GET("api/products/{id}/movements")
     suspend fun productMovements(
@@ -357,6 +369,12 @@ interface AtlasApi {
     @POST("api/expenses")
     suspend fun createFinanceEntry(@Body body: CreateFinanceEntryRequest): ApiEnvelope<FinanceEntryDto>
 
+    @HTTP(method = "DELETE", path = "api/expenses/{id}", hasBody = true)
+    suspend fun deleteFinanceEntry(
+        @Path("id") id: Long,
+        @Body body: ExpenseDeleteRequest,
+    ): ApiEnvelope<ActionAckDto>
+
     @GET("api/admin/employees/payroll")
     suspend fun employeePayroll(
         @Query("period") period: String,
@@ -364,6 +382,27 @@ interface AtlasApi {
         @Query("page_size") pageSize: Int = 50,
         @Query("due_before") dueBefore: String? = null,
     ): ApiEnvelope<PayrollPageDto>
+
+    @GET("api/employees")
+    suspend fun employees(@Query("status") status: String = "active"): ApiEnvelope<List<EmployeeDto>>
+
+    @GET("api/employees/{id}")
+    suspend fun employee(@Path("id") id: Long): ApiEnvelope<EmployeeDto>
+
+    @PUT("api/employees/{id}")
+    suspend fun updateEmployee(
+        @Path("id") id: Long,
+        @Body body: EmployeeUpdateRequest,
+    ): ApiEnvelope<EmployeeDto>
+
+    @POST("api/employees/{id}/resign")
+    suspend fun markEmployeeFormer(
+        @Path("id") id: Long,
+        @Body body: EmployeeResignRequest,
+    ): ApiEnvelope<EmployeeDto>
+
+    @DELETE("api/employees/{id}")
+    suspend fun deleteEmployee(@Path("id") id: Long): ApiEnvelope<ActionAckDto>
 
     @Streaming
     @GET("api/admin/finance/monthly/report.pdf")

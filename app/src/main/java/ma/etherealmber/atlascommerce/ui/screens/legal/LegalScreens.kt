@@ -648,7 +648,7 @@ private fun LegalPage(
         )
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = Atlas.density.screenPadding, vertical = Atlas.density.itemGap),
             verticalArrangement = Arrangement.spacedBy(Atlas.density.itemGap),

@@ -176,10 +176,15 @@ fun ProductsScreen(
                 animatedVisibilityScope = animatedVisibilityScope,
                 canEditImage = canEditProductImage,
                 canAdjustStock = canAdjustStock,
+                canDeleteProduct = Roles.isAdmin(user.role),
                 onOpenStockAdjust = { adjustTarget = destination },
                 onBack = { historyTarget = null },
                 onProductImageUpdated = { url ->
                     historyTarget = historyTarget?.takeIf { it.id == destination.id }?.copy(imageUrl = url)
+                    viewModel.refresh()
+                },
+                onProductDeleted = {
+                    historyTarget = null
                     viewModel.refresh()
                 },
                 onToast = onToast,

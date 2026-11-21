@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
@@ -71,6 +72,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -417,6 +419,8 @@ fun BalanceScreen(
     var reportSelection by remember { mutableStateOf(FinanceReportSelection()) }
     var showReportSelection by remember { mutableStateOf(false) }
     var showEntryDialog by remember { mutableStateOf(false) }
+    var pendingExpenseDelete by remember { mutableStateOf<FinanceStatementRowDto?>(null) }
+    var expenseDeletePassword by remember { mutableStateOf("") }
     var entryKind by remember { mutableStateOf(EntryKind.EXPENSE) }
     var movementFilter by remember { mutableStateOf("Toutes les écritures") }
     var movementSearch by remember { mutableStateOf("") }
@@ -520,6 +524,52 @@ fun BalanceScreen(
                     }
                 }
             },
+        )
+    }
+
+    pendingExpenseDelete?.let { row ->
+        AlertDialog(
+            onDismissRequest = { if (row.id !in state.deletingExpenseIds) { pendingExpenseDelete = null; expenseDeletePassword = "" } },
+            title = { Text(atlasText("Supprimer cette écriture ?", "Delete this entry?", "حذف هذا القيد؟")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(atlasText(
+                        "L’écriture « ${row.label} » sera retirée du relevé. La facture ou le reçu lié ne sera pas supprimé.",
+                        "“${row.label}” will be removed from the statement. Any linked invoice or receipt will remain.",
+                        "سيتم حذف القيد «${row.label}» من الكشف. لن يتم حذف الفاتورة أو الإيصال المرتبط.",
+                    ))
+                    OutlinedTextField(
+                        value = expenseDeletePassword,
+                        onValueChange = { expenseDeletePassword = it },
+                        label = { Text(atlasText("Mot de passe administrateur", "Administrator password", "كلمة مرور المسؤول")) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        enabled = row.id !in state.deletingExpenseIds,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = expenseDeletePassword.isNotBlank() && row.id !in state.deletingExpenseIds,
+                    onClick = {
+                        viewModel.deleteExpense(row.id, expenseDeletePassword) { result ->
+                            when (result) {
+                                is ApiResult.Success -> {
+                                    pendingExpenseDelete = null
+                                    expenseDeletePassword = ""
+                                    onToast(result.data)
+                                }
+                                is ApiResult.Failure -> onToast(result.message)
+                            }
+                        }
+                    },
+                ) {
+                    if (row.id in state.deletingExpenseIds) CircularProgressIndicator(Modifier.width(18.dp), strokeWidth = 2.dp)
+                    else Text(atlasText("Supprimer", "Delete", "حذف"))
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingExpenseDelete = null; expenseDeletePassword = "" }, enabled = row.id !in state.deletingExpenseIds) { Text(atlasText("Annuler", "Cancel", "إلغاء")) } },
         )
     }
 
@@ -735,7 +785,13 @@ fun BalanceScreen(
                             item(key = "empty-movements") { EmptyPanel(if (state.rows.isEmpty()) atlasText("Aucun mouvement pour cette période.", "No transactions for this period.", "لا توجد حركات لهذه الفترة.") else atlasText("Aucun mouvement ne correspond à ce filtre.", "No transactions match this filter.", "لا توجد حركات تطابق عامل التصفية هذا.")) }
                         } else {
                             items(visibleMovementRows, key = { "${it.source}-${it.id}" }) { row ->
-                                StatementRowCard(row = row, currency = state.statement?.currency ?: "MAD")
+                                StatementRowCard(
+                                    row = row,
+                                    currency = state.statement?.currency ?: "MAD",
+                                    canDelete = state.isAdmin && row.source == "expenses",
+                                    deleting = row.id in state.deletingExpenseIds,
+                                    onDelete = { expenseDeletePassword = ""; pendingExpenseDelete = row },
+                                )
                             }
                         }
                         if (state.statement?.hasMore == true) {
@@ -1119,7 +1175,13 @@ private fun ReconciliationNotice(balanced: Boolean?, status: String, asOf: Strin
 }
 
 @Composable
-private fun StatementRowCard(row: FinanceStatementRowDto, currency: String) {
+private fun StatementRowCard(
+    row: FinanceStatementRowDto,
+    currency: String,
+    canDelete: Boolean = false,
+    deleting: Boolean = false,
+    onDelete: () -> Unit = {},
+) {
     val kind = when (row.type.lowercase()) {
         "sale" -> atlasText("Encaissement", "Payment received", "تحصيل")
         "refund" -> atlasText("Remboursement", "Refund", "استرداد")
@@ -1145,6 +1207,12 @@ private fun StatementRowCard(row: FinanceStatementRowDto, currency: String) {
                     text = atlasText("Solde ${formatMoney(row.runningBalance, currency)}", "Balance ${formatMoney(row.runningBalance, currency)}", "الرصيد ${formatMoney(row.runningBalance, currency)}"),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            if (canDelete) {
+                IconButton(onClick = onDelete, enabled = !deleting) {
+                    if (deleting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Outlined.Delete, contentDescription = atlasText("Supprimer l’écriture", "Delete entry", "حذف القيد"), tint = MaterialTheme.colorScheme.error)
+                }
             }
         }
     }

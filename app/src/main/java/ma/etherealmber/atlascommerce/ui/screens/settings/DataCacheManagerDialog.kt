@@ -44,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -64,6 +65,7 @@ import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
+import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.root.roundUpTo50MiB
@@ -154,6 +156,11 @@ fun DataCacheManagerDialog(
     }
 
     val managerPanel: @Composable () -> Unit = {
+        var headerExpanded by remember(tabletSidebarWidth) { mutableStateOf(true) }
+        val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(
+            expanded = headerExpanded,
+            onExpandedChange = { headerExpanded = it },
+        )
         Surface(
             modifier = Modifier
                 .fillMaxSize()
@@ -165,12 +172,13 @@ fun DataCacheManagerDialog(
             },
             color = MaterialTheme.colorScheme.background,
         ) {
-            Column(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().nestedScroll(headerScrollConnection)) {
                 AtlasFloatingTopBar(
                     title = atlasText("Données et cache", "Data & cache manager", "مدير البيانات والذاكرة المؤقتة"),
                     subtitle = atlasText("Stockage privé de cet appareil", "This device's private storage", "التخزين الخاص بهذا الجهاز"),
                     onBack = if (tabletSidebarWidth == null) onDismiss else null,
                     applyStatusBarInsets = false,
+                    expanded = headerExpanded,
                     actions = {
                         IconButton(onClick = {
                             appViewModel.refreshLocalStorageSummary()

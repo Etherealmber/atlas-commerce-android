@@ -33,6 +33,7 @@ class ProductHistoryViewModel @Inject constructor(
         val canLoadMore: Boolean = false,
         val error: String? = null,
         val imageSaving: Boolean = false,
+        val deletingProduct: Boolean = false,
         val imageError: String? = null,
         val updatedImageUrl: String? = null,
     )
@@ -43,6 +44,8 @@ class ProductHistoryViewModel @Inject constructor(
     private var historyJob: Job? = null
     private var moreJob: Job? = null
     private var imageJob: Job? = null
+    private val pendingProductDeletions = mutableMapOf<Long, Long>()
+    private var deletionGeneration: Long = 0L
 
     init {
         viewModelScope.launch {
@@ -53,6 +56,8 @@ class ProductHistoryViewModel @Inject constructor(
                     historyJob?.cancel()
                     moreJob?.cancel()
                     imageJob?.cancel()
+                    pendingProductDeletions.clear()
+                    deletionGeneration += 1
                     _state.value = UiState(scopeIdentity = scope)
                 }
         }
@@ -68,7 +73,12 @@ class ProductHistoryViewModel @Inject constructor(
 
         historyJob?.cancel()
         moreJob?.cancel()
-        _state.value = UiState(productId = productId, scopeIdentity = scope, loading = true)
+        _state.value = UiState(
+            productId = productId,
+            scopeIdentity = scope,
+            loading = true,
+            deletingProduct = productId in pendingProductDeletions,
+        )
         historyJob = viewModelScope.launch {
             when (val result = commerceRepository.productMovements(productId = productId, limit = PAGE_SIZE, offset = 0)) {
                 is ApiResult.Failure -> {
@@ -116,6 +126,46 @@ class ProductHistoryViewModel @Inject constructor(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    fun deleteProduct(productId: Long, password: String, onComplete: (Boolean, String?) -> Unit) {
+        val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return
+        if (!Roles.isAdmin(user.role)) {
+            onComplete(false, "Réservé aux administrateurs.")
+            return
+        }
+        if (productId in pendingProductDeletions) {
+            onComplete(false, "La suppression de ce produit est déjà en cours.")
+            return
+        }
+        val scope = user.scopeIdentity
+        val generation = ++deletionGeneration
+        pendingProductDeletions[productId] = generation
+        _state.update { current ->
+            if (current.productId == productId) current.copy(deletingProduct = true, error = null) else current
+        }
+        viewModelScope.launch {
+            when (val result = commerceRepository.deleteProduct(productId, password)) {
+                is ApiResult.Success -> if (activeScope() == scope) {
+                    if (pendingProductDeletions[productId] == generation) {
+                        pendingProductDeletions.remove(productId)
+                        _state.update { current ->
+                            if (current.productId == productId) current.copy(deletingProduct = false, error = null) else current
+                        }
+                    }
+                    onComplete(true, result.data)
+                } else onComplete(false, "Le compte actif a changé. Réessayez.")
+                is ApiResult.Failure -> if (activeScope() == scope) {
+                    if (pendingProductDeletions[productId] == generation) {
+                        pendingProductDeletions.remove(productId)
+                        _state.update { current ->
+                            if (current.productId == productId) current.copy(deletingProduct = false, error = result.message) else current
+                        }
+                    }
+                    onComplete(false, result.message)
+                } else onComplete(false, "Le compte actif a changé. Réessayez.")
             }
         }
     }

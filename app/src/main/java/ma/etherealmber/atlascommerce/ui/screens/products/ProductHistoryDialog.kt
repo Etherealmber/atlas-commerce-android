@@ -30,13 +30,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,9 +50,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -61,6 +65,8 @@ import ma.etherealmber.atlascommerce.data.model.ProductMovementDto
 import ma.etherealmber.atlascommerce.ui.components.encodeProductImageDataUri
 import ma.etherealmber.atlascommerce.ui.components.ProductArtwork
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
+import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
@@ -82,9 +88,11 @@ internal fun ProductHistoryScreen(
     animatedVisibilityScope: AnimatedVisibilityScope,
     canEditImage: Boolean,
     canAdjustStock: Boolean,
+    canDeleteProduct: Boolean,
     onOpenStockAdjust: () -> Unit,
     onBack: () -> Unit,
     onProductImageUpdated: (String) -> Unit,
+    onProductDeleted: () -> Unit,
     onToast: (String) -> Unit,
     viewModel: ProductHistoryViewModel = hiltViewModel(),
 ) {
@@ -99,8 +107,11 @@ internal fun ProductHistoryScreen(
     val scope = rememberCoroutineScope()
     var displayedImageUrl by remember(product.id) { mutableStateOf(product.imageUrl) }
     var loadedStock by remember(product.id) { mutableStateOf(product.stock) }
+    var confirmDelete by remember(product.id) { mutableStateOf(false) }
+    var deletePassword by remember(product.id) { mutableStateOf("") }
     val imageUpdatedMessage = atlasText("Photo du produit mise à jour.", "Product image updated.", "تم تحديث صورة المنتج.")
     val imageReadErrorMessage = atlasText("Impossible de lire cette image.", "Could not read this image.", "تعذرت قراءة هذه الصورة.")
+    val productDeletedMessage = atlasText("Produit supprimé ou archivé.", "Product deleted or archived.", "تم حذف المنتج أو أرشفته.")
 
     LaunchedEffect(product.id, state.scopeIdentity) {
         viewModel.loadHistory(product.id)
@@ -122,7 +133,6 @@ internal fun ProductHistoryScreen(
             onToast(imageUpdatedMessage)
         }
     }
-
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             scope.launch {
@@ -148,28 +158,33 @@ internal fun ProductHistoryScreen(
         Modifier
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 18.dp, top = 10.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    atlasText("Historique du produit", "Product history", "سجل المنتج"),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    atlasText("Détails et mouvements de stock", "Product details and stock movements", "تفاصيل المنتج وحركات المخزون"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        AtlasDivider()
+    var headerExpanded by remember(product.id) { mutableStateOf(true) }
+    val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(
+        expanded = headerExpanded,
+        onExpandedChange = { headerExpanded = it },
+    )
+
+    Column(Modifier.fillMaxSize().nestedScroll(headerScrollConnection)) {
+        AtlasFloatingTopBar(
+            title = atlasText("Historique du produit", "Product history", "سجل المنتج"),
+            subtitle = atlasText("Détails et mouvements de stock", "Product details and stock movements", "تفاصيل المنتج وحركات المخزون"),
+            onBack = onBack,
+            expanded = headerExpanded,
+            actions = {
+                IconButton(onClick = refreshProductHistory, enabled = !state.loading) {
+                    if (state.loading) {
+                        androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh history", "تحديث السجل"))
+                    }
+                }
+                if (canDeleteProduct) {
+                    IconButton(onClick = { deletePassword = ""; confirmDelete = true }, enabled = !state.deletingProduct) {
+                        Icon(Icons.Outlined.Delete, contentDescription = atlasText("Supprimer le produit", "Delete product", "حذف المنتج"), tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+        )
         Column(
             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -294,9 +309,6 @@ internal fun ProductHistoryScreen(
                     if (!state.loading && state.error == null) {
                         AtlasChip(text = atlasQuantity(state.movements.size.toDouble()), tone = AtlasTone.NEUTRAL)
                     }
-                    IconButton(onClick = refreshProductHistory, enabled = !state.loading) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh history", "تحديث السجل"))
-                    }
                 }
                 Spacer(Modifier.height(10.dp))
                 when {
@@ -333,6 +345,50 @@ internal fun ProductHistoryScreen(
                 }
             }
         }
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { if (!state.deletingProduct) { confirmDelete = false; deletePassword = "" } },
+            title = { Text(atlasText("Supprimer le produit ?", "Delete product?", "حذف المنتج؟")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(atlasText(
+                        "Confirmez avec votre mot de passe administrateur. Le produit sera supprimé s’il n’a pas d’historique; sinon, le serveur l’archivera immédiatement et conservera les transactions. Aucun délai d’annulation n’est appliqué.",
+                        "Confirm with your administrator password. The product is deleted if it has no history; otherwise, the server archives it immediately and preserves transactions. There is no undo countdown.",
+                        "أكّد باستخدام كلمة مرور المسؤول. سيُحذف المنتج إذا لم يكن له سجل؛ وإلا فسيؤرشفه الخادم فوراً مع الاحتفاظ بالمعاملات. لا توجد مهلة للتراجع.",
+                    ))
+                    OutlinedTextField(
+                        value = deletePassword,
+                        onValueChange = { deletePassword = it },
+                        label = { Text(atlasText("Mot de passe administrateur", "Administrator password", "كلمة مرور المسؤول")) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        enabled = !state.deletingProduct,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    state.error?.takeIf(String::isNotBlank)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !state.deletingProduct && deletePassword.isNotBlank(),
+                    onClick = {
+                        viewModel.deleteProduct(product.id, deletePassword) { deleted, message ->
+                            confirmDelete = false
+                            deletePassword = ""
+                            if (deleted) {
+                                onToast(message ?: productDeletedMessage)
+                                onProductDeleted()
+                            } else if (!message.isNullOrBlank()) onToast(message)
+                        }
+                    },
+                ) {
+                    if (state.deletingProduct) androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text(atlasText("Confirmer la suppression", "Confirm deletion", "تأكيد الحذف"))
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }, enabled = !state.deletingProduct) { Text(atlasText("Annuler", "Cancel", "إلغاء")) } },
+        )
     }
 }
 
