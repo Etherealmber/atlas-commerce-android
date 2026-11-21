@@ -105,9 +105,9 @@ fun EmployeesScreen(
     val locale = when (language) { AppLanguage.FRENCH -> Locale.FRANCE; AppLanguage.ENGLISH -> Locale.UK; AppLanguage.ARABIC -> Locale.forLanguageTag("ar-MA") }
     var query by rememberSaveable(user.scopeIdentity) { mutableStateOf("") }
     var directoryQuery by rememberSaveable(user.scopeIdentity) { mutableStateOf("") }
-    var editingEmployee by remember { mutableStateOf<ma.etherealmber.atlascommerce.data.model.EmployeeDto?>(null) }
-    var confirmEmployeeDelete by remember { mutableStateOf(false) }
-    var confirmEmployeeResign by remember { mutableStateOf(false) }
+    var editingEmployee by remember(user.scopeIdentity) { mutableStateOf<ma.etherealmber.atlascommerce.data.model.EmployeeDto?>(null) }
+    var confirmEmployeeDelete by remember(user.scopeIdentity) { mutableStateOf(false) }
+    var confirmEmployeeResign by remember(user.scopeIdentity) { mutableStateOf(false) }
     var formerEmployeeReason by remember(user.scopeIdentity) { mutableStateOf("") }
     var paymentFilter by rememberSaveable(user.scopeIdentity) { mutableStateOf("Tous") }
     var payrollInfoOpen by remember { mutableStateOf(false) }
