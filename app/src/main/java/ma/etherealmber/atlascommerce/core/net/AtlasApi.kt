@@ -155,6 +155,19 @@ interface AtlasApi {
     @POST("api/auth/devices/revoke")
     suspend fun revokeDevice(@Body body: RevokeDeviceRequest): ActionAckDto
 
+    // Desktop native-auth v2 phone approval is intentionally separate from legacy QR routes.
+    @POST("api/auth/desktop/v2/phone/prepare")
+    suspend fun desktopPhonePrepare(
+        @retrofit2.http.Header("Authorization") authorization: String,
+        @Body body: ma.etherealmber.atlascommerce.data.model.DesktopPhonePrepareRequest,
+    ): ApiEnvelope<ma.etherealmber.atlascommerce.data.model.DesktopPhonePrepareDto>
+
+    @POST("api/auth/desktop/v2/phone/decision")
+    suspend fun desktopPhoneDecision(
+        @retrofit2.http.Header("Authorization") authorization: String,
+        @Body body: ma.etherealmber.atlascommerce.data.model.DesktopPhoneDecisionRequest,
+    ): ApiEnvelope<ma.etherealmber.atlascommerce.data.model.DesktopPhoneDecisionDto>
+
     @GET("api/auth/qr/session/{token}")
     suspend fun qrStatus(@Path("token") token: String): ApiEnvelope<QrSessionStatusDto>
 

@@ -51,6 +51,7 @@ import androidx.compose.material.icons.outlined.VideocamOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -235,6 +236,7 @@ fun QrDeviceScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = {
+                viewModel.cancelDesktopApproval()
                 viewModel.clearInitializedRoute()
                 onClose()
             }) {
@@ -357,6 +359,17 @@ fun QrDeviceScreen(
                         onApprove = viewModel::confirmPcAuthorization,
                         onDeny = viewModel::denyPcAuthorization,
                     )
+
+                    QrDeviceViewModel.Step.DESKTOP_V2_CONSENT -> state.desktopV2?.let { approval ->
+                        DesktopV2ApprovalCard(
+                            approval = approval,
+                            loading = state.loading,
+                            onComparisonChanged = viewModel::confirmDesktopCodeComparison,
+                            onApprove = { viewModel.decideDesktopApproval(true) },
+                            onDeny = { viewModel.decideDesktopApproval(false) },
+                            onCancel = viewModel::cancelDesktopApproval,
+                        )
+                    }
 
                     QrDeviceViewModel.Step.WAITING_PC_APPROVAL -> WaitingPcCard(
                         statusMessage = statusMessage,
@@ -656,6 +669,71 @@ private fun SecurityCard(content: @Composable () -> Unit) {
             .padding(14.dp),
     ) {
         content()
+    }
+}
+
+@Composable
+private fun DesktopV2ApprovalCard(
+    approval: QrDeviceViewModel.DesktopV2Approval,
+    loading: Boolean,
+    onComparisonChanged: (Boolean) -> Unit,
+    onApprove: () -> Unit,
+    onDeny: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    SecurityCard {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                atlasText("Nouvelle demande de connexion desktop", "Desktop sign-in request", "طلب تسجيل دخول إلى الكمبيوتر"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text("${atlasText("Compte", "Account", "الحساب")}: ${approval.username}", style = MaterialTheme.typography.bodyMedium)
+            Text("${atlasText("Serveur HTTPS", "HTTPS server", "خادم HTTPS")}: ${approval.origin}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "${atlasText("Appareil déclaré (non vérifié)", "Declared device (unverified)", "الجهاز المعلن (غير متحقق منه)")}: ${approval.deviceLabel}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                atlasText("Comparez ce code avec celui affiché sur l'ordinateur :", "Compare this code with the one shown on the computer:", "قارن هذا الرمز بالرمز المعروض على الكمبيوتر:"),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHighest) {
+                Text(
+                    approval.pairingCode,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 12.dp),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = approval.comparisonConfirmed, onCheckedChange = onComparisonChanged, enabled = !loading)
+                Text(
+                    atlasText("J'ai comparé les codes sur les deux appareils.", "I compared the codes on both devices.", "قارنت الرمزين على الجهازين."),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onDeny, enabled = !loading && approval.comparisonConfirmed, modifier = Modifier.weight(1f)) {
+                    Text(atlasText("Refuser", "Deny", "رفض"), color = MaterialTheme.colorScheme.error)
+                }
+                Button(
+                    onClick = onApprove,
+                    enabled = !loading && approval.comparisonConfirmed,
+                    colors = ButtonDefaults.buttonColors(containerColor = Atlas.palette.positive),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    if (loading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text(atlasText("Approuver", "Approve", "موافقة"), fontWeight = FontWeight.Bold)
+                }
+            }
+            TextButton(onClick = onCancel, enabled = !loading, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Text(atlasText("Annuler sans décider", "Cancel without deciding", "إلغاء دون اتخاذ قرار"))
+            }
+        }
     }
 }
 

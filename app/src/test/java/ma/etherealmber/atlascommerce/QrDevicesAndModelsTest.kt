@@ -28,6 +28,10 @@ import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.data.model.VerifyLinkRequest
 import ma.etherealmber.atlascommerce.ui.screens.agent.AgentViewModel
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrTokenParser
+import ma.etherealmber.atlascommerce.ui.screens.devices.DesktopPhoneQrParser
+import ma.etherealmber.atlascommerce.ui.screens.devices.DesktopPhoneApprovalRules
+import ma.etherealmber.atlascommerce.ui.screens.devices.SingleUseDecisionGate
+import ma.etherealmber.atlascommerce.data.model.DesktopPhoneDecisionRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -62,6 +66,51 @@ class QrDevicesAndModelsTest {
         assertTrue(QrTokenParser.looksLikeProductBarcode("6111035000214"))
         assertNull(QrTokenParser.extractQrToken("6111035000214"))
         assertNull(QrTokenParser.extractQrToken("012345678905"))
+    }
+
+    @Test
+    fun desktopPhoneV2ParserIsStrictlyPinnedToHttpsOriginAndExplicitPort() {
+        val id = "0123456789abcdef".repeat(4)
+        val valid = "https://shop.example:8443/login/desktop-phone#request_id=$id"
+        assertEquals("https://shop.example:8443", DesktopPhoneQrParser.parse(valid, "https://shop.example:8443")?.origin)
+        assertEquals(id, DesktopPhoneQrParser.parse(valid, "https://shop.example:8443")?.requestId)
+        assertNull("v2 QR identifiers must never enter the legacy token parser", QrTokenParser.extractQrToken(valid))
+        assertNull(DesktopPhoneQrParser.parse(valid, "https://shop.example:9443"))
+        assertNull(DesktopPhoneQrParser.parse(valid, "https://shop.example"))
+        assertNull(DesktopPhoneQrParser.parse("http://shop.example:8443/login/desktop-phone#request_id=$id", "https://shop.example:8443"))
+        assertNull(DesktopPhoneQrParser.parse("https://shop.example:8443/login/desktop-phone/?#request_id=$id", "https://shop.example:8443"))
+        assertNull(DesktopPhoneQrParser.parse("https://shop.example:8443/login/desktop-phone?x=1#request_id=$id", "https://shop.example:8443"))
+        assertNull(DesktopPhoneQrParser.parse("https://shop.example:8443/login/desktop-phone#request_id=$id&extra=1", "https://shop.example:8443"))
+        assertNull(DesktopPhoneQrParser.parse("https://user@shop.example:8443/login/desktop-phone#request_id=$id", "https://shop.example:8443"))
+        assertNull(DesktopPhoneQrParser.parse("https://shop.example:8443/login/desktop-phone#request_id=not-a-hex-id", "https://shop.example:8443"))
+    }
+
+    @Test
+    fun desktopPhoneConsentApprovalDenialExpiryAndReplayAreFailClosed() {
+        val now = 1_900_000_000_000L
+        val requestExpiry = "2030-03-17T17:51:40Z"
+        val consentExpiry = "2030-03-17T17:48:40Z"
+        assertFalse(DesktopPhoneApprovalRules.canDecide(false, requestExpiry, consentExpiry, now))
+        assertTrue(DesktopPhoneApprovalRules.canDecide(true, requestExpiry, consentExpiry, now))
+        assertFalse(DesktopPhoneApprovalRules.canDecide(true, "2030-01-01T00:00:00Z", consentExpiry, now))
+        assertFalse(DesktopPhoneApprovalRules.canDecide(true, requestExpiry, "not-a-date", now))
+        assertFalse(DesktopPhoneApprovalRules.isValidWindow(requestExpiry, "2032-01-01T00:00:00Z", now))
+        assertFalse(DesktopPhoneApprovalRules.isValidWindow(requestExpiry, "2031-03-17T17:48:41Z", now))
+        assertTrue(DesktopPhoneApprovalRules.matchesResponse(true, "approved"))
+        assertFalse(DesktopPhoneApprovalRules.matchesResponse(true, "denied"))
+        assertTrue(DesktopPhoneApprovalRules.matchesResponse(false, "denied"))
+        assertFalse(DesktopPhoneApprovalRules.matchesResponse(false, "approved"))
+
+        val gate = SingleUseDecisionGate()
+        assertFalse(gate.begin(false, requestExpiry, consentExpiry, now))
+        assertTrue(gate.begin(true, requestExpiry, consentExpiry, now))
+        assertFalse("A one-time request must not be replayed", gate.begin(true, requestExpiry, consentExpiry, now))
+
+        val adapter = moshi.adapter(DesktopPhoneDecisionRequest::class.java)
+        val payload = adapter.toJson(DesktopPhoneDecisionRequest("https://shop.example:8443", "a".repeat(64), "b".repeat(64), "approve", true))
+        assertTrue(payload.contains("\"consent_nonce\""))
+        assertTrue(payload.contains("\"compare_confirmed\":true"))
+        assertTrue(payload.contains("\"decision\":\"approve\""))
     }
 
     @Test

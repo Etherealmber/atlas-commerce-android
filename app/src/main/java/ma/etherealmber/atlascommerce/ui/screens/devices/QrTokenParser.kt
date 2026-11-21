@@ -1,6 +1,46 @@
 package ma.etherealmber.atlascommerce.ui.screens.devices
 
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import ma.etherealmber.atlascommerce.core.net.ServerUrl
+import java.net.URI
+
+/** Exact parser for the separate desktop native-auth v2 phone-approval QR. */
+data class DesktopPhoneQr(val origin: String, val requestId: String)
+
+object DesktopPhoneQrParser {
+    private val fragmentPattern = Regex("^request_id=([A-Fa-f0-9]{64})$")
+
+    /** Accepts only the fixed v2 URL structure, pinned to the currently selected HTTPS origin. */
+    fun parse(raw: String?, selectedServer: String?): DesktopPhoneQr? {
+        val value = raw ?: return null
+        if (value != value.trim() || value.isEmpty()) return null
+        val qr = runCatching { URI(value) }.getOrNull() ?: return null
+        if (!qr.scheme.equals("https", ignoreCase = true) || qr.rawUserInfo != null ||
+            qr.rawQuery != null || qr.rawPath != "/login/desktop-phone"
+        ) return null
+        val id = fragmentPattern.matchEntire(qr.rawFragment ?: return null)?.groupValues?.get(1) ?: return null
+        val qrOrigin = strictHttpsOrigin(qr) ?: return null
+        val activeUri = runCatching { URI(ServerUrl.normalize(selectedServer) ?: return null) }.getOrNull() ?: return null
+        val activeOrigin = strictHttpsOrigin(activeUri) ?: return null
+        if (qrOrigin != activeOrigin) return null
+        return DesktopPhoneQr(activeOrigin, id)
+    }
+
+    /** Preserve explicit ports (including :443) rather than normalizing them away. */
+    private fun strictHttpsOrigin(uri: URI): String? {
+        if (!uri.scheme.equals("https", ignoreCase = true) || uri.rawUserInfo != null ||
+            uri.rawQuery != null || uri.rawFragment != null || uri.rawPath.orEmpty().let { it.isNotEmpty() && it != "/" }
+        ) return null
+        val host = uri.host ?: return null
+        val authority = uri.rawAuthority ?: return null
+        if (authority.contains('@') || uri.port !in -1..65535) return null
+        val explicitPort = if (host.startsWith("[")) authority.substringAfter(']', "").startsWith(":")
+            else authority.substring(host.length).startsWith(":")
+        if (explicitPort && (uri.port !in 1..65535)) return null
+        val portSuffix = if (explicitPort) ":${uri.port}" else ""
+        return "https://${host.lowercase()}$portSuffix"
+    }
+}
 
 /**
  * Pure parser distinguishing Atlas QR pairing links/tokens from warehouse 1D product barcodes.

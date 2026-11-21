@@ -125,6 +125,41 @@ class AuthRepository @Inject constructor(
         }
     }
 
+    suspend fun desktopPhonePrepare(
+        origin: String,
+        requestId: String,
+        bearerToken: String,
+    ): ApiResult<ma.etherealmber.atlascommerce.data.model.DesktopPhonePrepareDto> {
+        val api = apiProvider.desktopPhoneApiForOrigin(origin, bearerToken)
+            ?: return ApiResult.Failure("ORIGIN_MISMATCH", "Le serveur sélectionné a changé ou n'utilise pas cette origine HTTPS.")
+        return runner.envelope {
+            api.desktopPhonePrepare(
+                "Bearer $bearerToken",
+                ma.etherealmber.atlascommerce.data.model.DesktopPhonePrepareRequest(origin, requestId),
+            )
+        }
+    }
+
+    suspend fun desktopPhoneDecision(
+        origin: String,
+        requestId: String,
+        nonce: String,
+        decision: String,
+        bearerToken: String,
+    ): ApiResult<ma.etherealmber.atlascommerce.data.model.DesktopPhoneDecisionDto> {
+        require(decision == "approve" || decision == "deny")
+        val api = apiProvider.desktopPhoneApiForOrigin(origin, bearerToken)
+            ?: return ApiResult.Failure("ORIGIN_MISMATCH", "Le serveur sélectionné a changé ou n'utilise pas cette origine HTTPS.")
+        return runner.envelope {
+            api.desktopPhoneDecision(
+                "Bearer $bearerToken",
+                ma.etherealmber.atlascommerce.data.model.DesktopPhoneDecisionRequest(
+                    origin, requestId, nonce, decision, compareConfirmed = true,
+                ),
+            )
+        }
+    }
+
     suspend fun qrStatus(token: String): ApiResult<QrSessionStatusDto> =
         runner.envelope { apiProvider.api().qrStatus(token) }
 

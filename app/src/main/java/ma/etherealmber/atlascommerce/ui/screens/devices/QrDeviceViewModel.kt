@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.core.net.ApiResult
+import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
 import ma.etherealmber.atlascommerce.core.server.ServerConfig
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentityUnavailableException
@@ -44,11 +45,28 @@ class QrDeviceViewModel @Inject constructor(
         IDLE,
         WAITING_PC_APPROVAL,
         CONFIRM_PC_BIND,
+        DESKTOP_V2_CONSENT,
         COMPLETED,
     }
 
+    data class DesktopV2Approval(
+        val requestId: String,
+        val origin: String,
+        val username: String,
+        val deviceLabel: String,
+        val pairingCode: String,
+        val consentNonce: String,
+        val expiresAt: String,
+        val consentExpiresAt: String,
+        val sessionIdentity: String,
+        val bearerSnapshot: String,
+        val serverSnapshot: String,
+        val comparisonConfirmed: Boolean = false,
+    )
+
     data class UiState(
         val step: Step = Step.IDLE,
+        val desktopV2: DesktopV2Approval? = null,
         val activeToken: String = "",
         val manualInput: String = "",
         val loading: Boolean = false,
@@ -106,16 +124,40 @@ class QrDeviceViewModel @Inject constructor(
     }
 
     private var pollJob: Job? = null
+    private var desktopDecisionGate = SingleUseDecisionGate()
+    private var desktopPrepareJob: Job? = null
     private var initializedRoute: Pair<String?, QrDeviceMode>? = null
     private var devicesLoadGeneration = 0L
 
     init {
+        viewModelScope.launch {
+            serverConfig.selection.map { it?.baseUrl }.distinctUntilChanged().collect { selected ->
+                val pending = _state.value.desktopV2
+                if (pending != null && ServerUrl.normalize(selected) != ServerUrl.normalize(pending.serverSnapshot)) {
+                    _state.update {
+                        it.copy(
+                            step = Step.IDLE, desktopV2 = null, loading = false,
+                            error = "Le serveur a changé. La demande d'approbation a été abandonnée.",
+                        )
+                    }
+                }
+            }
+        }
         viewModelScope.launch {
             sessionManager.state
                 .map { (it as? SessionState.Active)?.user?.scopeIdentity }
                 .distinctUntilChanged()
                 .collect { scopeIdentity ->
                     devicesLoadGeneration += 1
+                    val pendingV2 = _state.value.desktopV2
+                    if (pendingV2 != null && pendingV2.sessionIdentity != scopeIdentity) {
+                        _state.update {
+                            it.copy(
+                                step = Step.IDLE, desktopV2 = null, loading = false,
+                                error = "Le compte a changé. La demande d'approbation a été abandonnée.",
+                            )
+                        }
+                    }
                     _state.update { it.copy(devices = emptyList(), devicesLoading = false, devicesLoadError = null, revokingId = null) }
                     if (scopeIdentity != null) loadDevices()
                 }
@@ -144,6 +186,10 @@ class QrDeviceViewModel @Inject constructor(
     }
 
     fun consumeInitialToken(token: String?, mode: QrDeviceMode) {
+        if (token != null && runCatching { java.net.URI(token).rawPath == "/login/desktop-phone" }.getOrDefault(false)) {
+            handleRawScan(token, mode)
+            return
+        }
         val clean = QrTokenParser.extractQrToken(token) ?: return
         if (clean != _state.value.activeToken) {
             handleRawScan(clean, mode)
@@ -180,6 +226,23 @@ class QrDeviceViewModel @Inject constructor(
             return
         }
 
+        val desktopPath = runCatching { java.net.URI(raw).rawPath == "/login/desktop-phone" }.getOrDefault(false)
+        if (desktopPath) {
+            val qr = DesktopPhoneQrParser.parse(raw, serverConfig.selection.value?.baseUrl)
+            if (qr == null) {
+                _state.update { it.copy(error = "QR d'approbation desktop invalide ou provenant d'un autre serveur. Vérifiez le serveur HTTPS sélectionné.") }
+                return
+            }
+            if (mode != QrDeviceMode.AUTHORIZE_PC) {
+                _state.update { it.copy(error = "Ce QR approuve une connexion desktop ; utilisez le mode Autoriser un PC.") }
+                return
+            }
+            _scanFeedbackEvents.tryEmit(Unit)
+            _state.update { it.copy(cameraEnabled = false) }
+            prepareDesktopV2(qr)
+            return
+        }
+
         val token = QrTokenParser.extractQrToken(raw)
         if (token == null) {
             _state.update {
@@ -196,6 +259,139 @@ class QrDeviceViewModel @Inject constructor(
         when (mode) {
             QrDeviceMode.AUTHORIZE_PC -> previewPcBind(token)
             QrDeviceMode.SIGN_IN_PHONE -> claimPhoneLogin(token)
+        }
+    }
+
+    private fun prepareDesktopV2(qr: DesktopPhoneQr) {
+        val active = sessionManager.state.value as? SessionState.Active
+        val selected = serverConfig.selection.value?.baseUrl
+        val bearer = sessionManager.authToken
+        if (active == null || bearer.isNullOrBlank() || selected == null ||
+            ServerUrl.normalize(active.user.serverUrl) != ServerUrl.normalize(selected)
+        ) {
+            _state.update { it.copy(error = "Une session Android valide sur le serveur HTTPS sélectionné est nécessaire.") }
+            return
+        }
+        val identity = active.user.scopeIdentity
+        val expectedUsername = active.user.username
+        desktopPrepareJob = viewModelScope.launch {
+            _state.update { it.copy(loading = true, error = null, statusMessage = "Vérification de la demande desktop v2…") }
+            when (val result = authRepository.desktopPhonePrepare(qr.origin, qr.requestId, bearer)) {
+                is ApiResult.Failure -> _state.update {
+                    it.copy(loading = false, step = Step.IDLE, statusMessage = null, error = result.message)
+                }
+                is ApiResult.Success -> {
+                    val data = result.data
+                    val stillSameSession = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == identity &&
+                        sessionManager.authToken == bearer
+                    val stillSameServer = ServerUrl.normalize(serverConfig.selection.value?.baseUrl) == ServerUrl.normalize(selected)
+                    val validData = data.requestId == qr.requestId && data.origin == qr.origin &&
+                        data.username.equals(expectedUsername, ignoreCase = true) &&
+                        data.deviceLabel.isNotBlank() && data.pairingCode.isNotBlank() &&
+                        data.consentNonce.matches(Regex("[A-Fa-f0-9]{64}")) &&
+                        DesktopPhoneApprovalRules.isValidWindow(data.expiresAt, data.consentExpiresAt, System.currentTimeMillis())
+                    if (!stillSameSession || !stillSameServer || !validData) {
+                        _state.update {
+                            it.copy(
+                                loading = false, step = Step.IDLE,
+                                error = if (!stillSameSession) "Le compte a changé pendant la préparation. Scannez un nouveau QR."
+                                else if (!stillSameServer) "Le serveur a changé pendant la préparation. Scannez un nouveau QR."
+                                else "Réponse de préparation invalide ou expirée. Aucune décision n'a été envoyée.",
+                            )
+                        }
+                        return@launch
+                    }
+                    desktopDecisionGate = SingleUseDecisionGate()
+                    _state.update {
+                        it.copy(
+                            loading = false, step = Step.DESKTOP_V2_CONSENT,
+                            desktopV2 = DesktopV2Approval(
+                                requestId = data.requestId, origin = data.origin,
+                                username = data.username, deviceLabel = data.deviceLabel,
+                                pairingCode = data.pairingCode, consentNonce = data.consentNonce,
+                                expiresAt = data.expiresAt, consentExpiresAt = data.consentExpiresAt,
+                                sessionIdentity = identity, bearerSnapshot = bearer,
+                                serverSnapshot = selected,
+                            ),
+                            statusMessage = null,
+                        )
+                    }
+                }
+            }
+            desktopPrepareJob = null
+        }
+    }
+
+    fun confirmDesktopCodeComparison(confirmed: Boolean) {
+        _state.update { state -> state.copy(desktopV2 = state.desktopV2?.copy(comparisonConfirmed = confirmed)) }
+    }
+
+    /** Local cancellation deliberately sends no request; the server-side consent nonce expires. */
+    fun cancelDesktopApproval() {
+        if (_state.value.desktopV2 == null && desktopPrepareJob == null) return
+        desktopPrepareJob?.cancel()
+        desktopPrepareJob = null
+        _state.update { it.copy(step = Step.IDLE, desktopV2 = null, loading = false, error = null, statusMessage = null) }
+    }
+
+    fun decideDesktopApproval(approve: Boolean) {
+        val pending = _state.value.desktopV2 ?: return
+        if (_state.value.loading) return
+        if (!pending.comparisonConfirmed) return
+        if (!desktopDecisionGate.begin(pending.comparisonConfirmed, pending.expiresAt, pending.consentExpiresAt)) {
+            cancelDesktopApproval()
+            _state.update { it.copy(error = "La demande ou le consentement a expiré ou a déjà été utilisé. Scannez un nouveau QR.") }
+            return
+        }
+        val current = sessionManager.state.value as? SessionState.Active
+        val server = serverConfig.selection.value?.baseUrl
+        if (current?.user?.scopeIdentity != pending.sessionIdentity || sessionManager.authToken != pending.bearerSnapshot) {
+            cancelDesktopApproval()
+            _state.update { it.copy(error = "Le compte a changé. L'approbation a été abandonnée.") }
+            return
+        }
+        if (ServerUrl.normalize(server) != ServerUrl.normalize(pending.serverSnapshot) ||
+            ServerUrl.normalize(server) != ServerUrl.normalize(pending.origin)
+        ) {
+            cancelDesktopApproval()
+            _state.update { it.copy(error = "Le serveur a changé. Aucun bearer n'a été envoyé à une autre origine.") }
+            return
+        }
+        if (!DesktopPhoneApprovalRules.isValidWindow(pending.expiresAt, pending.consentExpiresAt, System.currentTimeMillis())) {
+            cancelDesktopApproval()
+            _state.update { it.copy(error = "La demande ou le consentement a expiré. Scannez un nouveau QR.") }
+            return
+        }
+        _state.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            when (val result = authRepository.desktopPhoneDecision(
+                origin = pending.origin, requestId = pending.requestId,
+                nonce = pending.consentNonce, decision = if (approve) "approve" else "deny",
+                bearerToken = pending.bearerSnapshot,
+            )) {
+                is ApiResult.Failure -> {
+                    // A lost response can follow a committed one-time decision; never replay it.
+                    _state.update {
+                        it.copy(
+                            loading = false, step = Step.IDLE, desktopV2 = null,
+                            error = "Décision non confirmée (${result.code}). La demande a été effacée pour éviter un rejeu. Scannez un nouveau QR.",
+                        )
+                    }
+                }
+                is ApiResult.Success -> {
+                    if (!DesktopPhoneApprovalRules.matchesResponse(approve, result.data.status)) {
+                        _state.update { it.copy(loading = false, step = Step.IDLE, desktopV2 = null, error = "Réponse inattendue ; la demande a été effacée. Scannez un nouveau QR.") }
+                    } else {
+                        _state.update {
+                            it.copy(
+                                loading = false, step = Step.COMPLETED, desktopV2 = null,
+                                statusMessage = if (approve) "Connexion desktop approuvée. Aucun jeton n'a été émis au téléphone."
+                                else "Demande desktop refusée.",
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -428,6 +624,7 @@ class QrDeviceViewModel @Inject constructor(
         _state.update {
             it.copy(
                 step = Step.IDLE,
+                desktopV2 = null,
                 activeToken = "",
                 manualInput = "",
                 statusDto = null,
