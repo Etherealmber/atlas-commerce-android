@@ -2297,6 +2297,9 @@ private fun VersionHistoryPage(
                             TextButton(onClick = {
                                 onOpenRelease("${AppDetails.PROJECT_REPO.trimEnd('/')}/releases/tag/${release.tagName}")
                             }) { Text(atlasText("Voir le tag", "View tag", "عرض الوسم")) }
+                            TextButton(onClick = {
+                                onOpenRelease("${AppDetails.PROJECT_REPO.trimEnd('/')}/commit/${release.tagName}")
+                            }) { Text(atlasText("Commit du tag", "Tag commit", "التزام الوسم")) }
                             release.authorUrl?.takeIf { it.startsWith("https://github.com/", ignoreCase = true) }?.let { url ->
                                 TextButton(onClick = { onOpenRelease(url) }) {
                                     Text(atlasText("Profil du contributeur", "Release author", "ملف المساهم"))
