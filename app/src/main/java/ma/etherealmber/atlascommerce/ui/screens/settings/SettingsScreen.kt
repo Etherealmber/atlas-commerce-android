@@ -113,6 +113,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -2241,15 +2242,17 @@ private fun VersionHistoryPage(
                             IconButton(onClick = onBack) {
                                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع"))
                             }
-                            Column(Modifier.weight(1f)) {
-                                Text(atlasText("Mises à jour des versions", "Version updates", "تحديثات الإصدارات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                Text(atlasText("Historique complet des changements publiés", "Full history of published changes", "السجل الكامل للتغييرات المنشورة"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(atlasText("Mises à jour des versions", "Version updates", "تحديثات الإصدارات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+                                Text(atlasText("Historique complet des changements publiés", "Full history of published changes", "السجل الكامل للتغييرات المنشورة"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
                             }
-                            if (loading) {
-                                CircularProgressIndicator(Modifier.padding(horizontal = 12.dp).size(22.dp), strokeWidth = 2.dp)
-                            } else {
-                                IconButton(onClick = onRefresh) {
-                                    Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh releases", "تحديث الإصدارات"))
+                            Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                if (loading) {
+                                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                                } else {
+                                    IconButton(onClick = onRefresh) {
+                                        Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh releases", "تحديث الإصدارات"))
+                                    }
                                 }
                             }
                         }
@@ -2265,7 +2268,7 @@ private fun VersionHistoryPage(
                         Text(atlasText("Aucune version publiée n'est disponible pour le moment.", "No published releases are available right now.", "لا توجد إصدارات منشورة متاحة حالياً."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                releases.forEach { release ->
+                releases.forEachIndexed { releaseIndex, release ->
                     AtlasCard(padding = 20.dp) {
                         Text(release.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Row(
@@ -2277,13 +2280,39 @@ private fun VersionHistoryPage(
                             if (release.isLatest) AtlasChip(text = atlasText("Dernière", "Latest", "الأحدث"), tone = AtlasTone.POSITIVE)
                             if (release.isPrerelease) AtlasChip(text = atlasText("Préversion", "Pre-release", "نسخة تجريبية"), tone = AtlasTone.NEUTRAL)
                         }
-                        release.publishedAt?.let { date ->
+                        val authorLabel = release.authorLogin
+                        val releaseMetadata = buildString {
+                            release.publishedAt?.let { append(atlasText("Publié le $it", "Published on $it", "نُشر في $it")) }
+                            if (authorLabel != null) {
+                                if (isNotEmpty()) append(" · ")
+                                append(atlasText("par $authorLabel", "by $authorLabel", "بواسطة $authorLabel"))
+                            }
+                        }
+                        if (releaseMetadata.isNotEmpty()) {
                             Text(
-                                atlasText("Publié le $date", "Published on $date", "نُشر في $date"),
+                                releaseMetadata,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(top = 6.dp),
                             )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(onClick = {
+                                onOpenRelease("${AppDetails.PROJECT_REPO.trimEnd('/')}/releases/tag/${release.tagName}")
+                            }) { Text(atlasText("Voir le tag", "View tag", "عرض الوسم")) }
+                            TextButton(onClick = {
+                                onOpenRelease("${AppDetails.PROJECT_REPO.trimEnd('/')}/commit/${release.tagName}")
+                            }) { Text(atlasText("Commit du tag", "Tag commit", "التزام الوسم")) }
+                            release.authorUrl?.takeIf { it.startsWith("https://github.com/", ignoreCase = true) }?.let { url ->
+                                TextButton(onClick = { onOpenRelease(url) }) {
+                                    Text(atlasText("Profil du contributeur", "Release author", "ملف المساهم"))
+                                }
+                            }
+                            release.targetCommitish?.takeIf { it.isNotBlank() }?.let { branch ->
+                                TextButton(onClick = { onOpenRelease("${AppDetails.PROJECT_REPO.trimEnd('/')}/tree/$branch") }) {
+                                    Text(atlasText("Source $branch", "Source $branch", "المصدر $branch"))
+                                }
+                            }
                         }
                         AtlasDivider(Modifier.padding(vertical = 14.dp))
                         AtlasMarkdown(
@@ -2291,6 +2320,14 @@ private fun VersionHistoryPage(
                             textColor = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.fillMaxWidth(),
                         )
+                        releases.getOrNull(releaseIndex + 1)?.let { olderRelease ->
+                            val compareUrl = "${AppDetails.PROJECT_REPO.trimEnd('/')}/compare/${olderRelease.tagName}...${release.tagName}"
+                            TextButton(onClick = { onOpenRelease(compareUrl) }, modifier = Modifier.padding(top = 4.dp)) {
+                                Icon(Icons.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(atlasText("Comparer avec la version précédente", "Compare with previous release", "مقارنة بالإصدار السابق"))
+                            }
+                        }
                         release.htmlUrl
                             ?.takeIf { it.startsWith("https://github.com/", ignoreCase = true) }
                             ?.let { url ->

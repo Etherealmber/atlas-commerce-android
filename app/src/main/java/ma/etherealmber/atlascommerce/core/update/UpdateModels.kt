@@ -90,6 +90,9 @@ data class ReleaseChangelogEntry(
     val isPrerelease: Boolean = false,
     val notes: String,
     val htmlUrl: String? = null,
+    val authorLogin: String? = null,
+    val authorUrl: String? = null,
+    val targetCommitish: String? = null,
 )
 
 data class GitHubLimitNotice(
