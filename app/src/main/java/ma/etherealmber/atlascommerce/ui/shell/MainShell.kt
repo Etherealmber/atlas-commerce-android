@@ -106,6 +106,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -250,6 +251,8 @@ fun MainShell(
     appViewModel: AppViewModel = hiltViewModel(),
 ) {
     val atlasLanguage = LocalAtlasLanguage.current
+    val context = LocalContext.current
+    val toastMessage: (String) -> Unit = { message -> android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show() }
     val tabletWindow = LocalConfiguration.current.screenWidthDp >= 600
     val cartCount by shellViewModel.cartCount.collectAsStateWithLifecycle()
     val shakeToReportEnabled by appViewModel.shakeToReportEnabled.collectAsStateWithLifecycle()
@@ -340,7 +343,7 @@ fun MainShell(
                     TextButton(onClick = {
                         showShakeReportPrompt = false
                         appViewModel.setShakeToReportEnabled(false)
-                        scope.launch { snackbarHostState.showSnackbar(shakeDisabledMessage) }
+                        toastMessage(shakeDisabledMessage)
                     }) {
                         Text(atlasText("Désactiver ce raccourci", "Disable this shortcut", "تعطيل هذا الاختصار"))
                     }
@@ -364,7 +367,7 @@ fun MainShell(
         ProblemReportDialog(
             screenOrigin = tab.label,
             onDismiss = { showProblemReportDialog = false },
-            onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+            onToast = toastMessage,
         )
     }
 
@@ -397,7 +400,7 @@ fun MainShell(
     }
 
     val onToast: (String) -> Unit = { message ->
-        scope.launch { snackbarHostState.showSnackbar(atlasNotice(message, atlasLanguage)) }
+        toastMessage(atlasNotice(message, atlasLanguage))
     }
     val switchTab: (MainTab) -> Unit = { target ->
         showDataCacheManagerDialog = false
@@ -488,7 +491,7 @@ fun MainShell(
     if (showDataCacheManagerDialog && !useRail) {
         DataCacheManagerDialog(
             onDismiss = closeDataCacheManager,
-            onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+            onToast = toastMessage,
             appViewModel = appViewModel,
         )
     }
@@ -502,10 +505,10 @@ fun MainShell(
         shellTopBarVisible = showShellTopBar
     }
     val motionEnabled = LocalAtlasAnimationsEnabled.current
-    val floatingBarsVisibility = remember(tab) { mutableStateOf(true) }
+    val floatingTopBarExpanded = remember(tab) { mutableStateOf(true) }
     val scrollDelta = remember(tab) { mutableFloatStateOf(0f) }
     LaunchedEffect(tab, productHistoryActive, releaseHistorySubpageActive, isForeground) {
-        floatingBarsVisibility.value = true
+        floatingTopBarExpanded.value = true
         scrollDelta.floatValue = 0f
     }
     val scrollDirectionThresholdPx = with(LocalDensity.current) { 12.dp.toPx() }
@@ -521,11 +524,11 @@ fun MainShell(
                 scrollDelta.floatValue += verticalDelta
                 when {
                     scrollDelta.floatValue <= -scrollDirectionThresholdPx -> {
-                        floatingBarsVisibility.value = false
+                        floatingTopBarExpanded.value = false
                         scrollDelta.floatValue = 0f
                     }
                     scrollDelta.floatValue >= scrollDirectionThresholdPx -> {
-                        floatingBarsVisibility.value = true
+                        floatingTopBarExpanded.value = true
                         scrollDelta.floatValue = 0f
                     }
                 }
@@ -584,8 +587,16 @@ fun MainShell(
                                 },
                             )
                             .then(
-                                if (floatingBarsVisibility.value) Modifier.fillMaxWidth()
-                                else Modifier.align(Alignment.Center),
+                                if (floatingTopBarExpanded.value) {
+                                    Modifier.fillMaxWidth()
+                                } else {
+                                    Modifier
+                                        .align(Alignment.Center)
+                                        .clickable(role = Role.Button) {
+                                            scrollDelta.floatValue = 0f
+                                            floatingTopBarExpanded.value = true
+                                        }
+                                },
                             ),
                         shape = RoundedCornerShape(26.dp),
                         color = MaterialTheme.colorScheme.surface,
@@ -597,7 +608,7 @@ fun MainShell(
                         shadowElevation = 4.dp,
                     ) {
                         AnimatedContent(
-                            targetState = floatingBarsVisibility.value,
+                            targetState = floatingTopBarExpanded.value,
                             transitionSpec = {
                                 if (motionEnabled) {
                                     (fadeIn(tween(180, easing = FastOutSlowInEasing)) +
@@ -787,10 +798,35 @@ fun MainShell(
                                     },
                                 )
                             } else {
-                                Box(
-                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                                    contentAlignment = Alignment.Center,
+                                val compactUpdateVisible = when (updateState) {
+                                    is UpdateState.Available,
+                                    is UpdateState.Downloading,
+                                    is UpdateState.ReadyToInstall -> true
+                                    is UpdateState.Error -> updateState.info != null
+                                    else -> false
+                                }
+                                val showCompactUpdate = isForeground && compactUpdateVisible
+                                val showCompactAccessories = tab == MainTab.AGENT || showCompactUpdate
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
+                                    if (showCompactAccessories) {
+                                        Box(Modifier.width(38.dp), contentAlignment = Alignment.CenterEnd) {
+                                            if (tab == MainTab.AGENT) {
+                                                AtlasAgentSurpriseMascot(
+                                                    modifier = Modifier.size(28.dp),
+                                                    isTyping = agentState?.input?.isNotBlank() == true,
+                                                    isThinking = agentState?.sending == true,
+                                                    onSurprise = {
+                                                        surpriseIndex = nextSurprise(surpriseIndex, 5)
+                                                        showAgentSurprise = true
+                                                    },
+                                                )
+                                            }
+                                        }
+                                        Spacer(Modifier.width(4.dp))
+                                    }
                                     Text(
                                         text = tab.localizedLabel(),
                                         style = MaterialTheme.typography.titleSmall,
@@ -798,6 +834,18 @@ fun MainShell(
                                         maxLines = 1,
                                         softWrap = false,
                                     )
+                                    if (showCompactAccessories) {
+                                        Spacer(Modifier.width(4.dp))
+                                        Box(Modifier.width(38.dp), contentAlignment = Alignment.CenterStart) {
+                                            if (showCompactUpdate) {
+                                                UpdateMiniProgressBall(
+                                                    state = updateState,
+                                                    onClick = onShowUpdateProgress,
+                                                    forceVisible = true,
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -888,7 +936,7 @@ fun MainShell(
         CompositionLocalProvider(
             LocalAtlasFloatingDockPadding provides if (!useRail && tab !in BackStackTabs && !productHistoryActive) 96.dp + navigationInset else 0.dp,
             LocalAtlasFloatingTopBarPadding provides if (showShellTopBar && shellTopBarVisible) 76.dp else 0.dp,
-            LocalAtlasFloatingTopBarExpanded provides floatingBarsVisibility.value,
+            LocalAtlasFloatingTopBarExpanded provides floatingTopBarExpanded.value,
         ) {
         AtlasPageTransition(
             targetState = pageTarget,
@@ -921,7 +969,7 @@ fun MainShell(
                     if (useRail && currentPage.isDataStorage) {
                         DataCacheManagerDialog(
                             onDismiss = closeDataCacheManager,
-                            onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+                            onToast = toastMessage,
                             appViewModel = appViewModel,
                             tabletSidebarWidth = 0.dp,
                             isForeground = isForeground,
@@ -1062,7 +1110,7 @@ fun MainShell(
     }
     if (!useRail) {
         AnimatedVisibility(
-            visible = tab !in BackStackTabs && !productHistoryActive && floatingBarsVisibility.value,
+            visible = true,
             modifier = Modifier.align(Alignment.BottomCenter).width(floatingBarWidth),
             enter = if (motionEnabled) {
                 fadeIn(tween(260, easing = FastOutSlowInEasing)) +
@@ -1081,7 +1129,7 @@ fun MainShell(
                 fadeOut(tween(150, easing = FastOutSlowInEasing)) +
                     slideOutVertically(
                         animationSpec = tween(190, easing = FastOutSlowInEasing),
-                        targetOffsetY = { height -> height / 3 },
+                        targetOffsetY = { height -> height },
                     ) +
                     scaleOut(
                         animationSpec = tween(170, easing = FastOutSlowInEasing),
@@ -1172,8 +1220,8 @@ private fun AtlasFloatingBottomBar(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-            .height(84.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp)
+            .height(96.dp),
     ) {
         val compactWidth = maxWidth < 360.dp
         val dockWidth = if (maxWidth >= 680.dp) 640.dp else maxWidth
@@ -1183,7 +1231,7 @@ private fun AtlasFloatingBottomBar(
             color = barColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
             tonalElevation = 0.dp,
-            shadowElevation = 4.dp,
+            shadowElevation = 8.dp,
         ) {
             Row(
                 modifier = Modifier.fillMaxSize().padding(horizontal = if (compactWidth) 2.dp else 6.dp),
@@ -1232,10 +1280,10 @@ private fun AtlasFloatingBottomBar(
                 containerColor = fabContainerColor,
                 contentColor = fabContentColor,
                 elevation = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = 4.dp,
-                    pressedElevation = 7.dp,
-                    focusedElevation = 5.dp,
-                    hoveredElevation = 5.dp,
+                    defaultElevation = 6.dp,
+                    pressedElevation = 8.dp,
+                    focusedElevation = 7.dp,
+                    hoveredElevation = 7.dp,
                 ),
             ) {
                 Icon(centerTab.icon, contentDescription = centerTab.localizedLabel(), modifier = Modifier.size(25.dp))

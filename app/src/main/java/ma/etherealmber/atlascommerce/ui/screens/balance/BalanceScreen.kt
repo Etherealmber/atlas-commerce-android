@@ -751,7 +751,12 @@ fun BalanceScreen(
                                 title = atlasText("À recevoir", "Receivables", "مستحقات القبض"),
                                 amount = bucket?.totalOutstanding ?: 0.0,
                                 currency = state.finance?.currency ?: "MAD",
-                                subtitle = atlasText("${bucket?.count ?: 0} document(s) · ${formatMoney(bucket?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} en retard", "${bucket?.count ?: 0} document(s) · ${formatMoney(bucket?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} overdue", "${bucket?.count ?: 0} مستند · ${formatMoney(bucket?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} متأخر"),
+                                subtitle = atlasText("${bucket?.count ?: 0} document(s)", "${bucket?.count ?: 0} document(s)", "${bucket?.count ?: 0} مستند"),
+                                secondaryAmount = atlasText(
+                                    "En retard · ${formatMoney(bucket?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")}",
+                                    "Overdue · ${formatMoney(bucket?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")}",
+                                    "متأخر · ${formatMoney(bucket?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")}",
+                                ),
                             )
                         }
                         val receivableDocuments = bucket?.documents.orEmpty()
@@ -768,7 +773,12 @@ fun BalanceScreen(
                                 title = atlasText("À payer", "Payables", "مستحقات الدفع"),
                                 amount = payables?.totalOutstanding ?: 0.0,
                                 currency = state.finance?.currency ?: "MAD",
-                                subtitle = atlasText("${payables?.count ?: 0} document(s) · ${formatMoney(payables?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} en retard", "${payables?.count ?: 0} document(s) · ${formatMoney(payables?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} overdue", "${payables?.count ?: 0} مستند · ${formatMoney(payables?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")} متأخر"),
+                                subtitle = atlasText("${payables?.count ?: 0} document(s)", "${payables?.count ?: 0} document(s)", "${payables?.count ?: 0} مستند"),
+                                secondaryAmount = atlasText(
+                                    "En retard · ${formatMoney(payables?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")}",
+                                    "Overdue · ${formatMoney(payables?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")}",
+                                    "متأخر · ${formatMoney(payables?.totalOverdue ?: 0.0, state.finance?.currency ?: "MAD")}",
+                                ),
                             )
                         }
                         val payableDocuments = payables?.documents.orEmpty()
@@ -872,7 +882,11 @@ private fun BalanceClosingCard(closing: Double, currency: String, modifier: Modi
                 Spacer(Modifier.width(8.dp))
                 Text(atlasText("SOLDE DE CLÔTURE", "CLOSING BALANCE", "الرصيد الختامي"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
-            Text(formatMoney(closing, currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            FinanceAmountBadge(
+                text = formatMoney(closing, currency),
+                tint = accent,
+                prominent = true,
+            )
             Text(atlasText("Après les mouvements comptabilisés"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f))
         }
     }
@@ -905,11 +919,12 @@ private fun SummaryAmountCard(
     amount: Double,
     currency: String,
     subtitle: String? = null,
+    secondaryAmount: String? = null,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     accent: Color = Atlas.palette.chartReceivable,
     modifier: Modifier = Modifier,
 ) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (icon != null) {
@@ -920,7 +935,19 @@ private fun SummaryAmountCard(
                 if (icon != null) Spacer(Modifier.width(6.dp))
                 Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(formatMoney(amount, currency), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = accent)
+            FinanceAmountBadge(
+                text = formatMoney(amount, currency),
+                tint = accent,
+                prominent = true,
+                allowTwoLines = true,
+            )
+            if (secondaryAmount != null) {
+                FinanceAmountBadge(
+                    text = secondaryAmount,
+                    tint = MaterialTheme.colorScheme.error,
+                    allowTwoLines = true,
+                )
+            }
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -973,25 +1000,32 @@ private fun CashBankDashboard(data: FinancePeriodDto, currency: String) {
 
 @Composable
 private fun CashAccountCard(title: String, incoming: Double, outgoing: Double, currency: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
-        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = financeCardBorder()) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title.uppercase(atlasLocale()), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(
-                atlasText("Entrées  +${formatMoney(incoming, currency)}", "Incoming  +${formatMoney(incoming, currency)}", "الوارد  +${formatMoney(incoming, currency)}"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
+            FinanceAmountBadge(
+                text = atlasText("Entrées  +${formatMoney(incoming, currency)}", "Incoming  +${formatMoney(incoming, currency)}", "الوارد  +${formatMoney(incoming, currency)}"),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth(),
+                allowTwoLines = true,
             )
-            Text(atlasText("Sorties  −${formatMoney(outgoing, currency)}", "Outgoing  −${formatMoney(outgoing, currency)}", "الصادر  −${formatMoney(outgoing, currency)}"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            FinanceAmountBadge(
+                text = atlasText("Sorties  −${formatMoney(outgoing, currency)}", "Outgoing  −${formatMoney(outgoing, currency)}", "الصادر  −${formatMoney(outgoing, currency)}"),
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.fillMaxWidth(),
+                allowTwoLines = true,
+            )
             val net = incoming - outgoing
-            Text(
-                atlasText(
+            FinanceAmountBadge(
+                text = atlasText(
                     "Net  ${if (net >= 0.0) "+" else "−"}${formatMoney(kotlin.math.abs(net), currency)}",
                     "Net  ${if (net >= 0.0) "+" else "−"}${formatMoney(kotlin.math.abs(net), currency)}",
                     "الصافي  ${if (net >= 0.0) "+" else "−"}${formatMoney(kotlin.math.abs(net), currency)}",
                 ),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = if (net >= 0.0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                tint = if (net >= 0.0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                modifier = Modifier.fillMaxWidth(),
+                prominent = true,
+                allowTwoLines = true,
             )
         }
     }
@@ -999,14 +1033,13 @@ private fun CashAccountCard(title: String, incoming: Double, outgoing: Double, c
 
 @Composable
 private fun OwnerMovementCard(title: String, amount: Double, count: Int, positive: Boolean, currency: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(title.uppercase(atlasLocale()), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(
-                "${if (positive) "+" else "−"}${formatMoney(amount, currency)}",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = if (positive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            FinanceAmountBadge(
+                text = "${if (positive) "+" else "−"}${formatMoney(amount, currency)}",
+                tint = if (positive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                prominent = true,
             )
             Text(
                 atlasText(
@@ -1029,7 +1062,7 @@ private fun FinanceFlowCard(
     modifier: Modifier = Modifier,
 ) {
     val largest = rows.maxOfOrNull { it.second.coerceAtLeast(0.0) } ?: 0.0
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             rows.forEach { (label, amount) ->
@@ -1038,7 +1071,10 @@ private fun FinanceFlowCard(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(atlasText(label), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(formatMoney(amount, currency), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
+                        FinanceAmountBadge(
+                            text = formatMoney(amount, currency),
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                     LinearProgressIndicator(
                         progress = { fraction },
@@ -1055,7 +1091,7 @@ private fun FinanceFlowCard(
 @Composable
 private fun ReconciliationNotice(balanced: Boolean?, status: String, asOf: String) {
     val color = if (balanced == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = financeCardBorder()) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 Text(
@@ -1089,20 +1125,22 @@ private fun StatementRowCard(row: FinanceStatementRowDto, currency: String) {
         "supplier" -> atlasText("Fournisseur", "Supplier", "المورد")
         else -> atlasText("Mouvement", "Transaction", "حركة")
     }
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = financeCardBorder()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(if (row.label.isNotBlank()) atlasText(row.label) else kind, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text("$kind · ${row.ref} · ${atlasShortDate(row.ts)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(10.dp))
-            Column(horizontalAlignment = Alignment.End) {
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 val amount = if (row.credit > 0.0) "+${formatMoney(row.credit, currency)}" else "−${formatMoney(row.debit, currency)}"
-                Text(amount, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = if (row.credit > 0.0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
-                Text(
-                    atlasText("Solde ${formatMoney(row.runningBalance, currency)}", "Balance ${formatMoney(row.runningBalance, currency)}", "الرصيد ${formatMoney(row.runningBalance, currency)}"),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                FinanceAmountBadge(
+                    text = amount,
+                    tint = if (row.credit > 0.0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                )
+                FinanceAmountBadge(
+                    text = atlasText("Solde ${formatMoney(row.runningBalance, currency)}", "Balance ${formatMoney(row.runningBalance, currency)}", "الرصيد ${formatMoney(row.runningBalance, currency)}"),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -1111,7 +1149,7 @@ private fun StatementRowCard(row: FinanceStatementRowDto, currency: String) {
 
 @Composable
 private fun ReceivableCard(document: FinanceOutstandingDocumentDto, currency: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(document.party.ifBlank { atlasText("Client") }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
@@ -1132,8 +1170,19 @@ private fun ReceivableCard(document: FinanceOutstandingDocumentDto, currency: St
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             HorizontalDivider(Modifier.padding(vertical = 3.dp))
-            Text(atlasText("Restant dû  ${formatMoney(document.remaining, currency)}", "Remaining due  ${formatMoney(document.remaining, currency)}", "المتبقي المستحق  ${formatMoney(document.remaining, currency)}"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-            Text(atlasText("Payé ${formatMoney(document.paid, currency)} / Total ${formatMoney(document.total, currency)}", "Paid ${formatMoney(document.paid, currency)} / Total ${formatMoney(document.total, currency)}", "المدفوع ${formatMoney(document.paid, currency)} / الإجمالي ${formatMoney(document.total, currency)}"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FinanceAmountBadge(
+                text = atlasText("Restant dû  ${formatMoney(document.remaining, currency)}", "Remaining due  ${formatMoney(document.remaining, currency)}", "المتبقي المستحق  ${formatMoney(document.remaining, currency)}"),
+                tint = if (document.state.equals("overdue", ignoreCase = true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth(),
+                prominent = true,
+                allowTwoLines = true,
+            )
+            FinanceAmountBadge(
+                text = atlasText("Payé ${formatMoney(document.paid, currency)} / Total ${formatMoney(document.total, currency)}", "Paid ${formatMoney(document.paid, currency)} / Total ${formatMoney(document.total, currency)}", "المدفوع ${formatMoney(document.paid, currency)} / الإجمالي ${formatMoney(document.total, currency)}"),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+                allowTwoLines = true,
+            )
         }
     }
 }
@@ -1162,7 +1211,10 @@ private fun FinanceReportMiniChart(finance: ma.etherealmber.atlascommerce.data.m
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(formatMoney(amount, finance.currency), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    FinanceAmountBadge(
+                        text = formatMoney(amount, finance.currency),
+                        tint = accent,
+                    )
                 }
                 LinearProgressIndicator(
                     progress = { (kotlin.math.abs(amount) / maximum).toFloat().coerceIn(0f, 1f) },
@@ -1176,9 +1228,39 @@ private fun FinanceReportMiniChart(finance: ma.etherealmber.atlascommerce.data.m
 }
 
 @Composable
+private fun FinanceAmountBadge(
+    text: String,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    prominent: Boolean = false,
+    allowTwoLines: Boolean = true,
+) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.small,
+        color = tint.copy(alpha = 0.10f),
+        contentColor = tint,
+        border = BorderStroke(1.dp, Atlas.palette.cardBorder),
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(
+                horizontal = if (prominent) 10.dp else 8.dp,
+                vertical = if (prominent) 6.dp else 4.dp,
+            ),
+            style = if (prominent) MaterialTheme.typography.titleSmall else MaterialTheme.typography.labelMedium,
+            fontWeight = if (prominent) FontWeight.Bold else FontWeight.SemiBold,
+            maxLines = if (allowTwoLines) 2 else 1,
+            softWrap = allowTwoLines,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
 private fun financeCardBorder() = BorderStroke(
     width = 1.dp,
-    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.76f),
+    color = Atlas.palette.cardBorder,
 )
 
 @Composable
@@ -1192,7 +1274,7 @@ private fun financeFieldColors() = OutlinedTextFieldDefaults.colors(
 
 @Composable
 private fun ReportActionCard(title: String, description: String, icon: @Composable () -> Unit, actionLabel: String, enabled: Boolean, onClick: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = financeCardBorder()) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = financeCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {

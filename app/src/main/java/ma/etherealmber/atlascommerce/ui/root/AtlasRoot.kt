@@ -427,7 +427,7 @@ private fun AtlasGate(
     }
 
     val showToast: (String) -> Unit = { message ->
-        scope.launch { snackbarHostState.showSnackbar(atlasNotice(message, atlasLanguage)) }
+        android.widget.Toast.makeText(context, atlasNotice(message, atlasLanguage), android.widget.Toast.LENGTH_SHORT).show()
     }
 
     LaunchedEffect(notificationDownloadInfo) {
