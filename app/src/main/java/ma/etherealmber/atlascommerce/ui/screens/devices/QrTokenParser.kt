@@ -25,7 +25,7 @@ object DesktopPhoneQrParser {
             qr.rawQuery != null || qr.rawPath != "/login/desktop-phone"
         ) return null
         val id = fragmentPattern.matchEntire(qr.rawFragment ?: return null)?.groupValues?.get(1) ?: return null
-        val qrOrigin = strictHttpsOrigin(qr) ?: return null
+        val qrOrigin = strictHttpsOrigin(qr, allowDesktopPath = true) ?: return null
         val activeUri = runCatching { URI(ServerUrl.normalize(selectedServer) ?: return null) }.getOrNull() ?: return null
         val activeOrigin = strictHttpsOrigin(activeUri) ?: return null
         if (qrOrigin != activeOrigin) return null
@@ -33,9 +33,12 @@ object DesktopPhoneQrParser {
     }
 
     /** Preserve explicit ports (including :443) rather than normalizing them away. */
-    private fun strictHttpsOrigin(uri: URI): String? {
+    private fun strictHttpsOrigin(uri: URI, allowDesktopPath: Boolean = false): String? {
+        val path = uri.rawPath.orEmpty()
         if (!uri.scheme.equals("https", ignoreCase = true) || uri.rawUserInfo != null ||
-            uri.rawQuery != null || uri.rawPath.orEmpty().let { it.isNotEmpty() && it != "/" }
+            uri.rawQuery != null ||
+            (allowDesktopPath && path != "/login/desktop-phone") ||
+            (!allowDesktopPath && path.isNotEmpty() && path != "/")
         ) return null
         val host = uri.host ?: return null
         val authority = uri.rawAuthority ?: return null
