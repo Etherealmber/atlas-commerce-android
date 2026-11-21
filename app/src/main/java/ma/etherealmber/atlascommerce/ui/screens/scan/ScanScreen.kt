@@ -90,6 +90,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.BarcodeCameraView
 import ma.etherealmber.atlascommerce.ui.components.CameraVisualStyle
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.ProductCreateDialog
 import ma.etherealmber.atlascommerce.ui.components.ScanFeedback
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
@@ -272,7 +273,12 @@ fun ScanScreen(
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(10.dp),
+                    .padding(
+                        start = 10.dp,
+                        top = 10.dp + LocalAtlasFloatingTopBarPadding.current,
+                        end = 10.dp,
+                        bottom = 10.dp,
+                    ),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 if (state.hasActiveScan) {

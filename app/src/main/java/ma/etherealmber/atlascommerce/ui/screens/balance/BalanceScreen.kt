@@ -530,7 +530,12 @@ fun BalanceScreen(
     }
     Column(Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(
+                start = 16.dp,
+                end = 12.dp,
+                top = 10.dp + LocalAtlasFloatingTopBarPadding.current,
+                bottom = 8.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
@@ -595,7 +600,7 @@ fun BalanceScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     start = if (maxWidth >= 600.dp) 24.dp else 16.dp,
                     end = if (maxWidth >= 600.dp) 24.dp else 16.dp,
-                    top = 12.dp + LocalAtlasFloatingTopBarPadding.current,
+                    top = 12.dp,
                     bottom = 12.dp + dockPadding,
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
