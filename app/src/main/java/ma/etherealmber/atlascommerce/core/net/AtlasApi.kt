@@ -56,6 +56,8 @@ import ma.etherealmber.atlascommerce.data.model.QrSessionStatusDto
 import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
 import ma.etherealmber.atlascommerce.data.model.RejectMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.RevokeDeviceRequest
+import ma.etherealmber.atlascommerce.data.model.StartupRoleRefreshRequest
+import ma.etherealmber.atlascommerce.data.model.StartupRoleRefreshDto
 import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
 import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestBody
 import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
@@ -117,6 +119,10 @@ interface AtlasApi {
 
     @GET("api/auth/me")
     suspend fun me(): ApiEnvelope<MeDto>
+
+    /** Legacy v2 role refresh is invoked only after the exact HTTP 409 / ROLE_CHANGED response. */
+    @POST("api/auth/role-refresh")
+    suspend fun refreshLegacyRole(@Body body: StartupRoleRefreshRequest): ApiEnvelope<StartupRoleRefreshDto>
 
     /** Read-only status for the signed-in account; no tracker credentials are sent by the app. */
     @GET("api/mobile/work-status")

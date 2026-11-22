@@ -100,7 +100,7 @@ class RoleRefreshInterceptor(
             val data = payload["data"] as? Map<*, *> ?: return null
             val rotatedToken = (data["token"] as? String)?.takeIf(String::isNotBlank) ?: return null
             val role = (data["role"] as? String)?.takeIf(String::isNotBlank) ?: return null
-            return if (tokenHolder.installRoleRefresh(oldToken, rotatedToken, role)) rotatedToken else tokenHolder.token
+            return if (tokenHolder.installRoleRefresh(oldToken, rotatedToken, role)) rotatedToken else null
         }
     }
 

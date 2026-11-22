@@ -121,6 +121,47 @@ class RoleRefreshInterceptorTest {
     }
 
     @Test
+    fun profileTokenRotationKeepsPendingRoleRefreshBoundToTheRotatedToken() {
+        val tokenHolder = TokenHolder().apply { set("old-token") }
+        assertTrue(tokenHolder.installRoleRefresh("old-token", "refreshed-token", "manager"))
+
+        tokenHolder.set("profile-rotated-token")
+
+        assertEquals("profile-rotated-token", tokenHolder.token)
+        assertEquals(
+            RefreshedSessionRole("old-token", "profile-rotated-token", "manager"),
+            tokenHolder.roleRefreshes.value,
+        )
+        tokenHolder.clear()
+        assertEquals(null, tokenHolder.roleRefreshes.value)
+    }
+
+    @Test
+    fun rejectedRefreshResponseIsNotReplayedWithAnUnrelatedCurrentAccountToken() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(409).setBody("""{"code":"ROLE_CHANGED"}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"success":true,"data":{"token":"old-account-rotated","role":"manager"}}"""))
+        server.start()
+        try {
+            val tokenHolder = TokenHolder().apply { set("old-account-token") }
+            val client = OkHttpClient.Builder()
+                .addInterceptor(RoleRefreshInterceptor(tokenHolder, {
+                    tokenHolder.set("new-account-token")
+                    "device-fingerprint"
+                }, SessionEvents(), Moshi.Builder().build()))
+                .build()
+            val request = Request.Builder().url(server.url("api/products")).header("Authorization", "Bearer old-account-token").get().build()
+
+            client.newCall(request).execute().use { response -> assertEquals(409, response.code) }
+            assertEquals(2, server.requestCount)
+            assertEquals("new-account-token", tokenHolder.token)
+            assertEquals(null, tokenHolder.roleRefreshes.value)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun refresh401SignalsInvalidSessionButDoesNotTreatTransientFailuresAsLogout() = runBlocking {
         val server = MockWebServer()
         server.enqueue(MockResponse().setResponseCode(409).setBody("""{"code":"ROLE_CHANGED"}"""))

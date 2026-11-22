@@ -68,6 +68,8 @@ class NotificationsViewModel @Inject constructor(
 
     private var refreshJob: Job? = null
     private var productActionDetailsGeneration = 0L
+    /** Keep a created product ID across completion retries while the action is pending. */
+    private val createdProductIds = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     private val _messages = MutableSharedFlow<String>(
         extraBufferCapacity = 4,
@@ -236,10 +238,13 @@ class NotificationsViewModel @Inject constructor(
             _state.update { it.copy(busyId = action.id) }
             if (isAdmin && action.type.equals("new_product", ignoreCase = true)) {
                 when (
+                    val approvalKey = "${activeUser?.scopeIdentity.orEmpty()}:${action.id}"
                     val res = commerceRepository.approveActionAsAdmin(
                         action = action,
                         adminUsername = activeUser?.username ?: "admin",
                         productRequest = productRequest,
+                        existingProductId = createdProductIds[approvalKey],
+                        onProductCreated = { product -> createdProductIds[approvalKey] = product.id },
                     )
                 ) {
                     is ApiResult.Failure -> {
@@ -249,6 +254,7 @@ class NotificationsViewModel @Inject constructor(
                     }
 
                     is ApiResult.Success -> {
+                        createdProductIds.remove(approvalKey)
                         _state.update { it.copy(busyId = null) }
                         onResult(true)
                         val created = res.data

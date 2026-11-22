@@ -391,17 +391,22 @@ class CommerceRepository @Inject constructor(
         action: MobileActionDto,
         adminUsername: String,
         productRequest: CreateProductRequest? = null,
+        existingProductId: Long? = null,
+        onProductCreated: (ProductDto) -> Unit = {},
     ): ApiResult<ProductDto?> {
         val meta = parseActionMeta(action)
         val pendingProduct = meta?.createProductBody
         var createdProduct: ProductDto? = null
-        if (pendingProduct != null && action.productId == null) {
+        if (pendingProduct != null && action.productId == null && existingProductId == null) {
             val authorizedProduct = productRequest ?: return ApiResult.Failure(
                 "PRODUCT_PRICE_REQUIRED",
                 "Enter a price and VAT mode before creating this requested product.",
             )
             when (val prodRes = createProduct(authorizedProduct)) {
-                is ApiResult.Success -> createdProduct = prodRes.data
+                is ApiResult.Success -> {
+                    createdProduct = prodRes.data
+                    onProductCreated(prodRes.data)
+                }
                 is ApiResult.Failure -> return prodRes
             }
         }
@@ -410,7 +415,7 @@ class CommerceRepository @Inject constructor(
                 id = action.id,
                 applyStock = true,
                 completedBy = adminUsername,
-                productId = createdProduct?.id ?: action.productId,
+                productId = createdProduct?.id ?: existingProductId ?: action.productId,
             )
         ) {
             is ApiResult.Success -> ApiResult.Success(createdProduct)

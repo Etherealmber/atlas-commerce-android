@@ -228,6 +228,8 @@ data class MeDto(
     val phone: String? = null,
     @Json(name = "avatar_url") val avatarUrl: String? = null,
     @Json(name = "reputationScore") val reputationScore: Int? = null,
+    /** Set only by the startup validator after the legacy role-refresh endpoint succeeds. */
+    @Json(ignore = true) val startupRoleRefreshValidated: Boolean = false,
 )
 
 @JsonClass(generateAdapter = true)

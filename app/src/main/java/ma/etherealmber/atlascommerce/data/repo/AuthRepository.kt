@@ -42,9 +42,35 @@ class AuthRepository @Inject constructor(
     suspend fun logout(): ApiResult<ActionAckDto> =
         runner.status { apiProvider.api().logout() }
 
-    /** Verify an encrypted same-device session without installing it in the global token holder. */
-    suspend fun validateStartupSession(serverUrl: String, savedBearerToken: String): ApiResult<MeDto> =
-        runner.envelope { apiProvider.startupResumeApi(serverUrl, savedBearerToken).me() }
+    /** Verify a saved session and handle only the legacy v2 409 / ROLE_CHANGED contract. */
+    suspend fun validateStartupSession(
+        serverUrl: String,
+        savedBearerToken: String,
+        fingerprint: String,
+    ): ApiResult<MeDto> {
+        val first = runner.envelope { apiProvider.startupResumeApi(serverUrl, savedBearerToken).me() }
+        val roleChanged = first as? ApiResult.Failure
+        if (roleChanged == null || roleChanged.httpStatus != 409 || roleChanged.code != "ROLE_CHANGED") return first
+
+        val refresh = runner.envelope {
+            apiProvider.startupResumeApi(serverUrl, savedBearerToken)
+                .refreshLegacyRole(ma.etherealmber.atlascommerce.data.model.StartupRoleRefreshRequest(fingerprint))
+        }
+        val rotated = when (refresh) {
+            is ApiResult.Success -> refresh.data
+            is ApiResult.Failure -> return refresh
+        }
+        if (rotated.token.isBlank() || rotated.role.isBlank()) {
+            return ApiResult.Failure("ROLE_REFRESH_INVALID", "Réponse de mise à jour du rôle invalide.")
+        }
+        val retried = runner.envelope { apiProvider.startupResumeApi(serverUrl, rotated.token).me() }
+        return when (retried) {
+            is ApiResult.Success -> ApiResult.Success(
+                retried.data.copy(token = rotated.token, role = rotated.role, startupRoleRefreshValidated = true),
+            )
+            is ApiResult.Failure -> retried
+        }
+    }
 
     suspend fun verifyOtp(
         username: String,

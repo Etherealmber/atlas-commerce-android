@@ -232,7 +232,13 @@ class SessionManager @Inject constructor(
             when (
                 val verification = StartupResumePreparation.verifyWithRetry(
                     request = request,
-                    validate = authRepository::validateStartupSession,
+                    validate = { serverUrl, bearerToken ->
+                        authRepository.validateStartupSession(
+                            serverUrl = serverUrl,
+                            savedBearerToken = bearerToken,
+                            fingerprint = deviceIdentity.fingerprintForRequest(),
+                        )
+                    },
                 )
             ) {
                 is StartupSessionVerification.Valid -> {
@@ -272,8 +278,12 @@ class SessionManager @Inject constructor(
         if (username.isBlank()) return false
         val user = SessionUser(
             username = username,
-            // /auth/me still echoes the role embedded in the presented token; do not refresh privileges from it.
-            role = stored.role.ifBlank { "user" },
+            // Ignore the role echoed by /auth/me; only a successful legacy role-refresh is authoritative.
+            role = if (profile.startupRoleRefreshValidated) {
+                profile.role?.takeIf(String::isNotBlank) ?: stored.role.ifBlank { "user" }
+            } else {
+                stored.role.ifBlank { "user" }
+            },
             displayName = profile.displayName?.takeIf { it.isNotBlank() } ?: stored.displayName.ifBlank { username },
             email = profile.email ?: stored.email,
             phone = profile.phone.orEmpty(),
@@ -495,6 +505,9 @@ class SessionManager @Inject constructor(
             )
         }.baseUrl
         purgeInMemorySessionAndPersist()
+        // The token holder is about to belong to the saved account, so do not leave the
+        // previous account visible to an in-flight role-refresh event.
+        _state.value = SessionState.Loading
         val selectedServer = serverConfig.select(savedServerUrl, rememberServer = false)
         if (selectedServer.isFailure) {
             tokenHolder.clear()
@@ -512,6 +525,7 @@ class SessionManager @Inject constructor(
         when (val verify = authRepository.me()) {
             is ApiResult.Failure -> {
                 tokenHolder.clear()
+                _state.value = SessionState.SignedOut
                 // Keep the encrypted account and its opt-in unlock setting on
                 // transient network/server failures. Only a definitive 401
                 // means the saved token can no longer authenticate.
@@ -529,14 +543,18 @@ class SessionManager @Inject constructor(
             is ApiResult.Success -> {
                 val me = verify.data
                 val resolvedUser = (me.username?.takeIf { it.isNotBlank() } ?: entry.username).lowercase(Locale.ROOT)
-                // Preserve the signed-in session's display policy until a server-side authoritative role contract exists.
-                val resolvedRole = entry.role.ifBlank { "user" }
+                val resolvedToken = tokenHolder.token?.takeIf(String::isNotBlank) ?: token
+                val refreshedRole = tokenHolder.roleRefreshes.value?.takeIf {
+                    it.previousToken == token && it.token == resolvedToken
+                }?.role
+                // /auth/me's role is not authoritative; only the exact legacy role-refresh response is.
+                val resolvedRole = refreshedRole ?: entry.role.ifBlank { "user" }
                 val resolvedDisplay = me.displayName?.takeIf { it.isNotBlank() } ?: entry.displayName.ifBlank { resolvedUser }
                 val resolvedEmail = me.email ?: entry.email
                 val resolvedAvatar = me.avatarUrl?.takeIf { it.isNotBlank() } ?: entry.avatarUrl
                 activateIsolatedSession(
                     serverUrl = savedServerUrl,
-                    token = token,
+                    token = resolvedToken,
                     username = resolvedUser,
                     role = resolvedRole,
                     displayName = resolvedDisplay,
@@ -544,7 +562,7 @@ class SessionManager @Inject constructor(
                     avatarUrl = resolvedAvatar,
                     phone = me.phone.orEmpty(),
                     rememberAccount = true,
-                    savedAccountTokenCipher = entry.tokenCipher,
+                    savedAccountTokenCipher = entry.tokenCipher.takeIf { resolvedToken == token },
                 )
                 return ApiResult.Success(Unit)
             }
@@ -703,17 +721,18 @@ class SessionManager @Inject constructor(
         if (result !is ApiResult.Success) return
 
         sessionTransitionMutex.withLock {
-            if (!isProfileRefreshCurrent(
-                    expectedScopeIdentity = current.scopeIdentity,
-                    expectedToken = tokenAtRequest,
-                    activeScopeIdentity = (_state.value as? SessionState.Active)?.user?.scopeIdentity,
-                    activeToken = tokenHolder.token,
-                )
-            ) return@withLock
+            val activeUser = (_state.value as? SessionState.Active)?.user
+            val activeToken = tokenHolder.token
+            val pendingRoleRefresh = tokenHolder.roleRefreshes.value?.takeIf {
+                it.previousToken == tokenAtRequest && it.token == activeToken
+            }
+            val sameSession = activeUser?.scopeIdentity == current.scopeIdentity &&
+                (activeToken == tokenAtRequest || pendingRoleRefresh != null)
+            if (!sameSession) return@withLock
 
             val me = result.data
-            val updated = current.withRefreshedProfile(me)
-            val currentToken = validatedSessionToken(me.token, tokenAtRequest)
+            val updated = current.withRefreshedProfile(me).copy(role = pendingRoleRefresh?.role ?: current.role)
+            val currentToken = validatedSessionToken(me.token, activeToken ?: tokenAtRequest)
             val tokenRotated = currentToken != tokenAtRequest
             tokenHolder.set(currentToken)
             _state.value = SessionState.Active(updated)

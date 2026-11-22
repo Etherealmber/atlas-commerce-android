@@ -27,8 +27,16 @@ class TokenHolder @Inject constructor() {
     @Synchronized
     fun set(token: String?) {
         val previous = this.token
+        val pendingRefresh = _roleRefreshes.value
         this.token = token
-        if (token != previous) _roleRefreshes.value = null
+        if (token == previous) return
+        // /auth/me may rotate the freshly refreshed token before SessionManager consumes
+        // the pending role. Preserve the proven rotation chain and retarget its token.
+        if (pendingRefresh != null && pendingRefresh.token == previous && !token.isNullOrBlank()) {
+            _roleRefreshes.value = pendingRefresh.copy(token = token)
+        } else {
+            _roleRefreshes.value = null
+        }
     }
 
     @Synchronized

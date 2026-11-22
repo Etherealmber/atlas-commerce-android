@@ -584,7 +584,7 @@ fun ProductsScreen(
                                     wideLayout = wideLayout,
                                     listLayout = listLayout,
                                     onOpen = {
-                                        if (canSell) historyTarget = product else selected = product
+                                        if (canSell && !isAdmin) historyTarget = product else selected = product
                                     },
                                     onAdd = {
                                         if (canSell) viewModel.addToCart(product)
