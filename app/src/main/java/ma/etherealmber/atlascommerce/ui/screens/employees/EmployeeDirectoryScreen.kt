@@ -138,7 +138,7 @@ private fun EmployeeProfileDialog(employee: EmployeeDto, canEdit: Boolean, canMa
             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onClose) { Icon(Icons.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع")) }
+                        IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع")) }
                         Column(Modifier.weight(1f)) {
                             Text(employee.displayName.ifBlank { employee.name }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             Text(atlasText("Profil et paiements", "Profile and payments", "الملف والمدفوعات"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
