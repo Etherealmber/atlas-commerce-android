@@ -48,6 +48,8 @@ class RoleRefreshInterceptor(
 
         val authorization = request.header("Authorization") ?: return first
         val oldToken = authorization.removePrefix("Bearer ").takeIf { it != authorization && it.isNotBlank() } ?: return first
+        // Native-pilot tokens use their own role contract and must never hit the v2 endpoint.
+        if (oldToken.startsWith("np1.")) return first
         val currentToken = synchronized(refreshLock) {
             if (tokenHolder.token != oldToken) {
                 tokenHolder.roleRefreshes.value

@@ -50,7 +50,8 @@ class AuthRepository @Inject constructor(
     ): ApiResult<MeDto> {
         val first = runner.envelope { apiProvider.startupResumeApi(serverUrl, savedBearerToken).me() }
         val roleChanged = first as? ApiResult.Failure
-        if (roleChanged == null || roleChanged.httpStatus != 409 || roleChanged.code != "ROLE_CHANGED") return first
+        // Native-pilot sessions have a distinct contract and are not refreshed with the v2 endpoint.
+        if (savedBearerToken.startsWith("np1.") || roleChanged == null || roleChanged.httpStatus != 409 || roleChanged.code != "ROLE_CHANGED") return first
 
         val refresh = runner.envelope {
             apiProvider.startupResumeApi(serverUrl, savedBearerToken)

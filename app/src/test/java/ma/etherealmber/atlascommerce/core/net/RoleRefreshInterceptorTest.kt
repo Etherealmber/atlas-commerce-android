@@ -78,6 +78,26 @@ class RoleRefreshInterceptorTest {
     }
 
     @Test
+    fun nativePilotRoleChangedResponseNeverUsesTheLegacyRefreshEndpoint() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(409).setBody("""{"code":"ROLE_CHANGED"}"""))
+        server.start()
+        try {
+            val tokenHolder = TokenHolder().apply { set("np1.native-session-token") }
+            val client = OkHttpClient.Builder()
+                .addInterceptor(RoleRefreshInterceptor(tokenHolder, { "device-fingerprint" }, SessionEvents(), Moshi.Builder().build()))
+                .build()
+            val request = Request.Builder().url(server.url("api/products")).header("Authorization", "Bearer np1.native-session-token").get().build()
+
+            client.newCall(request).execute().use { response -> assertEquals(409, response.code) }
+            assertEquals(1, server.requestCount)
+            assertEquals("np1.native-session-token", tokenHolder.token)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun offlineRefreshFailureReturnsOriginal409WithoutLogoutOrReplay() = runBlocking {
         val server = MockWebServer()
         server.enqueue(MockResponse().setResponseCode(409).setBody("""{"code":"ROLE_CHANGED"}"""))

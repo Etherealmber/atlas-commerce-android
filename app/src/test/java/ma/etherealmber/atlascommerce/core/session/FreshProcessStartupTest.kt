@@ -175,6 +175,26 @@ class FreshProcessStartupTest {
     }
 
     @Test
+    fun `unresolved role changed response is terminal instead of retrying the same startup token`() = runBlocking {
+        val request = StartupResumePreparation.createRequest(
+            session(), "https://shop.example.com", false,
+        ) { "saved-token" }.request!!
+        var calls = 0
+
+        val result = StartupResumePreparation.verifyWithRetry(
+            request = request,
+            retryDelayMillis = 0,
+            validate = { _, _ ->
+                calls++
+                ApiResult.Failure("ROLE_CHANGED", "role changed", 409)
+            },
+        )
+
+        assertEquals(1, calls)
+        assertEquals(StartupSessionVerification.Rejected, result)
+    }
+
+    @Test
     fun `revoked session is rejected and transient failures remain recoverable`() = runBlocking {
         val request = StartupResumePreparation.createRequest(
             session(), "https://shop.example.com", false,
