@@ -1,6 +1,6 @@
 import unittest
 
-from release_notes import format_github_release_body, format_in_app_notes, group_release_commits, should_generate_github_release_notes
+from release_notes import format_commit_release_notes, format_github_release_body, format_in_app_notes, group_release_commits, should_generate_github_release_notes
 
 
 class ReleaseNotesTest(unittest.TestCase):
@@ -34,17 +34,35 @@ class ReleaseNotesTest(unittest.TestCase):
         self.assertLessEqual(len(note), 80)
         self.assertIn("ffffff", note)
 
+    def test_github_release_notes_list_commits_and_thank_commit_authors_not_pull_requests(self):
+        first = "a" * 40
+        second = "b" * 40
+        raw = (
+            f"{first}\x1ffeat: Add client history\x1f\x1e"
+            f"{second}\x1ffix: Keep profile bar above scrolling content\x1f\x1e"
+        )
+        notes = format_commit_release_notes(
+            raw,
+            "https://github.com/example/repo",
+            {first: "@alice", second: "bob", "c" * 40: "automation[bot]"},
+        )
+        self.assertLess(notes.index("Add client history"), notes.index("Keep profile bar"))
+        self.assertIn('["aaaaaaa"](https://github.com/example/repo/commit/' + first + ')', notes)
+        self.assertIn("Thanks to @alice, @bob", notes)
+        self.assertNotIn("pull/", notes)
+        self.assertNotIn("automation[bot]", notes)
+
     def test_github_generation_only_uses_new_or_matching_remote_tags(self):
         build_commit = "a" * 40
         self.assertTrue(should_generate_github_release_notes(None, build_commit))
         self.assertTrue(should_generate_github_release_notes(build_commit.upper(), build_commit))
         self.assertFalse(should_generate_github_release_notes("b" * 40, build_commit))
 
-    def test_github_release_body_uses_signed_apk_template_and_preserves_github_notes(self):
+    def test_github_release_body_uses_signed_apk_template_and_preserves_commit_notes(self):
         generated = (
             "## What's Changed\n\n"
-            "* Improve tablet navigation by @loxdpsy in [#102](https://github.com/example/repo/pull/102)\n\n"
-            "**Full Changelog**: [v1.7.0...v1.8.0](https://github.com/example/repo/compare/v1.7.0...v1.8.0)"
+            "* Improve tablet navigation ([\"abcdef0\"](https://github.com/example/repo/commit/abcdef0))\n\n"
+            "## Contributors\n\nThanks to @loxdpsy for contributing to this release."
         )
         body = format_github_release_body(
             tag="v1.8.0",
@@ -58,8 +76,9 @@ class ReleaseNotesTest(unittest.TestCase):
         self.assertTrue(body.startswith("## ✨ Atlas Commerce `v1.8.0` (build `180`)\n\n### 📦 Paquet signé (`APK`)"))
         self.assertIn("- **Version :** `v1.8.0` (`versionCode = 180`)\n\n- **Taille :** `30.38 Mo`", body)
         self.assertIn("- **Téléchargement :** [latest.apk](https://cdn.example/latest.apk)", body)
-        self.assertIn("## What's Changed\n\n* Improve tablet navigation by @loxdpsy in [#102](https://github.com/example/repo/pull/102)", body)
-        self.assertIn("**Full Changelog**: [v1.7.0...v1.8.0](https://github.com/example/repo/compare/v1.7.0...v1.8.0)", body)
+        self.assertIn("Improve tablet navigation ([\"abcdef0\"](https://github.com/example/repo/commit/abcdef0))", body)
+        self.assertIn("Thanks to @loxdpsy", body)
+        self.assertNotIn("/pull/", body)
 
     def test_empty_or_noise_only_history_does_not_claim_a_fix(self):
         groups = group_release_commits(

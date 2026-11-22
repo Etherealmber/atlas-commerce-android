@@ -83,6 +83,7 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasPaginationControls
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
@@ -119,6 +120,13 @@ fun ProductsScreen(
     var adjustTarget by remember { mutableStateOf<ProductDto?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var pendingFulfillRequest by remember { mutableStateOf<ProductCreationRequestDto?>(null) }
+    var catalogPage by rememberSaveable(user.scopeIdentity) { mutableStateOf(1) }
+    val catalogPageCount = ((state.visibleProducts.size + 9) / 10).coerceAtLeast(1)
+    val pageProducts = remember(state.visibleProducts, catalogPage) {
+        state.visibleProducts.drop((catalogPage - 1) * 10).take(10)
+    }
+    LaunchedEffect(state.query, state.filter, state.visibleProducts.size) { catalogPage = 1 }
+    LaunchedEffect(catalogPageCount) { if (catalogPage > catalogPageCount) catalogPage = catalogPageCount }
 
     val isAdmin = Roles.canCreateProductDirectly(user.role)
     val canSell = Roles.canCreateDocuments(user.role)
@@ -572,7 +580,7 @@ fun ProductsScreen(
                                 }
                             }
                         }
-                        gridItemsIndexed(state.visibleProducts, key = { _, product -> product.id }) { index, product ->
+                        gridItemsIndexed(pageProducts, key = { _, product -> product.id }) { index, product ->
                             StaggeredCatalogEntry(index = index) {
                                 ProductRow(
                                     product = product,
@@ -587,6 +595,17 @@ fun ProductsScreen(
                                     onAdd = {
                                         if (canSell) viewModel.addToCart(product)
                                     },
+                                )
+                            }
+                        }
+                        if (state.visibleProducts.size > 10) {
+                            item(span = { GridItemSpan(maxLineSpan) }, key = "catalog-pagination") {
+                                AtlasPaginationControls(
+                                    totalItems = state.visibleProducts.size,
+                                    currentPage = catalogPage.coerceAtMost(catalogPageCount),
+                                    onPageSelected = { catalogPage = it },
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
+                                    pageSize = 10,
                                 )
                             }
                         }
