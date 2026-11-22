@@ -67,6 +67,7 @@ fun ProductCreateDialog(
     initialCategory: String = "",
     initialImageUrl: String? = null,
     requesterName: String? = null,
+    allowRequestOnly: Boolean = true,
     imageServerBaseUrl: String? = null,
     submitting: Boolean = false,
     onDismiss: () -> Unit,
@@ -87,8 +88,8 @@ fun ProductCreateDialog(
     // - Non-Admins (`canCreateDirectly == false`) NEVER create directly; their full fiche is
     //   immediately dispatched straight to Admins (`onSubmitDirect` -> `repo.submitProductForRole`
     //   which routes non-admin calls directly to Admin notifications + stock requests).
-    var adminWantsRequestOnly by remember(canCreateDirectly) { mutableStateOf(false) }
-    val modeDirect = canCreateDirectly && !adminWantsRequestOnly
+    var adminWantsRequestOnly by remember(canCreateDirectly, allowRequestOnly) { mutableStateOf(false) }
+    val modeDirect = canCreateDirectly && (!allowRequestOnly || !adminWantsRequestOnly)
 
     var barcode by remember(initialBarcode) { mutableStateOf(initialBarcode) }
     var name by remember(initialName) { mutableStateOf(initialName) }
@@ -197,9 +198,9 @@ fun ProductCreateDialog(
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 text = atlasText(
-                                    "Demandeur : ${requesterName?.takeIf { it.isNotBlank() } ?: "Compte connecté"}. La demande sera transmise à l'Administrateur ; votre identité est confirmée par la session.",
-                                    "Requester: ${requesterName?.takeIf { it.isNotBlank() } ?: "Signed-in account"}. This request goes to an administrator; your identity is verified by your session.",
-                                    "مقدم الطلب: ${requesterName?.takeIf { it.isNotBlank() } ?: "الحساب المتصل"}. سيُرسل الطلب إلى المسؤول، وتُتحقق هويتك من الجلسة.",
+                                    "Demandeur : ${requesterName?.takeIf { it.isNotBlank() } ?: "Compte connecté"}. Nom affiché depuis votre profil, sans saisir ni transmettre un nom manuellement.",
+                                    "Requester: ${requesterName?.takeIf { it.isNotBlank() } ?: "Signed-in account"}. Displayed from your profile; no requester name is entered or sent manually.",
+                                    "مقدم الطلب: ${requesterName?.takeIf { it.isNotBlank() } ?: "الحساب المتصل"}. الاسم معروض من ملفك الشخصي ولا يُدخل أو يُرسل يدوياً.",
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = toneForeground(AtlasTone.INFO),
@@ -234,7 +235,7 @@ fun ProductCreateDialog(
                     }
                 }
 
-                if (canCreateDirectly) {
+                if (canCreateDirectly && allowRequestOnly) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = !adminWantsRequestOnly,

@@ -321,6 +321,7 @@ fun NotificationsScreen(
     } else if (productAction != null && productBody != null && state.isAdmin) {
         ProductCreateDialog(
             canCreateDirectly = true,
+            allowRequestOnly = false,
             initialName = productBody.name,
             initialSku = productBody.sku,
             initialUnit = productBody.unit,
@@ -333,9 +334,12 @@ fun NotificationsScreen(
                 viewModel.clearProductActionDetails()
             },
             onSubmitDirect = { request ->
-                viewModel.completeAction(productAction, request)
-                productActionToCreateId = null
-                viewModel.clearProductActionDetails()
+                viewModel.completeAction(productAction, request) { succeeded ->
+                    if (succeeded) {
+                        productActionToCreateId = null
+                        viewModel.clearProductActionDetails()
+                    }
+                }
             },
             onSubmitRequest = { _, _, _, _, _, _, _, _ -> },
         )
