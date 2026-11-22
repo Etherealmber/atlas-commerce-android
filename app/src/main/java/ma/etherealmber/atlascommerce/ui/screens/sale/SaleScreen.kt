@@ -243,7 +243,7 @@ fun SaleScreen(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = canSell && state.canSubmit && lines.isNotEmpty(),
                     loading = state.submitting,
-                    icon = Icons.Outlined.PointOfSale,
+                    icon = Icons.Outlined.CreditCard,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(

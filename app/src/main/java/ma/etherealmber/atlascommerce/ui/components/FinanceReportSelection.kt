@@ -132,6 +132,9 @@ fun FinanceReportSelectionDialog(
                                     selected = period == key,
                                     onClick = { period = key },
                                     label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    leadingIcon = if (period == key) {
+                                        { Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                    } else null,
                                     modifier = Modifier.weight(1f),
                                 )
                             }
@@ -175,6 +178,9 @@ fun FinanceReportSelectionDialog(
                                     if (report.key in selectedSections) selectedSections.remove(report.key) else selectedSections.add(report.key)
                                 },
                                 label = { Text(report.localizedLabel(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                leadingIcon = if (report.key in selectedSections) {
+                                    { Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null,
                                 modifier = Modifier.weight(1f),
                             )
                         }

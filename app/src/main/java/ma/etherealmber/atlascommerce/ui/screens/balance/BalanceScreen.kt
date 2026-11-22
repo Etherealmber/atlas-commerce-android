@@ -1382,10 +1382,10 @@ private enum class EntryKind(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val categories: List<String>,
 ) {
-    EXPENSE("expense", "Dépense", "+ Dépense", "+ Expense", "+ مصروف", Icons.Outlined.ArrowUpward, listOf("Loyer", "Transport", "Fournitures", "Salaires", "Taxes", "Autre dépense")),
-    INCOME("income", "Recette", "+ Recette", "+ Income", "+ إيراد", Icons.Outlined.ArrowDownward, listOf("Vente divers", "Prestation de service", "Remboursement", "Subvention", "Intérêts", "Autre recette")),
-    OWNER_CONTRIB("owner_contrib", "Apport propriétaire", "+ Apport", "+ Contribution", "+ مساهمة", Icons.Outlined.AccountBalanceWallet, listOf("Apport en capital", "Apport en compte courant", "Autre apport")),
-    OWNER_DRAW("owner_draw", "Prélèvement propriétaire", "+ Prélèvement", "+ Withdrawal", "+ سحب", Icons.Outlined.ArrowUpward, listOf("Prélèvement personnel", "Dividende", "Remboursement associé", "Autre prélèvement")),
+    EXPENSE("expense", "Dépense", "+ Dépense", "+ Expense", "+ مصروف", Icons.Outlined.Add, listOf("Loyer", "Transport", "Fournitures", "Salaires", "Taxes", "Autre dépense")),
+    INCOME("income", "Recette", "+ Recette", "+ Income", "+ إيراد", Icons.Outlined.CircleDollarSign, listOf("Vente divers", "Prestation de service", "Remboursement", "Subvention", "Intérêts", "Autre recette")),
+    OWNER_CONTRIB("owner_contrib", "Apport propriétaire", "+ Apport", "+ Contribution", "+ مساهمة", Icons.Outlined.HandCoins, listOf("Apport en capital", "Apport en compte courant", "Autre apport")),
+    OWNER_DRAW("owner_draw", "Prélèvement propriétaire", "+ Prélèvement", "+ Withdrawal", "+ سحب", Icons.Outlined.HandCoins, listOf("Prélèvement personnel", "Dividende", "Remboursement associé", "Autre prélèvement")),
 }
 
 @Composable
