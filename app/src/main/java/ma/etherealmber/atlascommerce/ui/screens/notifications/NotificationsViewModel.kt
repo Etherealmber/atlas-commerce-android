@@ -237,16 +237,15 @@ class NotificationsViewModel @Inject constructor(
 
             _state.update { it.copy(busyId = action.id) }
             if (isAdmin && action.type.equals("new_product", ignoreCase = true)) {
-                when (
-                    val approvalKey = "${activeUser?.scopeIdentity.orEmpty()}:${action.id}"
-                    val res = commerceRepository.approveActionAsAdmin(
-                        action = action,
-                        adminUsername = activeUser?.username ?: "admin",
-                        productRequest = productRequest,
-                        existingProductId = createdProductIds[approvalKey],
-                        onProductCreated = { product -> createdProductIds[approvalKey] = product.id },
-                    )
-                ) {
+                val approvalKey = "${activeUser?.scopeIdentity.orEmpty()}:${action.id}"
+                val res = commerceRepository.approveActionAsAdmin(
+                    action = action,
+                    adminUsername = activeUser?.username ?: "admin",
+                    productRequest = productRequest,
+                    existingProductId = createdProductIds[approvalKey],
+                    onProductCreated = { product -> createdProductIds[approvalKey] = product.id },
+                )
+                when (res) {
                     is ApiResult.Failure -> {
                         _state.update { it.copy(busyId = null) }
                         _messages.tryEmit(res.message)
