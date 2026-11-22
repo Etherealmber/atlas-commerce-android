@@ -118,7 +118,7 @@ fun QrDeviceScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshTrustedDevices = rememberApiRefreshAction("trusted-devices", 5_000L, viewModel::loadDevices)
-    val otherDevices = remember(state.devices, viewModel) { state.devices.filterNot(viewModel::isCurrentDevice) }
+    val connectedDevices = remember(state.devices, viewModel) { state.devices.sortedByDescending(viewModel::isCurrentDevice) }
     val autoOpenCamera by viewModel.autoOpenCamera.collectAsStateWithLifecycle()
     val scanHaptic by viewModel.scanHapticEnabled.collectAsStateWithLifecycle()
     val scanSound by viewModel.scanSoundEnabled.collectAsStateWithLifecycle()
@@ -570,7 +570,7 @@ fun QrDeviceScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = atlasText("Autres appareils", "Other devices", "أجهزة أخرى"),
+                            text = atlasText("Appareils connectés", "Connected devices", "الأجهزة المتصلة"),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -602,25 +602,27 @@ fun QrDeviceScreen(
                         }
                     }
                 }
-                if (state.devicesLoading && otherDevices.isEmpty()) {
+                if (state.devicesLoading && connectedDevices.isEmpty()) {
                     item { AtlasDeviceListSkeleton(Modifier.fillMaxWidth(), rows = 2) }
-                } else if (otherDevices.isEmpty() && state.devicesLoadError.isNullOrBlank()) {
+                } else if (connectedDevices.isEmpty() && state.devicesLoadError.isNullOrBlank()) {
                     item {
                         SecurityCard {
                             Text(
-                                text = atlasText("Aucun autre appareil enregistré sur ce compte.", "No other devices are registered to this account.", "لا توجد أجهزة أخرى مسجّلة لهذا الحساب."),
+                                text = atlasText("Aucun appareil connecté n'est enregistré sur ce compte.", "No connected devices are registered to this account.", "لا توجد أجهزة متصلة مسجلة لهذا الحساب."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
                 } else {
-                    items(otherDevices, key = { it.revokeId.ifBlank { it.hashCode().toString() } }) { device ->
+                    items(connectedDevices, key = { it.revokeId.ifBlank { it.hashCode().toString() } }) { device ->
                         val deviceKey = device.revokeId.ifBlank { device.hashCode().toString() }
                         SecurityDeviceRow(
                             device = device,
                             detailsVisible = deviceKey in expandedDeviceIds,
                             revoking = state.revokingId == device.revokeId,
+                            isCurrent = viewModel.isCurrentDevice(device),
+                            canRevoke = !viewModel.isCurrentDevice(device),
                             onToggleDetails = {
                                 expandedDeviceIds = if (deviceKey in expandedDeviceIds) {
                                     expandedDeviceIds - deviceKey
@@ -930,11 +932,25 @@ private fun SecurityDeviceRow(
     device: TrustedDeviceDto,
     detailsVisible: Boolean,
     revoking: Boolean,
+    isCurrent: Boolean,
+    canRevoke: Boolean,
     onToggleDetails: () -> Unit,
     onRevoke: () -> Unit,
 ) {
     SecurityCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (device.userAgent.orEmpty().contains("Android", ignoreCase = true)) Icons.Outlined.Devices else Icons.Outlined.Computer,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(19.dp),
+                )
+            }
+            Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -944,7 +960,7 @@ private fun SecurityDeviceRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (device.current) {
+                    if (isCurrent) {
                         Spacer(Modifier.width(8.dp))
                         Box(
                             modifier = Modifier
@@ -966,15 +982,15 @@ private fun SecurityDeviceRow(
                     device.lastIp?.takeIf { it.isNotBlank() }?.let { "IP $it" },
                     localizedLastSeen,
                 ).joinToString(" · ")
+                val userAgent = device.userAgent?.takeIf(String::isNotBlank)
+                if (userAgent != null) {
+                    Text(userAgent, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (meta.isNotBlank()) {
+                    Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (detailsVisible) {
                     Spacer(Modifier.height(4.dp))
-                    if (meta.isNotBlank()) {
-                        Text(
-                            text = meta,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                     device.fingerprint.takeIf { it.isNotBlank() }?.let { fingerprint ->
                         Text(
                             text = atlasText("Identifiant : $fingerprint", "Fingerprint: $fingerprint", "بصمة الجهاز: $fingerprint"),
@@ -991,15 +1007,17 @@ private fun SecurityDeviceRow(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(onClick = onRevoke, enabled = !revoking) {
-                if (revoking) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.DeleteOutline,
-                        contentDescription = atlasText("Révoquer cet appareil", "Revoke this device", "إلغاء صلاحية هذا الجهاز"),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
+            if (canRevoke) {
+                IconButton(onClick = onRevoke, enabled = !revoking) {
+                    if (revoking) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.DeleteOutline,
+                            contentDescription = atlasText("Révoquer cet appareil", "Revoke this device", "إلغاء صلاحية هذا الجهاز"),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
         }

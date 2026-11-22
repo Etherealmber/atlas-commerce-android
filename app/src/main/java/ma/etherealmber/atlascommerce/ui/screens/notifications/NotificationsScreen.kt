@@ -325,6 +325,8 @@ fun NotificationsScreen(
             initialName = productBody.name,
             initialSku = productBody.sku,
             initialUnit = productBody.unit,
+            initialSecondaryUnit = productBody.secondaryUnit.orEmpty(),
+            initialSecondaryUnitFactor = productBody.secondaryUnitFactor?.toString().orEmpty(),
             initialQuantity = productBody.stockQuantity.toString(),
             initialImageUrl = productBody.imageDataUrl ?: productBody.legacyImageUrl,
             imageServerBaseUrl = null,
@@ -341,7 +343,7 @@ fun NotificationsScreen(
                     }
                 }
             },
-            onSubmitRequest = { _, _, _, _, _, _, _, _ -> },
+            onSubmitRequest = { _, _, _, _, _, _, _, _, _, _ -> },
         )
     } else if (productAction != null && state.isAdmin) {
         LaunchedEffect(productAction.id) {

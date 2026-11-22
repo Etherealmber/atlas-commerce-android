@@ -28,7 +28,9 @@ class ProductRequestWireContractTest {
                 createProductBody = ProductRequestBody(
                     name = "Marbre",
                     sku = "MAR-1",
-                    unit = "m²",
+                    unit = "carton",
+                    secondaryUnit = "m²",
+                    secondaryUnitFactor = 1.59,
                     stockQuantity = 4.0,
                 ),
             ),
@@ -38,7 +40,7 @@ class ProductRequestWireContractTest {
         val body = meta["create_product_body"] as Map<*, *>
 
         assertEquals(
-            setOf("name", "sku", "unit", "stock_quantity"),
+            setOf("name", "sku", "unit", "secondary_unit", "secondary_unit_factor", "stock_quantity"),
             body.keys,
         )
         assertFalse(body.containsKey("price"))
@@ -52,12 +54,20 @@ class ProductRequestWireContractTest {
     fun nonAdminActionIncludesImageDataUrlOnlyWhenPresent() {
         val json = parseMap(
             moshi.adapter(ProductRequestBody::class.java).toJson(
-                ProductRequestBody("Marbre", "MAR-1", "m²", 4.0, "data:image/png;base64,abc"),
+                ProductRequestBody(
+                    name = "Marbre",
+                    sku = "MAR-1",
+                    unit = "carton",
+                    secondaryUnit = "m²",
+                    secondaryUnitFactor = 1.59,
+                    stockQuantity = 4.0,
+                    imageDataUrl = "data:image/png;base64,abc",
+                ),
             ),
         )
         assertEquals("data:image/png;base64,abc", json["image_data_url"])
         assertEquals(
-            setOf("name", "sku", "unit", "stock_quantity", "image_data_url"),
+            setOf("name", "sku", "unit", "secondary_unit", "secondary_unit_factor", "stock_quantity", "image_data_url"),
             json.keys,
         )
     }
@@ -70,6 +80,37 @@ class ProductRequestWireContractTest {
 
         assertEquals("exclusive", exclusive["invoice_price_mode"])
         assertEquals("inclusive", inclusive["invoice_price_mode"])
+    }
+
+    @Test
+    fun productDetailAndCatalogPayloadsReadSecondaryUnits() {
+        val payload = """{"id":7,"name":"Tile","unit":"carton","secondary_unit":"m²","secondary_unit_factor":1.59,"stock_quantity":6,"price":20}"""
+        val product = requireNotNull(moshi.adapter(ProductDto::class.java).fromJson(payload))
+        assertEquals("carton", product.unit)
+        assertEquals("m²", product.secondaryUnit)
+        assertEquals(1.59, product.secondaryUnitFactor!!, 0.0)
+        assertEquals(6.0, product.stock, 0.0)
+    }
+
+    @Test
+    fun directCreationSerializesSecondaryUnitsAlongsidePriceMode() {
+        val json = parseMap(
+            moshi.adapter(CreateProductRequest::class.java).toJson(
+                CreateProductRequest(
+                    name = "Tile",
+                    sku = "T-1",
+                    unit = "carton",
+                    secondaryUnit = "m²",
+                    secondaryUnitFactor = 1.59,
+                    price = 20.0,
+                    invoicePriceMode = "inclusive",
+                ),
+            ),
+        )
+        assertEquals("carton", json["unit"])
+        assertEquals("m²", json["secondary_unit"])
+        assertEquals(1.59, json["secondary_unit_factor"])
+        assertEquals("inclusive", json["invoice_price_mode"])
     }
 
     @Test

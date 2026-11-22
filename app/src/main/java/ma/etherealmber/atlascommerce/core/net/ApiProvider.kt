@@ -14,7 +14,7 @@ import javax.inject.Singleton
 
 /** True when an app-wide interceptor must be excluded from startup resume preparation. */
 internal fun isStartupResumeExcludedInterceptor(interceptor: Interceptor): Boolean =
-    interceptor is AtlasHeaderInterceptor || interceptor is SessionGuardInterceptor
+    interceptor is AtlasHeaderInterceptor || interceptor is SessionGuardInterceptor || interceptor is RoleRefreshInterceptor
 
 /**
  * Builds the Retrofit client for the currently selected server.

@@ -203,9 +203,9 @@ internal fun AgentInlineActions(
                 showProductForm = false
                 productsViewModel.createProduct(request)
             },
-            onSubmitRequest = { code, name, sku, unit, quantity, category, note, photoUrl ->
+            onSubmitRequest = { code, name, sku, unit, secondaryUnit, secondaryUnitFactor, quantity, category, note, photoUrl ->
                 showProductForm = false
-                productsViewModel.submitProductRequest(code, name, sku, unit, quantity, category, note, photoUrl)
+                productsViewModel.submitProductRequest(code, name, sku, unit, secondaryUnit, secondaryUnitFactor, quantity, category, note, photoUrl)
             },
         )
     }

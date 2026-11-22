@@ -15,9 +15,11 @@ import kotlinx.coroutines.SupervisorJob
 import ma.etherealmber.atlascommerce.BuildConfig
 import ma.etherealmber.atlascommerce.core.net.AtlasDiagnosticDns
 import ma.etherealmber.atlascommerce.core.net.AtlasHeaderInterceptor
+import ma.etherealmber.atlascommerce.core.net.fingerprintForRequest
 import ma.etherealmber.atlascommerce.core.net.AtlasNetworkEventListener
 import ma.etherealmber.atlascommerce.core.net.SessionEvents
 import ma.etherealmber.atlascommerce.core.net.SessionGuardInterceptor
+import ma.etherealmber.atlascommerce.core.net.RoleRefreshInterceptor
 import ma.etherealmber.atlascommerce.core.net.SafeReadRetryInterceptor
 import ma.etherealmber.atlascommerce.core.net.TokenHolder
 import ma.etherealmber.atlascommerce.core.security.DeviceIdentity
@@ -62,6 +64,7 @@ object AppModule {
         tokenHolder: TokenHolder,
         deviceIdentity: DeviceIdentity,
         sessionEvents: SessionEvents,
+        moshi: Moshi,
     ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) {
@@ -82,6 +85,8 @@ object AppModule {
             // replay silently. SafeReadRetryInterceptor adds one bounded retry to GET/HEAD only.
             .retryOnConnectionFailure(false)
             .addInterceptor(AtlasHeaderInterceptor(tokenHolder, deviceIdentity))
+            // The explicit legacy ROLE_CHANGED contract rotates the bearer and retries once.
+            .addInterceptor(RoleRefreshInterceptor(tokenHolder, { deviceIdentity.fingerprintForRequest() }, sessionEvents, moshi))
             // Retry the same fully-headered request once only for safe reads; POST credentials
             // and mutations are never replayed, and TLS/protocol failures are not retried.
             .addInterceptor(SafeReadRetryInterceptor())

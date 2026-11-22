@@ -60,11 +60,7 @@ data class SessionUser(
         get() = "${serverUrl.trim().lowercase()}|${username.trim().lowercase()}|${role.trim().lowercase()}"
 }
 
-/**
- * `/api/auth/me` currently echoes role from the presented session token. Update profile fields,
- * but never treat that token/cached role as an authorization refresh. A server-side authoritative
- * role contract (with session invalidation semantics) must land before this can change.
- */
+/** `/api/auth/me` profile reads never change authorization; only ROLE_CHANGED role-refresh can. */
 internal fun SessionUser.withRefreshedProfile(me: MeDto): SessionUser = copy(
     username = me.username?.takeIf { it.isNotBlank() } ?: username,
     role = role,
@@ -152,6 +148,9 @@ class SessionManager @Inject constructor(
         scope.launch { initializeFreshSession() }
         // v1.2 FCM bridge — (re)register the device push token with the worker
         // whenever a session becomes active (password login, saved-account unlock, QR pairing).
+        scope.launch {
+            tokenHolder.roleRefreshes.collect { refreshed -> refreshed?.let { applyRoleRefresh(it) } }
+        }
         scope.launch {
             state
                 .map { (it as? SessionState.Active)?.user?.scopeIdentity }
@@ -556,6 +555,30 @@ class SessionManager @Inject constructor(
         preferences.removeSavedAccount(serverUrl, username)
         DeviceUnlockAuthenticator.forgetSavedAccountKey(serverUrl, username)
         offlineCache.clearAccountScope(serverUrl, username)
+    }
+
+    private suspend fun applyRoleRefresh(refreshed: ma.etherealmber.atlascommerce.core.net.RefreshedSessionRole) {
+        sessionTransitionMutex.withLock {
+            val active = _state.value as? SessionState.Active ?: return
+            if (tokenHolder.token != refreshed.token || refreshed.role.isBlank()) return
+            val updated = active.user.copy(role = refreshed.role)
+            _state.value = SessionState.Active(updated)
+            runCatching {
+                val cipher = cryptoStore.encrypt(refreshed.token)
+                preferences.writeSession(
+                    serverUrl = updated.serverUrl,
+                    tokenCipher = cipher,
+                    username = updated.username,
+                    role = updated.role,
+                    displayName = updated.displayName,
+                    email = updated.email,
+                    avatarUrl = updated.avatarUrl,
+                )
+                val saved = preferences.savedAccountsForServer(updated.serverUrl).first()
+                    .firstOrNull { it.username.equals(updated.username, ignoreCase = true) }
+                if (saved != null) preferences.upsertSavedAccount(saved.copy(role = updated.role, tokenCipher = cipher))
+            }
+        }
     }
 
     private suspend fun completeLogin(

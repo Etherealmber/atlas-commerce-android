@@ -63,9 +63,15 @@ fun ProductCreateDialog(
     initialName: String = "",
     initialSku: String = "",
     initialUnit: String = "unité",
+    initialSecondaryUnit: String = "",
+    initialSecondaryUnitFactor: String = "",
     initialQuantity: String = "0",
+    initialPrice: String = "",
+    initialInvoicePriceMode: String = "exclusive",
+    initialLowStockThreshold: String = "5",
     initialCategory: String = "",
     initialImageUrl: String? = null,
+    formTitle: String? = null,
     requesterName: String? = null,
     allowRequestOnly: Boolean = true,
     imageServerBaseUrl: String? = null,
@@ -77,6 +83,8 @@ fun ProductCreateDialog(
         name: String,
         sku: String?,
         unit: String,
+        secondaryUnit: String?,
+        secondaryUnitFactor: Double?,
         quantity: Double,
         category: String?,
         note: String?,
@@ -101,10 +109,12 @@ fun ProductCreateDialog(
         )
     }
     var unit by remember(initialUnit) { mutableStateOf(initialUnit.ifBlank { "unité" }) }
+    var secondaryUnit by remember(initialSecondaryUnit) { mutableStateOf(initialSecondaryUnit) }
+    var secondaryUnitFactorText by remember(initialSecondaryUnitFactor) { mutableStateOf(initialSecondaryUnitFactor) }
     var rawQty by remember(initialQuantity) { mutableStateOf(initialQuantity) }
-    var rawPrice by remember { mutableStateOf("") }
-    var invoicePriceMode by remember { mutableStateOf("exclusive") }
-    var rawThreshold by remember { mutableStateOf("5") }
+    var rawPrice by remember(initialPrice) { mutableStateOf(initialPrice) }
+    var invoicePriceMode by remember(initialInvoicePriceMode) { mutableStateOf(initialInvoicePriceMode) }
+    var rawThreshold by remember(initialLowStockThreshold) { mutableStateOf(initialLowStockThreshold) }
     var category by remember(initialCategory) { mutableStateOf(initialCategory) }
     var note by remember { mutableStateOf("") }
     var photoUrl by remember(initialImageUrl) { mutableStateOf(initialImageUrl) }
@@ -126,6 +136,12 @@ fun ProductCreateDialog(
 
     val parsedQty = rawQty.replace(',', '.').toDoubleOrNull()
     val parsedPrice = rawPrice.replace(',', '.').toDoubleOrNull()
+    val parsedSecondaryUnitFactor = secondaryUnitFactorText.replace(',', '.').toDoubleOrNull()
+    val secondaryUnitValid = when {
+        secondaryUnit.isBlank() && secondaryUnitFactorText.isBlank() -> true
+        secondaryUnit.isNotBlank() && parsedSecondaryUnitFactor != null -> parsedSecondaryUnitFactor > 0.0
+        else -> false
+    }
     val parsedThreshold = rawThreshold.replace(',', '.').toDoubleOrNull() ?: 5.0
 
     val reqNameOk = name.trim().length in 1..200
@@ -143,6 +159,7 @@ fun ProductCreateDialog(
         add((if (!canCreateDirectly || modeDirect) "SKU *" else "Code/SKU *") to reqCodeOrSkuOk)
         add("Unité *" to reqUnitOk)
         add("Qté *" to reqQtyOk)
+        add("Unité secondaire / facteur" to secondaryUnitValid)
         if (modeDirect) add("Prix *" to reqPriceOk)
     }
 
@@ -154,7 +171,7 @@ fun ProductCreateDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = if (canCreateDirectly && modeDirect) {
+                    text = formTitle ?: if (canCreateDirectly && modeDirect) {
                         atlasText("Nouveau produit (Création Admin)")
                     } else {
                         atlasText("Nouveau produit · Envoi à l'Admin")
@@ -306,6 +323,39 @@ fun ProductCreateDialog(
                         )
                     }
                 }
+                OutlinedTextField(
+                    value = unit,
+                    onValueChange = { unit = it },
+                    label = { Text(atlasText("Unité principale *")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = secondaryUnit,
+                        onValueChange = { secondaryUnit = it },
+                        label = { Text(atlasText("Unité secondaire (facultative)")) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = secondaryUnitFactorText,
+                        onValueChange = { value -> secondaryUnitFactorText = value.filter { it.isDigit() || it == '.' || it == ',' } },
+                        label = { Text(atlasText("Facteur")) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(0.75f),
+                    )
+                }
+                Text(
+                    atlasText(
+                        "Facteur = unités secondaires par unité principale (ex. 1 carton = 1,59 m²). Stock et prix restent en unité principale.",
+                        "Factor = secondary units per primary unit (e.g. 1 carton = 1.59 m²). Stock and prices stay in the primary unit.",
+                        "المعامل = عدد الوحدات الثانوية لكل وحدة أساسية. يبقى المخزون والسعر بالوحدة الأساسية.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ProductArtwork(
@@ -353,7 +403,7 @@ fun ProductCreateDialog(
                         OutlinedTextField(
                             value = rawQty,
                             onValueChange = { s -> rawQty = s.filter { it.isDigit() || it == '.' || it == ',' } },
-                            label = { Text(atlasText("Quantité *")) },
+                            label = { Text(atlasText("Quantité * · ${unit.ifBlank { "unité" }}", "Quantity * · ${unit.ifBlank { "unit" }}", "الكمية * · ${unit.ifBlank { "وحدة" }}")) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
@@ -392,7 +442,7 @@ fun ProductCreateDialog(
                     OutlinedTextField(
                         value = rawQty,
                         onValueChange = { s -> rawQty = s.filter { it.isDigit() || it == '.' || it == ',' } },
-                        label = { Text(atlasText("Quantité *")) },
+                        label = { Text(atlasText("Quantité * · ${unit.ifBlank { "unité" }}", "Quantity * · ${unit.ifBlank { "unit" }}", "الكمية * · ${unit.ifBlank { "وحدة" }}")) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth(),
@@ -448,6 +498,8 @@ fun ProductCreateDialog(
                                 name = name.trim(),
                                 sku = sku.trim(),
                                 unit = unit.trim().ifBlank { "unité" },
+                                secondaryUnit = secondaryUnit.trim().ifBlank { null },
+                                secondaryUnitFactor = parsedSecondaryUnitFactor,
                                 stockQuantity = qty,
                                 imageUrl = photoUrl,
                             ),
@@ -460,6 +512,8 @@ fun ProductCreateDialog(
                                 barcode = barcode.trim().ifBlank { null },
                                 category = category.trim().ifBlank { null },
                                 unit = unit.trim().ifBlank { "unité" },
+                                secondaryUnit = secondaryUnit.trim().ifBlank { null },
+                                secondaryUnitFactor = parsedSecondaryUnitFactor,
                                 price = parsedPrice ?: 0.0,
                                 invoicePriceMode = invoicePriceMode,
                                 stockQuantity = qty,
@@ -473,6 +527,8 @@ fun ProductCreateDialog(
                             name.trim(),
                             generatedSku,
                             unit.trim().ifBlank { "unité" },
+                            secondaryUnit.trim().ifBlank { null },
+                            parsedSecondaryUnitFactor,
                             qty,
                             category.trim().ifBlank { null },
                             note.trim().ifBlank { null },

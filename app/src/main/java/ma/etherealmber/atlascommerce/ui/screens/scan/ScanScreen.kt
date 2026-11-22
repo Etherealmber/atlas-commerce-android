@@ -627,9 +627,9 @@ fun ScanScreen(
                 showCreateDialog = false
                 viewModel.createProductFromScan(req)
             },
-            onSubmitRequest = { code, name, sku, unit, qty, cat, note, photoUrl ->
+            onSubmitRequest = { code, name, sku, unit, secondaryUnit, secondaryUnitFactor, qty, cat, note, photoUrl ->
                 showCreateDialog = false
-                viewModel.submitRequestFromScan(code, name, sku, unit, qty, cat, note, photoUrl)
+                viewModel.submitRequestFromScan(code, name, sku, unit, secondaryUnit, secondaryUnitFactor, qty, cat, note, photoUrl)
             },
         )
     }

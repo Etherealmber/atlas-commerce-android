@@ -253,9 +253,12 @@ data class TrustedDeviceDto(
     val friendlyLabel: String
         get() {
             val ua = userAgent.orEmpty()
+            val atlasAndroid = Regex("Atlas-Android/([^ ]+) \\(Android ([^;]+); ([^)]+)\\)", RegexOption.IGNORE_CASE).find(ua)
+            val atlasDesktop = Regex("Atlas-Desktop/([^ ]+) \\(([^)]+)\\)", RegexOption.IGNORE_CASE).find(ua)
             return when {
-                ua.contains("Atlas-Android", ignoreCase = true) ||
-                    ua.contains("okhttp", ignoreCase = true) -> "Atlas Android · Mobile"
+                atlasAndroid != null -> "Atlas Android ${atlasAndroid.groupValues[1]} · ${atlasAndroid.groupValues[3]} (Android ${atlasAndroid.groupValues[2]})"
+                atlasDesktop != null -> "Atlas Desktop ${atlasDesktop.groupValues[1]} · ${atlasDesktop.groupValues[2]}"
+                ua.contains("okhttp", ignoreCase = true) -> "Atlas Android · Mobile"
                 ua.contains("Android", ignoreCase = true) -> "Appareil Android"
                 ua.contains("iPhone", ignoreCase = true) || ua.contains("iPad", ignoreCase = true) -> "iPhone / iPad"
                 ua.contains("Windows", ignoreCase = true) && ua.contains("Edg", ignoreCase = true) -> "PC Windows · Edge"
@@ -708,6 +711,8 @@ data class ProductDto(
     val barcode: String? = null,
     val category: String? = null,
     val unit: String? = null,
+    @Json(name = "secondary_unit") val secondaryUnit: String? = null,
+    @Json(name = "secondary_unit_factor") val secondaryUnitFactor: Double? = null,
     val price: Double = 0.0,
     @Json(name = "stock_quantity") val stock: Double = 0.0,
     @Json(name = "low_stock_threshold") val lowStockThresholdRaw: Double? = null,
@@ -786,6 +791,8 @@ data class CreateProductRequest(
     val barcode: String? = null,
     val category: String? = null,
     val unit: String = "unité",
+    @Json(name = "secondary_unit") val secondaryUnit: String? = null,
+    @Json(name = "secondary_unit_factor") val secondaryUnitFactor: Double? = null,
     val price: Double = 0.0,
     @Json(name = "invoice_price_mode") val invoicePriceMode: String = "exclusive",
     @Json(name = "stock_quantity") val stockQuantity: Double = 0.0,
@@ -801,6 +808,8 @@ data class ProductCreationRequestDto(
     val name: String? = null,
     val sku: String? = null,
     val unit: String? = null,
+    @Json(name = "secondary_unit") val secondaryUnit: String? = null,
+    @Json(name = "secondary_unit_factor") val secondaryUnitFactor: Double? = null,
     val quantity: Double? = null,
     val category: String? = null,
     val note: String? = null,
@@ -816,6 +825,8 @@ data class SubmitProductRequestBody(
     val name: String,
     val sku: String? = null,
     val unit: String = "unité",
+    @Json(name = "secondary_unit") val secondaryUnit: String? = null,
+    @Json(name = "secondary_unit_factor") val secondaryUnitFactor: Double? = null,
     val quantity: Double = 1.0,
     val category: String? = null,
     val note: String? = null,
@@ -893,6 +904,8 @@ data class ProductRequestBody(
     val name: String = "",
     val sku: String = "",
     val unit: String = "unité",
+    @Json(name = "secondary_unit") val secondaryUnit: String? = null,
+    @Json(name = "secondary_unit_factor") val secondaryUnitFactor: Double? = null,
     @Json(name = "stock_quantity") val stockQuantity: Double = 0.0,
     @Json(name = "image_data_url") val imageDataUrl: String? = null,
     /** Read-only compatibility for requests created by older Android/web clients. */

@@ -217,6 +217,12 @@ interface AtlasApi {
     @POST("api/products")
     suspend fun createProduct(@Body body: CreateProductRequest): ApiEnvelope<ProductDto>
 
+    @PUT("api/products/{id}")
+    suspend fun updateProduct(
+        @Path("id") id: Long,
+        @Body body: CreateProductRequest,
+    ): ApiEnvelope<ProductDto>
+
     @HTTP(method = "DELETE", path = "api/products/{id}", hasBody = true)
     suspend fun deleteProduct(
         @Path("id") id: Long,

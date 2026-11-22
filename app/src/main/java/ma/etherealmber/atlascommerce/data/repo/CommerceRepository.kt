@@ -248,6 +248,9 @@ class CommerceRepository @Inject constructor(
     suspend fun createProduct(request: CreateProductRequest): ApiResult<ProductDto> =
         runner.envelope { apiProvider.api().createProduct(request) }
 
+    suspend fun updateProduct(productId: Long, request: CreateProductRequest): ApiResult<ProductDto> =
+        runner.envelope { apiProvider.api().updateProduct(productId, request) }
+
     suspend fun deleteProduct(productId: Long, password: String): ApiResult<String> {
         val result = runner.statusRaw { apiProvider.api().deleteProduct(productId, ProductDeleteRequest(confirmPassword = password)) }
         return when (result) {
@@ -302,6 +305,8 @@ class CommerceRepository @Inject constructor(
                         name = request.name,
                         sku = request.sku,
                         unit = request.unit,
+                        secondaryUnit = request.secondaryUnit,
+                        secondaryUnitFactor = request.secondaryUnitFactor,
                         stockQuantity = request.stockQuantity,
                         imageDataUrl = request.imageUrl,
                     ),
