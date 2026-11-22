@@ -98,7 +98,7 @@ fun EmployeeDirectoryScreen(user: SessionUser, viewModel: EmployeeDirectoryViewM
             AtlasEmptyState(icon = Icons.Outlined.Groups, title = atlasText("Aucun employé", "No employees", "لا يوجد موظفون"), message = atlasText("Aucune fiche ne correspond à cette vue.", "No employee records match this view.", "لا توجد ملفات مطابقة لهذا العرض."))
         }
         items(visible, key = { "employee-${it.id}" }) { employee ->
-            val nextPayment = employee.nextDue?.takeIf(String::isNotBlank)?.let(::atlasShortDate)
+            val nextPayment = employee.nextDue?.takeIf(String::isNotBlank)?.let { atlasShortDate(it) }
             AtlasCard(onClick = { viewModel.showDetails(employee.id) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -153,7 +153,7 @@ private fun EmployeeProfileDialog(employee: EmployeeDto, canEdit: Boolean, canMa
                             employee.lastPaidAt?.takeIf(String::isNotBlank)?.let { "${atlasText("Dernier paiement", "Last payment", "آخر دفعة")}: ${atlasShortDate(it)}" },
                             "${atlasText("Cycle de paie", "Pay cycle", "دورة الدفع")}: ${if (employee.payCycleType == "monthly") atlasText("Mensuel (30 jours)", "Monthly (30 days)", "شهري (30 يوماً)") else atlasText("Tous les ${employee.payCycleDays} jours", "Every ${employee.payCycleDays} days", "كل ${employee.payCycleDays} يوم")}",
                             "${atlasText("Montant journalier", "Daily pay", "الأجر اليومي")}: ${atlasMoney(employee.dailyRate, "MAD")}",
-                            if (employee.active == 0) atlasText("Statut : ancien employé", "Status: former employee", "الحالة: موظف سابق") else "${atlasText("Prochain paiement", "Next payment", "الدفعة التالية")}: ${employee.nextDue?.let(::atlasShortDate) ?: "—"}",
+                            if (employee.active == 0) atlasText("Statut : ancien employé", "Status: former employee", "الحالة: موظف سابق") else "${atlasText("Prochain paiement", "Next payment", "الدفعة التالية")}: ${employee.nextDue?.let { atlasShortDate(it) } ?: "—"}",
                         ).forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
                         if (canMarkFormer && employee.active != 0) {
                             TextButton(onClick = onMarkFormer) { Text(atlasText("Marquer comme ancien", "Mark as former", "تحديد كسابق")) }
@@ -165,7 +165,7 @@ private fun EmployeeProfileDialog(employee: EmployeeDto, canEdit: Boolean, canMa
                 items(employee.payments, key = { "payment-${it.id}" }) { payment ->
                     AtlasCard {
                         Text(atlasMoney(payment.amount, "MAD"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text(listOf(payment.periodLabel, payment.paidAt.takeIf(String::isNotBlank)?.let(::atlasShortDate), payment.note).filterNotNull().filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(listOf(payment.periodLabel, payment.paidAt.takeIf(String::isNotBlank)?.let { atlasShortDate(it) }, payment.note).filterNotNull().filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

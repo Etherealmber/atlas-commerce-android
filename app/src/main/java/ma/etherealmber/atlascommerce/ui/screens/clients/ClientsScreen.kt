@@ -108,7 +108,7 @@ private fun ClientCreditDetails(client: ClientDto, history: List<InvoiceDto>, cu
             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onClose) { Icon(Icons.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع")) }
+                        IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع")) }
                         Column(Modifier.weight(1f)) {
                             Text(client.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             Text(atlasText("Détails du crédit client", "Client credit details", "تفاصيل ائتمان العميل"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -132,7 +132,7 @@ private fun ClientCreditDetails(client: ClientDto, history: List<InvoiceDto>, cu
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(invoice.number?.takeIf(String::isNotBlank) ?: atlasText("Facture #${invoice.id}", "Invoice #${invoice.id}", "فاتورة #${invoice.id}"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                                Text(listOfNotNull(invoice.issueDate?.takeIf(String::isNotBlank)?.let(::atlasShortDate), invoice.dueDate?.takeIf(String::isNotBlank)?.let { "${atlasText("Échéance", "Due", "الاستحقاق")}: ${atlasShortDate(it)}" }, invoice.status).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(listOfNotNull(invoice.issueDate?.takeIf(String::isNotBlank)?.let { atlasShortDate(it) }, invoice.dueDate?.takeIf(String::isNotBlank)?.let { "${atlasText("Échéance", "Due", "الاستحقاق")}: ${atlasShortDate(it)}" }, invoice.status).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(atlasMoney(invoice.remaining, currency), fontWeight = FontWeight.Bold, color = if (invoice.remaining > 0.009) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)

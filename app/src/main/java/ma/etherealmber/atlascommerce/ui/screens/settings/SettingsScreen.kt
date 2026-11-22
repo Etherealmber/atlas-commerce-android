@@ -2345,6 +2345,7 @@ private fun settingsTabLabel(tab: MainTab): String = when (tab) {
     MainTab.PROFILE -> atlasText("Mon profil", "My profile", "ملفي الشخصي")
     MainTab.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
     MainTab.NOTIFICATIONS -> atlasText("Notifications", "Notifications", "الإشعارات")
+    MainTab.CLIENTS -> atlasText("Clients", "Clients", "العملاء")
 }
 
 @Composable
