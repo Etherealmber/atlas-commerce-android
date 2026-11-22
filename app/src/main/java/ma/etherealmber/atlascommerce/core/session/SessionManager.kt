@@ -60,6 +60,16 @@ data class SessionUser(
         get() = "${serverUrl.trim().lowercase()}|${username.trim().lowercase()}|${role.trim().lowercase()}"
 }
 
+/** `/api/auth/me` profile reads never change authorization; only ROLE_CHANGED role-refresh can. */
+internal fun SessionUser.withRefreshedProfile(me: MeDto): SessionUser = copy(
+    username = me.username?.takeIf { it.isNotBlank() } ?: username,
+    role = role,
+    displayName = me.displayName?.takeIf { it.isNotBlank() } ?: displayName,
+    email = me.email ?: email,
+    phone = me.phone ?: phone,
+    avatarUrl = me.avatarUrl?.takeIf { it.isNotBlank() } ?: avatarUrl,
+)
+
 sealed interface SessionState {
     data object Loading : SessionState
     data object SignedOut : SessionState
@@ -138,6 +148,9 @@ class SessionManager @Inject constructor(
         scope.launch { initializeFreshSession() }
         // v1.2 FCM bridge — (re)register the device push token with the worker
         // whenever a session becomes active (password login, saved-account unlock, QR pairing).
+        scope.launch {
+            tokenHolder.roleRefreshes.collect { refreshed -> refreshed?.let { applyRoleRefresh(it) } }
+        }
         scope.launch {
             state
                 .map { (it as? SessionState.Active)?.user?.scopeIdentity }
@@ -219,7 +232,13 @@ class SessionManager @Inject constructor(
             when (
                 val verification = StartupResumePreparation.verifyWithRetry(
                     request = request,
-                    validate = authRepository::validateStartupSession,
+                    validate = { serverUrl, bearerToken ->
+                        authRepository.validateStartupSession(
+                            serverUrl = serverUrl,
+                            savedBearerToken = bearerToken,
+                            fingerprint = deviceIdentity.fingerprint,
+                        )
+                    },
                 )
             ) {
                 is StartupSessionVerification.Valid -> {
@@ -259,7 +278,12 @@ class SessionManager @Inject constructor(
         if (username.isBlank()) return false
         val user = SessionUser(
             username = username,
-            role = profile.role?.takeIf { it.isNotBlank() } ?: stored.role.ifBlank { "user" },
+            // Ignore the role echoed by /auth/me; only a successful legacy role-refresh is authoritative.
+            role = if (profile.startupRoleRefreshValidated) {
+                profile.role?.takeIf(String::isNotBlank) ?: stored.role.ifBlank { "user" }
+            } else {
+                stored.role.ifBlank { "user" }
+            },
             displayName = profile.displayName?.takeIf { it.isNotBlank() } ?: stored.displayName.ifBlank { username },
             email = profile.email ?: stored.email,
             phone = profile.phone.orEmpty(),
@@ -481,6 +505,9 @@ class SessionManager @Inject constructor(
             )
         }.baseUrl
         purgeInMemorySessionAndPersist()
+        // The token holder is about to belong to the saved account, so do not leave the
+        // previous account visible to an in-flight role-refresh event.
+        _state.value = SessionState.Loading
         val selectedServer = serverConfig.select(savedServerUrl, rememberServer = false)
         if (selectedServer.isFailure) {
             tokenHolder.clear()
@@ -498,6 +525,7 @@ class SessionManager @Inject constructor(
         when (val verify = authRepository.me()) {
             is ApiResult.Failure -> {
                 tokenHolder.clear()
+                _state.value = SessionState.SignedOut
                 // Keep the encrypted account and its opt-in unlock setting on
                 // transient network/server failures. Only a definitive 401
                 // means the saved token can no longer authenticate.
@@ -515,13 +543,18 @@ class SessionManager @Inject constructor(
             is ApiResult.Success -> {
                 val me = verify.data
                 val resolvedUser = (me.username?.takeIf { it.isNotBlank() } ?: entry.username).lowercase(Locale.ROOT)
-                val resolvedRole = me.role?.takeIf { it.isNotBlank() } ?: entry.role.ifBlank { "user" }
+                val resolvedToken = tokenHolder.token?.takeIf(String::isNotBlank) ?: token
+                val refreshedRole = tokenHolder.roleRefreshes.value?.takeIf {
+                    it.previousToken == token && it.token == resolvedToken
+                }?.role
+                // /auth/me's role is not authoritative; only the exact legacy role-refresh response is.
+                val resolvedRole = refreshedRole ?: entry.role.ifBlank { "user" }
                 val resolvedDisplay = me.displayName?.takeIf { it.isNotBlank() } ?: entry.displayName.ifBlank { resolvedUser }
                 val resolvedEmail = me.email ?: entry.email
                 val resolvedAvatar = me.avatarUrl?.takeIf { it.isNotBlank() } ?: entry.avatarUrl
                 activateIsolatedSession(
                     serverUrl = savedServerUrl,
-                    token = token,
+                    token = resolvedToken,
                     username = resolvedUser,
                     role = resolvedRole,
                     displayName = resolvedDisplay,
@@ -529,7 +562,7 @@ class SessionManager @Inject constructor(
                     avatarUrl = resolvedAvatar,
                     phone = me.phone.orEmpty(),
                     rememberAccount = true,
-                    savedAccountTokenCipher = entry.tokenCipher,
+                    savedAccountTokenCipher = entry.tokenCipher.takeIf { resolvedToken == token },
                 )
                 return ApiResult.Success(Unit)
             }
@@ -540,6 +573,30 @@ class SessionManager @Inject constructor(
         preferences.removeSavedAccount(serverUrl, username)
         DeviceUnlockAuthenticator.forgetSavedAccountKey(serverUrl, username)
         offlineCache.clearAccountScope(serverUrl, username)
+    }
+
+    private suspend fun applyRoleRefresh(refreshed: ma.etherealmber.atlascommerce.core.net.RefreshedSessionRole) {
+        sessionTransitionMutex.withLock {
+            val active = _state.value as? SessionState.Active ?: return
+            if (tokenHolder.token != refreshed.token || refreshed.role.isBlank()) return
+            val updated = active.user.copy(role = refreshed.role)
+            _state.value = SessionState.Active(updated)
+            runCatching {
+                val cipher = cryptoStore.encrypt(refreshed.token)
+                preferences.writeSession(
+                    serverUrl = updated.serverUrl,
+                    tokenCipher = cipher,
+                    username = updated.username,
+                    role = updated.role,
+                    displayName = updated.displayName,
+                    email = updated.email,
+                    avatarUrl = updated.avatarUrl,
+                )
+                val saved = preferences.savedAccountsForServer(updated.serverUrl).first()
+                    .firstOrNull { it.username.equals(updated.username, ignoreCase = true) }
+                if (saved != null) preferences.upsertSavedAccount(saved.copy(role = updated.role, tokenCipher = cipher))
+            }
+        }
     }
 
     private suspend fun completeLogin(
@@ -664,24 +721,18 @@ class SessionManager @Inject constructor(
         if (result !is ApiResult.Success) return
 
         sessionTransitionMutex.withLock {
-            if (!isProfileRefreshCurrent(
-                    expectedScopeIdentity = current.scopeIdentity,
-                    expectedToken = tokenAtRequest,
-                    activeScopeIdentity = (_state.value as? SessionState.Active)?.user?.scopeIdentity,
-                    activeToken = tokenHolder.token,
-                )
-            ) return@withLock
+            val activeUser = (_state.value as? SessionState.Active)?.user
+            val activeToken = tokenHolder.token
+            val pendingRoleRefresh = tokenHolder.roleRefreshes.value?.takeIf {
+                it.previousToken == tokenAtRequest && it.token == activeToken
+            }
+            val sameSession = activeUser?.scopeIdentity == current.scopeIdentity &&
+                (activeToken == tokenAtRequest || pendingRoleRefresh != null)
+            if (!sameSession) return@withLock
 
             val me = result.data
-            val updated = current.copy(
-                username = me.username?.takeIf { it.isNotBlank() } ?: current.username,
-                role = me.role?.takeIf { it.isNotBlank() } ?: current.role,
-                displayName = me.displayName?.takeIf { it.isNotBlank() } ?: current.displayName,
-                email = me.email ?: current.email,
-                phone = me.phone ?: current.phone,
-                avatarUrl = me.avatarUrl?.takeIf { it.isNotBlank() } ?: current.avatarUrl,
-            )
-            val currentToken = validatedSessionToken(me.token, tokenAtRequest)
+            val updated = current.withRefreshedProfile(me).copy(role = pendingRoleRefresh?.role ?: current.role)
+            val currentToken = validatedSessionToken(me.token, activeToken ?: tokenAtRequest)
             val tokenRotated = currentToken != tokenAtRequest
             tokenHolder.set(currentToken)
             _state.value = SessionState.Active(updated)

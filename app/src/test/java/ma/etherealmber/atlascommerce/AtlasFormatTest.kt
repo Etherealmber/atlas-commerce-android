@@ -216,13 +216,13 @@ class MarkdownParserTest {
         assertFalse(Roles.canViewFinancials("stock"))
         assertFalse(Roles.canViewFinancials("user"))
 
-        // 2. Balance replaces Vente for every role; employee payroll stays admin-only.
+        // 2. Balance replaces Vente; employee directory is available to admin and secretary roles.
         assertEquals(
             listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.EMPLOYEES),
             MainTab.bottomTabsForRole("admin"),
         )
         val nonAdminTabs = listOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE)
-        assertEquals(nonAdminTabs, MainTab.bottomTabsForRole("secretaire"))
+        assertEquals(nonAdminTabs + MainTab.EMPLOYEES, MainTab.bottomTabsForRole("secretaire"))
         assertEquals(listOf(MainTab.HOME, MainTab.SCAN, MainTab.PRODUCTS), MainTab.bottomTabsForRole("stock"))
         assertEquals(listOf(MainTab.HOME, MainTab.SCAN, MainTab.PRODUCTS), MainTab.bottomTabsForRole("magasinier"))
         assertEquals(nonAdminTabs, MainTab.bottomTabsForRole("user"))

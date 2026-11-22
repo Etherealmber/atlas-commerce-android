@@ -195,6 +195,7 @@ internal fun AgentInlineActions(
     if (showProductForm) {
         ProductCreateDialog(
             canCreateDirectly = Roles.canCreateProductDirectly(user.role),
+            requesterName = user.displayName.ifBlank { user.username },
             imageServerBaseUrl = user.serverUrl,
             submitting = productState.submitting,
             onDismiss = { showProductForm = false },
@@ -202,9 +203,9 @@ internal fun AgentInlineActions(
                 showProductForm = false
                 productsViewModel.createProduct(request)
             },
-            onSubmitRequest = { code, name, sku, unit, quantity, category, note, photoUrl ->
+            onSubmitRequest = { code, name, sku, unit, secondaryUnit, secondaryUnitFactor, quantity, category, note, photoUrl ->
                 showProductForm = false
-                productsViewModel.submitProductRequest(code, name, sku, unit, quantity, category, note, photoUrl)
+                productsViewModel.submitProductRequest(code, name, sku, unit, secondaryUnit, secondaryUnitFactor, quantity, category, note, photoUrl)
             },
         )
     }

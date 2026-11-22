@@ -376,8 +376,6 @@ class ScanViewModel @Inject constructor(
                 val res = commerceRepository.submitProductForRole(
                     request = request,
                     role = activeUser?.role,
-                    username = activeUser?.username,
-                    note = request.description,
                 )
             ) {
                 is ApiResult.Failure -> {
@@ -420,6 +418,8 @@ class ScanViewModel @Inject constructor(
         name: String,
         sku: String?,
         unit: String,
+        secondaryUnit: String?,
+        secondaryUnitFactor: Double?,
         quantity: Double,
         category: String?,
         note: String?,
@@ -434,6 +434,8 @@ class ScanViewModel @Inject constructor(
                     barcode = code,
                     category = category,
                     unit = unit,
+                    secondaryUnit = secondaryUnit,
+                    secondaryUnitFactor = secondaryUnitFactor,
                     price = 0.0,
                     stockQuantity = quantity,
                     description = note,
@@ -451,6 +453,8 @@ class ScanViewModel @Inject constructor(
                         name = name,
                         sku = sku,
                         unit = unit,
+                        secondaryUnit = secondaryUnit,
+                        secondaryUnitFactor = secondaryUnitFactor,
                         quantity = quantity,
                         category = category,
                         note = note,

@@ -32,11 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Refresh
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -248,18 +244,24 @@ internal fun ProductHistoryScreen(
                     }
                 }
                 val creator = product.createdBy?.takeIf { it.isNotBlank() }
-                    ?: atlasText("non renseigné", "not recorded", "غير مسجل")
                 val approver = product.approvedBy?.takeIf { it.isNotBlank() }
-                    ?: atlasText("non transmis par le serveur", "not supplied by the server", "غير متوفر من الخادم")
-                Text(
-                    atlasText(
+                val productAttribution = when {
+                    creator != null && approver != null -> atlasText(
                         "Créé par $creator · Approuvé par $approver",
                         "Created by $creator · Approved by $approver",
                         "أنشأه $creator · اعتمده $approver",
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                    )
+                    creator != null -> atlasText("Créé par $creator", "Created by $creator", "أنشأه $creator")
+                    approver != null -> atlasText("Approuvé par $approver", "Approved by $approver", "اعتمده $approver")
+                    else -> null
+                }
+                if (productAttribution != null) {
+                    Text(
+                        productAttribution,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (!state.imageError.isNullOrBlank()) {
                     Spacer(Modifier.height(8.dp))
                     Text(state.imageError.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
@@ -268,9 +270,9 @@ internal fun ProductHistoryScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AtlasChip(
                         text = atlasText(
-                            "Stock ${productStockDisplay(product.stock, product.unit)}",
-                            "Stock ${productStockDisplay(product.stock, product.unit)}",
-                            "المخزون ${productStockDisplay(product.stock, product.unit)}",
+                            "Stock ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                            "Stock ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                            "المخزون ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
                         ),
                         tone = productStockTone(product.stock, product.trackInventory),
                     )
@@ -461,17 +463,23 @@ private fun ProductMovementRow(movement: ProductMovementDto) {
             Text(details, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         val actor = movement.createdBy?.takeIf { it.isNotBlank() }
-            ?: atlasText("non renseigné", "not recorded", "غير مسجل")
         val approver = movement.approvedBy?.takeIf { it.isNotBlank() }
-            ?: atlasText("non transmis par le serveur", "not supplied by the server", "غير متوفر من الخادم")
-        Text(
-            atlasText(
+        val movementAttribution = when {
+            actor != null && approver != null -> atlasText(
                 "Créé par $actor · Approuvé par $approver",
                 "Created by $actor · Approved by $approver",
                 "أنشأه $actor · اعتمده $approver",
-            ),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+            )
+            actor != null -> atlasText("Créé par $actor", "Created by $actor", "أنشأه $actor")
+            approver != null -> atlasText("Approuvé par $approver", "Approved by $approver", "اعتمده $approver")
+            else -> null
+        }
+        if (movementAttribution != null) {
+            Text(
+                movementAttribution,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

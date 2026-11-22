@@ -32,17 +32,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.CameraAlt
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Computer
-import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.Send
-import androidx.compose.material.icons.outlined.ShoppingCart
-import androidx.compose.material.icons.outlined.Videocam
-import androidx.compose.material.icons.outlined.VideocamOff
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
@@ -93,6 +83,7 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.ProductCreateDialog
 import ma.etherealmber.atlascommerce.ui.components.ScanFeedback
+import ma.etherealmber.atlascommerce.ui.screens.products.productStockDisplay
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
@@ -461,9 +452,9 @@ fun ScanScreen(
                     if (scannedProduct.trackInventory) {
                         Text(
                             atlasText(
-                                "Stock : ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
-                                "Stock: ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
-                                "المخزون: ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
+                                "Stock : ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
+                                "Stock: ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
+                                "المخزون: ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
                             ),
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -547,9 +538,9 @@ fun ScanScreen(
                     Text(scannedProduct.name, style = MaterialTheme.typography.titleSmall)
                     Text(
                         atlasText(
-                            "Stock actuel : ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
-                            "Current stock: ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
-                            "المخزون الحالي: ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
+                            "Stock actuel : ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
+                            "Current stock: ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
+                            "المخزون الحالي: ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -617,6 +608,7 @@ fun ScanScreen(
         ProductCreateDialog(
             canCreateDirectly = isAdmin,
             initialBarcode = state.lastCode.orEmpty(),
+            requesterName = user.displayName.ifBlank { user.username },
             imageServerBaseUrl = user.serverUrl,
             submitting = state.creating,
             onDismiss = {
@@ -626,9 +618,9 @@ fun ScanScreen(
                 showCreateDialog = false
                 viewModel.createProductFromScan(req)
             },
-            onSubmitRequest = { code, name, sku, unit, qty, cat, note, photoUrl ->
+            onSubmitRequest = { code, name, sku, unit, secondaryUnit, secondaryUnitFactor, qty, cat, note, photoUrl ->
                 showCreateDialog = false
-                viewModel.submitRequestFromScan(code, name, sku, unit, qty, cat, note, photoUrl)
+                viewModel.submitRequestFromScan(code, name, sku, unit, secondaryUnit, secondaryUnitFactor, qty, cat, note, photoUrl)
             },
         )
     }

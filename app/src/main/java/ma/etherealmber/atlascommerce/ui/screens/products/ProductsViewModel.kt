@@ -255,8 +255,6 @@ class ProductsViewModel @Inject constructor(
                 val res = commerceRepository.submitProductForRole(
                     request = request,
                     role = activeUser?.role,
-                    username = activeUser?.username,
-                    note = request.description,
                 )
             ) {
                 is ApiResult.Failure -> {
@@ -289,11 +287,35 @@ class ProductsViewModel @Inject constructor(
         }
     }
 
+    fun updateProduct(productId: Long, request: CreateProductRequest) {
+        viewModelScope.launch {
+            val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
+            if (!Roles.canCreateProductDirectly(activeUser?.role)) {
+                _messages.tryEmit("Seul un Administrateur peut modifier un produit.")
+                return@launch
+            }
+            _state.update { it.copy(submitting = true) }
+            when (val result = commerceRepository.updateProduct(productId, request)) {
+                is ApiResult.Failure -> {
+                    _state.update { it.copy(submitting = false) }
+                    _messages.tryEmit(result.message)
+                }
+                is ApiResult.Success -> {
+                    _state.update { it.copy(submitting = false) }
+                    _messages.tryEmit("Produit « ${result.data.name} » mis à jour.")
+                    fetchState(query = _state.value.query, initial = false)
+                }
+            }
+        }
+    }
+
     fun submitProductRequest(
         code: String,
         name: String,
         sku: String?,
         unit: String,
+        secondaryUnit: String?,
+        secondaryUnitFactor: Double?,
         quantity: Double,
         category: String?,
         note: String?,
@@ -308,6 +330,8 @@ class ProductsViewModel @Inject constructor(
                     barcode = code,
                     category = category,
                     unit = unit,
+                    secondaryUnit = secondaryUnit,
+                    secondaryUnitFactor = secondaryUnitFactor,
                     price = 0.0,
                     stockQuantity = quantity,
                     description = note,
@@ -325,6 +349,8 @@ class ProductsViewModel @Inject constructor(
                         name = name,
                         sku = sku,
                         unit = unit,
+                        secondaryUnit = secondaryUnit,
+                        secondaryUnitFactor = secondaryUnitFactor,
                         quantity = quantity,
                         category = category,
                         note = note,

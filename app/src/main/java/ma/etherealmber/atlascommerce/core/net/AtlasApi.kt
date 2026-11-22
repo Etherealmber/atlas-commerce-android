@@ -42,6 +42,8 @@ import ma.etherealmber.atlascommerce.data.model.MobileWorkStatusDto
 import ma.etherealmber.atlascommerce.data.model.OtpRequest
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.ProductUnitDto
+import ma.etherealmber.atlascommerce.data.model.UpdateProductRequest
 import ma.etherealmber.atlascommerce.data.model.ProductImageDto
 import ma.etherealmber.atlascommerce.data.model.ProductImageUploadRequest
 import ma.etherealmber.atlascommerce.data.model.ProductMovementDto
@@ -54,6 +56,8 @@ import ma.etherealmber.atlascommerce.data.model.QrSessionStatusDto
 import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
 import ma.etherealmber.atlascommerce.data.model.RejectMobileActionRequest
 import ma.etherealmber.atlascommerce.data.model.RevokeDeviceRequest
+import ma.etherealmber.atlascommerce.data.model.StartupRoleRefreshRequest
+import ma.etherealmber.atlascommerce.data.model.StartupRoleRefreshDto
 import ma.etherealmber.atlascommerce.data.model.StockAdjustRequest
 import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestBody
 import ma.etherealmber.atlascommerce.data.model.StockAdjustmentRequestDto
@@ -115,6 +119,10 @@ interface AtlasApi {
 
     @GET("api/auth/me")
     suspend fun me(): ApiEnvelope<MeDto>
+
+    /** Legacy v2 role refresh is invoked only after the exact HTTP 409 / ROLE_CHANGED response. */
+    @POST("api/auth/role-refresh")
+    suspend fun refreshLegacyRole(@Body body: StartupRoleRefreshRequest): ApiEnvelope<StartupRoleRefreshDto>
 
     /** Read-only status for the signed-in account; no tracker credentials are sent by the app. */
     @GET("api/mobile/work-status")
@@ -200,6 +208,9 @@ interface AtlasApi {
 
     // --- Core commerce ---
 
+    @GET("api/units")
+    suspend fun productUnits(): ApiEnvelope<List<ProductUnitDto>>
+
     @GET("api/dashboard")
     suspend fun dashboard(): ApiEnvelope<DashboardDto>
 
@@ -216,6 +227,12 @@ interface AtlasApi {
 
     @POST("api/products")
     suspend fun createProduct(@Body body: CreateProductRequest): ApiEnvelope<ProductDto>
+
+    @PUT("api/products/{id}")
+    suspend fun updateProduct(
+        @Path("id") id: Long,
+        @Body body: UpdateProductRequest,
+    ): ApiEnvelope<ProductDto>
 
     @HTTP(method = "DELETE", path = "api/products/{id}", hasBody = true)
     suspend fun deleteProduct(
@@ -292,6 +309,9 @@ interface AtlasApi {
 
     @GET("api/mobile-actions/stats")
     suspend fun mobileActionStats(): ApiEnvelope<MobileActionStatsDto>
+
+    @GET("api/mobile-actions/{id}")
+    suspend fun mobileAction(@Path("id") id: Long): ApiEnvelope<MobileActionDto>
 
     @POST("api/mobile-actions")
     suspend fun createMobileAction(@Body body: CreateMobileActionRequest): ActionAckDto
@@ -411,7 +431,10 @@ interface AtlasApi {
     ): Response<ResponseBody>
 
     @GET("api/invoices")
-    suspend fun invoices(@Query("kind") kind: String = "all"): ApiEnvelope<List<InvoiceDto>>
+    suspend fun invoices(
+        @Query("kind") kind: String = "all",
+        @Query("client") clientId: Long? = null,
+    ): ApiEnvelope<List<InvoiceDto>>
 
     @POST("api/invoices")
     suspend fun createInvoice(

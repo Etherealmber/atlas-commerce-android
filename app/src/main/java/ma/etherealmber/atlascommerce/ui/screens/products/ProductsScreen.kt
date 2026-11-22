@@ -47,17 +47,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.AddShoppingCart
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.QrCodeScanner
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Remove
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Send
-import androidx.compose.material.icons.outlined.ViewList
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -124,6 +114,7 @@ fun ProductsScreen(
     val listLayout by viewModel.listLayout.collectAsStateWithLifecycle()
     val density = Atlas.density
     var selected by remember { mutableStateOf<ProductDto?>(null) }
+    var editingProduct by remember { mutableStateOf<ProductDto?>(null) }
     var historyTarget by remember { mutableStateOf<ProductDto?>(null) }
     var adjustTarget by remember { mutableStateOf<ProductDto?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -593,7 +584,7 @@ fun ProductsScreen(
                                     wideLayout = wideLayout,
                                     listLayout = listLayout,
                                     onOpen = {
-                                        if (canSell) historyTarget = product else selected = product
+                                        if (canSell && !isAdmin) historyTarget = product else selected = product
                                     },
                                     onAdd = {
                                         if (canSell) viewModel.addToCart(product)
@@ -614,6 +605,7 @@ fun ProductsScreen(
         ProductCreateDialog(
             canCreateDirectly = isAdmin,
             initialBarcode = state.query.trim().takeIf { it.all(Char::isDigit) && it.length >= 6 }.orEmpty(),
+            requesterName = user.displayName.ifBlank { user.username },
             imageServerBaseUrl = user.serverUrl,
             submitting = state.submitting,
             onDismiss = { showCreateDialog = false },
@@ -621,9 +613,9 @@ fun ProductsScreen(
                 showCreateDialog = false
                 viewModel.createProduct(req)
             },
-            onSubmitRequest = { code, name, sku, unit, qty, cat, note, photoUrl ->
+            onSubmitRequest = { code, name, sku, unit, secondaryUnit, secondaryUnitFactor, qty, cat, note, photoUrl ->
                 showCreateDialog = false
-                viewModel.submitProductRequest(code, name, sku, unit, qty, cat, note, photoUrl)
+                viewModel.submitProductRequest(code, name, sku, unit, secondaryUnit, secondaryUnitFactor, qty, cat, note, photoUrl)
             },
         )
     }
@@ -636,9 +628,12 @@ fun ProductsScreen(
             initialName = fulfill.name.orEmpty(),
             initialSku = fulfill.sku.orEmpty(),
             initialUnit = fulfill.unit ?: "unité",
+            initialSecondaryUnit = fulfill.secondaryUnit.orEmpty(),
+            initialSecondaryUnitFactor = fulfill.secondaryUnitFactor?.let { atlasQuantity(it) }.orEmpty(),
             initialQuantity = fulfill.quantity?.let { atlasQuantity(it) } ?: "1",
             initialCategory = fulfill.category.orEmpty(),
             initialImageUrl = fulfill.photoUrl,
+            requesterName = user.displayName.ifBlank { user.username },
             imageServerBaseUrl = user.serverUrl,
             submitting = state.submitting,
             onDismiss = { pendingFulfillRequest = null },
@@ -646,9 +641,9 @@ fun ProductsScreen(
                 pendingFulfillRequest = null
                 viewModel.createProduct(req, fulfillingRequestId = fulfill.id)
             },
-            onSubmitRequest = { code, name, sku, unit, qty, cat, note, photoUrl ->
+            onSubmitRequest = { code, name, sku, unit, secondaryUnit, secondaryUnitFactor, qty, cat, note, photoUrl ->
                 pendingFulfillRequest = null
-                viewModel.submitProductRequest(code, name, sku, unit, qty, cat, note, photoUrl)
+                viewModel.submitProductRequest(code, name, sku, unit, secondaryUnit, secondaryUnitFactor, qty, cat, note, photoUrl)
             },
         )
     }
@@ -661,7 +656,12 @@ fun ProductsScreen(
             canSell = canSell,
             canDirectlyAdjustStock = canAdjustStock,
             canChangeStock = canChangeStock,
+            canEditProduct = isAdmin,
             onDismiss = { selected = null },
+            onEdit = {
+                editingProduct = product
+                selected = null
+            },
             onAdd = { quantity ->
                 viewModel.addToCart(product, quantity)
                 selected = null
@@ -674,6 +674,34 @@ fun ProductsScreen(
                 adjustTarget = product
                 selected = null
             },
+        )
+    }
+
+    val editProduct = editingProduct
+    if (editProduct != null && isAdmin) {
+        ProductCreateDialog(
+            canCreateDirectly = true,
+            allowRequestOnly = false,
+            initialBarcode = editProduct.barcode.orEmpty(),
+            initialName = editProduct.name,
+            initialSku = editProduct.sku.orEmpty(),
+            initialUnit = editProduct.unit ?: "unité",
+            initialSecondaryUnit = editProduct.secondaryUnit.orEmpty(),
+            initialSecondaryUnitFactor = editProduct.secondaryUnitFactor?.toString().orEmpty(),
+            initialQuantity = editProduct.stock.toString(),
+            initialPrice = editProduct.price.toString(),
+            initialLowStockThreshold = editProduct.lowStockThreshold.toString(),
+            initialCategory = editProduct.category.orEmpty(),
+            initialImageUrl = editProduct.imageUrl,
+            formTitle = "Modifier le produit",
+            imageServerBaseUrl = user.serverUrl,
+            submitting = state.submitting,
+            onDismiss = { editingProduct = null },
+            onSubmitDirect = { request ->
+                viewModel.updateProduct(editProduct.id, request)
+                editingProduct = null
+            },
+            onSubmitRequest = { _, _, _, _, _, _, _, _, _, _ -> },
         )
     }
 
@@ -742,7 +770,7 @@ private fun ProductRequestRow(
                         atlasText("Code ${request.code}", "Code ${request.code}", "الرمز ${request.code}"),
                         request.sku?.takeIf { it.isNotBlank() }?.let { "SKU $it" },
                         request.quantity?.let {
-                            "${atlasQuantity(it)} ${request.unit ?: atlasText("unité", "unit", "وحدة")}"
+                            productStockDisplay(it, request.unit ?: atlasText("unité", "unit", "وحدة"), request.secondaryUnit, request.secondaryUnitFactor)
                         },
                     ).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
@@ -975,9 +1003,9 @@ private fun ProductMetaChips(product: ProductDto, currency: String) {
     ) {
         AtlasChip(
             text = atlasText(
-                "Stock ${productStockDisplay(product.stock, product.unit)}",
-                "Stock ${productStockDisplay(product.stock, product.unit)}",
-                "المخزون ${productStockDisplay(product.stock, product.unit)}",
+                "Stock ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                "Stock ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                "المخزون ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
             ),
             tone = productStockTone(product.stock, product.trackInventory),
         )
@@ -987,7 +1015,12 @@ private fun ProductMetaChips(product: ProductDto, currency: String) {
                 tone = if (product.isOutOfStock) AtlasTone.DANGER else AtlasTone.WARNING,
             )
         }
-        AtlasChip(text = atlasMoney(product.price, currency))
+        AtlasChip(text = "${atlasMoney(product.price, currency)} / ${product.unit.orEmpty()}")
+        product.secondaryUnit?.takeIf { it.isNotBlank() }?.let { secondary ->
+            product.secondaryUnitFactor?.let { factor ->
+                AtlasChip(text = "1 ${product.unit.orEmpty()} = ${atlasQuantity(factor)} $secondary")
+            }
+        }
     }
 }
 
@@ -999,7 +1032,9 @@ private fun ProductDetailDialog(
     canSell: Boolean,
     canDirectlyAdjustStock: Boolean,
     canChangeStock: Boolean,
+    canEditProduct: Boolean,
     onDismiss: () -> Unit,
+    onEdit: () -> Unit,
     onAdd: (Double) -> Unit,
     onOpenSale: () -> Unit,
     onAdjustStock: () -> Unit,
@@ -1024,13 +1059,22 @@ private fun ProductDetailDialog(
                     )
                     Spacer(Modifier.height(10.dp))
                 }
+                product.secondaryUnit?.takeIf { it.isNotBlank() }?.let { secondary ->
+                    val factor = product.secondaryUnitFactor
+                    Text(
+                        text = if (factor != null) "1 ${product.unit.orEmpty()} = ${atlasQuantity(factor)} $secondary" else secondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AtlasChip(text = atlasText("Prix ${atlasMoney(product.price, currency)}", "Price ${atlasMoney(product.price, currency)}", "السعر ${atlasMoney(product.price, currency)}"))
+                    AtlasChip(text = atlasText("Prix ${atlasMoney(product.price, currency)} / ${product.unit.orEmpty()}", "Price ${atlasMoney(product.price, currency)} / ${product.unit.orEmpty()}", "السعر ${atlasMoney(product.price, currency)} / ${product.unit.orEmpty()}"))
                     AtlasChip(
                         text = atlasText(
-                            "Stock ${productStockDisplay(product.stock, product.unit)}",
-                            "Stock ${productStockDisplay(product.stock, product.unit)}",
-                            "المخزون ${productStockDisplay(product.stock, product.unit)}",
+                            "Stock ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                            "Stock ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                            "المخزون ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
                         ),
                         tone = productStockTone(product.stock, product.trackInventory),
                     )
@@ -1082,6 +1126,9 @@ private fun ProductDetailDialog(
                 horizontalArrangement = Arrangement.End,
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
+                if (canEditProduct) {
+                    TextButton(onClick = onEdit) { Text(atlasText("Modifier le produit", "Edit product", "تعديل المنتج")) }
+                }
                 if (product.trackInventory && canChangeStock) {
                     TextButton(onClick = onAdjustStock) {
                         Text(
@@ -1131,9 +1178,9 @@ private fun StockAdjustDialog(
                 )
                 Text(
                     text = atlasText(
-                        "Stock actuel : ${productStockDisplay(product.stock, product.unit)}",
-                        "Current stock: ${productStockDisplay(product.stock, product.unit)}",
-                        "المخزون الحالي: ${productStockDisplay(product.stock, product.unit)}",
+                        "Stock actuel : ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                        "Current stock: ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                        "المخزون الحالي: ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1169,7 +1216,7 @@ private fun StockAdjustDialog(
                     onValueChange = { input ->
                         rawQuantity = input.filter { it.isDigit() || it == '.' || it == ',' }
                     },
-                    label = { Text(atlasText("Quantité")) },
+                    label = { Text(atlasText("Quantité · ${product.unit.orEmpty()}", "Quantity · ${product.unit.orEmpty()}", "الكمية · ${product.unit.orEmpty()}")) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),

@@ -25,16 +25,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AdminPanelSettings
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.NotificationsActive
-import androidx.compose.material.icons.outlined.NotificationsNone
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Send
-import androidx.compose.material.icons.outlined.Warning
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ma.etherealmber.atlascommerce.core.RoleTarget
 import ma.etherealmber.atlascommerce.data.model.AlertItemDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionDto
+import ma.etherealmber.atlascommerce.ui.components.ProductCreateDialog
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -86,6 +80,7 @@ fun NotificationsScreen(
     val density = Atlas.density
     val roleLabel = atlasRoleLabel(state.role)
     var showComposeDialog by remember { mutableStateOf(false) }
+    var productActionToCreateId by remember { mutableStateOf<Long?>(null) }
     val systemNotificationsEnabled = runCatching {
         NotificationManagerCompat.from(context).areNotificationsEnabled()
     }.getOrDefault(true)
@@ -249,7 +244,11 @@ fun NotificationsScreen(
                         AtlasSectionHeader(
                             title = atlasText("Demandes & notifications par rôle"),
                             subtitle = if (state.isAdmin) {
-                                atlasText("Validez en 1 clic les demandes produits envoyées par l'équipe")
+                                atlasText(
+                                    "Examinez les demandes produit, puis indiquez le prix et le mode TVA avant création.",
+                                    "Review product requests, then set the price and VAT mode before creating.",
+                                    "راجع طلبات المنتجات، ثم حدّد السعر وطريقة الضريبة قبل الإنشاء.",
+                                )
                             } else {
                                 atlasText("Notifications reçues pour votre rôle et suivi de vos envois Admin")
                             },
@@ -275,13 +274,76 @@ fun NotificationsScreen(
                             isAdmin = state.isAdmin,
                             currentUsername = state.username,
                             busy = state.busyId == action.id,
-                            onComplete = { viewModel.completeAction(action) },
+                            onComplete = {
+                                if (state.isAdmin && action.type.equals("new_product", ignoreCase = true)) {
+                                    productActionToCreateId = action.id
+                                    viewModel.loadProductActionDetails(action)
+                                } else {
+                                    viewModel.completeAction(action)
+                                }
+                            },
                             onReject = { viewModel.rejectAction(action) },
                         )
                     }
                 }
             }
         }
+
+    val productActionId = productActionToCreateId
+    LaunchedEffect(productActionId, state.loadingProductActionId, state.productActionDetails) {
+        if (productActionId != null && state.loadingProductActionId != productActionId && state.productActionDetails?.id != productActionId) {
+            productActionToCreateId = null
+        }
+    }
+    val productAction = state.productActionDetails?.takeIf { it.id == productActionId }
+    val productBody = productAction?.let(viewModel::productRequestBody)
+    if (productActionId != null && state.loadingProductActionId == productActionId) {
+        AlertDialog(
+            onDismissRequest = {
+                productActionToCreateId = null
+                viewModel.clearProductActionDetails()
+            },
+            title = { Text(atlasText("Chargement de la demande", "Loading request", "جارٍ تحميل الطلب")) },
+            text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                Text(atlasText("Récupération de la fiche complète et de sa photo…", "Loading the full product request and photo…", "جارٍ تحميل طلب المنتج الكامل وصورته…"))
+            } },
+            confirmButton = {},
+        )
+    } else if (productAction != null && productBody != null && state.isAdmin) {
+        ProductCreateDialog(
+            canCreateDirectly = true,
+            allowRequestOnly = false,
+            initialName = productBody.name,
+            initialSku = productBody.sku,
+            initialUnit = productBody.unit,
+            initialSecondaryUnit = productBody.secondaryUnit.orEmpty(),
+            initialSecondaryUnitFactor = productBody.secondaryUnitFactor?.toString().orEmpty(),
+            initialQuantity = productBody.stockQuantity.toString(),
+            initialImageUrl = productBody.imageDataUrl ?: productBody.legacyImageUrl,
+            imageServerBaseUrl = null,
+            submitting = state.busyId == productAction.id,
+            onDismiss = {
+                productActionToCreateId = null
+                viewModel.clearProductActionDetails()
+            },
+            onSubmitDirect = { request ->
+                viewModel.completeAction(productAction, request) { succeeded ->
+                    if (succeeded) {
+                        productActionToCreateId = null
+                        viewModel.clearProductActionDetails()
+                    }
+                }
+            },
+            onSubmitRequest = { _, _, _, _, _, _, _, _, _, _ -> },
+        )
+    } else if (productAction != null && state.isAdmin) {
+        LaunchedEffect(productAction.id) {
+            viewModel.completeAction(productAction)
+            productActionToCreateId = null
+            viewModel.clearProductActionDetails()
+        }
+    }
 
     if (showComposeDialog) {
         SendRoleNotificationDialog(

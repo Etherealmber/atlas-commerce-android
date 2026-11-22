@@ -101,6 +101,7 @@ internal object StartupResumePreparation {
             }
             is ApiResult.Failure -> if (
                 response.httpStatus == 401 || response.httpStatus == 403 ||
+                    (response.httpStatus == 409 && response.code == "ROLE_CHANGED") ||
                     response.code == "SESSION_EXPIRED" || response.code.contains("REVOK", ignoreCase = true)
             ) {
                 StartupSessionVerification.Rejected

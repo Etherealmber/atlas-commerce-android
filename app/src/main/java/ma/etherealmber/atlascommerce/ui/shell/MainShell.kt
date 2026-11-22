@@ -59,22 +59,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AddComment
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.HourglassBottom
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.Groups
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.QrCodeScanner
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.ShoppingCart
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -151,7 +136,8 @@ import ma.etherealmber.atlascommerce.ui.screens.agent.AtlasAgentMascot
 import ma.etherealmber.atlascommerce.ui.screens.legal.ProblemReportDialog
 import ma.etherealmber.atlascommerce.ui.screens.balance.BalanceScreen
 import ma.etherealmber.atlascommerce.ui.screens.home.HomeScreen
-import ma.etherealmber.atlascommerce.ui.screens.employees.EmployeesScreen
+import ma.etherealmber.atlascommerce.ui.screens.employees.EmployeeDirectoryScreen
+import ma.etherealmber.atlascommerce.ui.screens.clients.ClientsScreen
 import ma.etherealmber.atlascommerce.ui.screens.products.ProductsScreen
 import ma.etherealmber.atlascommerce.ui.screens.sale.SaleScreen
 import ma.etherealmber.atlascommerce.ui.screens.scan.ScanScreen
@@ -169,10 +155,11 @@ enum class MainTab(val label: String, val icon: ImageVector) {
     SALE("Vente", Icons.Outlined.ShoppingCart),
     BALANCE("Balance", Icons.Outlined.AccountBalanceWallet),
     EMPLOYEES("Employés", Icons.Outlined.Groups),
-    AGENT("Atlas Agent", Icons.Outlined.AutoAwesome),
+    AGENT("Atlas Agent", Icons.Outlined.Bot),
     PROFILE("Mon profil", Icons.Outlined.Person),
     SETTINGS("Paramètres", Icons.Outlined.Settings),
     NOTIFICATIONS("Notifications", Icons.Outlined.Notifications),
+    CLIENTS("Clients", Icons.Outlined.Groups),
     ;
 
     companion object {
@@ -184,6 +171,7 @@ enum class MainTab(val label: String, val icon: ImageVector) {
             when {
                 Roles.isAdmin(role) -> BottomBarTabs
                 Roles.normalize(role) == Roles.STOCK -> listOf(HOME, SCAN, PRODUCTS)
+                Roles.normalize(role) == Roles.SECRETARY -> listOf(HOME, PRODUCTS, SCAN, BALANCE, EMPLOYEES)
                 else -> listOf(HOME, PRODUCTS, SCAN, BALANCE)
             }
 
@@ -213,9 +201,10 @@ internal fun MainTab.localizedLabel(): String = when (this) {
     MainTab.PROFILE -> atlasText("Mon profil", "My profile", "ملفي الشخصي")
     MainTab.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
     MainTab.NOTIFICATIONS -> atlasText("Notifications", "Notifications", "الإشعارات")
+    MainTab.CLIENTS -> atlasText("Clients", "Clients", "العملاء")
 }
 
-private val BackStackTabs = setOf(MainTab.AGENT, MainTab.SALE, MainTab.PROFILE, MainTab.SETTINGS, MainTab.NOTIFICATIONS)
+private val BackStackTabs = setOf(MainTab.AGENT, MainTab.SALE, MainTab.PROFILE, MainTab.SETTINGS, MainTab.NOTIFICATIONS, MainTab.CLIENTS)
 private val FloatingDockTabs = setOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.EMPLOYEES)
 private val FloatingDockOverlayTabs = setOf(MainTab.SALE)
 
@@ -280,7 +269,8 @@ fun MainShell(
     val rawTab = MainTab.entries.firstOrNull { it.name == tabName } ?: MainTab.HOME
     val tab = when {
         rawTab == MainTab.SALE && !Roles.canCreateDocuments(user.role) -> MainTab.HOME
-        rawTab == MainTab.EMPLOYEES && !Roles.isAdmin(user.role) -> MainTab.HOME
+        rawTab == MainTab.EMPLOYEES && !(Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY) -> MainTab.HOME
+        rawTab == MainTab.CLIENTS && !Roles.canCreateDocuments(user.role) -> MainTab.HOME
         rawTab == MainTab.BALANCE && Roles.normalize(user.role) == Roles.STOCK -> MainTab.HOME
         else -> rawTab
     }
@@ -369,7 +359,8 @@ fun MainShell(
         if (!externalTabRequest.isNullOrBlank()) {
             val targetAllowed = when (externalTabRequest) {
                 MainTab.SALE.name -> Roles.canCreateDocuments(user.role)
-                MainTab.EMPLOYEES.name -> Roles.isAdmin(user.role)
+                MainTab.EMPLOYEES.name -> Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY
+                MainTab.CLIENTS.name -> Roles.canCreateDocuments(user.role)
                 MainTab.BALANCE.name -> Roles.normalize(user.role) != Roles.STOCK
                 else -> true
             }
@@ -459,7 +450,7 @@ fun MainShell(
         showDataCacheManagerDialog = false
         when (tab) {
             MainTab.SETTINGS -> setTabName(MainTab.PROFILE.name)
-            MainTab.PROFILE, MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS -> setTabName(lastBottomTabName)
+            MainTab.PROFILE, MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS, MainTab.CLIENTS -> setTabName(lastBottomTabName)
             else -> switchTab(MainTab.HOME)
         }
     }
@@ -491,7 +482,7 @@ fun MainShell(
 
     val showShellTopBar = isForeground && (
         (!useRail && !productHistoryActive && !releaseHistorySubpageActive) ||
-            (useRail && tab in setOf(MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS) && !productHistoryActive)
+            (useRail && tab in setOf(MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS, MainTab.CLIENTS) && !productHistoryActive)
         )
     var shellTopBarVisible by remember { mutableStateOf(false) }
     LaunchedEffect(showShellTopBar) {
@@ -619,7 +610,7 @@ fun MainShell(
                         ) { expanded ->
                             if (expanded) {
                                 AtlasTopBar(
-                                    title = if (!useRail || tab in setOf(MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS)) tab.localizedLabel() else "",
+                                    title = if (!useRail || tab in setOf(MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS, MainTab.CLIENTS)) tab.localizedLabel() else "",
                                     subtitle = null,
                                     windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal),
                                     containerColor = Color.Transparent,
@@ -638,7 +629,7 @@ fun MainShell(
                                     } else null,
                                     onBack = if (useRail) null else when (tab) {
                                         MainTab.SETTINGS -> ({ setTabName(MainTab.PROFILE.name) })
-                                        MainTab.PROFILE, MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS -> ({ setTabName(lastBottomTabName) })
+                                        MainTab.PROFILE, MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS, MainTab.CLIENTS -> ({ setTabName(lastBottomTabName) })
                                         else -> null
                                     },
                                     actions = {
@@ -768,8 +759,10 @@ fun MainShell(
                                                     TopBarQuickActionsMenu(
                                                         notificationCount = notificationCount,
                                                         showSale = Roles.canCreateDocuments(user.role),
+                                                        showClients = Roles.canCreateDocuments(user.role),
                                                         onOpenNotifications = openNotificationsForLayout,
                                                         onOpenSale = { switchTab(MainTab.SALE) },
+                                                        onOpenClients = { switchTab(MainTab.CLIENTS) },
                                                     )
                                                     Spacer(Modifier.width(6.dp))
                                                     AtlasAvatar(
@@ -1006,7 +999,9 @@ fun MainShell(
                         onToast = onToast,
                     )
 
-                    MainTab.EMPLOYEES -> EmployeesScreen(user = user, wideLayout = useDesktopSidebar)
+                    MainTab.EMPLOYEES -> EmployeeDirectoryScreen(user = user)
+
+                    MainTab.CLIENTS -> ClientsScreen()
 
                     MainTab.AGENT -> AgentScreen(
                         user = user,
@@ -1427,8 +1422,10 @@ private fun AnimatedTabIcon(icon: ImageVector, label: String, selected: Boolean)
 private fun TopBarQuickActionsMenu(
     notificationCount: Int,
     showSale: Boolean,
+    showClients: Boolean,
     onOpenNotifications: () -> Unit,
     onOpenSale: () -> Unit,
+    onOpenClients: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val arrowRotation by animateFloatAsState(
@@ -1506,6 +1503,18 @@ private fun TopBarQuickActionsMenu(
                     onOpenNotifications()
                 },
             )
+            if (showClients) {
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(atlasText("Clients", "Clients", "العملاء"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                            Text(atlasText("Crédits et soldes", "Credits and balances", "الائتمان والأرصدة"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    },
+                    leadingIcon = { Icon(Icons.Outlined.Groups, contentDescription = null) },
+                    onClick = { expanded = false; onOpenClients() },
+                )
+            }
             if (showSale) {
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp))
                 DropdownMenuItem(

@@ -16,13 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.Tune
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -138,6 +132,9 @@ fun FinanceReportSelectionDialog(
                                     selected = period == key,
                                     onClick = { period = key },
                                     label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    leadingIcon = if (period == key) {
+                                        { Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                    } else null,
                                     modifier = Modifier.weight(1f),
                                 )
                             }
@@ -181,6 +178,9 @@ fun FinanceReportSelectionDialog(
                                     if (report.key in selectedSections) selectedSections.remove(report.key) else selectedSections.add(report.key)
                                 },
                                 label = { Text(report.localizedLabel(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                leadingIcon = if (report.key in selectedSections) {
+                                    { Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null,
                                 modifier = Modifier.weight(1f),
                             )
                         }

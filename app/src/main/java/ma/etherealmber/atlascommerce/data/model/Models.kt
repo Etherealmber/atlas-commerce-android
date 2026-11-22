@@ -228,6 +228,8 @@ data class MeDto(
     val phone: String? = null,
     @Json(name = "avatar_url") val avatarUrl: String? = null,
     @Json(name = "reputationScore") val reputationScore: Int? = null,
+    /** Set only by the startup validator after the legacy role-refresh endpoint succeeds. */
+    @Json(ignore = true) val startupRoleRefreshValidated: Boolean = false,
 )
 
 @JsonClass(generateAdapter = true)
@@ -253,9 +255,12 @@ data class TrustedDeviceDto(
     val friendlyLabel: String
         get() {
             val ua = userAgent.orEmpty()
+            val atlasAndroid = Regex("Atlas-Android/([^ ]+) \\(Android ([^;]+); (.+)\\)", RegexOption.IGNORE_CASE).find(ua)
+            val atlasDesktop = Regex("Atlas-Desktop/([^ ]+) \\(([^)]+)\\)", RegexOption.IGNORE_CASE).find(ua)
             return when {
-                ua.contains("Atlas-Android", ignoreCase = true) ||
-                    ua.contains("okhttp", ignoreCase = true) -> "Atlas Android · Mobile"
+                atlasAndroid != null -> "Atlas Android ${atlasAndroid.groupValues[1]} · ${atlasAndroid.groupValues[3]} (Android ${atlasAndroid.groupValues[2]})"
+                atlasDesktop != null -> "Atlas Desktop ${atlasDesktop.groupValues[1]} · ${atlasDesktop.groupValues[2]}"
+                ua.contains("okhttp", ignoreCase = true) -> "Atlas Android · Mobile"
                 ua.contains("Android", ignoreCase = true) -> "Appareil Android"
                 ua.contains("iPhone", ignoreCase = true) || ua.contains("iPad", ignoreCase = true) -> "iPhone / iPad"
                 ua.contains("Windows", ignoreCase = true) && ua.contains("Edg", ignoreCase = true) -> "PC Windows · Edge"
@@ -420,6 +425,11 @@ data class EmployeeDto(
     @Json(name = "pay_amount") val payAmount: Double = 0.0,
     @Json(name = "pay_cycle_type") val payCycleType: String = "monthly",
     @Json(name = "pay_cycle_days") val payCycleDays: Int = 30,
+    @Json(name = "cycle_days") val cycleDays: Int = 0,
+    @Json(name = "next_due") val nextDue: String? = null,
+    @Json(name = "last_paid_at") val lastPaidAt: String? = null,
+    @Json(name = "daily_rate") val dailyRate: Double = 0.0,
+    @Json(name = "pay_overdue") val payOverdue: Boolean = false,
     val notes: String = "",
     val payments: List<EmployeePaymentDto> = emptyList(),
 )
@@ -452,6 +462,8 @@ data class EmployeeUpdateRequest(
     @Json(name = "employment_status") val employmentStatus: String,
     @Json(name = "joined_date") val joinedDate: String,
     @Json(name = "pay_amount") val payAmount: Double,
+    @Json(name = "pay_cycle_type") val payCycleType: String = "monthly",
+    @Json(name = "pay_cycle_days") val payCycleDays: Int = 30,
 )
 
 @JsonClass(generateAdapter = true)
@@ -708,6 +720,8 @@ data class ProductDto(
     val barcode: String? = null,
     val category: String? = null,
     val unit: String? = null,
+    @Json(name = "secondary_unit") val secondaryUnit: String? = null,
+    @Json(name = "secondary_unit_factor") val secondaryUnitFactor: Double? = null,
     val price: Double = 0.0,
     @Json(name = "stock_quantity") val stock: Double = 0.0,
     @Json(name = "low_stock_threshold") val lowStockThresholdRaw: Double? = null,
@@ -786,12 +800,53 @@ data class CreateProductRequest(
     val barcode: String? = null,
     val category: String? = null,
     val unit: String = "unité",
+    @Json(name = "secondary_unit") val secondaryUnit: String? = null,
+    @Json(name = "secondary_unit_factor") val secondaryUnitFactor: Double? = null,
     val price: Double = 0.0,
+    @Json(name = "invoice_price_mode") val invoicePriceMode: String = "exclusive",
     @Json(name = "stock_quantity") val stockQuantity: Double = 0.0,
     @Json(name = "low_stock_threshold") val lowStockThreshold: Double = 5.0,
     val description: String? = null,
     @Json(name = "image_url") val imageUrl: String? = null,
 )
+
+/** PUT representation uses empty strings for both dual-unit fields when clearing them.
+ * The Worker treats those explicit empty values as a request to store SQL NULLs. */
+@JsonClass(generateAdapter = true)
+data class UpdateProductRequest(
+    val name: String,
+    val sku: String,
+    val barcode: String? = null,
+    val category: String? = null,
+    val unit: String = "unité",
+    @Json(name = "secondary_unit") val secondaryUnit: String = "",
+    @Json(name = "secondary_unit_factor") val secondaryUnitFactor: Any = "",
+    val price: Double = 0.0,
+    @Json(name = "invoice_price_mode") val invoicePriceMode: String = "exclusive",
+    @Json(name = "stock_quantity") val stockQuantity: Double = 0.0,
+    @Json(name = "low_stock_threshold") val lowStockThreshold: Double = 5.0,
+    val description: String? = null,
+    @Json(name = "image_url") val imageUrl: String? = null,
+)
+
+fun CreateProductRequest.toUpdateProductRequest(): UpdateProductRequest {
+    val cleanSecondary = secondaryUnit?.trim()?.takeIf(String::isNotEmpty)
+    return UpdateProductRequest(
+        name = name,
+        sku = sku,
+        barcode = barcode,
+        category = category,
+        unit = unit,
+        secondaryUnit = cleanSecondary.orEmpty(),
+        secondaryUnitFactor = if (cleanSecondary == null) "" else secondaryUnitFactor ?: "",
+        price = price,
+        invoicePriceMode = invoicePriceMode,
+        stockQuantity = stockQuantity,
+        lowStockThreshold = lowStockThreshold,
+        description = description,
+        imageUrl = imageUrl,
+    )
+}
 
 @JsonClass(generateAdapter = true)
 data class ProductCreationRequestDto(
@@ -800,6 +855,8 @@ data class ProductCreationRequestDto(
     val name: String? = null,
     val sku: String? = null,
     val unit: String? = null,
+    @Json(name = "secondary_unit") val secondaryUnit: String? = null,
+    @Json(name = "secondary_unit_factor") val secondaryUnitFactor: Double? = null,
     val quantity: Double? = null,
     val category: String? = null,
     val note: String? = null,
@@ -815,6 +872,8 @@ data class SubmitProductRequestBody(
     val name: String,
     val sku: String? = null,
     val unit: String = "unité",
+    @Json(name = "secondary_unit") val secondaryUnit: String? = null,
+    @Json(name = "secondary_unit_factor") val secondaryUnitFactor: Double? = null,
     val quantity: Double = 1.0,
     val category: String? = null,
     val note: String? = null,
@@ -882,7 +941,22 @@ data class MobileActionMetaDto(
     val priority: String? = null,
     val category: String? = null,
     @Json(name = "proposed_stock") val proposedStock: Double? = null,
-    @Json(name = "create_product_body") val createProductBody: CreateProductRequest? = null,
+    @Json(name = "needs_approval") val needsApproval: Boolean? = null,
+    @Json(name = "create_product_body") val createProductBody: ProductRequestBody? = null,
+)
+
+/** Minimal, session-attributed product request body used by the `new_product` action. */
+@JsonClass(generateAdapter = true)
+data class ProductRequestBody(
+    val name: String = "",
+    val sku: String = "",
+    val unit: String = "unité",
+    @Json(name = "secondary_unit") val secondaryUnit: String? = null,
+    @Json(name = "secondary_unit_factor") val secondaryUnitFactor: Double? = null,
+    @Json(name = "stock_quantity") val stockQuantity: Double = 0.0,
+    @Json(name = "image_data_url") val imageDataUrl: String? = null,
+    /** Read-only compatibility for requests created by older Android/web clients. */
+    @Json(name = "image_url") val legacyImageUrl: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -942,7 +1016,7 @@ data class CreateMobileActionRequest(
     val detail: String? = null,
     val barcode: String? = null,
     @Json(name = "product_id") val productId: Long? = null,
-    @Json(name = "created_by") val createdBy: String = "mobile",
+    @Json(name = "created_by") val createdBy: String? = null,
     val source: String = "android",
     val meta: MobileActionMetaDto? = null,
 )
@@ -1130,6 +1204,7 @@ data class ClientDto(
 @JsonClass(generateAdapter = true)
 data class InvoiceDto(
     val id: Long = 0,
+    @Json(name = "client_id") val clientId: Long? = null,
     val number: String? = null,
     @Json(name = "client_name") val clientName: String? = null,
     @Json(name = "issue_date") val issueDate: String? = null,

@@ -22,6 +22,8 @@ import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.model.AlertItemDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionDto
+import ma.etherealmber.atlascommerce.data.model.ProductRequestBody
+import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import javax.inject.Inject
 
@@ -41,6 +43,8 @@ class NotificationsViewModel @Inject constructor(
         val sentNotificationCount: Int = 0,
         val busyId: Long? = null,
         val sendingNotification: Boolean = false,
+        val productActionDetails: MobileActionDto? = null,
+        val loadingProductActionId: Long? = null,
         val error: String? = null,
     ) {
         val isAdmin: Boolean get() = Roles.isAdmin(role)
@@ -63,6 +67,9 @@ class NotificationsViewModel @Inject constructor(
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private var refreshJob: Job? = null
+    private var productActionDetailsGeneration = 0L
+    /** Keep a created product ID across completion retries while the action is pending. */
+    private val createdProductIds = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     private val _messages = MutableSharedFlow<String>(
         extraBufferCapacity = 4,
@@ -77,6 +84,7 @@ class NotificationsViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collect { key ->
                     refreshJob?.cancel()
+                    productActionDetailsGeneration += 1
                     _state.value = UiState()
                     if (key != null) {
                         refresh()
@@ -172,7 +180,50 @@ class NotificationsViewModel @Inject constructor(
         }
     }
 
-    fun completeAction(action: MobileActionDto) {
+    fun productRequestBody(action: MobileActionDto): ProductRequestBody? =
+        commerceRepository.parseActionMeta(action)?.createProductBody
+
+    fun loadProductActionDetails(action: MobileActionDto) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return
+        if (!Roles.isAdmin(activeUser.role) || !action.type.equals("new_product", ignoreCase = true)) return
+        val requestedScope = activeUser.scopeIdentity
+        val generation = ++productActionDetailsGeneration
+        _state.update { it.copy(loadingProductActionId = action.id, productActionDetails = null) }
+        viewModelScope.launch {
+            when (val result = commerceRepository.mobileAction(action.id)) {
+                is ApiResult.Failure -> {
+                    if (generation == productActionDetailsGeneration &&
+                        (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope
+                    ) {
+                        _state.update { it.copy(loadingProductActionId = null) }
+                        _messages.tryEmit(result.message)
+                    }
+                }
+                is ApiResult.Success -> {
+                    if (generation != productActionDetailsGeneration ||
+                        (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope
+                    ) return@launch
+                    _state.update {
+                        it.copy(
+                            loadingProductActionId = null,
+                            productActionDetails = result.data,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun clearProductActionDetails() {
+        productActionDetailsGeneration += 1
+        _state.update { it.copy(loadingProductActionId = null, productActionDetails = null) }
+    }
+
+    fun completeAction(
+        action: MobileActionDto,
+        productRequest: CreateProductRequest? = null,
+        onResult: (Boolean) -> Unit = {},
+    ) {
         viewModelScope.launch {
             val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
             val isAdmin = Roles.isAdmin(activeUser?.role)
@@ -180,24 +231,31 @@ class NotificationsViewModel @Inject constructor(
             // STRICT: Only an Admin can validate a product creation request (`new_product`)!
             if (action.type.equals("new_product", ignoreCase = true) && !isAdmin) {
                 _messages.tryEmit("Seul un Administrateur peut valider et créer ce produit.")
+                onResult(false)
                 return@launch
             }
 
             _state.update { it.copy(busyId = action.id) }
             if (isAdmin && action.type.equals("new_product", ignoreCase = true)) {
-                when (
-                    val res = commerceRepository.approveActionAsAdmin(
-                        action = action,
-                        adminUsername = activeUser?.username ?: "admin",
-                    )
-                ) {
+                val approvalKey = "${activeUser?.scopeIdentity.orEmpty()}:${action.id}"
+                val res = commerceRepository.approveActionAsAdmin(
+                    action = action,
+                    adminUsername = activeUser?.username ?: "admin",
+                    productRequest = productRequest,
+                    existingProductId = createdProductIds[approvalKey],
+                    onProductCreated = { product -> createdProductIds[approvalKey] = product.id },
+                )
+                when (res) {
                     is ApiResult.Failure -> {
                         _state.update { it.copy(busyId = null) }
                         _messages.tryEmit(res.message)
+                        onResult(false)
                     }
 
                     is ApiResult.Success -> {
+                        createdProductIds.remove(approvalKey)
                         _state.update { it.copy(busyId = null) }
+                        onResult(true)
                         val created = res.data
                         _messages.tryEmit(
                             if (created != null) {

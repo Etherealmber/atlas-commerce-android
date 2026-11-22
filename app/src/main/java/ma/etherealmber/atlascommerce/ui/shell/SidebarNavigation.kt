@@ -35,12 +35,7 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.Logout
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.ShoppingCart
-import androidx.compose.material.icons.outlined.SystemUpdateAlt
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
@@ -261,6 +256,13 @@ internal fun AtlasSidebarContent(
                 onClick = onOpenNotifications,
             )
             if (Roles.canCreateDocuments(user.role)) {
+                SidebarNavigationItem(
+                    icon = MainTab.CLIENTS.icon,
+                    label = MainTab.CLIENTS.localizedLabel(),
+                    isSelected = selectedTab == MainTab.CLIENTS && !dataStorageSelected,
+                    expanded = expanded,
+                    onClick = { onNavigate(MainTab.CLIENTS) },
+                )
                 SidebarNavigationItem(
                     icon = Icons.Outlined.ShoppingCart,
                     label = atlasText("Nouvelle vente", "New sale", "بيع جديد"),
