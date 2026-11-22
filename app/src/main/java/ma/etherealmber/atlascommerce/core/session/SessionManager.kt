@@ -236,7 +236,7 @@ class SessionManager @Inject constructor(
                         authRepository.validateStartupSession(
                             serverUrl = serverUrl,
                             savedBearerToken = bearerToken,
-                            fingerprint = deviceIdentity.fingerprintForRequest(),
+                            fingerprint = deviceIdentity.fingerprint,
                         )
                     },
                 )
