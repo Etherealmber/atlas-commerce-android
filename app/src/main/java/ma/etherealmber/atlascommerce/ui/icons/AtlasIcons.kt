@@ -2,9 +2,9 @@ package ma.etherealmber.atlascommerce.ui.icons
 
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import io.github.dpplinh28.lucide.LucideIconDefinition
-import io.github.dpplinh28.lucide.LucideIcons
-import io.github.dpplinh28.lucide.all.*
+import ma.etherealmber.atlascommerce.ui.icons.lucide.LucideIconDefinition
+import ma.etherealmber.atlascommerce.ui.icons.lucide.LucideIcons
+import ma.etherealmber.atlascommerce.ui.icons.lucide.all.*
 
 /** App-wide Lucide set, matching the web mobile icon family (24px box, 2px rounded strokes). */
 object AtlasIcons {
