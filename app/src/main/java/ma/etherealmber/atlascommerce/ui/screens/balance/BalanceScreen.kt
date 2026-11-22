@@ -579,85 +579,92 @@ fun BalanceScreen(
         }
         return
     }
-    Column(Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(
-                start = 16.dp,
-                end = 12.dp,
-                top = 10.dp + LocalAtlasFloatingTopBarPadding.current,
-                bottom = 8.dp,
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val maxContentWidth = if (maxWidth >= 900.dp) 1180.dp else 820.dp
+        LazyColumn(
+            modifier = Modifier.widthIn(max = maxContentWidth).fillMaxSize().align(Alignment.TopCenter),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                start = if (maxWidth >= 600.dp) 24.dp else 16.dp,
+                end = if (maxWidth >= 600.dp) 24.dp else 16.dp,
+                top = 12.dp,
+                bottom = 12.dp + dockPadding,
             ),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                atlasText("Trésorerie · créances · mouvements", "Cash · receivables · transactions", "الخزينة · المستحقات · الحركات"),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                MonthSelector(selectedPeriod = state.selectedPeriod, onSelect = viewModel::selectPeriod)
-                IconButton(onClick = refreshBalance, enabled = !state.refreshing) {
-                    if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les soldes"))
-                }
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            EntryKind.entries.forEach { kind ->
-                val open = {
-                    entryKind = kind
-                    showEntryDialog = true
-                }
-                if (kind == EntryKind.EXPENSE) {
-                    Button(onClick = open) {
-                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.width(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(atlasText(kind.quickLabel, kind.quickEnglish, kind.quickArabic))
-                    }
-                } else {
-                    FilledTonalButton(onClick = open) {
-                        Icon(kind.icon, contentDescription = null, modifier = Modifier.width(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(atlasText(kind.quickLabel, kind.quickEnglish, kind.quickArabic))
+            item(key = "balance-heading") {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(
+                        start = 16.dp,
+                        end = 12.dp,
+                        top = 10.dp + LocalAtlasFloatingTopBarPadding.current,
+                        bottom = 8.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        atlasText("Trésorerie · créances · mouvements", "Cash · receivables · transactions", "الخزينة · المستحقات · الحركات"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        MonthSelector(selectedPeriod = state.selectedPeriod, onSelect = viewModel::selectPeriod)
+                        IconButton(onClick = refreshBalance, enabled = !state.refreshing) {
+                            if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les soldes"))
+                        }
                     }
                 }
             }
-        }
-        TabRow(selectedTabIndex = section.ordinal) {
-            BalanceSection.entries.forEach { tab ->
-                Tab(
-                    selected = section == tab,
-                    onClick = { section = tab },
-                    text = { Text(when (tab) { BalanceSection.MOVEMENTS -> atlasText("Mouvements", "Transactions", "الحركات"); BalanceSection.CLIENTS -> atlasText("Comptes", "Accounts", "الحسابات"); BalanceSection.REPORTS -> atlasText("Rapports", "Reports", "التقارير") }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                )
+            item(key = "balance-entry-actions") {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    EntryKind.entries.forEach { kind ->
+                        val open = {
+                            entryKind = kind
+                            showEntryDialog = true
+                        }
+                        if (kind == EntryKind.EXPENSE) {
+                            Button(onClick = open) {
+                                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.width(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(atlasText(kind.quickLabel, kind.quickEnglish, kind.quickArabic))
+                            }
+                        } else {
+                            FilledTonalButton(onClick = open) {
+                                Icon(kind.icon, contentDescription = null, modifier = Modifier.width(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(atlasText(kind.quickLabel, kind.quickEnglish, kind.quickArabic))
+                            }
+                        }
+                    }
+                }
             }
-        }
-        if (state.error != null) {
-            Text(atlasNotice(state.error.orEmpty(), appLanguage), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        }
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val maxContentWidth = if (maxWidth >= 900.dp) 1180.dp else 820.dp
-            LazyColumn(
-                modifier = Modifier.widthIn(max = maxContentWidth).fillMaxSize().align(Alignment.TopCenter),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    start = if (maxWidth >= 600.dp) 24.dp else 16.dp,
-                    end = if (maxWidth >= 600.dp) 24.dp else 16.dp,
-                    top = 12.dp,
-                    bottom = 12.dp + dockPadding,
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+            item(key = "balance-sections") {
+                TabRow(selectedTabIndex = section.ordinal) {
+                    BalanceSection.entries.forEach { tab ->
+                        Tab(
+                            selected = section == tab,
+                            onClick = { section = tab },
+                            text = { Text(when (tab) { BalanceSection.MOVEMENTS -> atlasText("Mouvements", "Transactions", "الحركات"); BalanceSection.CLIENTS -> atlasText("Comptes", "Accounts", "الحسابات"); BalanceSection.REPORTS -> atlasText("Rapports", "Reports", "التقارير") }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        )
+                    }
+                }
+            }
+            if (state.error != null) {
+                item(key = "balance-error") {
+                    Text(atlasNotice(state.error.orEmpty(), appLanguage), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
                 val hasBalanceSnapshot = state.finance != null || state.statement != null || state.periodBreakdown != null || state.rows.isNotEmpty()
                 if ((state.loading || state.refreshing) && !hasBalanceSnapshot) {
                     item(key = "balance_loading") {
@@ -901,7 +908,6 @@ fun BalanceScreen(
             }
         }
     }
-}
 
 @Composable
 private fun MonthSelector(selectedPeriod: String?, onSelect: (String) -> Unit) {

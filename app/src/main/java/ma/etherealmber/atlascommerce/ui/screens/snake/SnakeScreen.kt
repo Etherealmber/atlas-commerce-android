@@ -29,6 +29,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -149,33 +150,17 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
     }
 
     var headerExpanded by remember(page) { mutableStateOf(true) }
+    val headerContentInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 100.dp
     val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(
         expanded = headerExpanded,
         onExpandedChange = { headerExpanded = it },
     )
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(headerScrollConnection),
-        topBar = {
-            AtlasFloatingTopBar(
-                title = when (page) {
-                    SnakePage.MENU, SnakePage.PLAY -> atlasText("Atlas Snake", "Atlas Snake", "ثعبان Atlas")
-                    SnakePage.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
-                    SnakePage.DAILY -> atlasText("Défi du jour", "Daily challenge", "تحدي اليوم")
-                },
-                onBack = {
-                    if (page == SnakePage.MENU) onClose() else {
-                        running = false
-                        page = SnakePage.MENU
-                    }
-                },
-                expanded = headerExpanded,
-            )
-        },
-    ) { padding ->
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).nestedScroll(headerScrollConnection)) {
         when (page) {
             SnakePage.PLAY -> GameplayPage(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
+                headerInset = headerContentInset,
                 game = game,
                 bestScore = bestScore,
                 bestCrowns = bestCrowns,
@@ -195,7 +180,8 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                 onSettings = { running = false; page = SnakePage.SETTINGS },
             )
             SnakePage.MENU -> MenuPage(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
+                headerInset = headerContentInset,
                 bestScore = bestScore,
                 bestCrowns = bestCrowns,
                 syncStatus = personalBestState.syncStatus,
@@ -204,7 +190,8 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                 onDaily = { page = SnakePage.DAILY },
             )
             SnakePage.SETTINGS -> SettingsPage(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
+                headerInset = headerContentInset,
                 speedMillis = speedMillis,
                 wrapWalls = wrapWalls,
                 onSpeed = { speedMillis = it; preferences.edit().putInt("snake_speed_ms_v2", it).apply() },
@@ -215,12 +202,29 @@ fun SnakeScreen(onClose: () -> Unit, pausedByPrompt: Boolean, isActive: Boolean)
                 },
             )
             SnakePage.DAILY -> DailyPage(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
+                headerInset = headerContentInset,
                 target = dailyTarget,
                 dailyBest = dailyBest,
                 onStart = { startGame(true) },
             )
         }
+        AtlasFloatingTopBar(
+            title = when (page) {
+                SnakePage.MENU, SnakePage.PLAY -> atlasText("Atlas Snake", "Atlas Snake", "ثعبان Atlas")
+                SnakePage.SETTINGS -> atlasText("Paramètres", "Settings", "الإعدادات")
+                SnakePage.DAILY -> atlasText("Défi du jour", "Daily challenge", "تحدي اليوم")
+            },
+            onBack = {
+                if (page == SnakePage.MENU) onClose() else {
+                    running = false
+                    page = SnakePage.MENU
+                }
+            },
+            expanded = headerExpanded,
+            onCollapsedClick = { headerExpanded = true },
+            modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
+        )
     }
 }
 
@@ -244,6 +248,7 @@ private fun SnakeSyncStatusText(status: SnakeScoreSyncStatus) {
 @Composable
 private fun MenuPage(
     modifier: Modifier,
+    headerInset: Dp,
     bestScore: Int,
     bestCrowns: Int,
     syncStatus: SnakeScoreSyncStatus,
@@ -264,6 +269,7 @@ private fun MenuPage(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
+                    Spacer(Modifier.height(headerInset))
                     Text(
                         atlasText("Le serpent Atlas", "Atlas Snake", "ثعبان Atlas"),
                         style = MaterialTheme.typography.headlineMedium,
@@ -341,6 +347,7 @@ private fun MenuPage(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                Spacer(Modifier.height(headerInset))
                 Text(
                     atlasText("Le serpent Atlas", "Atlas Snake", "ثعبان Atlas"),
                     style = MaterialTheme.typography.headlineMedium,
@@ -407,6 +414,7 @@ private fun MenuPage(
 @Composable
 private fun GameplayPage(
     modifier: Modifier,
+    headerInset: Dp,
     game: SnakeState,
     bestScore: Int,
     bestCrowns: Int,
@@ -441,6 +449,7 @@ private fun GameplayPage(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    Spacer(Modifier.height(headerInset))
                     Text(
                         atlasText("Atlas Snake", "Atlas Snake", "ثعبان Atlas"),
                         style = MaterialTheme.typography.headlineSmall,
@@ -532,9 +541,10 @@ private fun GameplayPage(
             }
         } else {
             Column(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 6.dp),
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                Spacer(Modifier.height(headerInset))
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -600,7 +610,7 @@ private fun GameplayPage(
                     )
                 }
                 SnakeBoardViewport(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 500.dp),
                     maxBoardSide = 500.dp,
                     game = game,
                     crownToastVisible = crownToastVisible,
@@ -737,12 +747,14 @@ private fun CrownCollectedToast(visible: Boolean, modifier: Modifier = Modifier)
 @Composable
 private fun SettingsPage(
     modifier: Modifier,
+    headerInset: Dp,
     speedMillis: Int,
     wrapWalls: Boolean,
     onSpeed: (Int) -> Unit,
     onWrapWalls: (Boolean) -> Unit,
 ) {
     Column(modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Spacer(Modifier.height(headerInset))
         Text(atlasText("Ajustez votre partie", "Tune your game", "اضبط لعبتك"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(atlasText("Vitesse", "Speed", "السرعة"), style = MaterialTheme.typography.titleMedium)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -772,12 +784,13 @@ private fun SettingsPage(
 }
 
 @Composable
-private fun DailyPage(modifier: Modifier, target: Int, dailyBest: Int, onStart: () -> Unit) {
+private fun DailyPage(modifier: Modifier, headerInset: Dp, target: Int, dailyBest: Int, onStart: () -> Unit) {
     Column(
         modifier.verticalScroll(rememberScrollState()).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
+        Spacer(Modifier.height(headerInset))
         EtherealmberLogoGlyph(Modifier.size(64.dp), size = 64.dp)
         Text(atlasText("Défi du jour", "Daily challenge", "تحدي اليوم"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(

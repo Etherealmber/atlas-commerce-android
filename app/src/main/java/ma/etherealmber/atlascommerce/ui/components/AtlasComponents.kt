@@ -44,6 +44,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -66,6 +67,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -673,6 +676,7 @@ fun AtlasFloatingTopBar(
     modifier: Modifier = Modifier,
     applyStatusBarInsets: Boolean = true,
     expanded: Boolean = true,
+    onCollapsedClick: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
@@ -684,7 +688,17 @@ fun AtlasFloatingTopBar(
             .graphicsLayer { clip = false },
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth().graphicsLayer { clip = false },
+            modifier = Modifier
+                .graphicsLayer { clip = false }
+                .then(
+                    if (expanded) Modifier.fillMaxWidth()
+                    else Modifier.align(Alignment.Center).wrapContentWidth()
+                )
+                .then(
+                    if (!expanded && onCollapsedClick != null) {
+                        Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onCollapsedClick)
+                    } else Modifier
+                ),
             shape = RoundedCornerShape(26.dp),
             color = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
@@ -717,7 +731,7 @@ fun AtlasFloatingTopBar(
                     )
                 } else {
                     Box(
-                        modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 10.dp),
+                        modifier = Modifier.widthIn(min = 150.dp, max = 360.dp).height(48.dp).padding(horizontal = 10.dp),
                     ) {
                         if (onBack != null) {
                             IconButton(

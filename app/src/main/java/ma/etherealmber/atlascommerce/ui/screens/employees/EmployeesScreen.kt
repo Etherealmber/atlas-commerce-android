@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -57,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -804,27 +808,15 @@ private fun EmployeeDetailsDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize().nestedScroll(scrollConnection)) {
-                AtlasFloatingTopBar(
-                    title = displayName,
-                    subtitle = atlasText("Détails et historique de paie", "Details and payroll history", "التفاصيل وسجل الرواتب"),
-                    onBack = { if (!deleting && !saving) onDismiss() },
-                    expanded = headerExpanded,
-                    actions = {
-                        IconButton(onClick = onEdit, enabled = !deleting && !saving) {
-                            Icon(Icons.Outlined.Edit, contentDescription = atlasText("Modifier l’employé", "Edit employee", "تعديل الموظف"))
-                        }
-                        if (employee.active == 0) {
-                            IconButton(onClick = onDelete, enabled = !deleting && !saving) {
-                                if (deleting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                else Icon(Icons.Outlined.Delete, contentDescription = atlasText("Supprimer l’employé", "Delete employee", "حذف الموظف"), tint = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                    },
-                )
+            Box(Modifier.fillMaxSize().nestedScroll(scrollConnection)) {
                 LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 100.dp,
+                        bottom = 24.dp,
+                    ),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     item(key = "employee_profile") {
@@ -882,6 +874,25 @@ private fun EmployeeDetailsDialog(
                         }
                     }
                 }
+                AtlasFloatingTopBar(
+                    title = displayName,
+                    subtitle = atlasText("Détails et historique de paie", "Details and payroll history", "التفاصيل وسجل الرواتب"),
+                    onBack = { if (!deleting && !saving) onDismiss() },
+                    expanded = headerExpanded,
+                    onCollapsedClick = { headerExpanded = true },
+                    modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
+                    actions = {
+                        IconButton(onClick = onEdit, enabled = !deleting && !saving) {
+                            Icon(Icons.Outlined.Edit, contentDescription = atlasText("Modifier l’employé", "Edit employee", "تعديل الموظف"))
+                        }
+                        if (employee.active == 0) {
+                            IconButton(onClick = onDelete, enabled = !deleting && !saving) {
+                                if (deleting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                else Icon(Icons.Outlined.Delete, contentDescription = atlasText("Supprimer l’employé", "Delete employee", "حذف الموظف"), tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    },
+                )
             }
         }
     }

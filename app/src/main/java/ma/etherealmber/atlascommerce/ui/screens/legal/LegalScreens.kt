@@ -19,11 +19,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -639,20 +643,31 @@ private fun LegalPage(
         expanded = headerExpanded,
         onExpandedChange = { headerExpanded = it },
     )
-    Column(modifier = Modifier.fillMaxSize().nestedScroll(headerScrollConnection)) {
+    val floatingHeaderInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 100.dp
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(headerScrollConnection)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            // This spacer scrolls with the page so legal content can pass behind the floating header.
+            Spacer(Modifier.height(floatingHeaderInset))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Atlas.density.screenPadding, vertical = Atlas.density.itemGap),
+                verticalArrangement = Arrangement.spacedBy(Atlas.density.itemGap),
+                content = content,
+            )
+        }
         AtlasFloatingTopBar(
             title = title,
             subtitle = subtitle,
             onBack = onBack,
             expanded = headerExpanded,
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = Atlas.density.screenPadding, vertical = Atlas.density.itemGap),
-            verticalArrangement = Arrangement.spacedBy(Atlas.density.itemGap),
-            content = content,
+            onCollapsedClick = { headerExpanded = true },
+            modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
         )
     }
 }

@@ -40,6 +40,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -105,6 +108,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -2230,37 +2234,20 @@ private fun VersionHistoryPage(
     }
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         val wideWindow = maxWidth >= 840.dp
-        Column(
-            Modifier
-                .widthIn(max = 1100.dp)
-                .fillMaxSize()
-                .nestedScroll(headerScrollConnection),
-        ) {
-            AtlasFloatingTopBar(
-                title = atlasText("Mises à jour des versions", "Version updates", "تحديثات الإصدارات"),
-                subtitle = atlasText("Historique complet des changements publiés", "Full history of published changes", "السجل الكامل للتغييرات المنشورة"),
-                onBack = onBack,
-                expanded = headerExpanded,
-                modifier = Modifier.padding(horizontal = if (wideWindow) 10.dp else 0.dp),
-                actions = {
-                    if (loading) {
-                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                        }
-                    } else {
-                        IconButton(onClick = onRefresh) {
-                            Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh releases", "تحديث الإصدارات"))
-                        }
-                    }
-                },
-            )
+        Box(Modifier.widthIn(max = 1100.dp).fillMaxSize()) {
             Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = if (wideWindow) 24.dp else 14.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                    .fillMaxSize()
+                    .nestedScroll(headerScrollConnection)
+                    .verticalScroll(rememberScrollState()),
             ) {
+                Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 100.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = if (wideWindow) 24.dp else 14.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
                 githubLimitNotice?.let { notice ->
                     GitHubFallbackNotice(notice, Modifier.fillMaxWidth().padding(vertical = 6.dp))
                 }
@@ -2343,6 +2330,26 @@ private fun VersionHistoryPage(
                     }
                 }
             }
+        }
+        AtlasFloatingTopBar(
+            title = atlasText("Mises à jour des versions", "Version updates", "تحديثات الإصدارات"),
+            subtitle = atlasText("Historique complet des changements publiés", "Full history of published changes", "السجل الكامل للتغييرات المنشورة"),
+            onBack = onBack,
+            expanded = headerExpanded,
+            onCollapsedClick = { headerExpanded = true },
+            modifier = Modifier.align(Alignment.TopCenter).padding(horizontal = if (wideWindow) 10.dp else 0.dp).zIndex(1f),
+            actions = {
+                    if (loading) {
+                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                        }
+                    } else {
+                        IconButton(onClick = onRefresh) {
+                            Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l'historique", "Refresh releases", "تحديث الإصدارات"))
+                        }
+                    }
+                },
+            )
         }
     }
 }

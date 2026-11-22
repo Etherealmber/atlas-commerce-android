@@ -1,13 +1,22 @@
 package ma.etherealmber.atlascommerce.ui.screens.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -19,7 +28,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +63,7 @@ import ma.etherealmber.atlascommerce.core.diagnostics.CrashReportConsent
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
 import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
+import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
@@ -171,24 +180,27 @@ fun DeveloperDiagnosticsScreen(
         appViewModel.clearDeveloperApiProbe()
     }
 
-    Scaffold(
-        topBar = {
-            AtlasFloatingTopBar(
-                title = atlasText("Diagnostics développeur", "Developer status", "حالة المطوّر"),
-                subtitle = atlasText("État local · détails sensibles masqués", "Local status · sensitive details hidden", "حالة محلية · إخفاء التفاصيل الحساسة"),
-                onBack = onBack,
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background,
-    ) { padding ->
+    var headerExpanded by remember { mutableStateOf(true) }
+    val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(
+        expanded = headerExpanded,
+        onExpandedChange = { headerExpanded = it },
+    )
+
+    val floatingHeaderInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 100.dp
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = Atlas.density.screenPadding, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .nestedScroll(headerScrollConnection)
+                .verticalScroll(rememberScrollState()),
         ) {
+            Spacer(Modifier.height(floatingHeaderInset))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Atlas.density.screenPadding, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
             AtlasCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -525,14 +537,23 @@ fun DeveloperDiagnosticsScreen(
                 )
             }
 
-            DeveloperCacheToolsCard(
-                summary = localStorage,
-                cachedProductCount = cachedProductCount,
-                hasActiveSession = session is SessionState.Active,
-                actionInProgress = cacheActionInProgress,
-                onRequestClear = { pendingCacheAction = it },
-            )
+                DeveloperCacheToolsCard(
+                    summary = localStorage,
+                    cachedProductCount = cachedProductCount,
+                    hasActiveSession = session is SessionState.Active,
+                    actionInProgress = cacheActionInProgress,
+                    onRequestClear = { pendingCacheAction = it },
+                )
+            }
         }
+        AtlasFloatingTopBar(
+            title = atlasText("Diagnostics développeur", "Developer status", "حالة المطوّر"),
+            subtitle = atlasText("État local · détails sensibles masqués", "Local status · sensitive details hidden", "حالة محلية · إخفاء التفاصيل الحساسة"),
+            onBack = onBack,
+            expanded = headerExpanded,
+            onCollapsedClick = { headerExpanded = true },
+            modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
+        )
     }
 
     pendingCacheAction?.let { action ->
