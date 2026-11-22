@@ -42,6 +42,8 @@ import ma.etherealmber.atlascommerce.data.model.MobileWorkStatusDto
 import ma.etherealmber.atlascommerce.data.model.OtpRequest
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.ProductUnitDto
+import ma.etherealmber.atlascommerce.data.model.UpdateProductRequest
 import ma.etherealmber.atlascommerce.data.model.ProductImageDto
 import ma.etherealmber.atlascommerce.data.model.ProductImageUploadRequest
 import ma.etherealmber.atlascommerce.data.model.ProductMovementDto
@@ -200,6 +202,9 @@ interface AtlasApi {
 
     // --- Core commerce ---
 
+    @GET("api/units")
+    suspend fun productUnits(): ApiEnvelope<List<ProductUnitDto>>
+
     @GET("api/dashboard")
     suspend fun dashboard(): ApiEnvelope<DashboardDto>
 
@@ -220,7 +225,7 @@ interface AtlasApi {
     @PUT("api/products/{id}")
     suspend fun updateProduct(
         @Path("id") id: Long,
-        @Body body: CreateProductRequest,
+        @Body body: UpdateProductRequest,
     ): ApiEnvelope<ProductDto>
 
     @HTTP(method = "DELETE", path = "api/products/{id}", hasBody = true)

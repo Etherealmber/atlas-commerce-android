@@ -62,6 +62,8 @@ import ma.etherealmber.atlascommerce.data.model.ProductDeleteRequest
 import ma.etherealmber.atlascommerce.data.model.ProductImageDto
 import ma.etherealmber.atlascommerce.data.model.ProductImageUploadRequest
 import ma.etherealmber.atlascommerce.data.model.ProductMovementDto
+import ma.etherealmber.atlascommerce.data.model.ProductUnitDto
+import ma.etherealmber.atlascommerce.data.model.toUpdateProductRequest
 import ma.etherealmber.atlascommerce.data.model.PutAgentThreadRequest
 import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
 import ma.etherealmber.atlascommerce.data.model.RejectMobileActionRequest
@@ -105,6 +107,9 @@ class CommerceRepository @Inject constructor(
 
     suspend fun settings(): ApiResult<CompanySettingsDto> =
         runner.envelope { apiProvider.api().settings() }
+
+    suspend fun productUnits(): ApiResult<List<ProductUnitDto>> =
+        runner.envelope { apiProvider.api().productUnits() }
 
     suspend fun clients(): ApiResult<List<ClientDto>> =
         runner.envelope { apiProvider.api().clients() }
@@ -249,7 +254,7 @@ class CommerceRepository @Inject constructor(
         runner.envelope { apiProvider.api().createProduct(request) }
 
     suspend fun updateProduct(productId: Long, request: CreateProductRequest): ApiResult<ProductDto> =
-        runner.envelope { apiProvider.api().updateProduct(productId, request) }
+        runner.envelope { apiProvider.api().updateProduct(productId, request.toUpdateProductRequest()) }
 
     suspend fun deleteProduct(productId: Long, password: String): ApiResult<String> {
         val result = runner.statusRaw { apiProvider.api().deleteProduct(productId, ProductDeleteRequest(confirmPassword = password)) }

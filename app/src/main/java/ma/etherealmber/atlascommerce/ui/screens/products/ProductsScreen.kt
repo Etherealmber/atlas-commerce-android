@@ -698,10 +698,7 @@ fun ProductsScreen(
             submitting = state.submitting,
             onDismiss = { editingProduct = null },
             onSubmitDirect = { request ->
-                val update = if (request.secondaryUnit.isNullOrBlank() && request.secondaryUnitFactor == null) {
-                    request.copy(secondaryUnit = "", secondaryUnitFactor = 0.0)
-                } else request
-                viewModel.updateProduct(editProduct.id, update)
+                viewModel.updateProduct(editProduct.id, request)
                 editingProduct = null
             },
             onSubmitRequest = { _, _, _, _, _, _, _, _, _, _ -> },
@@ -773,7 +770,7 @@ private fun ProductRequestRow(
                         atlasText("Code ${request.code}", "Code ${request.code}", "الرمز ${request.code}"),
                         request.sku?.takeIf { it.isNotBlank() }?.let { "SKU $it" },
                         request.quantity?.let {
-                            "${atlasQuantity(it)} ${request.unit ?: atlasText("unité", "unit", "وحدة")}"
+                            productStockDisplay(it, request.unit ?: atlasText("unité", "unit", "وحدة"), request.secondaryUnit, request.secondaryUnitFactor)
                         },
                     ).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
@@ -1006,9 +1003,9 @@ private fun ProductMetaChips(product: ProductDto, currency: String) {
     ) {
         AtlasChip(
             text = atlasText(
-                "Stock ${productStockDisplay(product.stock, product.unit)}",
-                "Stock ${productStockDisplay(product.stock, product.unit)}",
-                "المخزون ${productStockDisplay(product.stock, product.unit)}",
+                "Stock ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                "Stock ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                "المخزون ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
             ),
             tone = productStockTone(product.stock, product.trackInventory),
         )
@@ -1075,9 +1072,9 @@ private fun ProductDetailDialog(
                     AtlasChip(text = atlasText("Prix ${atlasMoney(product.price, currency)} / ${product.unit.orEmpty()}", "Price ${atlasMoney(product.price, currency)} / ${product.unit.orEmpty()}", "السعر ${atlasMoney(product.price, currency)} / ${product.unit.orEmpty()}"))
                     AtlasChip(
                         text = atlasText(
-                            "Stock ${productStockDisplay(product.stock, product.unit)}",
-                            "Stock ${productStockDisplay(product.stock, product.unit)}",
-                            "المخزون ${productStockDisplay(product.stock, product.unit)}",
+                            "Stock ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                            "Stock ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                            "المخزون ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
                         ),
                         tone = productStockTone(product.stock, product.trackInventory),
                     )
@@ -1181,9 +1178,9 @@ private fun StockAdjustDialog(
                 )
                 Text(
                     text = atlasText(
-                        "Stock actuel : ${productStockDisplay(product.stock, product.unit)}",
-                        "Current stock: ${productStockDisplay(product.stock, product.unit)}",
-                        "المخزون الحالي: ${productStockDisplay(product.stock, product.unit)}",
+                        "Stock actuel : ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                        "Current stock: ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                        "المخزون الحالي: ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

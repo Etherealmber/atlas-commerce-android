@@ -93,6 +93,43 @@ class ProductRequestWireContractTest {
     }
 
     @Test
+    fun unitCatalogMergesServerOptionsWithTheFullFallbackSet() {
+        val units = ProductUnitDefaults.merge(
+            listOf(
+                ProductUnitDto(id = 5, name = "m²"),
+                ProductUnitDto(id = null, name = "yard"),
+                ProductUnitDto(id = 6, name = "YARD"),
+            ),
+        )
+        assertEquals("m²", units.first())
+        assertEquals("yard", units[1])
+        assertEquals(1, units.count { it.equals("yard", ignoreCase = true) })
+        assertTrue(units.containsAll(listOf("unité", "pièce", "g", "mL", "cm", "m³", "boîte", "carton", "paquet", "lot", "sac", "bouteille", "pack", "douzaine", "heure", "jour", "forfait", "service")))
+    }
+
+    @Test
+    fun productEditSerializesEmptyDualUnitsToClearExistingValues() {
+        val body = CreateProductRequest("Tile", "T-1").toUpdateProductRequest()
+        val json = parseMap(moshi.adapter(UpdateProductRequest::class.java).toJson(body))
+        assertEquals("", json["secondary_unit"])
+        assertEquals("", json["secondary_unit_factor"])
+    }
+
+    @Test
+    fun productEditKeepsPositiveFactorNumeric() {
+        val body = CreateProductRequest(
+            name = "Tile",
+            sku = "T-1",
+            unit = "carton",
+            secondaryUnit = "m²",
+            secondaryUnitFactor = 1.59,
+        ).toUpdateProductRequest()
+        val json = parseMap(moshi.adapter(UpdateProductRequest::class.java).toJson(body))
+        assertEquals("m²", json["secondary_unit"])
+        assertEquals(1.59, json["secondary_unit_factor"])
+    }
+
+    @Test
     fun directCreationSerializesSecondaryUnitsAlongsidePriceMode() {
         val json = parseMap(
             moshi.adapter(CreateProductRequest::class.java).toJson(

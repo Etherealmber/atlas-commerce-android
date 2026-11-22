@@ -270,9 +270,9 @@ internal fun ProductHistoryScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AtlasChip(
                         text = atlasText(
-                            "Stock ${productStockDisplay(product.stock, product.unit)}",
-                            "Stock ${productStockDisplay(product.stock, product.unit)}",
-                            "المخزون ${productStockDisplay(product.stock, product.unit)}",
+                            "Stock ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                            "Stock ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
+                            "المخزون ${productStockDisplay(product.stock, product.unit, product.secondaryUnit, product.secondaryUnitFactor)}",
                         ),
                         tone = productStockTone(product.stock, product.trackInventory),
                     )

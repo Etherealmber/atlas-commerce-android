@@ -801,6 +801,44 @@ data class CreateProductRequest(
     @Json(name = "image_url") val imageUrl: String? = null,
 )
 
+/** PUT representation uses empty strings for both dual-unit fields when clearing them.
+ * The Worker treats those explicit empty values as a request to store SQL NULLs. */
+@JsonClass(generateAdapter = true)
+data class UpdateProductRequest(
+    val name: String,
+    val sku: String,
+    val barcode: String? = null,
+    val category: String? = null,
+    val unit: String = "unité",
+    @Json(name = "secondary_unit") val secondaryUnit: String = "",
+    @Json(name = "secondary_unit_factor") val secondaryUnitFactor: Any = "",
+    val price: Double = 0.0,
+    @Json(name = "invoice_price_mode") val invoicePriceMode: String = "exclusive",
+    @Json(name = "stock_quantity") val stockQuantity: Double = 0.0,
+    @Json(name = "low_stock_threshold") val lowStockThreshold: Double = 5.0,
+    val description: String? = null,
+    @Json(name = "image_url") val imageUrl: String? = null,
+)
+
+fun CreateProductRequest.toUpdateProductRequest(): UpdateProductRequest {
+    val cleanSecondary = secondaryUnit?.trim()?.takeIf(String::isNotEmpty)
+    return UpdateProductRequest(
+        name = name,
+        sku = sku,
+        barcode = barcode,
+        category = category,
+        unit = unit,
+        secondaryUnit = cleanSecondary.orEmpty(),
+        secondaryUnitFactor = if (cleanSecondary == null) "" else secondaryUnitFactor ?: "",
+        price = price,
+        invoicePriceMode = invoicePriceMode,
+        stockQuantity = stockQuantity,
+        lowStockThreshold = lowStockThreshold,
+        description = description,
+        imageUrl = imageUrl,
+    )
+}
+
 @JsonClass(generateAdapter = true)
 data class ProductCreationRequestDto(
     val id: Long = 0,

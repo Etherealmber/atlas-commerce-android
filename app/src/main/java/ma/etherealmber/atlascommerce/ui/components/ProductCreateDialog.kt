@@ -16,6 +16,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenu
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,22 +31,25 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import java.util.Locale
 
-private val StandardUnits = listOf("unité", "pièce", "m²", "kg", "carton")
 
 /**
  * Shared dialog for adding a product (`POST /api/products` strictly for Admins) or
@@ -91,6 +98,9 @@ fun ProductCreateDialog(
     //   which routes non-admin calls directly to Admin notifications + stock requests).
     var adminWantsRequestOnly by remember(canCreateDirectly, allowRequestOnly) { mutableStateOf(false) }
     val modeDirect = canCreateDirectly && (!allowRequestOnly || !adminWantsRequestOnly)
+    val unitCatalogViewModel: ProductUnitCatalogViewModel = hiltViewModel()
+    val unitOptions by unitCatalogViewModel.units.collectAsState()
+    LaunchedEffect(unitCatalogViewModel) { unitCatalogViewModel.load() }
 
     var barcode by remember(initialBarcode) { mutableStateOf(initialBarcode) }
     var name by remember(initialName) { mutableStateOf(initialName) }
@@ -102,8 +112,14 @@ fun ProductCreateDialog(
         )
     }
     var unit by remember(initialUnit) { mutableStateOf(initialUnit.ifBlank { "unité" }) }
-    var secondaryUnit by remember(initialSecondaryUnit) { mutableStateOf(initialSecondaryUnit) }
-    var secondaryUnitFactorText by remember(initialSecondaryUnitFactor) { mutableStateOf(initialSecondaryUnitFactor) }
+    val initialSecondaryMatchesPrimary = initialSecondaryUnit.isNotBlank() &&
+        initialSecondaryUnit.trim().equals(initialUnit.trim(), ignoreCase = true)
+    var secondaryUnit by remember(initialSecondaryUnit, initialUnit) {
+        mutableStateOf(if (initialSecondaryMatchesPrimary) "" else initialSecondaryUnit)
+    }
+    var secondaryUnitFactorText by remember(initialSecondaryUnitFactor, initialSecondaryUnit, initialUnit) {
+        mutableStateOf(if (initialSecondaryMatchesPrimary) "" else initialSecondaryUnitFactor)
+    }
     var rawQty by remember(initialQuantity) { mutableStateOf(initialQuantity) }
     var rawPrice by remember(initialPrice) { mutableStateOf(initialPrice) }
     var invoicePriceMode by remember(initialInvoicePriceMode) { mutableStateOf(initialInvoicePriceMode) }
@@ -130,10 +146,26 @@ fun ProductCreateDialog(
     val parsedQty = rawQty.replace(',', '.').toDoubleOrNull()
     val parsedPrice = rawPrice.replace(',', '.').toDoubleOrNull()
     val parsedSecondaryUnitFactor = secondaryUnitFactorText.replace(',', '.').toDoubleOrNull()
-    val secondaryUnitValid = when {
+    val secondaryUnitsDiffer = secondaryUnit.isBlank() || !secondaryUnit.trim().equals(unit.trim(), ignoreCase = true)
+    val secondaryUnitValid = secondaryUnitsDiffer && when {
         secondaryUnit.isBlank() && secondaryUnitFactorText.isBlank() -> true
-        secondaryUnit.isNotBlank() && parsedSecondaryUnitFactor != null -> parsedSecondaryUnitFactor > 0.0
+        secondaryUnit.isNotBlank() && parsedSecondaryUnitFactor != null -> parsedSecondaryUnitFactor.isFinite() && parsedSecondaryUnitFactor > 0.0
         else -> false
+    }
+    val submittedSecondaryUnit = secondaryUnit.trim().takeIf { it.isNotEmpty() }
+    val submittedSecondaryUnitFactor = parsedSecondaryUnitFactor?.takeIf {
+        submittedSecondaryUnit != null && it.isFinite() && it > 0.0
+    }
+    val onPrimaryUnitChange: (String) -> Unit = { selected ->
+        unit = selected
+        if (secondaryUnit.isNotBlank() && selected.isNotBlank() && secondaryUnit.trim().equals(selected.trim(), ignoreCase = true)) {
+            secondaryUnit = ""
+            secondaryUnitFactorText = ""
+        }
+    }
+    val onSecondaryUnitChange: (String) -> Unit = { selected ->
+        secondaryUnit = selected
+        if (selected.isBlank()) secondaryUnitFactorText = ""
     }
     val parsedThreshold = rawThreshold.replace(',', '.').toDoubleOrNull() ?: 5.0
 
@@ -307,37 +339,38 @@ fun ProductCreateDialog(
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    StandardUnits.take(4).forEach { candidate ->
-                        FilterChip(
-                            selected = unit.equals(candidate, ignoreCase = true),
-                            onClick = { unit = candidate },
-                            label = { Text(candidate) },
-                        )
-                    }
-                }
-                OutlinedTextField(
+                ProductUnitDropdown(
                     value = unit,
-                    onValueChange = { unit = it },
-                    label = { Text(atlasText("Unité principale *")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    options = unitOptions,
+                    label = atlasText("Unité principale *", "Primary unit *", "الوحدة الأساسية *"),
+                    allowNone = false,
+                    onValueChange = onPrimaryUnitChange,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = secondaryUnit,
-                        onValueChange = { secondaryUnit = it },
-                        label = { Text(atlasText("Unité secondaire (facultative)")) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
+                ProductUnitDropdown(
+                    value = secondaryUnit,
+                    options = unitOptions,
+                    label = atlasText("Unité secondaire (facultative)", "Secondary unit (optional)", "الوحدة الثانوية (اختيارية)"),
+                    allowNone = true,
+                    disabledUnit = unit,
+                    isError = !secondaryUnitsDiffer,
+                    onValueChange = onSecondaryUnitChange,
+                )
+                if (!secondaryUnitsDiffer) {
+                    Text(
+                        atlasText("Choisissez une unité secondaire différente de l'unité principale.", "Choose a secondary unit different from the primary unit.", "اختر وحدة ثانوية مختلفة عن الوحدة الأساسية."),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
                     )
+                }
+                if (secondaryUnit.isNotBlank()) {
                     OutlinedTextField(
                         value = secondaryUnitFactorText,
                         onValueChange = { value -> secondaryUnitFactorText = value.filter { it.isDigit() || it == '.' || it == ',' } },
-                        label = { Text(atlasText("Facteur")) },
+                        label = { Text(atlasText("Facteur secondaire *", "Secondary-unit factor *", "معامل الوحدة الثانوية *")) },
                         singleLine = true,
+                        isError = !secondaryUnitValid,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.weight(0.75f),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 Text(
@@ -491,8 +524,8 @@ fun ProductCreateDialog(
                                 name = name.trim(),
                                 sku = sku.trim(),
                                 unit = unit.trim().ifBlank { "unité" },
-                                secondaryUnit = secondaryUnit.trim().ifBlank { null },
-                                secondaryUnitFactor = parsedSecondaryUnitFactor,
+                                secondaryUnit = submittedSecondaryUnit,
+                                secondaryUnitFactor = submittedSecondaryUnitFactor,
                                 stockQuantity = qty,
                                 imageUrl = photoUrl,
                             ),
@@ -505,8 +538,8 @@ fun ProductCreateDialog(
                                 barcode = barcode.trim().ifBlank { null },
                                 category = category.trim().ifBlank { null },
                                 unit = unit.trim().ifBlank { "unité" },
-                                secondaryUnit = secondaryUnit.trim().ifBlank { null },
-                                secondaryUnitFactor = parsedSecondaryUnitFactor,
+                                secondaryUnit = submittedSecondaryUnit,
+                                secondaryUnitFactor = submittedSecondaryUnitFactor,
                                 price = parsedPrice ?: 0.0,
                                 invoicePriceMode = invoicePriceMode,
                                 stockQuantity = qty,
@@ -520,8 +553,8 @@ fun ProductCreateDialog(
                             name.trim(),
                             generatedSku,
                             unit.trim().ifBlank { "unité" },
-                            secondaryUnit.trim().ifBlank { null },
-                            parsedSecondaryUnitFactor,
+                            submittedSecondaryUnit,
+                            submittedSecondaryUnitFactor,
                             qty,
                             category.trim().ifBlank { null },
                             note.trim().ifBlank { null },
@@ -557,4 +590,74 @@ fun ProductCreateDialog(
             }
         },
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProductUnitDropdown(
+    value: String,
+    options: List<String>,
+    label: String,
+    allowNone: Boolean,
+    disabledUnit: String? = null,
+    isError: Boolean = false,
+    onValueChange: (String) -> Unit,
+) {
+    var expanded by remember(label) { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { typed ->
+                onValueChange(typed)
+                expanded = true
+            },
+            label = { Text(label) },
+            singleLine = true,
+            isError = isError,
+            trailingIcon = {
+                Icon(
+                    imageVector = Icons.Outlined.ExpandMore,
+                    contentDescription = null,
+                    modifier = Modifier.graphicsLayer { rotationZ = if (expanded) 180f else 0f },
+                )
+            },
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            if (allowNone) {
+                DropdownMenuItem(
+                    text = { Text(atlasText("Aucune", "None", "بدون")) },
+                    onClick = {
+                        onValueChange("")
+                        expanded = false
+                    },
+                )
+            }
+            options.forEach { option ->
+                val disabled = !disabledUnit.isNullOrBlank() &&
+                    option.trim().equals(disabledUnit.trim(), ignoreCase = true)
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    enabled = !disabled,
+                    onClick = {
+                        onValueChange(option)
+                        expanded = false
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text(atlasText("Autre unité…", "Other unit…", "وحدة أخرى…")) },
+                onClick = {
+                    onValueChange("")
+                    expanded = false
+                },
+            )
+        }
+    }
 }

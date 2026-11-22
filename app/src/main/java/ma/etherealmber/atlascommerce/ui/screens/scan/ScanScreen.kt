@@ -83,6 +83,7 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.ProductCreateDialog
 import ma.etherealmber.atlascommerce.ui.components.ScanFeedback
+import ma.etherealmber.atlascommerce.ui.screens.products.productStockDisplay
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
@@ -451,9 +452,9 @@ fun ScanScreen(
                     if (scannedProduct.trackInventory) {
                         Text(
                             atlasText(
-                                "Stock : ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
-                                "Stock: ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
-                                "المخزون: ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
+                                "Stock : ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
+                                "Stock: ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
+                                "المخزون: ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
                             ),
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -537,9 +538,9 @@ fun ScanScreen(
                     Text(scannedProduct.name, style = MaterialTheme.typography.titleSmall)
                     Text(
                         atlasText(
-                            "Stock actuel : ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
-                            "Current stock: ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
-                            "المخزون الحالي: ${atlasQuantity(scannedProduct.stock)} ${scannedProduct.unit.orEmpty()}",
+                            "Stock actuel : ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
+                            "Current stock: ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
+                            "المخزون الحالي: ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
