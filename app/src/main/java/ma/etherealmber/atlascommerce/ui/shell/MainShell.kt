@@ -155,7 +155,7 @@ enum class MainTab(val label: String, val icon: ImageVector) {
     SALE("Vente", Icons.Outlined.ShoppingCart),
     BALANCE("Balance", Icons.Outlined.AccountBalanceWallet),
     EMPLOYEES("Employés", Icons.Outlined.Groups),
-    AGENT("Atlas Agent", Icons.Outlined.Bot),
+    AGENT("Atlas Agent", Icons.Outlined.AutoAwesome),
     PROFILE("Mon profil", Icons.Outlined.Person),
     SETTINGS("Paramètres", Icons.Outlined.Settings),
     NOTIFICATIONS("Notifications", Icons.Outlined.Notifications),

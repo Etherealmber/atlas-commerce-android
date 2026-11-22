@@ -928,7 +928,7 @@ private fun SecurityDeviceRow(
     onRevoke: () -> Unit,
 ) {
     val isAndroid = device.userAgent.orEmpty().contains("Android", ignoreCase = true)
-    val lastSeen = device.lastSeen?.takeIf(String::isNotBlank)?.let(::atlasDateTime)
+    val lastSeen = device.lastSeen?.takeIf(String::isNotBlank)?.let { atlasDateTime(it) }
     val metadata = listOfNotNull(device.lastIp?.takeIf(String::isNotBlank)?.let { "IP $it" }, lastSeen).joinToString(" · ")
 
     SecurityCard {
