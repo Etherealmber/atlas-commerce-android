@@ -425,7 +425,10 @@ interface AtlasApi {
     ): Response<ResponseBody>
 
     @GET("api/invoices")
-    suspend fun invoices(@Query("kind") kind: String = "all"): ApiEnvelope<List<InvoiceDto>>
+    suspend fun invoices(
+        @Query("kind") kind: String = "all",
+        @Query("client") clientId: Long? = null,
+    ): ApiEnvelope<List<InvoiceDto>>
 
     @POST("api/invoices")
     suspend fun createInvoice(

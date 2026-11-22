@@ -114,8 +114,8 @@ class CommerceRepository @Inject constructor(
     suspend fun clients(): ApiResult<List<ClientDto>> =
         runner.envelope { apiProvider.api().clients() }
 
-    suspend fun invoices(kind: String = "all"): ApiResult<List<InvoiceDto>> =
-        runner.envelope { apiProvider.api().invoices(kind) }
+    suspend fun invoices(kind: String = "all", clientId: Long? = null): ApiResult<List<InvoiceDto>> =
+        runner.envelope { apiProvider.api().invoices(kind, clientId) }
 
     suspend fun financeMonthly(period: String? = null): ApiResult<FinanceMonthlyDto> =
         runner.envelope { apiProvider.api().financeMonthly(period) }

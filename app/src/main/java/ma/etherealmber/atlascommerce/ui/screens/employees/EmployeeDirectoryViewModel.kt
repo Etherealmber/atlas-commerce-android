@@ -63,14 +63,14 @@ class EmployeeDirectoryViewModel @Inject constructor(
                     directoryGeneration += 1
                     detailGeneration += 1
                     _state.value = UiState(scopeIdentity = user?.scopeIdentity)
-                    if (user != null && Roles.isAdmin(user.role)) load()
+                    if (user != null && canAccessEmployees(user.role)) load()
                 }
         }
     }
 
     fun load() {
         val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return
-        if (!Roles.isAdmin(user.role)) return
+        if (!canAccessEmployees(user.role)) return
         val scope = user.scopeIdentity
         val generation = ++directoryGeneration
         directoryJob?.cancel()
@@ -89,7 +89,7 @@ class EmployeeDirectoryViewModel @Inject constructor(
 
     fun showDetails(id: Long) {
         val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return
-        if (!Roles.isAdmin(user.role)) return
+        if (!canAccessEmployees(user.role)) return
         val scope = user.scopeIdentity
         val generation = ++detailGeneration
         detailsJob?.cancel()
@@ -115,7 +115,7 @@ class EmployeeDirectoryViewModel @Inject constructor(
 
     fun updateEmployee(id: Long, request: EmployeeUpdateRequest, onComplete: (Boolean) -> Unit = {}) {
         val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return
-        if (!Roles.isAdmin(user.role) || _state.value.saving) return
+        if (!canAccessEmployees(user.role) || _state.value.saving) return
         val scope = user.scopeIdentity
         val generation = detailGeneration
         _state.update { it.copy(saving = true, actionError = null) }
@@ -214,6 +214,9 @@ class EmployeeDirectoryViewModel @Inject constructor(
 
     private fun activeAdminScope(): String? =
         (sessionManager.state.value as? SessionState.Active)?.user
-            ?.takeIf { Roles.isAdmin(it.role) }
+            ?.takeIf { canAccessEmployees(it.role) }
             ?.scopeIdentity
+
+    private fun canAccessEmployees(role: String?): Boolean =
+        Roles.isAdmin(role) || Roles.normalize(role) == Roles.SECRETARY
 }

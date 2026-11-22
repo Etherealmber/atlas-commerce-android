@@ -423,6 +423,11 @@ data class EmployeeDto(
     @Json(name = "pay_amount") val payAmount: Double = 0.0,
     @Json(name = "pay_cycle_type") val payCycleType: String = "monthly",
     @Json(name = "pay_cycle_days") val payCycleDays: Int = 30,
+    @Json(name = "cycle_days") val cycleDays: Int = 0,
+    @Json(name = "next_due") val nextDue: String? = null,
+    @Json(name = "last_paid_at") val lastPaidAt: String? = null,
+    @Json(name = "daily_rate") val dailyRate: Double = 0.0,
+    @Json(name = "pay_overdue") val payOverdue: Boolean = false,
     val notes: String = "",
     val payments: List<EmployeePaymentDto> = emptyList(),
 )
@@ -455,6 +460,8 @@ data class EmployeeUpdateRequest(
     @Json(name = "employment_status") val employmentStatus: String,
     @Json(name = "joined_date") val joinedDate: String,
     @Json(name = "pay_amount") val payAmount: Double,
+    @Json(name = "pay_cycle_type") val payCycleType: String = "monthly",
+    @Json(name = "pay_cycle_days") val payCycleDays: Int = 30,
 )
 
 @JsonClass(generateAdapter = true)
@@ -1195,6 +1202,7 @@ data class ClientDto(
 @JsonClass(generateAdapter = true)
 data class InvoiceDto(
     val id: Long = 0,
+    @Json(name = "client_id") val clientId: Long? = null,
     val number: String? = null,
     @Json(name = "client_name") val clientName: String? = null,
     @Json(name = "issue_date") val issueDate: String? = null,

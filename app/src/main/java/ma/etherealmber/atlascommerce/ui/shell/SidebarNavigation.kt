@@ -257,6 +257,13 @@ internal fun AtlasSidebarContent(
             )
             if (Roles.canCreateDocuments(user.role)) {
                 SidebarNavigationItem(
+                    icon = MainTab.CLIENTS.icon,
+                    label = MainTab.CLIENTS.localizedLabel(),
+                    isSelected = selectedTab == MainTab.CLIENTS && !dataStorageSelected,
+                    expanded = expanded,
+                    onClick = { onNavigate(MainTab.CLIENTS) },
+                )
+                SidebarNavigationItem(
                     icon = Icons.Outlined.ShoppingCart,
                     label = atlasText("Nouvelle vente", "New sale", "بيع جديد"),
                     isSelected = selectedTab == MainTab.SALE && !dataStorageSelected,
