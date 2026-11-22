@@ -639,6 +639,7 @@ fun ProductsScreen(
             initialQuantity = fulfill.quantity?.let { atlasQuantity(it) } ?: "1",
             initialCategory = fulfill.category.orEmpty(),
             initialImageUrl = fulfill.photoUrl,
+            requesterName = user.displayName.ifBlank { user.username },
             imageServerBaseUrl = user.serverUrl,
             submitting = state.submitting,
             onDismiss = { pendingFulfillRequest = null },

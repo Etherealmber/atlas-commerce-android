@@ -617,6 +617,7 @@ fun ScanScreen(
         ProductCreateDialog(
             canCreateDirectly = isAdmin,
             initialBarcode = state.lastCode.orEmpty(),
+            requesterName = user.displayName.ifBlank { user.username },
             imageServerBaseUrl = user.serverUrl,
             submitting = state.creating,
             onDismiss = {

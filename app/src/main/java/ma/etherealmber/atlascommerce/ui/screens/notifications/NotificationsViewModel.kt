@@ -22,6 +22,8 @@ import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.model.AlertItemDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionDto
+import ma.etherealmber.atlascommerce.data.model.ProductRequestBody
+import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import javax.inject.Inject
 
@@ -41,6 +43,8 @@ class NotificationsViewModel @Inject constructor(
         val sentNotificationCount: Int = 0,
         val busyId: Long? = null,
         val sendingNotification: Boolean = false,
+        val productActionDetails: MobileActionDto? = null,
+        val loadingProductActionId: Long? = null,
         val error: String? = null,
     ) {
         val isAdmin: Boolean get() = Roles.isAdmin(role)
@@ -172,7 +176,40 @@ class NotificationsViewModel @Inject constructor(
         }
     }
 
-    fun completeAction(action: MobileActionDto) {
+    fun productRequestBody(action: MobileActionDto): ProductRequestBody? =
+        commerceRepository.parseActionMeta(action)?.createProductBody
+
+    fun loadProductActionDetails(action: MobileActionDto) {
+        val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return
+        if (!Roles.isAdmin(activeUser.role) || !action.type.equals("new_product", ignoreCase = true)) return
+        val requestedScope = activeUser.scopeIdentity
+        _state.update { it.copy(loadingProductActionId = action.id, productActionDetails = null) }
+        viewModelScope.launch {
+            when (val result = commerceRepository.mobileAction(action.id)) {
+                is ApiResult.Failure -> {
+                    if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope) {
+                        _state.update { it.copy(loadingProductActionId = null) }
+                        _messages.tryEmit(result.message)
+                    }
+                }
+                is ApiResult.Success -> {
+                    if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+                    _state.update {
+                        it.copy(
+                            loadingProductActionId = null,
+                            productActionDetails = result.data,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun clearProductActionDetails() {
+        _state.update { it.copy(loadingProductActionId = null, productActionDetails = null) }
+    }
+
+    fun completeAction(action: MobileActionDto, productRequest: CreateProductRequest? = null) {
         viewModelScope.launch {
             val activeUser = (sessionManager.state.value as? SessionState.Active)?.user
             val isAdmin = Roles.isAdmin(activeUser?.role)
@@ -189,6 +226,7 @@ class NotificationsViewModel @Inject constructor(
                     val res = commerceRepository.approveActionAsAdmin(
                         action = action,
                         adminUsername = activeUser?.username ?: "admin",
+                        productRequest = productRequest,
                     )
                 ) {
                     is ApiResult.Failure -> {

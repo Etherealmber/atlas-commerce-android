@@ -195,6 +195,7 @@ internal fun AgentInlineActions(
     if (showProductForm) {
         ProductCreateDialog(
             canCreateDirectly = Roles.canCreateProductDirectly(user.role),
+            requesterName = user.displayName.ifBlank { user.username },
             imageServerBaseUrl = user.serverUrl,
             submitting = productState.submitting,
             onDismiss = { showProductForm = false },

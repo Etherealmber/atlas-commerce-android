@@ -15,7 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AdminPanelSettings
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
@@ -63,9 +63,10 @@ fun ProductCreateDialog(
     initialName: String = "",
     initialSku: String = "",
     initialUnit: String = "unité",
-    initialQuantity: String = "1",
+    initialQuantity: String = "0",
     initialCategory: String = "",
     initialImageUrl: String? = null,
+    requesterName: String? = null,
     imageServerBaseUrl: String? = null,
     submitting: Boolean = false,
     onDismiss: () -> Unit,
@@ -100,7 +101,8 @@ fun ProductCreateDialog(
     }
     var unit by remember(initialUnit) { mutableStateOf(initialUnit.ifBlank { "unité" }) }
     var rawQty by remember(initialQuantity) { mutableStateOf(initialQuantity) }
-    var rawPrice by remember { mutableStateOf("0") }
+    var rawPrice by remember { mutableStateOf("") }
+    var invoicePriceMode by remember { mutableStateOf("exclusive") }
     var rawThreshold by remember { mutableStateOf("5") }
     var category by remember(initialCategory) { mutableStateOf(initialCategory) }
     var note by remember { mutableStateOf("") }
@@ -126,7 +128,7 @@ fun ProductCreateDialog(
     val parsedThreshold = rawThreshold.replace(',', '.').toDoubleOrNull() ?: 5.0
 
     val reqNameOk = name.trim().length in 1..200
-    val reqCodeOrSkuOk = if (modeDirect) {
+    val reqCodeOrSkuOk = if (!canCreateDirectly || modeDirect) {
         sku.trim().isNotBlank()
     } else {
         barcode.trim().isNotBlank() || sku.trim().isNotBlank()
@@ -137,7 +139,7 @@ fun ProductCreateDialog(
 
     val checks = buildList {
         add("Nom *" to reqNameOk)
-        add((if (modeDirect) "SKU *" else "Code/SKU *") to reqCodeOrSkuOk)
+        add((if (!canCreateDirectly || modeDirect) "SKU *" else "Code/SKU *") to reqCodeOrSkuOk)
         add("Unité *" to reqUnitOk)
         add("Qté *" to reqQtyOk)
         if (modeDirect) add("Prix *" to reqPriceOk)
@@ -188,13 +190,17 @@ fun ProductCreateDialog(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
-                                imageVector = Icons.Outlined.AdminPanelSettings,
+                                imageVector = Icons.Outlined.AccountCircle,
                                 contentDescription = null,
                                 tint = toneForeground(AtlasTone.INFO),
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                text = atlasText("Création directe réservée à l'Admin : cette fiche est envoyée immédiatement à l'Administrateur pour validation."),
+                                text = atlasText(
+                                    "Demandeur : ${requesterName?.takeIf { it.isNotBlank() } ?: "Compte connecté"}. La demande sera transmise à l'Administrateur ; votre identité est confirmée par la session.",
+                                    "Requester: ${requesterName?.takeIf { it.isNotBlank() } ?: "Signed-in account"}. This request goes to an administrator; your identity is verified by your session.",
+                                    "مقدم الطلب: ${requesterName?.takeIf { it.isNotBlank() } ?: "الحساب المتصل"}. سيُرسل الطلب إلى المسؤول، وتُتحقق هويتك من الجلسة.",
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = toneForeground(AtlasTone.INFO),
                             )
@@ -243,17 +249,19 @@ fun ProductCreateDialog(
                     }
                 }
 
-                OutlinedTextField(
-                    value = barcode,
-                    onValueChange = { barcode = it },
-                    label = {
-                        Text(
-                            if (modeDirect) atlasText("Code-barres (EAN / QR)") else atlasText("Code-barres / EAN *"),
-                        )
-                    },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (canCreateDirectly) {
+                    OutlinedTextField(
+                        value = barcode,
+                        onValueChange = { barcode = it },
+                        label = {
+                            Text(
+                                if (modeDirect) atlasText("Code-barres (EAN / QR)") else atlasText("Code-barres / EAN *"),
+                            )
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
 
                 OutlinedTextField(
                     value = name,
@@ -358,6 +366,27 @@ fun ProductCreateDialog(
                             modifier = Modifier.weight(1f),
                         )
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = invoicePriceMode == "exclusive",
+                            onClick = { invoicePriceMode = "exclusive" },
+                            label = { Text(atlasText("HT · TVA ajoutée", "Exclusive · VAT added", "غير شامل · تُضاف الضريبة")) },
+                        )
+                        FilterChip(
+                            selected = invoicePriceMode == "inclusive",
+                            onClick = { invoicePriceMode = "inclusive" },
+                            label = { Text(atlasText("TTC · TVA incluse", "Inclusive · VAT included", "شامل · الضريبة مضمنة")) },
+                        )
+                    }
+                    Text(
+                        if (invoicePriceMode == "exclusive") {
+                            atlasText("Le prix saisi est hors taxe ; la TVA sera ajoutée sur les factures.", "The entered price excludes VAT; VAT will be added to invoices.", "السعر المدخل غير شامل للضريبة؛ ستُضاف الضريبة إلى الفواتير.")
+                        } else {
+                            atlasText("Le prix saisi inclut déjà la TVA.", "The entered price already includes VAT.", "السعر المدخل يشمل الضريبة بالفعل.")
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 } else {
                     OutlinedTextField(
                         value = rawQty,
@@ -369,27 +398,29 @@ fun ProductCreateDialog(
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = category,
-                        onValueChange = { category = it },
-                        label = { Text(atlasText("Catégorie")) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = rawThreshold,
-                        onValueChange = { s ->
-                            rawThreshold = s.filter { it.isDigit() || it == '.' || it == ',' }
-                        },
-                        label = { Text(atlasText("Seuil alerte")) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.weight(1f),
-                    )
+                if (canCreateDirectly) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = category,
+                            onValueChange = { category = it },
+                            label = { Text(atlasText("Catégorie")) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = rawThreshold,
+                            onValueChange = { s ->
+                                rawThreshold = s.filter { it.isDigit() || it == '.' || it == ',' }
+                            },
+                            label = { Text(atlasText("Seuil alerte")) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
 
-                if (!modeDirect) {
+                if (canCreateDirectly && !modeDirect) {
                     OutlinedTextField(
                         value = note,
                         onValueChange = { note = it },
@@ -408,10 +439,19 @@ fun ProductCreateDialog(
                     val generatedSku = sku.trim().ifBlank {
                         "SKU-${barcode.takeLast(6).ifBlank { (1000..9999).random().toString() }}"
                     }
-                    if (!canCreateDirectly || modeDirect) {
-                        // Calls `onSubmitDirect` which routes through `repo.submitProductForRole(...)`:
-                        // - Admin: creates immediately (`POST /api/products`).
-                        // - Non-Admin: immediately notifies Admin (`POST /api/mobile-actions` + `product-requests`)!
+                    if (!canCreateDirectly) {
+                        // Repository sends only name, SKU, unit, stock and optional image data;
+                        // requester identity comes from the authenticated server session.
+                        onSubmitDirect(
+                            CreateProductRequest(
+                                name = name.trim(),
+                                sku = sku.trim(),
+                                unit = unit.trim().ifBlank { "unité" },
+                                stockQuantity = qty,
+                                imageUrl = photoUrl,
+                            ),
+                        )
+                    } else if (modeDirect) {
                         onSubmitDirect(
                             CreateProductRequest(
                                 name = name.trim(),
@@ -420,9 +460,9 @@ fun ProductCreateDialog(
                                 category = category.trim().ifBlank { null },
                                 unit = unit.trim().ifBlank { "unité" },
                                 price = parsedPrice ?: 0.0,
+                                invoicePriceMode = invoicePriceMode,
                                 stockQuantity = qty,
                                 lowStockThreshold = parsedThreshold,
-                                description = note.trim().ifBlank { null },
                                 imageUrl = photoUrl,
                             ),
                         )

@@ -293,6 +293,9 @@ interface AtlasApi {
     @GET("api/mobile-actions/stats")
     suspend fun mobileActionStats(): ApiEnvelope<MobileActionStatsDto>
 
+    @GET("api/mobile-actions/{id}")
+    suspend fun mobileAction(@Path("id") id: Long): ApiEnvelope<MobileActionDto>
+
     @POST("api/mobile-actions")
     suspend fun createMobileAction(@Body body: CreateMobileActionRequest): ActionAckDto
 

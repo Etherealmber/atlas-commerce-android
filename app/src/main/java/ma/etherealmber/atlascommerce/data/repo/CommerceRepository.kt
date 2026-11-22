@@ -57,6 +57,7 @@ import ma.etherealmber.atlascommerce.data.model.MobileActionStatsDto
 import ma.etherealmber.atlascommerce.data.model.MobileWorkStatusDto
 import ma.etherealmber.atlascommerce.data.model.ProductCreationRequestDto
 import ma.etherealmber.atlascommerce.data.model.ProductDto
+import ma.etherealmber.atlascommerce.data.model.ProductRequestBody
 import ma.etherealmber.atlascommerce.data.model.ProductDeleteRequest
 import ma.etherealmber.atlascommerce.data.model.ProductImageDto
 import ma.etherealmber.atlascommerce.data.model.ProductImageUploadRequest
@@ -275,17 +276,12 @@ class CommerceRepository @Inject constructor(
     }
 
     /**
-     * Authoritative role-gated product submission:
-     * - **Admin / Owner (`Roles.canCreateProductDirectly(role)`)**: Creates immediately (`POST /api/products`).
-     * - **Non-Admin (`secretaire`, `stock`, `user`)**: NEVER mutates catalogue directly; immediately
-     *   dispatches a full Admin notification (`POST /api/mobile-actions` targeted to `admin` with full
-     *   `CreateProductRequest` payload) AND registers the stock product request (`POST /api/stock/product-requests`).
+     * Authorized users create products directly. Other roles submit only the minimal
+     * session-attributed `new_product` action; the server derives requester identity.
      */
     suspend fun submitProductForRole(
         request: CreateProductRequest,
         role: String?,
-        username: String?,
-        note: String? = null,
     ): ApiResult<ProductSubmissionOutcome> {
         if (Roles.canCreateProductDirectly(role)) {
             return when (val created = createProduct(request)) {
@@ -294,58 +290,31 @@ class CommerceRepository @Inject constructor(
             }
         }
 
-        val sender = username?.takeIf { it.isNotBlank() } ?: "opérateur"
-        val roleLabel = Roles.label(role)
-        val code = request.barcode?.takeIf { it.isNotBlank() }
-            ?: request.sku.ifBlank { "AUTO-${System.currentTimeMillis() % 100_000}" }
-        val detailParts = buildList {
-            add("Demandé par $sender ($roleLabel)")
-            if (request.sku.isNotBlank()) add("Réf: ${request.sku}")
-            if (!request.barcode.isNullOrBlank()) add("Code: ${request.barcode}")
-            if (request.stockQuantity > 0.0) add("Qté initiale: ${request.stockQuantity} ${request.unit}")
-            if (!note.isNullOrBlank()) add("Note: ${note.trim()}")
-        }
-        val detailText = detailParts.joinToString(" · ")
-
         val actionRes = createMobileAction(
             CreateMobileActionRequest(
                 type = "new_product",
                 title = "Nouveau produit à créer : ${request.name}",
-                detail = detailText,
-                barcode = request.barcode?.takeIf { it.isNotBlank() } ?: code,
-                createdBy = sender,
                 meta = MobileActionMetaDto(
                     targetRole = RoleTarget.ADMIN.key,
-                    senderRole = Roles.normalize(role),
-                    priority = "high",
+                    needsApproval = true,
                     category = "product_creation_request",
-                    proposedStock = request.stockQuantity,
-                    createProductBody = request,
+                    createProductBody = ProductRequestBody(
+                        name = request.name,
+                        sku = request.sku,
+                        unit = request.unit,
+                        stockQuantity = request.stockQuantity,
+                        imageDataUrl = request.imageUrl,
+                    ),
                 ),
             ),
         )
-
-        val stockReqRes = submitProductRequest(
-            SubmitProductRequestBody(
-                code = code,
-                sku = request.sku.takeIf { it.isNotBlank() },
-                name = request.name,
-                category = request.category,
-                unit = request.unit.ifBlank { "unité" },
-                quantity = if (request.stockQuantity > 0.0) request.stockQuantity else 1.0,
-                note = detailText,
-                photoUrl = request.imageUrl,
-            ),
-        )
-
-        return if (actionRes is ApiResult.Success || stockReqRes is ApiResult.Success) {
-            ApiResult.Success(
+        return when (actionRes) {
+            is ApiResult.Success -> ApiResult.Success(
                 ProductSubmissionOutcome.SentToAdmin(
                     "Demande envoyée immédiatement à l'Administrateur pour « ${request.name} ».",
                 ),
             )
-        } else {
-            (actionRes as? ApiResult.Failure) ?: (stockReqRes as ApiResult.Failure)
+            is ApiResult.Failure -> actionRes
         }
     }
 
@@ -411,12 +380,17 @@ class CommerceRepository @Inject constructor(
     suspend fun approveActionAsAdmin(
         action: MobileActionDto,
         adminUsername: String,
+        productRequest: CreateProductRequest? = null,
     ): ApiResult<ProductDto?> {
         val meta = parseActionMeta(action)
         val pendingProduct = meta?.createProductBody
         var createdProduct: ProductDto? = null
         if (pendingProduct != null && action.productId == null) {
-            when (val prodRes = createProduct(pendingProduct)) {
+            val authorizedProduct = productRequest ?: return ApiResult.Failure(
+                "PRODUCT_PRICE_REQUIRED",
+                "Enter a price and VAT mode before creating this requested product.",
+            )
+            when (val prodRes = createProduct(authorizedProduct)) {
                 is ApiResult.Success -> createdProduct = prodRes.data
                 is ApiResult.Failure -> return prodRes
             }
@@ -506,6 +480,10 @@ class CommerceRepository @Inject constructor(
 
     suspend fun mobileActions(status: String = "all"): ApiResult<List<MobileActionDto>> =
         runner.envelope { apiProvider.api().mobileActions(status = status) }
+
+    /** Fetch one action without list compaction so product-request photos survive approval. */
+    suspend fun mobileAction(id: Long): ApiResult<MobileActionDto> =
+        runner.envelope { apiProvider.api().mobileAction(id) }
 
     suspend fun mobileActionStats(): ApiResult<MobileActionStatsDto> =
         runner.envelope { apiProvider.api().mobileActionStats() }

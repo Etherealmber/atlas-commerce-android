@@ -787,6 +787,7 @@ data class CreateProductRequest(
     val category: String? = null,
     val unit: String = "unité",
     val price: Double = 0.0,
+    @Json(name = "invoice_price_mode") val invoicePriceMode: String = "exclusive",
     @Json(name = "stock_quantity") val stockQuantity: Double = 0.0,
     @Json(name = "low_stock_threshold") val lowStockThreshold: Double = 5.0,
     val description: String? = null,
@@ -882,7 +883,20 @@ data class MobileActionMetaDto(
     val priority: String? = null,
     val category: String? = null,
     @Json(name = "proposed_stock") val proposedStock: Double? = null,
-    @Json(name = "create_product_body") val createProductBody: CreateProductRequest? = null,
+    @Json(name = "needs_approval") val needsApproval: Boolean? = null,
+    @Json(name = "create_product_body") val createProductBody: ProductRequestBody? = null,
+)
+
+/** Minimal, session-attributed product request body used by the `new_product` action. */
+@JsonClass(generateAdapter = true)
+data class ProductRequestBody(
+    val name: String = "",
+    val sku: String = "",
+    val unit: String = "unité",
+    @Json(name = "stock_quantity") val stockQuantity: Double = 0.0,
+    @Json(name = "image_data_url") val imageDataUrl: String? = null,
+    /** Read-only compatibility for requests created by older Android/web clients. */
+    @Json(name = "image_url") val legacyImageUrl: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -942,7 +956,7 @@ data class CreateMobileActionRequest(
     val detail: String? = null,
     val barcode: String? = null,
     @Json(name = "product_id") val productId: Long? = null,
-    @Json(name = "created_by") val createdBy: String = "mobile",
+    @Json(name = "created_by") val createdBy: String? = null,
     val source: String = "android",
     val meta: MobileActionMetaDto? = null,
 )

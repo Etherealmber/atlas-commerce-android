@@ -255,8 +255,6 @@ class ProductsViewModel @Inject constructor(
                 val res = commerceRepository.submitProductForRole(
                     request = request,
                     role = activeUser?.role,
-                    username = activeUser?.username,
-                    note = request.description,
                 )
             ) {
                 is ApiResult.Failure -> {

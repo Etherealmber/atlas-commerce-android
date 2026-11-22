@@ -60,6 +60,20 @@ data class SessionUser(
         get() = "${serverUrl.trim().lowercase()}|${username.trim().lowercase()}|${role.trim().lowercase()}"
 }
 
+/**
+ * `/api/auth/me` currently echoes role from the presented session token. Update profile fields,
+ * but never treat that token/cached role as an authorization refresh. A server-side authoritative
+ * role contract (with session invalidation semantics) must land before this can change.
+ */
+internal fun SessionUser.withRefreshedProfile(me: MeDto): SessionUser = copy(
+    username = me.username?.takeIf { it.isNotBlank() } ?: username,
+    role = role,
+    displayName = me.displayName?.takeIf { it.isNotBlank() } ?: displayName,
+    email = me.email ?: email,
+    phone = me.phone ?: phone,
+    avatarUrl = me.avatarUrl?.takeIf { it.isNotBlank() } ?: avatarUrl,
+)
+
 sealed interface SessionState {
     data object Loading : SessionState
     data object SignedOut : SessionState
@@ -259,7 +273,8 @@ class SessionManager @Inject constructor(
         if (username.isBlank()) return false
         val user = SessionUser(
             username = username,
-            role = profile.role?.takeIf { it.isNotBlank() } ?: stored.role.ifBlank { "user" },
+            // /auth/me still echoes the role embedded in the presented token; do not refresh privileges from it.
+            role = stored.role.ifBlank { "user" },
             displayName = profile.displayName?.takeIf { it.isNotBlank() } ?: stored.displayName.ifBlank { username },
             email = profile.email ?: stored.email,
             phone = profile.phone.orEmpty(),
@@ -515,7 +530,8 @@ class SessionManager @Inject constructor(
             is ApiResult.Success -> {
                 val me = verify.data
                 val resolvedUser = (me.username?.takeIf { it.isNotBlank() } ?: entry.username).lowercase(Locale.ROOT)
-                val resolvedRole = me.role?.takeIf { it.isNotBlank() } ?: entry.role.ifBlank { "user" }
+                // Preserve the signed-in session's display policy until a server-side authoritative role contract exists.
+                val resolvedRole = entry.role.ifBlank { "user" }
                 val resolvedDisplay = me.displayName?.takeIf { it.isNotBlank() } ?: entry.displayName.ifBlank { resolvedUser }
                 val resolvedEmail = me.email ?: entry.email
                 val resolvedAvatar = me.avatarUrl?.takeIf { it.isNotBlank() } ?: entry.avatarUrl
@@ -673,14 +689,7 @@ class SessionManager @Inject constructor(
             ) return@withLock
 
             val me = result.data
-            val updated = current.copy(
-                username = me.username?.takeIf { it.isNotBlank() } ?: current.username,
-                role = me.role?.takeIf { it.isNotBlank() } ?: current.role,
-                displayName = me.displayName?.takeIf { it.isNotBlank() } ?: current.displayName,
-                email = me.email ?: current.email,
-                phone = me.phone ?: current.phone,
-                avatarUrl = me.avatarUrl?.takeIf { it.isNotBlank() } ?: current.avatarUrl,
-            )
+            val updated = current.withRefreshedProfile(me)
             val currentToken = validatedSessionToken(me.token, tokenAtRequest)
             val tokenRotated = currentToken != tokenAtRequest
             tokenHolder.set(currentToken)
