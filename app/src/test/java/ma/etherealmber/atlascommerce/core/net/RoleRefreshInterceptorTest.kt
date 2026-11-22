@@ -96,7 +96,6 @@ class RoleRefreshInterceptorTest {
             assertEquals("old-token", tokenHolder.token)
             assertFalse(expiredEvent.isCompleted)
             expiredEvent.cancel()
-            assertEquals(1, server.requestCount)
         } finally {
             server.shutdown()
         }

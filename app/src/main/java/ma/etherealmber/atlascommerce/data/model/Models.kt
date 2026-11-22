@@ -253,7 +253,7 @@ data class TrustedDeviceDto(
     val friendlyLabel: String
         get() {
             val ua = userAgent.orEmpty()
-            val atlasAndroid = Regex("Atlas-Android/([^ ]+) \\(Android ([^;]+); ([^)]+)\\)", RegexOption.IGNORE_CASE).find(ua)
+            val atlasAndroid = Regex("Atlas-Android/([^ ]+) \\(Android ([^;]+); (.+)\\)", RegexOption.IGNORE_CASE).find(ua)
             val atlasDesktop = Regex("Atlas-Desktop/([^ ]+) \\(([^)]+)\\)", RegexOption.IGNORE_CASE).find(ua)
             return when {
                 atlasAndroid != null -> "Atlas Android ${atlasAndroid.groupValues[1]} · ${atlasAndroid.groupValues[3]} (Android ${atlasAndroid.groupValues[2]})"
