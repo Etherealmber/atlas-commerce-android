@@ -133,7 +133,7 @@ fun ProductsScreen(
     LaunchedEffect(historyTarget != null) {
         onHistoryPageVisibilityChanged(historyTarget != null)
     }
-    BackHandler(enabled = historyTarget != null && canSell) {
+    BackHandler(enabled = historyTarget != null) {
         historyTarget = null
     }
 
@@ -158,7 +158,7 @@ fun ProductsScreen(
         label = "product_catalog_push_navigation",
     ) { destination ->
         val animatedVisibilityScope = this
-        if (destination != null && canSell) {
+        if (destination != null) {
             ProductHistoryScreen(
                 product = destination,
                 currency = state.currency,
@@ -583,9 +583,7 @@ fun ProductsScreen(
                                     canSell = canSell,
                                     wideLayout = wideLayout,
                                     listLayout = listLayout,
-                                    onOpen = {
-                                        if (canSell && !isAdmin) historyTarget = product else selected = product
-                                    },
+                                    onOpen = { historyTarget = product },
                                     onAdd = {
                                         if (canSell) viewModel.addToCart(product)
                                     },

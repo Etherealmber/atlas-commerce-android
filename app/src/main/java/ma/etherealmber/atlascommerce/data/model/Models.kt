@@ -258,7 +258,15 @@ data class TrustedDeviceDto(
             val atlasAndroid = Regex("Atlas-Android/([^ ]+) \\(Android ([^;]+); (.+)\\)", RegexOption.IGNORE_CASE).find(ua)
             val atlasDesktop = Regex("Atlas-Desktop/([^ ]+) \\(([^)]+)\\)", RegexOption.IGNORE_CASE).find(ua)
             return when {
-                atlasAndroid != null -> "Atlas Android ${atlasAndroid.groupValues[1]} · ${atlasAndroid.groupValues[3]} (Android ${atlasAndroid.groupValues[2]})"
+                atlasAndroid != null -> {
+                    val model = atlasAndroid.groupValues[3].trim()
+                    val deviceName = if (model.contains("Subsystem for Android", ignoreCase = true)) {
+                        "Windows Subsystem for Android"
+                    } else {
+                        model.ifBlank { "Android device" }
+                    }
+                    "Atlas Android · $deviceName"
+                }
                 atlasDesktop != null -> "Atlas Desktop ${atlasDesktop.groupValues[1]} · ${atlasDesktop.groupValues[2]}"
                 ua.contains("okhttp", ignoreCase = true) -> "Atlas Android · Mobile"
                 ua.contains("Android", ignoreCase = true) -> "Appareil Android"

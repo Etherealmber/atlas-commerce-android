@@ -1,6 +1,10 @@
 package ma.etherealmber.atlascommerce.ui.screens.employees
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -21,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -39,6 +45,8 @@ import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.EmployeeDto
 import ma.etherealmber.atlascommerce.data.model.EmployeeUpdateRequest
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
+import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
@@ -51,104 +59,158 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
 @Composable
-fun EmployeeDirectoryScreen(user: SessionUser, viewModel: EmployeeDirectoryViewModel = hiltViewModel()) {
+fun EmployeeDirectoryScreen(
+    user: SessionUser,
+    onDetailsVisibilityChanged: (Boolean) -> Unit = {},
+    viewModel: EmployeeDirectoryViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val language = LocalAtlasLanguage.current
     val canEdit = Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY
     var query by rememberSaveable(user.scopeIdentity) { mutableStateOf("") }
     var showFormer by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<EmployeeDto?>(null) }
-    val visible = state.employees.filter { employee ->
-        (showFormer == (employee.active == 0)) &&
-            (query.isBlank() || listOf(employee.displayName, employee.employeeNumber, employee.roleTitle, employee.department, employee.phone)
+    var detailEmployeeId by remember { mutableStateOf<Long?>(null) }
+    val employee = state.selectedEmployee
+    val detailActive = detailEmployeeId != null || employee != null || state.detailsLoading || !state.actionError.isNullOrBlank()
+    LaunchedEffect(detailActive) { onDetailsVisibilityChanged(detailActive) }
+    androidx.activity.compose.BackHandler(enabled = detailActive) {
+        if (!state.saving) { detailEmployeeId = null; viewModel.clearDetails() }
+    }
+    val visible = state.employees.filter { row ->
+        (showFormer == (row.active == 0)) &&
+            (query.isBlank() || listOf(row.displayName, row.employeeNumber, row.roleTitle, row.department, row.phone)
                 .any { it.contains(query.trim(), ignoreCase = true) })
     }
     if (!canEdit) {
         AtlasErrorCard(title = atlasText("Accès réservé", "Restricted access", "الوصول مقيد"), message = atlasText("Le répertoire des employés est réservé aux administrateurs et secrétaires."))
         return
     }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 30.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        item {
-            AtlasCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(atlasText("Équipe", "Employees", "الموظفون"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text(atlasText("${visible.size} employé(s)", "${visible.size} employees", "${visible.size} موظف"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (detailActive) {
+        EmployeeProfilePage(
+            employee = employee,
+            loading = state.detailsLoading,
+            error = state.actionError,
+            saving = state.saving,
+            canEdit = canEdit,
+            canMarkFormer = Roles.isAdmin(user.role),
+            onClose = { detailEmployeeId = null; viewModel.clearDetails() },
+            onRefresh = { detailEmployeeId?.let(viewModel::showDetails) },
+            onEdit = { employee?.let { editTarget = it } },
+            onMarkFormer = { employee?.let { viewModel.markEmployeeFormer(it.id, "Départ") } },
+        )
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 30.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            item {
+                AtlasCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(atlasText("Équipe", "Employees", "الموظفون"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text(atlasText("${visible.size} employé(s)", "${visible.size} employees", "${visible.size} موظف"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick = viewModel::load, enabled = !state.loading) {
+                            if (state.loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser", "Refresh", "تحديث"))
+                        }
                     }
-                    IconButton(onClick = viewModel::load, enabled = !state.loading) {
-                        if (state.loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        else Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser"))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = !showFormer, onClick = { showFormer = false }, label = { Text(atlasText("En poste", "Current", "الحاليون")) })
+                        FilterChip(selected = showFormer, onClick = { showFormer = true }, label = { Text(atlasText("Anciens", "Former", "السابقون")) })
                     }
+                    AtlasTextField(value = query, onValueChange = { query = it }, label = atlasText("Rechercher", "Search", "بحث"), placeholder = atlasText("Nom, poste, numéro", "Name, role or number", "الاسم أو المنصب أو الرقم"), modifier = Modifier.fillMaxWidth())
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = !showFormer, onClick = { showFormer = false }, label = { Text(atlasText("En poste", "Current", "الحاليون")) })
-                    FilterChip(selected = showFormer, onClick = { showFormer = true }, label = { Text(atlasText("Anciens", "Former", "السابقون")) })
-                }
-                AtlasTextField(value = query, onValueChange = { query = it }, label = atlasText("Rechercher", "Search", "بحث"), placeholder = atlasText("Nom, poste, numéro", "Name, role or number", "الاسم أو المنصب أو الرقم"), modifier = Modifier.fillMaxWidth())
             }
-        }
-        if (!state.error.isNullOrBlank() && state.employees.isEmpty()) item {
-            AtlasErrorCard(title = atlasText("Équipe indisponible", "Directory unavailable", "الدليل غير متاح"), message = state.error.orEmpty(), onRetry = viewModel::load)
-        }
-        if (!state.loading && visible.isEmpty()) item {
-            AtlasEmptyState(icon = Icons.Outlined.Groups, title = atlasText("Aucun employé", "No employees", "لا يوجد موظفون"), message = atlasText("Aucune fiche ne correspond à cette vue.", "No employee records match this view.", "لا توجد ملفات مطابقة لهذا العرض."))
-        }
-        items(visible, key = { "employee-${it.id}" }) { employee ->
-            val nextPayment = employee.nextDue?.takeIf(String::isNotBlank)?.let { atlasShortDate(it) }
-            AtlasCard(onClick = { viewModel.showDetails(employee.id) }) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(employee.displayName.ifBlank { employee.name }, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                        Text(listOf(employee.employeeNumber, employee.roleTitle, employee.department).filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(
-                            if (employee.active == 0) atlasText("Ancien employé", "Former employee", "موظف سابق")
-                            else atlasText("Prochain paiement : ${nextPayment ?: "—"} · ${atlasMoney(employee.payAmount, "MAD")}", "Next payment: ${nextPayment ?: "—"} · ${atlasMoney(employee.payAmount, "MAD")}", "الدفعة التالية: ${nextPayment ?: "—"} · ${atlasMoney(employee.payAmount, "MAD")}"),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (employee.payOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+            if (!state.error.isNullOrBlank() && state.employees.isEmpty()) item {
+                AtlasErrorCard(title = atlasText("Équipe indisponible", "Directory unavailable", "الدليل غير متاح"), message = state.error.orEmpty(), onRetry = viewModel::load)
+            }
+            if (!state.loading && visible.isEmpty()) item {
+                AtlasEmptyState(icon = Icons.Outlined.Groups, title = atlasText("Aucun employé", "No employees", "لا يوجد موظفون"), message = atlasText("Aucune fiche ne correspond à cette vue.", "No employee records match this view.", "لا توجد ملفات مطابقة لهذا العرض."))
+            }
+            items(visible, key = { "employee-${it.id}" }) { row ->
+                val nextPayment = row.nextDue?.takeIf(String::isNotBlank)?.let { atlasShortDate(it) }
+                AtlasCard(onClick = { detailEmployeeId = row.id; viewModel.showDetails(row.id) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(row.displayName.ifBlank { row.name }, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(listOf(row.employeeNumber, row.roleTitle, row.department).filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                if (row.active == 0) atlasText("Ancien employé", "Former employee", "موظف سابق")
+                                else atlasText("Prochain paiement : ${nextPayment ?: "—"} · ${atlasMoney(row.payAmount, "MAD")}", "Next payment: ${nextPayment ?: "—"} · ${atlasMoney(row.payAmount, "MAD")}", "الدفعة التالية: ${nextPayment ?: "—"} · ${atlasMoney(row.payAmount, "MAD")}"),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (row.payOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        AtlasChip(text = if (row.active == 0) atlasText("Ancien", "Former", "سابق") else atlasText("Actif", "Active", "نشط"), tone = if (row.active == 0) AtlasTone.NEUTRAL else AtlasTone.POSITIVE)
                     }
-                    AtlasChip(text = if (employee.active == 0) atlasText("Ancien", "Former", "سابق") else atlasText("Actif", "Active", "نشط"), tone = if (employee.active == 0) AtlasTone.NEUTRAL else AtlasTone.POSITIVE)
                 }
             }
         }
     }
-    if (state.detailsLoading && state.selectedEmployee == null) AlertDialog(
-        onDismissRequest = viewModel::clearDetails,
-        title = { Text(atlasText("Chargement…", "Loading…", "جار التحميل…")) },
-        text = { CircularProgressIndicator() }, confirmButton = { TextButton(onClick = viewModel::clearDetails) { Text(atlasText("Fermer", "Close", "إغلاق")) } },
-    )
-    state.selectedEmployee?.let { employee ->
-        EmployeeProfileDialog(employee = employee, canEdit = canEdit, canMarkFormer = Roles.isAdmin(user.role), onClose = viewModel::clearDetails, onEdit = { editTarget = employee; viewModel.clearDetails() }, onMarkFormer = { viewModel.markEmployeeFormer(employee.id, "Départ") })
-    }
-    editTarget?.let { employee ->
-        EmployeeProfileEditDialog(employee, saving = state.saving, error = state.actionError, onClose = { editTarget = null }) { request ->
-            viewModel.updateEmployee(employee.id, request) { ok -> if (ok) editTarget = null }
+    editTarget?.let { target ->
+        EmployeeProfileEditDialog(target, saving = state.saving, error = state.actionError, onClose = { editTarget = null }) { request ->
+            viewModel.updateEmployee(target.id, request) { ok -> if (ok) editTarget = null }
         }
     }
 }
 
 @Composable
-private fun EmployeeProfileDialog(employee: EmployeeDto, canEdit: Boolean, canMarkFormer: Boolean, onClose: () -> Unit, onEdit: () -> Unit, onMarkFormer: () -> Unit) {
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+private fun EmployeeProfilePage(
+    employee: EmployeeDto?,
+    loading: Boolean,
+    error: String?,
+    saving: Boolean,
+    canEdit: Boolean,
+    canMarkFormer: Boolean,
+    onClose: () -> Unit,
+    onRefresh: () -> Unit,
+    onEdit: () -> Unit,
+    onMarkFormer: () -> Unit,
+) {
+    val title = employee?.displayName?.ifBlank { employee.name } ?: atlasText("Employé", "Employee", "موظف")
+    var headerExpanded by remember(employee?.id) { mutableStateOf(true) }
+    val scrollConnection = ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection(
+        expanded = headerExpanded,
+        onExpandedChange = { headerExpanded = it },
+    )
+    Box(Modifier.fillMaxSize().nestedScroll(scrollConnection)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item { Spacer(Modifier.height(104.dp)) }
+            if (loading && employee == null) item {
+                AtlasCard { CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp); Text(atlasText("Chargement du profil et des paiements…", "Loading profile and payments…", "جارٍ تحميل الملف والمدفوعات…")) }
+            }
+            if (employee == null && !error.isNullOrBlank()) item {
+                AtlasErrorCard(title = atlasText("Détails indisponibles", "Details unavailable", "التفاصيل غير متاحة"), message = error, onRetry = onRefresh)
+            }
+            if (employee != null) {
                 item {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour", "Back", "رجوع")) }
-                        Column(Modifier.weight(1f)) {
-                            Text(employee.displayName.ifBlank { employee.name }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            Text(atlasText("Profil et paiements", "Profile and payments", "الملف والمدفوعات"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // A full-width profile banner remains part of the scrolling content, not the pinned toolbar.
+                    AtlasCard {
+                        Text(atlasText("EMPLOYEE PROFILE", "EMPLOYEE PROFILE", "ملف الموظف"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text(listOf(employee.employeeNumber, employee.roleTitle, employee.department).filter(String::isNotBlank).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AtlasChip(text = if (employee.active == 0) atlasText("Ancien", "Former", "سابق") else atlasText("Actif", "Active", "نشط"), tone = if (employee.active == 0) AtlasTone.NEUTRAL else AtlasTone.POSITIVE)
+                            Spacer(Modifier.weight(1f))
+                            Text(atlasMoney(employee.payAmount, "MAD"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         }
-                        if (canEdit) IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, contentDescription = atlasText("Modifier", "Edit", "تعديل")) }
                     }
                 }
                 item {
                     AtlasCard {
+                        Text(atlasText("Profil et cycle de paie", "Profile and pay cycle", "الملف ودورة الدفع"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(8.dp))
                         listOfNotNull(
+                            employee.phone.takeIf(String::isNotBlank)?.let { "${atlasText("Téléphone", "Phone", "الهاتف")}: $it" },
+                            employee.email.takeIf(String::isNotBlank)?.let { "Email: $it" },
                             employee.joinedDate.takeIf(String::isNotBlank)?.let { "${atlasText("Date d’entrée", "Start date", "تاريخ البدء")}: ${atlasShortDate(it)}" },
                             employee.lastPaidAt?.takeIf(String::isNotBlank)?.let { "${atlasText("Dernier paiement", "Last payment", "آخر دفعة")}: ${atlasShortDate(it)}" },
                             "${atlasText("Cycle de paie", "Pay cycle", "دورة الدفع")}: ${if (employee.payCycleType == "monthly") atlasText("Mensuel (30 jours)", "Monthly (30 days)", "شهري (30 يوماً)") else atlasText("Tous les ${employee.payCycleDays} jours", "Every ${employee.payCycleDays} days", "كل ${employee.payCycleDays} يوم")}",
@@ -156,12 +218,17 @@ private fun EmployeeProfileDialog(employee: EmployeeDto, canEdit: Boolean, canMa
                             if (employee.active == 0) atlasText("Statut : ancien employé", "Status: former employee", "الحالة: موظف سابق") else "${atlasText("Prochain paiement", "Next payment", "الدفعة التالية")}: ${employee.nextDue?.let { atlasShortDate(it) } ?: "—"}",
                         ).forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
                         if (canMarkFormer && employee.active != 0) {
-                            TextButton(onClick = onMarkFormer) { Text(atlasText("Marquer comme ancien", "Mark as former", "تحديد كسابق")) }
+                            TextButton(onClick = onMarkFormer, enabled = !saving) {
+                                if (saving) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                else Text(atlasText("Marquer comme ancien", "Mark as former", "تحديد كسابق"))
+                            }
                         }
                     }
                 }
                 item { Text(atlasText("Historique des paiements", "Payment history", "سجل المدفوعات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
-                if (employee.payments.isEmpty()) item { AtlasEmptyState(icon = Icons.Outlined.History, title = atlasText("Aucun paiement enregistré", "No payments recorded", "لا توجد مدفوعات مسجلة"), message = atlasText("L’historique apparaîtra ici.", "Payment history will appear here.", "سيظهر سجل المدفوعات هنا.")) }
+                if (employee.payments.isEmpty()) item {
+                    AtlasEmptyState(icon = Icons.Outlined.History, title = atlasText("Aucun paiement enregistré", "No payments recorded", "لا توجد مدفوعات مسجلة"), message = atlasText("L’historique apparaîtra ici.", "Payment history will appear here.", "سيظهر سجل المدفوعات هنا."))
+                }
                 items(employee.payments, key = { "payment-${it.id}" }) { payment ->
                     AtlasCard {
                         Text(atlasMoney(payment.amount, "MAD"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -170,6 +237,23 @@ private fun EmployeeProfileDialog(employee: EmployeeDto, canEdit: Boolean, canMa
                 }
             }
         }
+        AtlasFloatingTopBar(
+            title = title,
+            subtitle = atlasText("Détails et historique de paie", "Details and payroll history", "التفاصيل وسجل الرواتب"),
+            onBack = { if (!saving) onClose() },
+            expanded = headerExpanded,
+            onCollapsedClick = { headerExpanded = true },
+            modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
+            actions = {
+                IconButton(onClick = onRefresh, enabled = !loading && employee != null) {
+                    if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser l’historique", "Refresh history", "تحديث السجل"))
+                }
+                if (canEdit && employee != null) IconButton(onClick = onEdit, enabled = !saving) {
+                    Icon(Icons.Outlined.Edit, contentDescription = atlasText("Modifier l’employé", "Edit employee", "تعديل الموظف"))
+                }
+            },
+        )
     }
 }
 

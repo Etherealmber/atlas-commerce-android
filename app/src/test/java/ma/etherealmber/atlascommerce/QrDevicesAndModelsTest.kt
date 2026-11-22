@@ -233,7 +233,7 @@ class QrDevicesAndModelsTest {
             userAgent = "Atlas-Android/1.8.1 (Android 17; Subsystem for Android(TM))",
             current = true,
         )
-        assertEquals("Atlas Android 1.8.1 · Subsystem for Android(TM) (Android 17)", android.friendlyLabel)
+        assertEquals("Atlas Android · Windows Subsystem for Android", android.friendlyLabel)
     }
 
     @Test

@@ -293,6 +293,13 @@ fun MainShell(
     var releaseHistorySubpageActive by remember(user.scopeIdentity) { mutableStateOf(false) }
     var showSidebarSignOutConfirmation by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var productHistoryActive by remember(user.scopeIdentity) { mutableStateOf(false) }
+    var employeeProfileActive by remember(user.scopeIdentity) { mutableStateOf(false) }
+    var clientProfileActive by remember(user.scopeIdentity) { mutableStateOf(false) }
+    val profileDetailActive = when (tab) {
+        MainTab.EMPLOYEES -> employeeProfileActive
+        MainTab.CLIENTS -> clientProfileActive
+        else -> false
+    }
     var pendingAgentReportRequest by remember(user.scopeIdentity) { mutableStateOf<AgentNavigationSuggestion?>(null) }
     LaunchedEffect(tab) {
         if (tab != MainTab.AGENT) showAgentQuotaDialog = false
@@ -480,7 +487,7 @@ fun MainShell(
         )
     }
 
-    val showShellTopBar = isForeground && (
+    val showShellTopBar = isForeground && !profileDetailActive && !pageTarget.isDataStorage && (
         (!useRail && !productHistoryActive && !releaseHistorySubpageActive) ||
             (useRail && tab in setOf(MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS, MainTab.CLIENTS) && !productHistoryActive)
         )
@@ -490,7 +497,7 @@ fun MainShell(
     }
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val showBottomNavigation = !useRail && (tab in FloatingDockTabs || tab in FloatingDockOverlayTabs) &&
-        !productHistoryActive && !releaseHistorySubpageActive
+        !productHistoryActive && !releaseHistorySubpageActive && !profileDetailActive
     val dockSelectedTab = roleTabs.firstOrNull { it.name == lastBottomTabName }
         ?: roleTabs.firstOrNull()
         ?: MainTab.HOME
@@ -659,7 +666,7 @@ fun MainShell(
                                                 },
                                             ) {
                                                 Icon(
-                                                    imageVector = Icons.Outlined.AutoAwesome,
+                                                    imageVector = MainTab.AGENT.icon,
                                                     contentDescription = openAgentDescription,
                                                     tint = MaterialTheme.colorScheme.primary,
                                                     modifier = Modifier.size(24.dp),
@@ -708,7 +715,7 @@ fun MainShell(
                                                     ) {
                                                         IconButton(onClick = openDataCacheManager, modifier = Modifier.size(40.dp)) {
                                                             Icon(
-                                                                imageVector = Icons.Outlined.Inventory2,
+                                                                imageVector = Icons.Outlined.Storage,
                                                                 contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
                                                             )
                                                         }
@@ -742,7 +749,7 @@ fun MainShell(
                                                         ) {
                                                             IconButton(onClick = openDataCacheManager, modifier = Modifier.size(40.dp)) {
                                                                 Icon(
-                                                                    imageVector = Icons.Outlined.Inventory2,
+                                                                    imageVector = Icons.Outlined.Storage,
                                                                     contentDescription = atlasText("Données et cache", "Data & cache manager", "البيانات والذاكرة المؤقتة"),
                                                                 )
                                                             }
@@ -999,9 +1006,9 @@ fun MainShell(
                         onToast = onToast,
                     )
 
-                    MainTab.EMPLOYEES -> EmployeeDirectoryScreen(user = user)
+                    MainTab.EMPLOYEES -> EmployeeDirectoryScreen(user = user, onDetailsVisibilityChanged = { employeeProfileActive = it })
 
-                    MainTab.CLIENTS -> ClientsScreen()
+                    MainTab.CLIENTS -> ClientsScreen(onDetailsVisibilityChanged = { clientProfileActive = it })
 
                     MainTab.AGENT -> AgentScreen(
                         user = user,
