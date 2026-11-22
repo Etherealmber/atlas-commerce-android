@@ -547,7 +547,9 @@ fun MainShell(
         containerColor = Color.Transparent,
         topBar = {
             AnimatedVisibility(
-                visible = shellTopBarVisible,
+                // Profile/history pages draw their own pinned toolbar. Remove the shell bar
+                // immediately instead of letting its exit animation cover that page toolbar.
+                visible = shellTopBarVisible && !profileDetailActive,
                 modifier = Modifier.graphicsLayer { clip = false },
                 enter = if (motionEnabled) {
                     fadeIn(tween(220, easing = FastOutSlowInEasing)) +
@@ -556,7 +558,7 @@ fun MainShell(
                             initialOffsetY = { height -> -height / 4 },
                         ) + scaleIn(tween(220, easing = FastOutSlowInEasing), initialScale = 0.98f)
                 } else EnterTransition.None,
-                exit = if (motionEnabled) {
+                exit = if (motionEnabled && !profileDetailActive) {
                     fadeOut(tween(150, easing = FastOutSlowInEasing)) +
                         slideOutVertically(
                             animationSpec = tween(180, easing = FastOutSlowInEasing),

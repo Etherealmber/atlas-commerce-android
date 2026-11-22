@@ -84,7 +84,11 @@ fun EmployeeDirectoryScreen(
     val detailActive = detailEmployeeId != null || employee != null || state.detailsLoading || !state.actionError.isNullOrBlank()
     LaunchedEffect(detailActive) { onDetailsVisibilityChanged(detailActive) }
     androidx.activity.compose.BackHandler(enabled = detailActive) {
-        if (!state.saving) { detailEmployeeId = null; viewModel.clearDetails() }
+        if (!state.saving) {
+            detailEmployeeId = null
+            viewModel.clearDetails()
+            onDetailsVisibilityChanged(false)
+        }
     }
     val visible = state.employees.filter { row ->
         (showFormer == (row.active == 0)) &&
@@ -120,7 +124,11 @@ fun EmployeeDirectoryScreen(
             saving = state.saving,
             canEdit = canEdit,
             canMarkFormer = Roles.isAdmin(user.role),
-            onClose = { detailEmployeeId = null; viewModel.clearDetails() },
+            onClose = {
+                detailEmployeeId = null
+                viewModel.clearDetails()
+                onDetailsVisibilityChanged(false)
+            },
             onRefresh = { detailEmployeeId?.let(viewModel::showDetails) },
             onEdit = { employee?.let { editTarget = it } },
             onMarkFormer = { employee?.let { viewModel.markEmployeeFormer(it.id, "Départ") } },
@@ -158,7 +166,11 @@ fun EmployeeDirectoryScreen(
             }
             items(pageEmployees, key = { "employee-${it.id}" }) { row ->
                 val nextPayment = row.nextDue?.takeIf(String::isNotBlank)?.let { atlasShortDate(it) }
-                AtlasCard(onClick = { detailEmployeeId = row.id; viewModel.showDetails(row.id) }) {
+                AtlasCard(onClick = {
+                    detailEmployeeId = row.id
+                    onDetailsVisibilityChanged(true)
+                    viewModel.showDetails(row.id)
+                }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(row.displayName.ifBlank { row.name }, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)

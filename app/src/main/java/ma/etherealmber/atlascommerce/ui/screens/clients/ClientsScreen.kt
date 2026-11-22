@@ -112,7 +112,10 @@ fun ClientsScreen(
                 currency = state.currency,
                 refreshing = state.loading,
                 onRefresh = viewModel::load,
-                onClose = { selectedClient = null },
+                onClose = {
+                    selectedClient = null
+                    onDetailsVisibilityChanged(false)
+                },
             )
         }
     }
