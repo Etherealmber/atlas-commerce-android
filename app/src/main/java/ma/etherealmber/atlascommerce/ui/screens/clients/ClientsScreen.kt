@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.clients
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,25 +55,93 @@ fun ClientsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
+    var page by rememberSaveable { mutableStateOf(1) }
     var selectedClient by remember { mutableStateOf<ClientDto?>(null) }
     LaunchedEffect(selectedClient != null) { onDetailsVisibilityChanged(selectedClient != null) }
-    BackHandler(enabled = selectedClient != null) { selectedClient = null }
+    BackHandler(enabled = selectedClient != null) {
+        selectedClient = null
+        onDetailsVisibilityChanged(false)
+    }
     val clients = remember(state.clients, query) {
         state.clients.filter { query.isBlank() || listOfNotNull(it.name, it.phone, it.email).any { value -> value.contains(query.trim(), true) } }
             .sortedByDescending { it.balanceDue }
     }
-    val client = selectedClient
-    if (client != null) {
-        val idMatches = state.invoices.filter { it.clientId == client.id }
-        val history = (if (idMatches.isNotEmpty()) idMatches else state.invoices.filter { invoice -> invoice.clientName?.trim()?.equals(client.name.trim(), ignoreCase = true) == true })
-            .sortedByDescending { it.issueDate.orEmpty() }
-        ClientCreditDetails(client, history, state.currency, refreshing = state.loading, onRefresh = viewModel::load, onClose = { selectedClient = null })
-        return
-    }
+    val pageCount = ((clients.size + CLIENT_PAGE_SIZE - 1) / CLIENT_PAGE_SIZE).coerceAtLeast(1)
+    LaunchedEffect(pageCount) { if (page > pageCount) page = pageCount }
 
+    androidx.compose.animation.AnimatedContent(
+        targetState = selectedClient,
+        modifier = Modifier.fillMaxSize(),
+        contentKey = { it?.id ?: 0L },
+        transitionSpec = {
+            if (targetState != null) {
+                (androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(280)) { it } +
+                    androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180))) togetherWith
+                    (androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(220)) { -it / 6 } +
+                        androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150)))
+            } else {
+                (androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(240)) { -it / 6 } +
+                    androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(170))) togetherWith
+                    (androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(260)) { it } +
+                        androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150)))
+            }
+        },
+        label = "client-directory-history-transition",
+    ) { client ->
+        if (client == null) {
+            ClientsListContent(
+                clients = clients,
+                currency = state.currency,
+                query = query,
+                loading = state.loading,
+                error = state.error,
+                page = page,
+                pageCount = pageCount,
+                onQueryChange = { query = it; page = 1 },
+                onRefresh = viewModel::load,
+                onPageChange = { page = it },
+                onClientClick = { selectedClient = it; onDetailsVisibilityChanged(true) },
+            )
+        } else {
+            val byId = state.invoices.filter { it.clientId == client.id }
+            val history = (if (byId.isNotEmpty()) byId else state.invoices.filter { invoice -> invoice.clientName?.trim()?.equals(client.name.trim(), ignoreCase = true) == true })
+                .sortedByDescending { it.issueDate.orEmpty() }
+            ClientCreditDetails(
+                client = client,
+                history = history,
+                currency = state.currency,
+                refreshing = state.loading,
+                onRefresh = viewModel::load,
+                onClose = {
+                    selectedClient = null
+                    onDetailsVisibilityChanged(false)
+                },
+            )
+        }
+    }
+}
+
+private const val CLIENT_PAGE_SIZE = 10
+
+@Composable
+private fun ClientsListContent(
+    clients: List<ClientDto>,
+    currency: String,
+    query: String,
+    loading: Boolean,
+    error: String?,
+    page: Int,
+    pageCount: Int,
+    onQueryChange: (String) -> Unit,
+    onRefresh: () -> Unit,
+    onPageChange: (Int) -> Unit,
+    onClientClick: (ClientDto) -> Unit,
+) {
+    val topInset = ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding.current
+    val currentPageClients = clients.drop((page - 1) * CLIENT_PAGE_SIZE).take(CLIENT_PAGE_SIZE)
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + topInset, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
@@ -82,22 +151,22 @@ fun ClientsScreen(
                         Text(atlasText("Clients", "Clients", "العملاء"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(atlasText("Crédits et soldes clients", "Client credits and balances", "أرصدة العملاء والائتمان"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    IconButton(onClick = viewModel::load, enabled = !state.loading) {
-                        if (state.loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    IconButton(onClick = onRefresh, enabled = !loading) {
+                        if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         else Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser", "Refresh", "تحديث"))
                     }
                 }
-                AtlasTextField(value = query, onValueChange = { query = it }, label = atlasText("Rechercher un client", "Search clients", "البحث عن عميل"), placeholder = atlasText("Nom, téléphone ou e-mail", "Name, phone or email", "الاسم أو الهاتف أو البريد الإلكتروني"), modifier = Modifier.fillMaxWidth())
+                AtlasTextField(value = query, onValueChange = onQueryChange, label = atlasText("Rechercher un client", "Search clients", "البحث عن عميل"), placeholder = atlasText("Nom, téléphone ou e-mail", "Name, phone or email", "الاسم أو الهاتف أو البريد الإلكتروني"), modifier = Modifier.fillMaxWidth())
             }
         }
-        if (!state.error.isNullOrBlank() && state.clients.isEmpty()) item {
-            AtlasErrorCard(title = atlasText("Clients indisponibles", "Clients unavailable", "العملاء غير متاحين"), message = state.error.orEmpty(), onRetry = viewModel::load)
+        if (!error.isNullOrBlank() && clients.isEmpty()) item {
+            AtlasErrorCard(title = atlasText("Clients indisponibles", "Clients unavailable", "العملاء غير متاحين"), message = error, onRetry = onRefresh)
         }
-        if (!state.loading && clients.isEmpty()) item {
+        if (!loading && clients.isEmpty()) item {
             AtlasEmptyState(title = atlasText("Aucun client", "No clients", "لا يوجد عملاء"), message = atlasText("Les clients et leurs crédits apparaîtront ici.", "Clients and their balances will appear here.", "سيظهر العملاء وأرصدتهم هنا."), icon = Icons.Outlined.Groups)
         }
-        items(clients, key = { "client-${it.id}-${it.name}" }) { rowClient ->
-            AtlasCard(onClick = { selectedClient = rowClient }) {
+        items(currentPageClients, key = { "client-${it.id}-${it.name}" }) { rowClient ->
+            AtlasCard(onClick = { onClientClick(rowClient) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(rowClient.name.ifBlank { atlasText("Client sans nom", "Unnamed client", "عميل بدون اسم") }, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -106,11 +175,20 @@ fun ClientsScreen(
                         }
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(atlasMoney(rowClient.balanceDue, state.currency), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = if (rowClient.balanceDue > 0.009) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                        Text(atlasMoney(rowClient.balanceDue, currency), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = if (rowClient.balanceDue > 0.009) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                         Text(atlasText("Solde dû", "Balance due", "المبلغ المستحق"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
+        }
+        if (clients.size > CLIENT_PAGE_SIZE) item(key = "clients-pagination") {
+            ma.etherealmber.atlascommerce.ui.components.AtlasPaginationControls(
+                totalItems = clients.size,
+                currentPage = page.coerceAtMost(pageCount),
+                onPageSelected = onPageChange,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp),
+                pageSize = CLIENT_PAGE_SIZE,
+            )
         }
     }
 }

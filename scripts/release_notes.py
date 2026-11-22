@@ -85,6 +85,45 @@ def group_release_commits(raw_log: str) -> dict[str, list[ReleaseNoteItem]]:
     return groups
 
 
+def format_commit_release_notes(
+    raw_log: str,
+    repository_url: str,
+    author_logins: dict[str, str] | None = None,
+) -> str:
+    """Render a chronological commit list (not GitHub's pull-request based release summary)."""
+    author_logins = author_logins or {}
+    groups = group_release_commits(raw_log)
+    by_hash = {item.commit_hash: item for items in groups.values() for item in items}
+    ordered: list[ReleaseNoteItem] = []
+    seen: set[str] = set()
+    for entry in raw_log.split("\x1e"):
+        fields = entry.strip("\r\n ").split("\x1f", 1)
+        if len(fields) != 2:
+            continue
+        commit_hash = fields[0].strip()
+        item = by_hash.get(commit_hash)
+        if item is not None and commit_hash not in seen:
+            ordered.append(item)
+            seen.add(commit_hash)
+
+    lines = ["## What's Changed", ""]
+    if not ordered:
+        lines.append("No categorized commit details were available.")
+    for item in ordered:
+        short_hash = item.commit_hash[:7]
+        commit_link = f'["{short_hash}"]({repository_url.rstrip("/")}/commit/{item.commit_hash})'
+        lines.append(f"* {item.summary} ({commit_link})")
+
+    contributors: list[str] = []
+    for item in ordered:
+        login = author_logins.get(item.commit_hash, "").strip().lstrip("@")
+        if login and not login.lower().endswith("[bot]") and login not in contributors:
+            contributors.append(login)
+    if contributors:
+        lines.extend(["", "## Contributors", "", "Thanks to " + ", ".join(f"@{login}" for login in contributors) + " for contributing to this release."])
+    return "\n".join(lines).strip()
+
+
 def format_in_app_notes(groups: dict[str, list[ReleaseNoteItem]], limit: int = 480) -> str:
     """Return a bounded categorized summary with commit/issue IDs for update prompts."""
     parts = [f"{category}: {items[0].plain()}" for category, items in groups.items() if items]

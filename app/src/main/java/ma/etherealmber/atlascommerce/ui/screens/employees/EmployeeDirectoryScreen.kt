@@ -1,5 +1,12 @@
 package ma.etherealmber.atlascommerce.ui.screens.employees
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -45,6 +52,8 @@ import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.EmployeeDto
 import ma.etherealmber.atlascommerce.data.model.EmployeeUpdateRequest
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasPaginationControls
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
 import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -68,24 +77,46 @@ fun EmployeeDirectoryScreen(
     val canEdit = Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY
     var query by rememberSaveable(user.scopeIdentity) { mutableStateOf("") }
     var showFormer by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
+    var page by rememberSaveable(user.scopeIdentity) { mutableStateOf(1) }
     var editTarget by remember { mutableStateOf<EmployeeDto?>(null) }
     var detailEmployeeId by remember { mutableStateOf<Long?>(null) }
     val employee = state.selectedEmployee
     val detailActive = detailEmployeeId != null || employee != null || state.detailsLoading || !state.actionError.isNullOrBlank()
     LaunchedEffect(detailActive) { onDetailsVisibilityChanged(detailActive) }
     androidx.activity.compose.BackHandler(enabled = detailActive) {
-        if (!state.saving) { detailEmployeeId = null; viewModel.clearDetails() }
+        if (!state.saving) {
+            detailEmployeeId = null
+            viewModel.clearDetails()
+            onDetailsVisibilityChanged(false)
+        }
     }
     val visible = state.employees.filter { row ->
         (showFormer == (row.active == 0)) &&
             (query.isBlank() || listOf(row.displayName, row.employeeNumber, row.roleTitle, row.department, row.phone)
                 .any { it.contains(query.trim(), ignoreCase = true) })
     }
+    val pageCount = ((visible.size + 9) / 10).coerceAtLeast(1)
+    LaunchedEffect(pageCount) { if (page > pageCount) page = pageCount }
+    val pageEmployees = visible.drop((page - 1) * 10).take(10)
     if (!canEdit) {
         AtlasErrorCard(title = atlasText("Accès réservé", "Restricted access", "الوصول مقيد"), message = atlasText("Le répertoire des employés est réservé aux administrateurs et secrétaires."))
         return
     }
-    if (detailActive) {
+    AnimatedContent(
+        targetState = detailActive,
+        modifier = Modifier.fillMaxSize(),
+        transitionSpec = {
+            if (targetState) {
+                (slideInHorizontally(tween(280)) { it } + fadeIn(tween(180))) togetherWith
+                    (slideOutHorizontally(tween(220)) { -it / 6 } + fadeOut(tween(150)))
+            } else {
+                (slideInHorizontally(tween(240)) { -it / 6 } + fadeIn(tween(170))) togetherWith
+                    (slideOutHorizontally(tween(260)) { it } + fadeOut(tween(150)))
+            }
+        },
+        label = "employee-directory-history-transition",
+    ) { showingDetails ->
+    if (showingDetails) {
         EmployeeProfilePage(
             employee = employee,
             loading = state.detailsLoading,
@@ -93,7 +124,11 @@ fun EmployeeDirectoryScreen(
             saving = state.saving,
             canEdit = canEdit,
             canMarkFormer = Roles.isAdmin(user.role),
-            onClose = { detailEmployeeId = null; viewModel.clearDetails() },
+            onClose = {
+                detailEmployeeId = null
+                viewModel.clearDetails()
+                onDetailsVisibilityChanged(false)
+            },
             onRefresh = { detailEmployeeId?.let(viewModel::showDetails) },
             onEdit = { employee?.let { editTarget = it } },
             onMarkFormer = { employee?.let { viewModel.markEmployeeFormer(it.id, "Départ") } },
@@ -101,7 +136,7 @@ fun EmployeeDirectoryScreen(
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 30.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + LocalAtlasFloatingTopBarPadding.current, bottom = 30.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
@@ -117,10 +152,10 @@ fun EmployeeDirectoryScreen(
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = !showFormer, onClick = { showFormer = false }, label = { Text(atlasText("En poste", "Current", "الحاليون")) })
-                        FilterChip(selected = showFormer, onClick = { showFormer = true }, label = { Text(atlasText("Anciens", "Former", "السابقون")) })
+                        FilterChip(selected = !showFormer, onClick = { showFormer = false; page = 1 }, label = { Text(atlasText("En poste", "Current", "الحاليون")) })
+                        FilterChip(selected = showFormer, onClick = { showFormer = true; page = 1 }, label = { Text(atlasText("Anciens", "Former", "السابقون")) })
                     }
-                    AtlasTextField(value = query, onValueChange = { query = it }, label = atlasText("Rechercher", "Search", "بحث"), placeholder = atlasText("Nom, poste, numéro", "Name, role or number", "الاسم أو المنصب أو الرقم"), modifier = Modifier.fillMaxWidth())
+                    AtlasTextField(value = query, onValueChange = { query = it; page = 1 }, label = atlasText("Rechercher", "Search", "بحث"), placeholder = atlasText("Nom, poste, numéro", "Name, role or number", "الاسم أو المنصب أو الرقم"), modifier = Modifier.fillMaxWidth())
                 }
             }
             if (!state.error.isNullOrBlank() && state.employees.isEmpty()) item {
@@ -129,9 +164,13 @@ fun EmployeeDirectoryScreen(
             if (!state.loading && visible.isEmpty()) item {
                 AtlasEmptyState(icon = Icons.Outlined.Groups, title = atlasText("Aucun employé", "No employees", "لا يوجد موظفون"), message = atlasText("Aucune fiche ne correspond à cette vue.", "No employee records match this view.", "لا توجد ملفات مطابقة لهذا العرض."))
             }
-            items(visible, key = { "employee-${it.id}" }) { row ->
+            items(pageEmployees, key = { "employee-${it.id}" }) { row ->
                 val nextPayment = row.nextDue?.takeIf(String::isNotBlank)?.let { atlasShortDate(it) }
-                AtlasCard(onClick = { detailEmployeeId = row.id; viewModel.showDetails(row.id) }) {
+                AtlasCard(onClick = {
+                    detailEmployeeId = row.id
+                    onDetailsVisibilityChanged(true)
+                    viewModel.showDetails(row.id)
+                }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(row.displayName.ifBlank { row.name }, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -147,7 +186,17 @@ fun EmployeeDirectoryScreen(
                     }
                 }
             }
+            if (visible.size > 10) item(key = "employees-pagination") {
+                AtlasPaginationControls(
+                    totalItems = visible.size,
+                    currentPage = page.coerceAtMost(pageCount),
+                    onPageSelected = { page = it },
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp),
+                    pageSize = 10,
+                )
+            }
         }
+    }
     }
     editTarget?.let { target ->
         EmployeeProfileEditDialog(target, saving = state.saving, error = state.actionError, onClose = { editTarget = null }) { request ->
