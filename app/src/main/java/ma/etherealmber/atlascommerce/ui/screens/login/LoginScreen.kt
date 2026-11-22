@@ -43,19 +43,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AlternateEmail
-import androidx.compose.material.icons.outlined.Fingerprint
-import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.HelpOutline
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.QrCode2
-import androidx.compose.material.icons.outlined.Shield
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults

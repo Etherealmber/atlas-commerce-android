@@ -67,17 +67,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Send
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.HourglassBottom
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Refresh
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon

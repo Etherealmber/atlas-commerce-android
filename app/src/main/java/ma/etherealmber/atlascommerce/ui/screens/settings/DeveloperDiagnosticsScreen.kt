@@ -18,10 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Share
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon

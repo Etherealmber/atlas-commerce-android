@@ -23,12 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.zIndex
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material.icons.outlined.ErrorOutline
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon

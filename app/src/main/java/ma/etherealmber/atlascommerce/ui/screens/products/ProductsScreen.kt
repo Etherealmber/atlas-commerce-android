@@ -47,17 +47,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.AddShoppingCart
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.QrCodeScanner
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Remove
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Send
-import androidx.compose.material.icons.outlined.ViewList
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon

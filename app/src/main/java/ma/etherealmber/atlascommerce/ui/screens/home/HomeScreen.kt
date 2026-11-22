@@ -23,18 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AdminPanelSettings
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.NotificationsActive
-import androidx.compose.material.icons.outlined.PointOfSale
-import androidx.compose.material.icons.outlined.QrCodeScanner
-import androidx.compose.material.icons.outlined.ReceiptLong
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.TrendingUp
-import androidx.compose.material.icons.outlined.Warning
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem

@@ -59,22 +59,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AddComment
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.HourglassBottom
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.Groups
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.QrCodeScanner
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.ShoppingCart
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox

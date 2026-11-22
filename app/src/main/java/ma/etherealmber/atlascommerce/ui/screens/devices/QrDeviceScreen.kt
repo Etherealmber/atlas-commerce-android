@@ -35,20 +35,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Computer
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Devices
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.QrCode2
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.Videocam
-import androidx.compose.material.icons.outlined.VideocamOff
+import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
