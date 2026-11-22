@@ -280,7 +280,7 @@ internal fun AtlasSidebarContent(
                 onClick = { onNavigate(MainTab.SETTINGS) },
             )
             SidebarNavigationItem(
-                icon = Icons.Outlined.Inventory2,
+                icon = Icons.Outlined.Storage,
                 label = atlasText("Stockage des données", "Data storage", "تخزين البيانات"),
                 isSelected = dataStorageSelected,
                 expanded = expanded,

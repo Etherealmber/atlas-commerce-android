@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -42,6 +43,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -669,6 +671,7 @@ private fun SecurityCard(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .wrapContentHeight()
             .clip(RoundedCornerShape(18.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
@@ -924,87 +927,87 @@ private fun SecurityDeviceRow(
     onToggleDetails: () -> Unit,
     onRevoke: () -> Unit,
 ) {
+    val isAndroid = device.userAgent.orEmpty().contains("Android", ignoreCase = true)
+    val lastSeen = device.lastSeen?.takeIf(String::isNotBlank)?.let { atlasDateTime(it) }
+    val metadata = listOfNotNull(device.lastIp?.takeIf(String::isNotBlank)?.let { "IP $it" }, lastSeen).joinToString(" · ")
+
     SecurityCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = if (device.userAgent.orEmpty().contains("Android", ignoreCase = true)) Icons.Outlined.Devices else Icons.Outlined.Computer,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(19.dp),
-                )
-            }
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = atlasText(device.friendlyLabel),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (isAndroid) Icons.Outlined.Devices else Icons.Outlined.Computer,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(19.dp),
                     )
-                    if (isCurrent) {
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(Atlas.palette.positive.copy(alpha = 0.2f))
-                                .padding(horizontal = 8.dp, vertical = 2.dp),
-                        ) {
-                            Text(
-                                text = atlasText("Cet appareil", "This device", "هذا الجهاز"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Atlas.palette.positive,
-                            )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = atlasText(device.friendlyLabel),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (isCurrent) {
+                            Spacer(Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(Atlas.palette.positive.copy(alpha = 0.2f))
+                                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                            ) {
+                                Text(atlasText("Cet appareil", "This device", "هذا الجهاز"), style = MaterialTheme.typography.labelSmall, color = Atlas.palette.positive, maxLines = 1)
+                            }
+                        }
+                    }
+                    if (metadata.isNotBlank()) {
+                        Text(metadata, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                IconButton(onClick = onToggleDetails, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = if (detailsVisible) atlasText("Masquer les détails", "Hide device details", "إخفاء تفاصيل الجهاز") else atlasText("Afficher les détails", "Show device details", "عرض تفاصيل الجهاز"),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (canRevoke) {
+                    IconButton(onClick = onRevoke, enabled = !revoking, modifier = Modifier.size(40.dp)) {
+                        if (revoking) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                        } else {
+                            Icon(Icons.Outlined.DeleteOutline, contentDescription = atlasText("Révoquer cet appareil", "Revoke this device", "إلغاء صلاحية هذا الجهاز"), tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
-                val lastSeen = device.lastSeen?.takeIf(String::isNotBlank)
-                val localizedLastSeen = if (lastSeen != null) atlasDateTime(lastSeen) else null
-                val meta = listOfNotNull(
-                    device.lastIp?.takeIf { it.isNotBlank() }?.let { "IP $it" },
-                    localizedLastSeen,
-                ).joinToString(" · ")
-                val userAgent = device.userAgent?.takeIf(String::isNotBlank)
-                if (userAgent != null) {
-                    Text(userAgent, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                if (meta.isNotBlank()) {
-                    Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (detailsVisible) {
-                    Spacer(Modifier.height(4.dp))
-                    device.fingerprint.takeIf { it.isNotBlank() }?.let { fingerprint ->
-                        Text(
-                            text = atlasText("Identifiant : $fingerprint", "Fingerprint: $fingerprint", "بصمة الجهاز: $fingerprint"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
             }
-            IconButton(onClick = onToggleDetails) {
-                Icon(
-                    imageVector = Icons.Outlined.Info,
-                    contentDescription = if (detailsVisible) atlasText("Masquer les détails", "Hide device details", "إخفاء تفاصيل الجهاز") else atlasText("Afficher les détails", "Show device details", "عرض تفاصيل الجهاز"),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (canRevoke) {
-                IconButton(onClick = onRevoke, enabled = !revoking) {
-                    if (revoking) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
-                    } else {
-                        Icon(
-                            imageVector = Icons.Outlined.DeleteOutline,
-                            contentDescription = atlasText("Révoquer cet appareil", "Revoke this device", "إلغاء صلاحية هذا الجهاز"),
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                    }
+            if (detailsVisible) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                device.userAgent?.takeIf(String::isNotBlank)?.let { userAgent ->
+                    Text(
+                        text = userAgent,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                device.fingerprint.takeIf(String::isNotBlank)?.let { fingerprint ->
+                    Text(
+                        text = atlasText("Identifiant : $fingerprint", "Fingerprint: $fingerprint", "بصمة الجهاز: $fingerprint"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }
