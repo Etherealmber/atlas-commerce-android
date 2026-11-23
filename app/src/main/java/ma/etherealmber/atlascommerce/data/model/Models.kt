@@ -438,6 +438,13 @@ data class EmployeeDto(
     @Json(name = "last_paid_at") val lastPaidAt: String? = null,
     @Json(name = "daily_rate") val dailyRate: Double = 0.0,
     @Json(name = "pay_overdue") val payOverdue: Boolean = false,
+    @Json(name = "suggested_pay") val suggestedPay: Double? = null,
+    @Json(name = "gross_accrued") val grossAccrued: Double? = null,
+    @Json(name = "can_advance") val canAdvance: Boolean = false,
+    @Json(name = "max_advance") val maxAdvance: Double = 0.0,
+    @Json(name = "advances_in_period") val advancesInPeriod: Double = 0.0,
+    @Json(name = "advance_needs_proof") val advanceNeedsProof: Boolean = false,
+    @Json(name = "advance_tier") val advanceTier: String? = null,
     val notes: String = "",
     val payments: List<EmployeePaymentDto> = emptyList(),
 )
@@ -455,6 +462,12 @@ data class EmployeePaymentDto(
 data class EmployeeResignRequest(
     val reason: String = "Départ",
     @Json(name = "settle_pay") val settlePay: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class EmployeePayrollActionRequest(
+    val note: String = "",
+    @Json(name = "payment_method") val paymentMethod: String = "cash",
 )
 
 @JsonClass(generateAdapter = true)

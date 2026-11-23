@@ -46,6 +46,7 @@ import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.EmployeeDto
 import ma.etherealmber.atlascommerce.data.model.EmployeeUpdateRequest
 import ma.etherealmber.atlascommerce.data.model.EmployeeResignRequest
+import ma.etherealmber.atlascommerce.data.model.EmployeePayrollActionRequest
 import ma.etherealmber.atlascommerce.data.model.ExpenseDeleteRequest
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
@@ -168,6 +169,30 @@ class CommerceRepository @Inject constructor(
 
     suspend fun markEmployeeFormer(id: Long, reason: String = "Départ"): ApiResult<EmployeeDto> =
         runner.envelope { apiProvider.api().markEmployeeFormer(id, EmployeeResignRequest(reason = reason)) }
+
+    suspend fun payEmployee(
+        id: Long,
+        idempotencyKey: String,
+        note: String = "",
+    ): ApiResult<EmployeeDto> = runner.envelope {
+        apiProvider.api().payEmployee(
+            id = id,
+            idempotencyKey = idempotencyKey,
+            body = EmployeePayrollActionRequest(note = note.trim()),
+        )
+    }
+
+    suspend fun advanceEmployee(
+        id: Long,
+        idempotencyKey: String,
+        note: String = "",
+    ): ApiResult<EmployeeDto> = runner.envelope {
+        apiProvider.api().advanceEmployee(
+            id = id,
+            idempotencyKey = idempotencyKey,
+            body = EmployeePayrollActionRequest(note = note.trim()),
+        )
+    }
 
     suspend fun deleteEmployee(id: Long): ApiResult<Unit> {
         val result = runner.statusRaw { apiProvider.api().deleteEmployee(id) }

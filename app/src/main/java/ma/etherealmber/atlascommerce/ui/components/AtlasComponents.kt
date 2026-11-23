@@ -68,7 +68,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -676,7 +675,7 @@ fun AtlasFloatingTopBar(
                 .graphicsLayer { clip = false }
                 .then(
                     if (expanded) Modifier.fillMaxWidth()
-                    else Modifier.align(Alignment.Center).wrapContentWidth()
+                    else Modifier.align(Alignment.Center).widthIn(max = 360.dp).fillMaxWidth()
                 )
                 .then(
                     if (!expanded && onCollapsedClick != null) {
@@ -714,28 +713,29 @@ fun AtlasFloatingTopBar(
                         actions = actions,
                     )
                 } else {
-                    Box(
-                        modifier = Modifier.widthIn(min = 150.dp, max = 360.dp).height(48.dp).padding(horizontal = 10.dp),
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (onBack != null) {
-                            IconButton(
-                                onClick = onBack,
-                                modifier = Modifier.align(Alignment.CenterStart),
-                            ) {
+                            IconButton(onClick = onBack) {
                                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour"))
                             }
                         }
                         Text(
                             text = atlasText(title),
-                            modifier = Modifier.align(Alignment.Center).padding(horizontal = 58.dp),
+                            modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Center,
                             maxLines = 1,
+                            softWrap = false,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Row(
-                            modifier = Modifier.align(Alignment.CenterEnd),
                             verticalAlignment = Alignment.CenterVertically,
                             content = actions,
                         )
