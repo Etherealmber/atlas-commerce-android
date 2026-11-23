@@ -942,6 +942,67 @@ data class StockAdjustmentRequestDto(
     @Json(name = "stock_after") val stockAfter: Double? = null,
 )
 
+@JsonClass(generateAdapter = true)
+data class InventoryLocationDto(
+    val id: Long = 0,
+    val code: String = "",
+    val name: String = "",
+    @Json(name = "is_default") val isDefaultRaw: Any? = null,
+) {
+    val isDefault: Boolean
+        get() = when (val value = isDefaultRaw) {
+            is Boolean -> value
+            is Number -> value.toInt() != 0
+            is String -> value == "1" || value.equals("true", ignoreCase = true)
+            else -> false
+        }
+}
+
+@JsonClass(generateAdapter = true)
+data class InventoryPlacementDto(
+    @Json(name = "product_id") val productId: Long = 0,
+    @Json(name = "product_name") val productName: String = "",
+    val total: Double = 0.0,
+    val placements: List<InventoryLocationPlacementDto> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class InventoryLocationPlacementDto(
+    @Json(name = "location_id") val locationId: Long = 0,
+    val code: String = "",
+    val name: String = "",
+    val quantity: Double = 0.0,
+    val revision: Long? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class InventoryOfflineOperationRequest(
+    @Json(name = "operation_id") val operationId: String,
+    val kind: String,
+    @Json(name = "product_id") val productId: Long,
+    @Json(name = "location_id") val locationId: Long,
+    @Json(name = "quantity_delta") val quantityDelta: Double? = null,
+    @Json(name = "counted_quantity") val countedQuantity: Double? = null,
+    @Json(name = "observed_quantity") val observedQuantity: Double? = null,
+    @Json(name = "observed_revision") val observedRevision: Long? = null,
+    val note: String = "",
+    @Json(name = "client_occurred_at") val clientOccurredAt: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class InventoryOfflineOperationResultDto(
+    @Json(name = "operation_id") val operationId: String = "",
+    val kind: String = "",
+    @Json(name = "product_id") val productId: Long = 0,
+    @Json(name = "location_id") val locationId: Long = 0,
+    @Json(name = "previous_quantity") val previousQuantity: Double = 0.0,
+    @Json(name = "new_quantity") val newQuantity: Double = 0.0,
+    @Json(name = "product_total") val productTotal: Double = 0.0,
+    @Json(name = "movement_id") val movementId: Long = 0,
+    @Json(name = "applied_at") val appliedAt: String = "",
+    val replayed: Boolean = false,
+)
+
 // ---------------------------------------------------------------------------
 // Notifications, alerts & mobile actions
 // ---------------------------------------------------------------------------
@@ -1152,6 +1213,8 @@ data class AssistToolTraceDto(
     val name: String = "",
     val ok: Boolean = true,
     val error: String? = null,
+    val data: Any? = null,
+    val proposal: AssistProposalDto? = null,
 )
 
 @JsonClass(generateAdapter = true)

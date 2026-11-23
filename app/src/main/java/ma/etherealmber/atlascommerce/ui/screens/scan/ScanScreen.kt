@@ -36,6 +36,8 @@ import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -110,6 +112,7 @@ fun ScanScreen(
     viewModel: ScanViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val queuedInventoryOperations by viewModel.inventoryQueueEntries.collectAsStateWithLifecycle()
     val autoOpenCamera by viewModel.autoOpenCamera.collectAsStateWithLifecycle()
     val scanHaptic by viewModel.scanHapticEnabled.collectAsStateWithLifecycle()
     val scanSound by viewModel.scanSoundEnabled.collectAsStateWithLifecycle()
@@ -422,6 +425,11 @@ fun ScanScreen(
 
     val scannedProduct = state.product
     val canEditScannedStock = Roles.canRequestStockAdjustment(user.role) && scannedProduct?.trackInventory == true
+    LaunchedEffect(showStockAdjustDialog, scannedProduct?.id) {
+        if (showStockAdjustDialog && scannedProduct != null && Roles.canAdjustStock(user.role)) {
+            viewModel.loadInventoryContext(scannedProduct.id)
+        }
+    }
     if (showScannedProductDialog && scannedProduct != null) {
         AlertDialog(
             onDismissRequest = { showScannedProductDialog = false },
@@ -521,15 +529,29 @@ fun ScanScreen(
 
     if (showStockAdjustDialog && scannedProduct != null) {
         var rawStockChange by remember(scannedProduct.id) { mutableStateOf("") }
-        var stockOut by remember(scannedProduct.id) { mutableStateOf(false) }
+        var operationKind by remember(scannedProduct.id) { mutableStateOf("receive") }
+        var selectedLocationId by remember(scannedProduct.id) { mutableStateOf<Long?>(null) }
+        var locationMenuOpen by remember { mutableStateOf(false) }
         var stockReason by remember(scannedProduct.id) { mutableStateOf("") }
         val parsedStockChange = rawStockChange.replace(',', '.').toDoubleOrNull()
         val directAdjustment = Roles.canAdjustStock(user.role)
+        val selectedLocation = state.inventoryLocations.firstOrNull { it.id == selectedLocationId }
+        val observedPlacement = state.productPlacements.firstOrNull { it.locationId == selectedLocationId }
+        val countNeedsZeroOrMore = operationKind == "count"
+        val quantityValid = parsedStockChange != null && parsedStockChange.isFinite() && (
+            if (countNeedsZeroOrMore) parsedStockChange >= 0.0 else parsedStockChange > 0.0
+        )
+        LaunchedEffect(state.inventoryLocations, selectedLocationId) {
+            if (selectedLocationId == null) {
+                selectedLocationId = state.inventoryLocations.firstOrNull { it.isDefault }?.id
+                    ?: state.inventoryLocations.firstOrNull()?.id
+            }
+        }
         AlertDialog(
             onDismissRequest = { showStockAdjustDialog = false },
             title = {
                 Text(
-                    if (directAdjustment) atlasText("Modifier le stock", "Edit stock", "تعديل المخزون")
+                    if (directAdjustment) atlasText("Opération d'entrepôt", "Warehouse operation", "عملية المستودع")
                     else atlasText("Demander un changement de stock", "Request a stock change", "طلب تغيير المخزون"),
                 )
             },
@@ -538,40 +560,63 @@ fun ScanScreen(
                     Text(scannedProduct.name, style = MaterialTheme.typography.titleSmall)
                     Text(
                         atlasText(
-                            "Stock actuel : ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
-                            "Current stock: ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
-                            "المخزون الحالي: ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
+                            "Stock global : ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
+                            "Global stock: ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
+                            "المخزون الإجمالي: ${productStockDisplay(scannedProduct.stock, scannedProduct.unit, scannedProduct.secondaryUnit, scannedProduct.secondaryUnitFactor)}",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (!directAdjustment) {
+                    if (directAdjustment) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            FilterChip(selected = operationKind == "receive", onClick = { operationKind = "receive" }, label = { Text(atlasText("Réception", "Receive", "استلام")) })
+                            FilterChip(selected = operationKind == "issue", onClick = { operationKind = "issue" }, label = { Text(atlasText("Sortie", "Issue", "صرف")) })
+                            FilterChip(selected = operationKind == "count", onClick = { operationKind = "count" }, label = { Text(atlasText("Comptage", "Count", "جرد")) })
+                        }
+                        androidx.compose.foundation.layout.Box {
+                            OutlinedButton(onClick = { locationMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedLocation?.name ?: atlasText("Choisir un emplacement", "Choose a location", "اختر موقعاً"))
+                            }
+                            DropdownMenu(expanded = locationMenuOpen, onDismissRequest = { locationMenuOpen = false }) {
+                                state.inventoryLocations.forEach { location ->
+                                    DropdownMenuItem(
+                                        text = { Text("${location.name} · ${location.code}") },
+                                        onClick = { selectedLocationId = location.id; locationMenuOpen = false },
+                                    )
+                                }
+                            }
+                        }
+                        if (state.inventoryContextLoading) {
+                            Text(atlasText("Chargement des emplacements…", "Loading warehouse locations…", "جار تحميل المواقع…"), style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (operationKind == "count") {
+                            Text(
+                                observedPlacement?.let { placement ->
+                                    atlasText(
+                                        "Valeur observée ${AtlasFormat.quantity(placement.quantity)} · version ${placement.revision ?: "?"}",
+                                        "Observed ${AtlasFormat.quantity(placement.quantity)} · revision ${placement.revision ?: "?"}",
+                                        "الكمية المرصودة ${AtlasFormat.quantity(placement.quantity)} · الإصدار ${placement.revision ?: "?"}",
+                                    )
+                                } ?: atlasText("Aucune valeur de base en cache pour cet emplacement.", "No cached baseline for this location.", "لا توجد قيمة أساسية محفوظة لهذا الموقع."),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        state.inventoryContextError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                    } else {
                         Text(
-                            atlasText(
-                                "La demande sera appliquée après approbation.",
-                                "The request will be applied after approval.",
-                                "سيتم تطبيق الطلب بعد الموافقة.",
-                            ),
+                            atlasText("La demande sera appliquée après approbation.", "The request will be applied after approval.", "سيتم تطبيق الطلب بعد الموافقة."),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = !stockOut,
-                            onClick = { stockOut = false },
-                            label = { Text(atlasText("Entrée", "Add", "إضافة")) },
-                        )
-                        FilterChip(
-                            selected = stockOut,
-                            onClick = { stockOut = true },
-                            label = { Text(atlasText("Sortie", "Remove", "إزالة")) },
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = operationKind == "receive", onClick = { operationKind = "receive" }, label = { Text(atlasText("Entrée", "Add", "إضافة")) })
+                            FilterChip(selected = operationKind == "issue", onClick = { operationKind = "issue" }, label = { Text(atlasText("Sortie", "Remove", "إزالة")) })
+                        }
                     }
                     OutlinedTextField(
                         value = rawStockChange,
                         onValueChange = { value -> rawStockChange = value.filter { it.isDigit() || it == '.' || it == ',' } },
-                        label = { Text(atlasText("Quantité", "Quantity", "الكمية")) },
+                        label = { Text(if (operationKind == "count") atlasText("Quantité comptée", "Counted quantity", "الكمية المحصاة") else atlasText("Quantité", "Quantity", "الكمية")) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth(),
@@ -579,21 +624,41 @@ fun ScanScreen(
                     OutlinedTextField(
                         value = stockReason,
                         onValueChange = { stockReason = it },
-                        label = { Text(atlasText("Motif (facultatif)", "Reason (optional)", "السبب (اختياري)")) },
+                        label = { Text(atlasText("Motif (facultatif)", "Note (optional)", "ملاحظة (اختيارية)")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    val blocked = queuedInventoryOperations.firstOrNull { it.status != "QUEUED" }
+                    if (blocked != null) {
+                        Text(
+                            "${blocked.productName} · ${blocked.locationName}: ${blocked.failureMessage.orEmpty()}",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        TextButton(onClick = { viewModel.discardBlockedInventoryOperation(blocked.operationId) }) {
+                            Text(atlasText("Écarter l'opération bloquée", "Discard blocked operation", "تجاهل العملية المتوقفة"))
+                        }
+                    } else if (queuedInventoryOperations.isNotEmpty()) {
+                        Text(atlasText("${queuedInventoryOperations.size} opération(s) en attente de synchronisation.", "${queuedInventoryOperations.size} operation(s) waiting to sync.", "${queuedInventoryOperations.size} عملية بانتظار المزامنة."), style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        parsedStockChange?.let { viewModel.adjustScannedStock(scannedProduct, it, stockOut, stockReason) }
+                        parsedStockChange?.let { amount ->
+                            if (directAdjustment) {
+                                selectedLocationId?.let { locationId -> viewModel.queueInventoryOperation(scannedProduct, operationKind, locationId, amount, stockReason) }
+                            } else {
+                                viewModel.adjustScannedStock(scannedProduct, amount, operationKind == "issue", stockReason)
+                            }
+                        }
                         showStockAdjustDialog = false
                     },
-                    enabled = parsedStockChange != null && parsedStockChange > 0.0,
+                    enabled = quantityValid && (!directAdjustment || (selectedLocation != null && !state.inventoryContextLoading)) &&
+                        (operationKind != "count" || observedPlacement?.revision != null),
                 ) {
-                    Text(if (directAdjustment) atlasText("Appliquer", "Apply", "تطبيق") else atlasText("Envoyer", "Submit", "إرسال"))
+                    Text(if (directAdjustment) atlasText("Mettre en file", "Queue operation", "إضافة إلى قائمة الانتظار") else atlasText("Envoyer", "Submit", "إرسال"))
                 }
             },
             dismissButton = {
