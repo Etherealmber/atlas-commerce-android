@@ -660,9 +660,11 @@ fun AtlasFloatingTopBar(
     applyStatusBarInsets: Boolean = true,
     expanded: Boolean = true,
     onCollapsedClick: (() -> Unit)? = null,
+    titleLeading: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val collapsedInteractionSource = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -679,7 +681,12 @@ fun AtlasFloatingTopBar(
                 )
                 .then(
                     if (!expanded && onCollapsedClick != null) {
-                        Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onCollapsedClick)
+                        Modifier.clickable(
+                            interactionSource = collapsedInteractionSource,
+                            indication = null,
+                            role = androidx.compose.ui.semantics.Role.Button,
+                            onClick = onCollapsedClick,
+                        )
                     } else Modifier
                 ),
             shape = RoundedCornerShape(26.dp),
@@ -708,6 +715,7 @@ fun AtlasFloatingTopBar(
                         title = title,
                         subtitle = subtitle,
                         onBack = onBack,
+                        titleLeading = titleLeading,
                         windowInsets = WindowInsets(0, 0, 0, 0),
                         containerColor = Color.Transparent,
                         actions = actions,
@@ -723,6 +731,11 @@ fun AtlasFloatingTopBar(
                         if (onBack != null) {
                             IconButton(onClick = onBack) {
                                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Retour"))
+                            }
+                        }
+                        if (titleLeading != null) {
+                            Box(Modifier.padding(start = 4.dp, end = 6.dp), contentAlignment = Alignment.Center) {
+                                titleLeading()
                             }
                         }
                         Text(

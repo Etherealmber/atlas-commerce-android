@@ -27,7 +27,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -76,6 +81,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.TrustedDeviceDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
+import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
+import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
 import ma.etherealmber.atlascommerce.ui.components.AtlasDeviceListSkeleton
 import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.BarcodeCameraView
@@ -212,83 +219,36 @@ fun QrDeviceScreen(
         state.step == QrDeviceViewModel.Step.IDLE &&
         !state.loading
 
-    Column(
+    var headerExpanded by remember(mode) { mutableStateOf(true) }
+    val headerScrollConnection = rememberAtlasFloatingTopBarScrollConnection(
+        expanded = headerExpanded,
+        onExpandedChange = { headerExpanded = it },
+    )
+    val closeScreen = {
+        viewModel.cancelDesktopApproval()
+        viewModel.clearInitializedRoute()
+        onClose()
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surface)))
-            .statusBarsPadding()
-            .navigationBarsPadding(),
+            .nestedScroll(headerScrollConnection),
     ) {
-        // Distinct Security Top Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = {
-                viewModel.cancelDesktopApproval()
-                viewModel.clearInitializedRoute()
-                onClose()
-            }) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = atlasText("Retour", "Back", "رجوع"),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Shield,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = if (mode == QrDeviceMode.AUTHORIZE_PC) atlasText("Autoriser un PC", "Authorize a PC", "السماح لجهاز كمبيوتر") else atlasText("Connexion du téléphone par QR", "Sign in on this phone with QR", "تسجيل الدخول على هذا الهاتف عبر QR"),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = atlasText("APPAIRAGE SÉCURISÉ · HORS CATALOGUE STOCK", "SECURE PAIRING · NOT AN INVENTORY SCAN", "اقتران آمن · ليس مسحًا للمخزون"),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-            IconButton(
-                onClick = {
-                    if (state.cameraEnabled) {
-                        viewModel.setCameraEnabled(false)
-                    } else {
-                        startQrCameraExplicitly()
-                    }
-                },
-            ) {
-                Icon(
-                    imageVector = if (state.cameraEnabled) Icons.Outlined.Videocam else Icons.Outlined.VideocamOff,
-                    contentDescription = if (state.cameraEnabled) atlasText("Couper la caméra", "Turn camera off", "إيقاف الكاميرا") else atlasText("Activer la caméra", "Turn camera on", "تشغيل الكاميرا"),
-                    tint = if (state.cameraEnabled) Atlas.palette.positive else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
         LazyColumn(
             modifier = Modifier
                 .widthIn(max = 1000.dp)
                 .fillMaxWidth()
-                .weight(1f)
-                .align(Alignment.CenterHorizontally),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
+                .fillMaxHeight()
+                .navigationBarsPadding()
+                .align(Alignment.TopCenter),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 104.dp,
+                end = 16.dp,
+                bottom = 28.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             // Active Signed-In Identity Pill
@@ -566,11 +526,15 @@ fun QrDeviceScreen(
                             modifier = Modifier.weight(1f),
                         )
                         IconButton(onClick = refreshTrustedDevices, enabled = !state.devicesLoading) {
-                            Icon(
-                                imageVector = Icons.Outlined.Refresh,
-                                contentDescription = atlasText("Actualiser les appareils", "Refresh devices", "تحديث الأجهزة"),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            if (state.devicesLoading) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Outlined.Refresh,
+                                    contentDescription = atlasText("Actualiser les appareils", "Refresh devices", "تحديث الأجهزة"),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
@@ -625,6 +589,33 @@ fun QrDeviceScreen(
                 }
             }
         }
+        AtlasFloatingTopBar(
+            title = if (mode == QrDeviceMode.AUTHORIZE_PC) atlasText("Autoriser un PC", "Authorize a PC", "السماح لجهاز كمبيوتر") else atlasText("Connexion du téléphone par QR", "Sign in on this phone with QR", "تسجيل الدخول على هذا الهاتف عبر QR"),
+            subtitle = atlasText("APPAIRAGE SÉCURISÉ · HORS CATALOGUE STOCK", "SECURE PAIRING · NOT AN INVENTORY SCAN", "اقتران آمن · ليس مسحًا للمخزون"),
+            onBack = closeScreen,
+            expanded = headerExpanded,
+            onCollapsedClick = { headerExpanded = true },
+            titleLeading = {
+                Box(
+                    modifier = Modifier.size(28.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(17.dp))
+                }
+            },
+            modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
+            actions = {
+                IconButton(onClick = {
+                    if (state.cameraEnabled) viewModel.setCameraEnabled(false) else startQrCameraExplicitly()
+                }) {
+                    Icon(
+                        imageVector = if (state.cameraEnabled) Icons.Outlined.Videocam else Icons.Outlined.VideocamOff,
+                        contentDescription = if (state.cameraEnabled) atlasText("Couper la caméra", "Turn camera off", "إيقاف الكاميرا") else atlasText("Activer la caméra", "Turn camera on", "تشغيل الكاميرا"),
+                        tint = if (state.cameraEnabled) Atlas.palette.positive else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+        )
     }
 }
 

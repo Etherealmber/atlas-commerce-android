@@ -206,7 +206,6 @@ internal fun MainTab.localizedLabel(): String = when (this) {
 
 private val BackStackTabs = setOf(MainTab.AGENT, MainTab.SALE, MainTab.PROFILE, MainTab.SETTINGS, MainTab.NOTIFICATIONS, MainTab.CLIENTS)
 private val FloatingDockTabs = setOf(MainTab.HOME, MainTab.PRODUCTS, MainTab.SCAN, MainTab.BALANCE, MainTab.EMPLOYEES)
-private val FloatingDockOverlayTabs = setOf(MainTab.SALE)
 
 @Composable
 fun MainShell(
@@ -500,7 +499,7 @@ fun MainShell(
         shellTopBarVisible = showShellTopBar
     }
     val motionEnabled = LocalAtlasAnimationsEnabled.current
-    val showBottomNavigation = !useRail && (tab in FloatingDockTabs || tab in FloatingDockOverlayTabs) &&
+    val showBottomNavigation = !useRail && tab in FloatingDockTabs &&
         !productHistoryActive && !releaseHistorySubpageActive && !profileDetailActive
     val dockSelectedTab = roleTabs.firstOrNull { it.name == lastBottomTabName }
         ?: roleTabs.firstOrNull()
