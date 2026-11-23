@@ -35,6 +35,7 @@ import ma.etherealmber.atlascommerce.data.model.SubmitProductRequestBody
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
 import ma.etherealmber.atlascommerce.data.repo.ProductSubmissionOutcome
 import ma.etherealmber.atlascommerce.ui.screens.devices.QrTokenParser
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 
 @HiltViewModel
@@ -66,6 +67,7 @@ class ScanViewModel @Inject constructor(
         val neededContextLoading: Boolean = false,
         val inventoryLocations: List<InventoryLocationDto> = emptyList(),
         val productPlacements: List<InventoryLocationPlacementDto> = emptyList(),
+        val inventoryContextProductId: Long? = null,
         val inventoryContextLoading: Boolean = false,
         val inventoryContextError: String? = null,
     ) {
@@ -96,6 +98,7 @@ class ScanViewModel @Inject constructor(
     )
     val scanFeedbackEvents: SharedFlow<Unit> = _scanFeedbackEvents.asSharedFlow()
     val inventoryQueueEntries: StateFlow<List<InventoryQueueEntry>> = inventoryWriteQueue.entries
+    val inventoryQueueReadError: StateFlow<String?> = inventoryWriteQueue.readError
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -111,6 +114,7 @@ class ScanViewModel @Inject constructor(
     private var lookupJob: Job? = null
     private var currentScanProductId: Long? = null
     private var currentScanAddedQty: Double = 0.0
+    private val inventoryContextGeneration = AtomicLong(0L)
 
     init {
         viewModelScope.launch {
@@ -148,37 +152,62 @@ class ScanViewModel @Inject constructor(
 
     fun loadInventoryContext(productId: Long) {
         val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity ?: return
+        val generation = inventoryContextGeneration.incrementAndGet()
         viewModelScope.launch {
-            _state.update { it.copy(inventoryContextLoading = true, inventoryContextError = null, productPlacements = emptyList()) }
+            if (inventoryContextGeneration.get() != generation ||
+                (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope
+            ) return@launch
+            _state.update { current ->
+                if (inventoryContextGeneration.get() == generation) current.copy(
+                    inventoryContextProductId = productId,
+                    inventoryContextLoading = true,
+                    inventoryContextError = null,
+                    productPlacements = emptyList(),
+                ) else current
+            }
             val locationsResult = commerceRepository.inventoryLocations()
             val placementsResult = commerceRepository.inventoryPlacements(productId)
-            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+            if (!isCurrentInventoryContext(generation, productId, requestedScope)) return@launch
             val locations = (locationsResult as? ApiResult.Success)?.data
             val placements = (placementsResult as? ApiResult.Success)?.data
             if (locations != null && placements != null && locations.isNotEmpty()) {
                 inventoryWriteQueue.cacheInventoryContext(requestedScope, productId, locations, placements.placements)
-                if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
-                _state.update {
-                    it.copy(inventoryLocations = locations, productPlacements = placements.placements, inventoryContextLoading = false)
+                if (!isCurrentInventoryContext(generation, productId, requestedScope)) return@launch
+                _state.update { current ->
+                    if (current.inventoryContextProductId == productId && inventoryContextGeneration.get() == generation) {
+                        current.copy(
+                            inventoryLocations = locations,
+                            productPlacements = placements.placements,
+                            inventoryContextLoading = false,
+                        )
+                    } else current
                 }
             } else {
+                if (!isCurrentInventoryContext(generation, productId, requestedScope)) return@launch
                 val cached = inventoryWriteQueue.cachedInventoryContext(requestedScope, productId)
-                if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
-                _state.update {
-                    it.copy(
-                        inventoryLocations = cached?.first.orEmpty(),
-                        productPlacements = cached?.second.orEmpty(),
-                        inventoryContextLoading = false,
-                        inventoryContextError = if (cached == null) {
-                            (locationsResult as? ApiResult.Failure)?.message
-                                ?: (placementsResult as? ApiResult.Failure)?.message
-                                ?: "No saved warehouse data. Connect once to load locations and stock versions."
-                        } else null,
-                    )
+                if (!isCurrentInventoryContext(generation, productId, requestedScope)) return@launch
+                _state.update { current ->
+                    if (current.inventoryContextProductId == productId && inventoryContextGeneration.get() == generation) {
+                        current.copy(
+                            inventoryLocations = cached?.first.orEmpty(),
+                            productPlacements = cached?.second.orEmpty(),
+                            inventoryContextLoading = false,
+                            inventoryContextError = if (cached == null) {
+                                (locationsResult as? ApiResult.Failure)?.message
+                                    ?: (placementsResult as? ApiResult.Failure)?.message
+                                    ?: "No saved warehouse data. Connect once to load locations and stock versions."
+                            } else null,
+                        )
+                    } else current
                 }
             }
         }
     }
+
+    private fun isCurrentInventoryContext(generation: Long, productId: Long, scopeIdentity: String): Boolean =
+        inventoryContextGeneration.get() == generation &&
+            _state.value.inventoryContextProductId == productId &&
+            (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
 
     fun queueInventoryOperation(product: ProductDto, kind: String, locationId: Long, quantity: Double, note: String) {
         val user = (sessionManager.state.value as? SessionState.Active)?.user
@@ -188,6 +217,10 @@ class ScanViewModel @Inject constructor(
         }
         val requestedScope = user.scopeIdentity
         val current = _state.value
+        if (current.inventoryContextProductId != product.id || current.inventoryContextLoading) {
+            _messages.tryEmit("Warehouse data is still loading for this product. Try again.")
+            return
+        }
         val location = current.inventoryLocations.firstOrNull { it.id == locationId } ?: run {
             _messages.tryEmit("Select a valid warehouse location.")
             return
@@ -230,7 +263,10 @@ class ScanViewModel @Inject constructor(
     }
 
     fun discardBlockedInventoryOperation(operationId: String) {
-        viewModelScope.launch { inventoryWriteQueue.discardBlockedOperation(operationId) }
+        viewModelScope.launch {
+            runCatching { inventoryWriteQueue.discardBlockedOperation(operationId) }
+                .onFailure { error -> _messages.tryEmit(error.message ?: "Could not update the inventory queue.") }
+        }
     }
 
     /** Called by the camera analyser or manual search; duplicate reads are throttled. */
@@ -589,6 +625,7 @@ class ScanViewModel @Inject constructor(
     }
 
     fun reset() {
+        inventoryContextGeneration.incrementAndGet()
         lookupJob?.cancel()
         lookupJob = null
         currentScanProductId = null

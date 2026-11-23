@@ -113,6 +113,7 @@ fun ScanScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val queuedInventoryOperations by viewModel.inventoryQueueEntries.collectAsStateWithLifecycle()
+    val inventoryQueueReadError by viewModel.inventoryQueueReadError.collectAsStateWithLifecycle()
     val autoOpenCamera by viewModel.autoOpenCamera.collectAsStateWithLifecycle()
     val scanHaptic by viewModel.scanHapticEnabled.collectAsStateWithLifecycle()
     val scanSound by viewModel.scanSoundEnabled.collectAsStateWithLifecycle()
@@ -628,6 +629,7 @@ fun ScanScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    inventoryQueueReadError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     val blocked = queuedInventoryOperations.firstOrNull { it.status != "QUEUED" }
                     if (blocked != null) {
                         Text(
@@ -655,7 +657,7 @@ fun ScanScreen(
                         }
                         showStockAdjustDialog = false
                     },
-                    enabled = quantityValid && (!directAdjustment || (selectedLocation != null && !state.inventoryContextLoading)) &&
+                    enabled = quantityValid && (!directAdjustment || (selectedLocation != null && !state.inventoryContextLoading && inventoryQueueReadError == null)) &&
                         (operationKind != "count" || observedPlacement?.revision != null),
                 ) {
                     Text(if (directAdjustment) atlasText("Mettre en file", "Queue operation", "إضافة إلى قائمة الانتظار") else atlasText("Envoyer", "Submit", "إرسال"))

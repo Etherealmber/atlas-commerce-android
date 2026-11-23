@@ -4,6 +4,8 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.os.Build
+import android.annotation.SuppressLint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -34,7 +36,7 @@ object ThermalPrinter {
         val adapter = manager.adapter ?: error("Bluetooth is not available on this device.")
         check(adapter.isEnabled) { "Turn on Bluetooth and try again." }
         val device = adapter.getRemoteDevice(address)
-        adapter.cancelDiscovery()
+        cancelDiscoveryOnLegacyAndroid(adapter)
         val socket = device.createRfcommSocketToServiceRecord(sppUuid)
         try {
             socket.connect()
@@ -50,9 +52,7 @@ object ThermalPrinter {
                 out.write(encode("Client: $client\n"))
                 out.write(encode("$rule\n"))
                 lines.forEach { line ->
-                    val left = "${line.name.take((columns * 2 / 3).coerceAtLeast(10))} x${formatQty(line.quantity)}"
-                    val right = money(line.quantity * line.unitPrice, currency)
-                    out.write(encode(wrapRow(left, right, columns) + "\n"))
+                    out.write(encode(formatItemRow(line.name, line.quantity, line.quantity * line.unitPrice, currency, columns) + "\n"))
                 }
                 out.write(encode("$rule\n"))
                 out.write(byteArrayOf(0x1b, 0x45, 0x01)) // Bold
@@ -67,6 +67,12 @@ object ThermalPrinter {
         }
     }
 
+    /** BLUETOOTH_ADMIN is sufficient on API 30; Android 12+ needs BLUETOOTH_SCAN, so skip it. */
+    @SuppressLint("MissingPermission")
+    private fun cancelDiscoveryOnLegacyAndroid(adapter: BluetoothAdapter) {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) adapter.cancelDiscovery()
+    }
+
     // Printer firmware defaults to different code pages (often CP437); emit a safe ASCII subset.
     private fun encode(text: String): ByteArray = java.text.Normalizer
         .normalize(text, java.text.Normalizer.Form.NFD)
@@ -75,6 +81,24 @@ object ThermalPrinter {
         .toByteArray(Charsets.US_ASCII)
     private fun money(value: Double, currency: String) = "%.2f %s".format(java.util.Locale.US, value, currency)
     private fun formatQty(value: Double) = if (value % 1.0 == 0.0) value.toLong().toString() else "%.3f".format(java.util.Locale.US, value).trimEnd('0').trimEnd('.')
+
+    internal fun formatItemRow(name: String, quantity: Double, amountValue: Double, currency: String, columns: Int): String {
+        val quantitySuffix = " x${formatQty(quantity)}"
+        val amount = money(amountValue, currency)
+        if (quantitySuffix.length >= columns) {
+            val quantityLines = quantitySuffix.chunked(columns).joinToString("\n")
+            val amountLines = amount.chunked(columns).joinToString("\n") { it.padStart(columns) }
+            return "${name.take(columns)}\n$quantityLines\n$amountLines"
+        }
+        val nameWidth = columns - quantitySuffix.length - amount.length - 1
+        if (nameWidth >= 1) {
+            return name.take(nameWidth).padEnd(nameWidth) + quantitySuffix + " " + amount
+        }
+        val shortNameWidth = (columns - quantitySuffix.length).coerceAtLeast(0)
+        val firstLine = name.take(shortNameWidth).padEnd(shortNameWidth) + quantitySuffix
+        val amountLines = amount.chunked(columns).joinToString("\n") { it.padStart(columns) }
+        return "$firstLine\n$amountLines"
+    }
 
     private fun wrapRow(left: String, right: String, columns: Int): String {
         val safeRight = right.take(columns)

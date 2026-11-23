@@ -99,7 +99,9 @@ class InventoryWriteQueue @Inject constructor(
     private val directory = File(context.noBackupFilesDir, "atlas-inventory-outbox").apply { mkdirs() }
     private val mutex = Mutex()
     private val activeEntries = MutableStateFlow<List<InventoryQueueEntry>>(emptyList())
+    private val activeReadError = MutableStateFlow<String?>(null)
     val entries: StateFlow<List<InventoryQueueEntry>> = activeEntries.asStateFlow()
+    val readError: StateFlow<String?> = activeReadError.asStateFlow()
     private val listAdapter by lazy {
         moshi.adapter<List<InventoryQueueEntry>>(
             Types.newParameterizedType(List::class.java, InventoryQueueEntry::class.java),
@@ -115,8 +117,27 @@ class InventoryWriteQueue @Inject constructor(
                 val key = user?.let { accountKey(it.serverUrl, it.username) }
                 if (key != lastKey) {
                     lastKey = key
-                    activeEntries.value = if (key == null) emptyList() else load(key)
-                    if (key != null && load(key).any { it.status == InventoryQueueStatus.QUEUED.name }) schedule(key)
+                    if (key == null) {
+                        if (accountForActiveUser() == null) {
+                            activeEntries.value = emptyList()
+                            activeReadError.value = null
+                        }
+                    } else {
+                        val loaded = try {
+                            load(key)
+                        } catch (_: Exception) {
+                            if (accountForActiveUser() == key) {
+                                activeEntries.value = emptyList()
+                                activeReadError.value = "Saved inventory queue could not be read. Existing operations were preserved; do not clear app data."
+                                schedule(key)
+                            }
+                            return@collect
+                        }
+                        if (accountForActiveUser() != key) return@collect
+                        activeEntries.value = loaded
+                        activeReadError.value = null
+                        if (loaded.any { it.status == InventoryQueueStatus.QUEUED.name }) schedule(key)
+                    }
                 }
             }
         }
@@ -192,7 +213,7 @@ class InventoryWriteQueue @Inject constructor(
     ): InventoryQueueEntry {
         require(productId > 0 && locationId > 0)
         require(countedQuantity.isFinite() && countedQuantity >= 0.0)
-        require(observedQuantity.isFinite() && observedQuantity >= 0.0)
+        require(observedQuantity.isFinite())
         require(observedRevision != null) { "A location revision is required for offline cycle counts." }
         val user = (sessionManager.state.value as? SessionState.Active)?.user
             ?: error("Sign in before queueing an inventory operation.")
@@ -219,6 +240,7 @@ class InventoryWriteQueue @Inject constructor(
         val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return@withLock false
         val key = accountKey(user.serverUrl, user.username)
         val current = load(key)
+        publishIfActive(key, current)
         val index = current.indexOfFirst { it.operationId == operationId && it.status != InventoryQueueStatus.QUEUED.name }
         if (index < 0) return@withLock false
         val remaining = current.toMutableList().also { it.removeAt(index) }
@@ -243,6 +265,7 @@ class InventoryWriteQueue @Inject constructor(
 
     internal suspend fun nextQueued(account: String): InventoryQueueEntry? = mutex.withLock {
         val items = load(account)
+        publishIfActive(account, items)
         if (items.any { it.status != InventoryQueueStatus.QUEUED.name }) null else items.firstOrNull()
     }
 
@@ -273,14 +296,20 @@ class InventoryWriteQueue @Inject constructor(
     internal fun activeUser() = (sessionManager.state.value as? SessionState.Active)?.user
 
     private fun publishIfActive(account: String, items: List<InventoryQueueEntry>) {
-        if (accountForActiveUser() == account) activeEntries.value = items
+        if (accountForActiveUser() == account) {
+            activeEntries.value = items
+            activeReadError.value = null
+        }
     }
 
     private suspend fun load(account: String): List<InventoryQueueEntry> = withContext(Dispatchers.IO) {
         val file = File(directory, "queue_$account.json")
-        val encrypted = runCatching { file.takeIf(File::exists)?.readText() }.getOrNull() ?: return@withContext emptyList()
-        val plain = crypto.decryptAtRest(encrypted) ?: return@withContext emptyList()
-        runCatching { listAdapter.fromJson(plain).orEmpty() }.getOrDefault(emptyList())
+        if (!file.exists()) return@withContext emptyList()
+        val encrypted = file.readText()
+        val plain = crypto.decryptAtRest(encrypted)
+            ?: throw IOException("Could not decrypt an existing inventory queue file.")
+        listAdapter.fromJson(plain)
+            ?: throw IOException("Could not deserialize an existing inventory queue file.")
     }
 
     private suspend fun save(account: String, items: List<InventoryQueueEntry>) = withContext(Dispatchers.IO) {
@@ -335,7 +364,13 @@ class InventoryWriteWorker(context: Context, params: WorkerParameters) : Corouti
         while (true) {
             if (queue.accountForActiveUser() != account) return Result.success()
             if (entryPoint.tokenHolder().token != bearer) return Result.retry()
-            val item = queue.nextQueued(account) ?: return Result.success()
+            val item = try {
+                queue.nextQueued(account)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                return Result.retry()
+            } ?: return Result.success()
             try {
                 val response = api.submitInventoryOfflineOperation(item.operationId, "Bearer $bearer", item.toRequest())
                 if (response.isSuccessful) {
