@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.devices
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -132,6 +133,7 @@ class QrDeviceViewModel @Inject constructor(
     private var desktopOperationServer: String? = null
     private var initializedRoute: Pair<String?, QrDeviceMode>? = null
     private var devicesLoadGeneration = 0L
+    private var devicesLoadJob: Job? = null
 
     private fun beginDesktopOperation(sessionIdentity: String, server: String): Long {
         invalidateDesktopOperation()
@@ -182,6 +184,8 @@ class QrDeviceViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collect { scopeIdentity ->
                     devicesLoadGeneration += 1
+                    devicesLoadJob?.cancel()
+                    devicesLoadJob = null
                     val expectedIdentity = desktopOperationSessionIdentity ?: _state.value.desktopV2?.sessionIdentity
                     if (expectedIdentity != null && expectedIdentity != scopeIdentity) {
                         abortDesktopOperation("Le compte a changé. La demande d'approbation a été abandonnée.")
@@ -577,10 +581,18 @@ class QrDeviceViewModel @Inject constructor(
                 return@launch
             }
 
-            var attempts = 0
-            while (isActive && attempts < 45) {
-                delay(2_000L)
-                attempts++
+            val pollingStartedAt = SystemClock.elapsedRealtime()
+            var elapsedPollingMs = 0L
+            while (isActive && elapsedPollingMs < 90_000L) {
+                // Keep approval responsive initially, then back off to reduce repeated DB reads
+                // while the user is waiting for the desktop confirmation.
+                val intervalMs = when {
+                    elapsedPollingMs < 10_000L -> 2_000L
+                    elapsedPollingMs < 30_000L -> 3_000L
+                    else -> 5_000L
+                }
+                delay(minOf(intervalMs, 90_000L - elapsedPollingMs))
+                elapsedPollingMs = SystemClock.elapsedRealtime() - pollingStartedAt
                 when (val poll = authRepository.qrStatus(token)) {
                     is ApiResult.Success -> {
                         val s = poll.data
@@ -605,6 +617,7 @@ class QrDeviceViewModel @Inject constructor(
 
                     is ApiResult.Failure -> Unit
                 }
+                elapsedPollingMs = SystemClock.elapsedRealtime() - pollingStartedAt
             }
             _state.update {
                 it.copy(
@@ -682,21 +695,32 @@ class QrDeviceViewModel @Inject constructor(
     }
 
     fun loadDevices() {
+        // Coalesce lifecycle-triggered and manual refreshes while a device-list read is in flight.
+        if (devicesLoadJob?.isActive == true) return
         val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity
         if (requestedScope == null) {
             devicesLoadGeneration += 1
+            devicesLoadJob?.cancel()
+            devicesLoadJob = null
             _state.update { it.copy(devices = emptyList(), devicesLoading = false, devicesLoadError = null) }
             return
         }
         val generation = ++devicesLoadGeneration
-        viewModelScope.launch {
-            if (generation != devicesLoadGeneration || (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
-            _state.update { it.copy(devicesLoading = true, devicesLoadError = null) }
-            val result = authRepository.devices()
-            if (generation != devicesLoadGeneration || (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
-            when (result) {
-                is ApiResult.Failure -> _state.update { it.copy(devicesLoading = false, devicesLoadError = result.message) }
-                is ApiResult.Success -> _state.update { it.copy(devicesLoading = false, devicesLoadError = null, devices = result.data) }
+        devicesLoadJob = viewModelScope.launch {
+            try {
+                if (generation != devicesLoadGeneration || (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+                _state.update { it.copy(devicesLoading = true, devicesLoadError = null) }
+                val result = authRepository.devices()
+                if (generation != devicesLoadGeneration || (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+                when (result) {
+                    is ApiResult.Failure -> _state.update { it.copy(devicesLoading = false, devicesLoadError = result.message) }
+                    is ApiResult.Success -> _state.update { it.copy(devicesLoading = false, devicesLoadError = null, devices = result.data) }
+                }
+            } finally {
+                if (generation == devicesLoadGeneration) {
+                    devicesLoadJob = null
+                    _state.update { current -> if (current.devicesLoading) current.copy(devicesLoading = false) else current }
+                }
             }
         }
     }
