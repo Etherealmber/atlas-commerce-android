@@ -759,7 +759,13 @@ private fun EmployeeDirectoryRow(employee: ma.etherealmber.atlascommerce.data.mo
     AtlasCard(onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(displayName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 val detail = listOf(employee.employeeNumber, employee.roleTitle, employee.department)
                     .filter(String::isNotBlank)
                     .joinToString(" · ")

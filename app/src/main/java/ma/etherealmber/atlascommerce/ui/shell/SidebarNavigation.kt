@@ -255,7 +255,7 @@ internal fun AtlasSidebarContent(
                 badgeCount = notificationCount,
                 onClick = onOpenNotifications,
             )
-            if (Roles.canCreateDocuments(user.role)) {
+            if (Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY) {
                 SidebarNavigationItem(
                     icon = MainTab.CLIENTS.icon,
                     label = MainTab.CLIENTS.localizedLabel(),

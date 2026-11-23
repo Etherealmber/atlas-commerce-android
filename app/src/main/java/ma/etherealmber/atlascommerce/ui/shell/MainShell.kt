@@ -270,7 +270,7 @@ fun MainShell(
     val tab = when {
         rawTab == MainTab.SALE && !Roles.canCreateDocuments(user.role) -> MainTab.HOME
         rawTab == MainTab.EMPLOYEES && !(Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY) -> MainTab.HOME
-        rawTab == MainTab.CLIENTS && !Roles.canCreateDocuments(user.role) -> MainTab.HOME
+        rawTab == MainTab.CLIENTS && !(Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY) -> MainTab.HOME
         rawTab == MainTab.BALANCE && Roles.normalize(user.role) == Roles.STOCK -> MainTab.HOME
         else -> rawTab
     }
@@ -367,7 +367,7 @@ fun MainShell(
             val targetAllowed = when (externalTabRequest) {
                 MainTab.SALE.name -> Roles.canCreateDocuments(user.role)
                 MainTab.EMPLOYEES.name -> Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY
-                MainTab.CLIENTS.name -> Roles.canCreateDocuments(user.role)
+                MainTab.CLIENTS.name -> Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY
                 MainTab.BALANCE.name -> Roles.normalize(user.role) != Roles.STOCK
                 else -> true
             }
@@ -401,6 +401,10 @@ fun MainShell(
             setTabName(MainTab.HOME.name)
         } else if (target == MainTab.SALE && !Roles.canCreateDocuments(user.role)) {
             onToast("Accès Vente réservé aux rôles Administrateur et Secrétaire.")
+        } else if ((target == MainTab.CLIENTS || target == MainTab.EMPLOYEES) &&
+            !(Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY)
+        ) {
+            onToast("Accès réservé aux administrateurs et secrétaires.")
         } else {
             if (roleTabs.contains(target)) setLastBottomTabName(target.name)
             setTabName(target.name)
@@ -423,9 +427,9 @@ fun MainShell(
         "التقارير المالية مخصصة للمسؤولين فقط.",
     )
     val restrictedEmployeesMessage = atlasText(
-        "Les informations employés sont réservées aux administrateurs.",
-        "Employee information is restricted to administrators.",
-        "معلومات الموظفين مخصصة للمسؤولين فقط.",
+        "Les informations employés sont réservées aux administrateurs et secrétaires.",
+        "Employee information is restricted to administrators and secretaries.",
+        "معلومات الموظفين مخصصة للمسؤولين والسكرتارية.",
     )
     val navigateFromAgent: (AgentNavigationSuggestion) -> Unit = { suggestion ->
         when (suggestion.destination) {
@@ -441,7 +445,7 @@ fun MainShell(
                 }
             }
             AgentNavigationDestination.EMPLOYEES -> {
-                if (Roles.isAdmin(user.role)) switchTab(MainTab.EMPLOYEES)
+                if (Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY) switchTab(MainTab.EMPLOYEES)
                 else onToast(restrictedEmployeesMessage)
             }
             AgentNavigationDestination.SCAN -> switchTab(MainTab.SCAN)
@@ -768,7 +772,7 @@ fun MainShell(
                                                     TopBarQuickActionsMenu(
                                                         notificationCount = notificationCount,
                                                         showSale = Roles.canCreateDocuments(user.role),
-                                                        showClients = Roles.canCreateDocuments(user.role),
+                                                        showClients = Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY,
                                                         onOpenNotifications = openNotificationsForLayout,
                                                         onOpenSale = { switchTab(MainTab.SALE) },
                                                         onOpenClients = { switchTab(MainTab.CLIENTS) },
@@ -1010,7 +1014,7 @@ fun MainShell(
 
                     MainTab.EMPLOYEES -> EmployeeDirectoryScreen(user = user, onDetailsVisibilityChanged = { employeeProfileActive = it })
 
-                    MainTab.CLIENTS -> ClientsScreen(onDetailsVisibilityChanged = { clientProfileActive = it })
+                    MainTab.CLIENTS -> ClientsScreen(user = user, onDetailsVisibilityChanged = { clientProfileActive = it })
 
                     MainTab.AGENT -> AgentScreen(
                         user = user,

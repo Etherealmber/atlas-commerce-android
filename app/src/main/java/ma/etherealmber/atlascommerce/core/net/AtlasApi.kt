@@ -28,6 +28,7 @@ import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.EmployeeDto
 import ma.etherealmber.atlascommerce.data.model.EmployeeUpdateRequest
 import ma.etherealmber.atlascommerce.data.model.EmployeeResignRequest
+import ma.etherealmber.atlascommerce.data.model.EmployeePayrollActionRequest
 import ma.etherealmber.atlascommerce.data.model.ExpenseDeleteRequest
 import ma.etherealmber.atlascommerce.data.model.ProductDeleteRequest
 import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
@@ -419,6 +420,20 @@ interface AtlasApi {
     suspend fun markEmployeeFormer(
         @Path("id") id: Long,
         @Body body: EmployeeResignRequest,
+    ): ApiEnvelope<EmployeeDto>
+
+    @POST("api/employees/{id}/pay")
+    suspend fun payEmployee(
+        @Path("id") id: Long,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Body body: EmployeePayrollActionRequest,
+    ): ApiEnvelope<EmployeeDto>
+
+    @POST("api/employees/{id}/advance")
+    suspend fun advanceEmployee(
+        @Path("id") id: Long,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Body body: EmployeePayrollActionRequest,
     ): ApiEnvelope<EmployeeDto>
 
     @DELETE("api/employees/{id}")
