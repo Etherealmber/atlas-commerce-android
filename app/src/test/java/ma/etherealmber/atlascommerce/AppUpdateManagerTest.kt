@@ -474,6 +474,11 @@ class AppUpdateManagerTest {
         val midStreamReached = CountDownLatch(1)
         val releaseSecondHalf = CountDownLatch(1)
         val notifier = RecordingNotifier()
+        // This test deliberately pauses the APK response while checking midpoint state.
+        // Keep OkHttp from timing out before the test releases the second half.
+        val downloadClient = client.newBuilder()
+            .readTimeout(40, TimeUnit.SECONDS)
+            .build()
 
         ServerSocket(0).use { server ->
             val port = server.localPort
@@ -502,7 +507,9 @@ class AppUpdateManagerTest {
                             out.write(apkBytes, 0, half)
                             out.flush()
                             midStreamReached.countDown()
-                            releaseSecondHalf.await(5, TimeUnit.SECONDS)
+                            // Keep the transfer at a stable midpoint until the assertions release it;
+                            // a short timeout races the test's own condition wait on slower CI workers.
+                            releaseSecondHalf.await(30, TimeUnit.SECONDS)
                             out.write(apkBytes, half, apkBytes.size - half)
                             out.flush()
                         }
@@ -516,7 +523,7 @@ class AppUpdateManagerTest {
                 currentVersionCode = 106,
                 currentVersionName = "1.0.6",
                 probeClient = client,
-                downloadClient = client,
+                downloadClient = downloadClient,
                 moshi = moshi,
                 notifier = notifier,
                 scope = scope,
@@ -524,14 +531,14 @@ class AppUpdateManagerTest {
             )
 
             manager.checkForUpdate(manual = true)
-            awaitCondition { manager.state.value is UpdateState.Available }
+            awaitCondition(timeoutMs = 15_000) { manager.state.value is UpdateState.Available }
 
             val available = manager.state.value as UpdateState.Available
             assertEquals("v1.0.7", available.info.displayVersion)
 
             manager.startDownload(fromSettings = true)
-            assertTrue("Expected first half of stream to arrive", midStreamReached.await(5, TimeUnit.SECONDS))
-            awaitCondition {
+            assertTrue("Expected first half of stream to arrive", midStreamReached.await(15, TimeUnit.SECONDS))
+            awaitCondition(timeoutMs = 15_000) {
                 val dl = manager.state.value as? UpdateState.Downloading
                 dl != null && dl.bytesRead >= (apkBytes.size / 2).toLong()
             }
@@ -568,7 +575,7 @@ class AppUpdateManagerTest {
             assertTrue((manager.state.value as UpdateState.Downloading).hiddenInForeground)
 
             releaseSecondHalf.countDown()
-            awaitCondition { manager.state.value is UpdateState.ReadyToInstall }
+            awaitCondition(timeoutMs = 15_000) { manager.state.value is UpdateState.ReadyToInstall }
 
             val ready = manager.state.value as UpdateState.ReadyToInstall
             assertTrue(ready.apkFile.exists())

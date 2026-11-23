@@ -725,14 +725,11 @@ fun SettingsUpdateCard(
             }
 
             UpdateState.Checking -> {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = atlasText("Recherche de mises à jour sur le serveur…", "Checking the update service…", "جارٍ التحقق من خدمة التحديثات…"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    AtlasSkeletonList(Modifier.fillMaxWidth(), rows = 1, avatarSize = 26.dp)
-                }
+                Text(
+                    text = atlasText("Recherche de mises à jour sur le serveur…", "Checking the update service…", "جارٍ التحقق من خدمة التحديثات…"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             is UpdateState.UpToDate -> {
