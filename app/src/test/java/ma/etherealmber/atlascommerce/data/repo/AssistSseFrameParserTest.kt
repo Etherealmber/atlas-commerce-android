@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.data.model.AssistChatResponseDto
+import ma.etherealmber.atlascommerce.data.model.AssistToolTraceDto
+import com.squareup.moshi.Moshi
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.FilterInputStream
@@ -42,6 +44,17 @@ class AssistSseFrameParserTest {
         assertEquals("{\"name\":\"inventory.read\",\"ok\":true}", frames[1].data)
         assertEquals("{\"reply\":\"Bonjour vous\"}", frames[3].data)
         assertEquals("{\"code\":\"QUOTA\",\"error\":\"Quota reached\"}", frames[4].data)
+    }
+
+    @Test
+    fun `worker tool SSE payload retains data and proposal fields`() {
+        val json = """{"name":"inventory.read","ok":true,"data":{"stock":9},"proposal":{"proposal_id":"p-1","delta":2}}"""
+        val trace = Moshi.Builder().build().adapter(AssistToolTraceDto::class.java).fromJson(json)!!
+
+        assertEquals("inventory.read", trace.name)
+        assertEquals(9.0, (trace.data as Map<*, *>)["stock"] as Double, 0.0)
+        assertEquals("p-1", trace.proposal?.proposalId)
+        assertEquals(2.0, trace.proposal?.delta ?: 0.0, 0.0)
     }
 
     @Test
