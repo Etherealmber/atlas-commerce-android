@@ -7,6 +7,13 @@ import org.junit.Test
 
 class ThermalPrinterFormattingTest {
     @Test
+    fun `Bluetooth connect permission becomes runtime permission on Android 12`() {
+        assertFalse(ThermalPrinter.requiresBluetoothConnectPermission(30))
+        assertTrue(ThermalPrinter.requiresBluetoothConnectPermission(31))
+        assertTrue(ThermalPrinter.requiresBluetoothConnectPermission(35))
+    }
+
+    @Test
     fun `long names preserve quantity and amount within 58mm width`() {
         assertReceiptRowFits(width = 32)
     }

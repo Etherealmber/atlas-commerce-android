@@ -1,11 +1,14 @@
 package ma.etherealmber.atlascommerce.data
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.Normalizer
@@ -16,10 +19,21 @@ import java.util.UUID
 object ThermalPrinter {
     private val sppUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
+    internal fun requiresBluetoothConnectPermission(apiLevel: Int): Boolean = apiLevel >= Build.VERSION_CODES.S
+
     fun pairedDevices(context: Context): List<BluetoothDevice> {
-        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        val adapter = manager.adapter ?: return emptyList()
-        return adapter.bondedDevices.orEmpty().sortedBy { it.name.orEmpty().lowercase() }
+        if (requiresBluetoothConnectPermission(Build.VERSION.SDK_INT) &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        ) {
+            throw SecurityException("Allow Nearby devices permission to list paired printers.")
+        }
+        return try {
+            val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val adapter = manager.adapter ?: return emptyList()
+            adapter.bondedDevices.orEmpty().sortedBy { it.name.orEmpty().lowercase() }
+        } catch (denied: SecurityException) {
+            throw SecurityException("Bluetooth access was revoked; allow Nearby devices and try again.", denied)
+        }
     }
 
     suspend fun print(
@@ -39,27 +53,36 @@ object ThermalPrinter {
         require(discount.isFinite() && discount >= 0.0) { "Receipt discount must be finite and nonnegative." }
         require(lines.all { it.quantity.isFinite() && it.unitPrice.isFinite() }) { "Receipt lines contain an invalid amount." }
         require(paperWidthMm == 58 || paperWidthMm == 80) { "Paper width must be 58 or 80 mm." }
-        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        val adapter = manager.adapter ?: error("Bluetooth is not available on this device.")
-        check(adapter.isEnabled) { "Turn on Bluetooth and try again." }
-        val device = adapter.getRemoteDevice(address)
-        cancelDiscoveryOnLegacyAndroid(adapter)
-        val socket = device.createRfcommSocketToServiceRecord(sppUuid)
+        if (requiresBluetoothConnectPermission(Build.VERSION.SDK_INT) &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        ) {
+            throw SecurityException("Allow Nearby devices permission to print receipts.")
+        }
         try {
-            socket.connect()
-            socket.outputStream.use { out ->
-                out.write(byteArrayOf(0x1b, 0x40)) // Initialize
-                out.write(byteArrayOf(0x1b, 0x61, 0x01)) // Center
-                out.write(encode(wrapText(title, columns(paperWidthMm)).joinToString("\n") + "\n"))
-                out.write(encode(wrapText(ticketNumber, columns(paperWidthMm)).joinToString("\n") + "\n"))
-                out.write(byteArrayOf(0x1b, 0x61, 0x00)) // Left
-                out.write(encode(formatReceiptBody(client, lines, verifiedTotal, currency, columns(paperWidthMm), discount, vatFreeVr)))
-                out.write(encode("\nMerci pour votre confiance.\n\n\n"))
-                out.write(byteArrayOf(0x1d, 0x56, 0x00)) // Full cut (ignored by printers without cutter)
-                out.flush()
+            val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val adapter = manager.adapter ?: error("Bluetooth is not available on this device.")
+            check(adapter.isEnabled) { "Turn on Bluetooth and try again." }
+            val device = adapter.getRemoteDevice(address)
+            cancelDiscoveryOnLegacyAndroid(adapter)
+            val socket = device.createRfcommSocketToServiceRecord(sppUuid)
+            try {
+                socket.connect()
+                socket.outputStream.use { out ->
+                    out.write(byteArrayOf(0x1b, 0x40)) // Initialize
+                    out.write(byteArrayOf(0x1b, 0x61, 0x01)) // Center
+                    out.write(encode(wrapText(title, columns(paperWidthMm)).joinToString("\n") + "\n"))
+                    out.write(encode(wrapText(ticketNumber, columns(paperWidthMm)).joinToString("\n") + "\n"))
+                    out.write(byteArrayOf(0x1b, 0x61, 0x00)) // Left
+                    out.write(encode(formatReceiptBody(client, lines, verifiedTotal, currency, columns(paperWidthMm), discount, vatFreeVr)))
+                    out.write(encode("\nMerci pour votre confiance.\n\n\n"))
+                    out.write(byteArrayOf(0x1d, 0x56, 0x00)) // Full cut (ignored by printers without cutter)
+                    out.flush()
+                }
+            } finally {
+                runCatching { socket.close() }
             }
-        } finally {
-            runCatching { socket.close() }
+        } catch (denied: SecurityException) {
+            throw SecurityException("Bluetooth access was revoked; allow Nearby devices and try again.", denied)
         }
     }
 
