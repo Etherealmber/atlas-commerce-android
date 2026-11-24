@@ -1,6 +1,7 @@
 package ma.etherealmber.atlascommerce.ui.screens.notifications
 
 import ma.etherealmber.atlascommerce.ui.components.rememberApiRefreshAction
+import ma.etherealmber.atlascommerce.ui.components.shouldShowNotificationEnablePrompt
 
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
@@ -40,15 +41,20 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -81,9 +87,24 @@ fun NotificationsScreen(
     val roleLabel = atlasRoleLabel(state.role)
     var showComposeDialog by remember { mutableStateOf(false) }
     var productActionToCreateId by remember { mutableStateOf<Long?>(null) }
-    val systemNotificationsEnabled = runCatching {
+    fun readSystemNotificationsEnabled(): Boolean = runCatching {
         NotificationManagerCompat.from(context).areNotificationsEnabled()
     }.getOrDefault(true)
+    var systemNotificationsEnabled by remember(context) {
+        mutableStateOf(readSystemNotificationsEnabled())
+    }
+    var enablePromptDismissed by rememberSaveable { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                systemNotificationsEnabled = readSystemNotificationsEnabled()
+                enablePromptDismissed = false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg -> onToast(msg) }
@@ -100,7 +121,7 @@ fun NotificationsScreen(
         verticalArrangement = Arrangement.spacedBy(density.itemGap),
     ) {
             // Role-Based Info Box Banner + Send Role Notification CTA
-            if (!systemNotificationsEnabled) {
+            if (shouldShowNotificationEnablePrompt(systemNotificationsEnabled, enablePromptDismissed)) {
                 item {
                     AtlasCard {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -128,12 +149,16 @@ fun NotificationsScreen(
                         AtlasButton(
                             text = atlasText("Activer les notifications dans Paramètres", "Enable notifications in Settings", "تفعيل الإشعارات في الإعدادات"),
                             onClick = {
+                                enablePromptDismissed = true
                                 runCatching {
                                     val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
                                         putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
                                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     }
                                     context.startActivity(intent)
+                                }.onFailure {
+                                    enablePromptDismissed = false
+                                    onToast(atlasText("Impossible d’ouvrir les paramètres de notification Android.", "Could not open Android notification settings.", "تعذّر فتح إعدادات إشعارات Android."))
                                 }
                             },
                             icon = Icons.Outlined.NotificationsActive,

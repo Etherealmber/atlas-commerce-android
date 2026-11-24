@@ -119,6 +119,7 @@ import ma.etherealmber.atlascommerce.ui.components.nextSurprise
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarExpanded
+import ma.etherealmber.atlascommerce.ui.components.TabletNavigationLayout
 import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
@@ -470,15 +471,15 @@ fun MainShell(
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val shellMaxHeight = maxHeight
-    val useRail = maxWidth >= 600.dp
+    val useRail = maxWidth >= TabletNavigationLayout.RAIL_BREAKPOINT_DP.dp
     val useDesktopSidebar = maxWidth >= 1000.dp
     val pageTarget = ShellPageTarget(tab = tab, isDataStorage = useRail && showDataCacheManagerDialog)
     // A full drawer consumes too much of a medium-width window (especially split-screen).
     // Keep those windows on a compact rail; allow an expanded drawer from 840dp upward.
-    val sidebarCanExpand = maxWidth >= 840.dp
+    val sidebarCanExpand = maxWidth >= TabletNavigationLayout.EXPANDED_BREAKPOINT_DP.dp
     val sidebarExpanded = sidebarCanExpand && !sidebarCollapsed
     val sidebarWidth by animateDpAsState(
-        targetValue = if (!useRail) 0.dp else if (sidebarExpanded) 264.dp else 76.dp,
+        targetValue = TabletNavigationLayout.sidebarWidthDp(maxWidth.value.toInt(), sidebarCollapsed).dp,
         animationSpec = spring(dampingRatio = 0.86f, stiffness = 360f),
         label = "atlas-sidebar-width",
     )
@@ -490,10 +491,8 @@ fun MainShell(
         )
     }
 
-    val showShellTopBar = isForeground && !profileDetailActive && !pageTarget.isDataStorage && (
-        (!useRail && !productHistoryActive && !releaseHistorySubpageActive) ||
-            (useRail && tab in setOf(MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS, MainTab.CLIENTS) && !productHistoryActive)
-        )
+    val showShellTopBar = isForeground && TabletNavigationLayout.shouldShowFloatingShellTopBar(useRail) &&
+        !profileDetailActive && !pageTarget.isDataStorage && !productHistoryActive && !releaseHistorySubpageActive
     var shellTopBarVisible by remember { mutableStateOf(false) }
     LaunchedEffect(showShellTopBar) {
         shellTopBarVisible = showShellTopBar
