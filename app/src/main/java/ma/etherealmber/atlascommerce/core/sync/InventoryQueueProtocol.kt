@@ -83,10 +83,16 @@ internal object InventoryHeldWriteActions {
 internal object InventoryQueueReplayOrder {
     fun nextReplayable(items: List<InventoryQueueEntry>): InventoryQueueEntry? {
         for (entry in items) {
-            when (entry.status) {
-                InventoryQueueStatus.REJECTED.name, InventoryQueueStatus.HELD.name -> continue
-                InventoryQueueStatus.QUEUED.name -> return entry
-                else -> return null
+            when (InventoryQueueStatus.valueOf(entry.status)) {
+                InventoryQueueStatus.QUEUED -> return entry
+                InventoryQueueStatus.REJECTED,
+                InventoryQueueStatus.HELD,
+                InventoryQueueStatus.CONFLICT -> continue
+                InventoryQueueStatus.FAILED -> {
+                    // FAILED represents an ambiguous/invalid server outcome or exhausted retry policy;
+                    // keep FIFO stopped until an operator acknowledges it.
+                    return null
+                }
             }
         }
         return null

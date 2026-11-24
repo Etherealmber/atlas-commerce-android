@@ -151,6 +151,43 @@ class InventoryWriteQueueContractTest {
     }
 
     @Test
+    fun `conflict write does not stall later FIFO work at another location`() {
+        val conflict = InventoryQueueEntryFactory { "conflict-at-one" }
+            .movement(1L, 42, "Marble", "Location A", "receive", 5.0, "", OCCURRED_AT)
+            .copy(status = InventoryQueueStatus.CONFLICT.name)
+        val later = InventoryQueueEntryFactory { "queued-at-two" }
+            .movement(2L, 43, "Granite", "Location B", "receive", 2.0, "", OCCURRED_AT)
+
+        assertEquals(later, InventoryQueueReplayOrder.nextReplayable(listOf(conflict, later)))
+    }
+
+    @Test
+    fun `failed write still halts replay until acknowledged`() {
+        val failed = InventoryQueueEntryFactory { "failed-at-one" }
+            .movement(1L, 42, "Marble", "Location A", "receive", 5.0, "", OCCURRED_AT)
+            .copy(status = InventoryQueueStatus.FAILED.name, failureCode = "RATE_LIMITED")
+        val later = InventoryQueueEntryFactory { "queued-at-two" }
+            .movement(2L, 43, "Granite", "Location B", "receive", 2.0, "", OCCURRED_AT)
+
+        assertNull(InventoryQueueReplayOrder.nextReplayable(listOf(failed, later)))
+        assertEquals(later, InventoryQueueReplayOrder.nextReplayable(listOf(later)))
+    }
+
+    @Test
+    fun `conflict and held writes at location one are skipped to queued write at location two`() {
+        val conflict = InventoryQueueEntryFactory { "conflict-at-one" }
+            .movement(1L, 42, "Marble", "Location A", "receive", 5.0, "", OCCURRED_AT)
+            .copy(status = InventoryQueueStatus.CONFLICT.name)
+        val held = InventoryQueueEntryFactory { "held-at-one" }
+            .movement(1L, 44, "Limestone", "Location A", "issue", 1.0, "", OCCURRED_AT)
+            .copy(status = InventoryQueueStatus.HELD.name)
+        val queued = InventoryQueueEntryFactory { "queued-at-two" }
+            .movement(2L, 43, "Granite", "Location B", "receive", 2.0, "", OCCURRED_AT)
+
+        assertEquals(queued, InventoryQueueReplayOrder.nextReplayable(listOf(conflict, held, queued)))
+    }
+
+    @Test
     fun `conflict write offers recount and resend but rejected write does not`() {
         assertEquals(
             InventoryHttpDecision.Terminal(InventoryTerminalStatus.CONFLICT),
