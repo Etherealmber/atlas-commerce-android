@@ -45,7 +45,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-internal enum class InventoryQueueStatus { QUEUED, CONFLICT, FAILED }
+internal enum class InventoryQueueStatus { QUEUED, CONFLICT, REJECTED, HELD, FAILED }
 
 @JsonClass(generateAdapter = true)
 data class InventoryQueueEntry(
@@ -98,16 +98,24 @@ class InventoryWriteQueue @Inject constructor(
 ) {
     private val directory = File(context.noBackupFilesDir, "atlas-inventory-outbox").apply { mkdirs() }
     private val mutex = Mutex()
+    private val replayGate = InventoryQueueReplayGate()
     private val activeEntries = MutableStateFlow<List<InventoryQueueEntry>>(emptyList())
     private val activeReadError = MutableStateFlow<String?>(null)
+    private val activeReplay = MutableStateFlow(false)
     val entries: StateFlow<List<InventoryQueueEntry>> = activeEntries.asStateFlow()
     val readError: StateFlow<String?> = activeReadError.asStateFlow()
+    val isReplaying: StateFlow<Boolean> = activeReplay.asStateFlow()
     private val listAdapter by lazy {
         moshi.adapter<List<InventoryQueueEntry>>(
             Types.newParameterizedType(List::class.java, InventoryQueueEntry::class.java),
         )
     }
     private val contextAdapter by lazy { moshi.adapter(CachedInventoryContext::class.java) }
+    private val requestListAdapter by lazy {
+        moshi.adapter<List<InventoryOfflineOperationRequest>>(
+            Types.newParameterizedType(List::class.java, InventoryOfflineOperationRequest::class.java),
+        )
+    }
     private val entryFactory = InventoryQueueEntryFactory()
     private val fileStore by lazy {
         InventoryQueueFileStore(
@@ -145,7 +153,7 @@ class InventoryWriteQueue @Inject constructor(
                         if (accountForActiveUser() != key) return@collect
                         activeEntries.value = loaded
                         activeReadError.value = null
-                        loaded.firstOrNull { it.status == InventoryQueueStatus.QUEUED.name }?.let { first ->
+                        InventoryQueueReplayOrder.nextReplayable(loaded)?.let { first ->
                             schedule(key, first.locationId, retryDelaySeconds(first))
                         }
                     }
@@ -219,6 +227,7 @@ class InventoryWriteQueue @Inject constructor(
     }
 
     suspend fun discardBlockedOperation(operationId: String): Boolean = mutex.withLock {
+        if (replayGate.isActive()) return@withLock false
         val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return@withLock false
         val key = accountKey(user.serverUrl, user.username)
         val current = load(key)
@@ -228,13 +237,103 @@ class InventoryWriteQueue @Inject constructor(
         val remaining = current.toMutableList().also { it.removeAt(index) }
         save(key, remaining)
         publishIfActive(key, remaining)
-        remaining.firstOrNull { it.status == InventoryQueueStatus.QUEUED.name }?.let { schedule(key, it.locationId) }
+        InventoryQueueReplayOrder.nextReplayable(remaining)?.let { schedule(key, it.locationId) }
         true
+    }
+
+    suspend fun exportHeldWrites(): String? = mutex.withLock {
+        if (replayGate.isActive()) return@withLock null
+        val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return@withLock null
+        val key = accountKey(user.serverUrl, user.username)
+        val current = load(key)
+        publishIfActive(key, current)
+        val heldCount = current.count { it.status == InventoryQueueStatus.HELD.name }
+        if (!InventoryHeldWriteActions.canExport(heldCount, replayGate.isActive())) return@withLock null
+        InventoryHeldWriteActions.exportJson(current, requestListAdapter::toJson)
+    }
+
+    suspend fun discardHeldWrites(typedCount: Int): Boolean = mutex.withLock {
+        val currentReplay = replayGate.isActive()
+        val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return@withLock false
+        val key = accountKey(user.serverUrl, user.username)
+        val current = load(key)
+        val heldCount = current.count { it.status == InventoryQueueStatus.HELD.name }
+        if (!InventoryHeldWriteActions.canDiscard(heldCount, typedCount, currentReplay)) return@withLock false
+        val remaining = current.filterNot { it.status == InventoryQueueStatus.HELD.name }
+        save(key, remaining)
+        publishIfActive(key, remaining)
+        InventoryQueueReplayOrder.nextReplayable(remaining)?.let { schedule(key, it.locationId) }
+        true
+    }
+
+    suspend fun retryConflict(operationId: String, freshPlacement: InventoryLocationPlacementDto?): Boolean = mutex.withLock {
+        if (replayGate.isActive()) return@withLock false
+        val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return@withLock false
+        val key = accountKey(user.serverUrl, user.username)
+        val current = load(key)
+        val index = current.indexOfFirst {
+            it.operationId == operationId && InventoryQueueConflictAction.canRetry(it.status, replayGate.isActive())
+        }
+        if (index < 0) return@withLock false
+        val old = current[index]
+        val updated = if (old.kind == "count") {
+            val placement = freshPlacement?.takeIf { it.locationId == old.locationId && it.revision != null }
+                ?: return@withLock false
+            old.copy(
+                operationId = java.util.UUID.randomUUID().toString(),
+                observedQuantity = placement.quantity,
+                observedRevision = placement.revision,
+                clientOccurredAt = java.time.Instant.now().toString(),
+                status = InventoryQueueStatus.QUEUED.name,
+                failureCode = null,
+                failureMessage = null,
+                rateLimitAttempts = 0,
+                retryNotBeforeEpochMillis = null,
+            )
+        } else {
+            old.copy(
+                operationId = java.util.UUID.randomUUID().toString(),
+                status = InventoryQueueStatus.QUEUED.name,
+                failureCode = null,
+                failureMessage = null,
+                rateLimitAttempts = 0,
+                retryNotBeforeEpochMillis = null,
+            )
+        }
+        val next = current.toMutableList().also { it[index] = updated }
+        save(key, next)
+        publishIfActive(key, next)
+        schedule(key, updated.locationId)
+        true
+    }
+
+    internal suspend fun beginReplay(account: String): Boolean = mutex.withLock {
+        if (accountForActiveUser() != account || !replayGate.begin()) return@withLock false
+        activeReplay.value = true
+        true
+    }
+
+    internal suspend fun endReplay() = mutex.withLock {
+        replayGate.end()
+        activeReplay.value = false
+    }
+
+    internal suspend fun holdQueuedWrites(account: String, code: String, message: String) = mutex.withLock {
+        val current = load(account)
+        val next = current.map { entry ->
+            if (entry.status == InventoryQueueStatus.QUEUED.name) {
+                entry.copy(status = InventoryQueueStatus.HELD.name, failureCode = code, failureMessage = message)
+            } else entry
+        }
+        save(account, next)
+        publishIfActive(account, next)
     }
 
     private suspend fun enqueue(account: String, entry: InventoryQueueEntry): InventoryQueueEntry = mutex.withLock {
         val current = load(account)
-        require(current.none { it.status != InventoryQueueStatus.QUEUED.name }) {
+        require(current.none {
+            it.status in setOf(InventoryQueueStatus.CONFLICT.name, InventoryQueueStatus.HELD.name, InventoryQueueStatus.FAILED.name)
+        }) {
             "Resolve the earlier blocked inventory operation before adding another."
         }
         require(current.size < 500) { "The offline inventory queue is full; reconnect and sync it before adding more." }
@@ -248,8 +347,7 @@ class InventoryWriteQueue @Inject constructor(
     internal suspend fun nextQueued(account: String, scheduledLocationId: Long): InventoryQueueEntry? = mutex.withLock {
         val items = load(account)
         publishIfActive(account, items)
-        if (items.any { it.status != InventoryQueueStatus.QUEUED.name }) return@withLock null
-        val first = items.firstOrNull() ?: return@withLock null
+        val first = InventoryQueueReplayOrder.nextReplayable(items) ?: return@withLock null
         val delaySeconds = retryDelaySeconds(first)
         if (first.locationId != scheduledLocationId || delaySeconds > 0L) {
             schedule(account, first.locationId, delaySeconds)
@@ -371,65 +469,71 @@ class InventoryWriteWorker(context: Context, params: WorkerParameters) : Corouti
             }
         }
 
-        while (true) {
-            if (queue.accountForActiveUser() != account) return Result.success()
-            if (entryPoint.tokenHolder().token != bearer) return Result.retry()
-            val item = try {
-                queue.nextQueued(account, locationId)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                return Result.retry()
-            } ?: return Result.success()
-            try {
-                val exchange = InventoryReplayScope.submitAndDecideIfAllowed(
-                    account, queue.accountForActiveUser(), locationId, item, gateway,
-                ) ?: return Result.success()
-                val (result, decision) = exchange
-                if (result.statusCode in 200..299) {
-                    if (result.responseOperationId == item.operationId) {
-                        queue.markApplied(account, item.operationId)
-                        continue
-                    }
-                    queue.markBlocked(account, item.operationId, InventoryQueueStatus.FAILED,
-                        result.errorCode ?: "INVALID_RESPONSE", result.errorMessage ?: "The server returned an incomplete inventory result.")
-                    return Result.success()
-                }
-                when (decision) {
-                    InventoryHttpDecision.Retry -> return Result.retry()
-                    is InventoryHttpDecision.RetryAfter -> {
-                        queue.markRateLimitedRetry(account, item.operationId, decision.seconds)
-                        return Result.success()
-                    }
-                    InventoryHttpDecision.ParkRateLimited -> {
+        if (!queue.beginReplay(account)) return Result.success()
+        return try {
+            while (true) {
+                if (queue.accountForActiveUser() != account) return Result.success()
+                if (entryPoint.tokenHolder().token != bearer) return Result.retry()
+                val item = try {
+                    queue.nextQueued(account, locationId)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    return Result.retry()
+                } ?: return Result.success()
+                try {
+                    val exchange = InventoryReplayScope.submitAndDecideIfAllowed(
+                        account, queue.accountForActiveUser(), locationId, item, gateway,
+                    ) ?: return Result.success()
+                    val (result, decision) = exchange
+                    if (result.statusCode in 200..299) {
+                        if (result.responseOperationId == item.operationId) {
+                            queue.markApplied(account, item.operationId)
+                            continue
+                        }
                         queue.markBlocked(account, item.operationId, InventoryQueueStatus.FAILED,
-                            "RATE_LIMITED", InventoryRetryPolicy.RATE_LIMIT_PARKED_MESSAGE)
+                            result.errorCode ?: "INVALID_RESPONSE", result.errorMessage ?: "The server returned an incomplete inventory result.")
                         return Result.success()
                     }
-                    InventoryHttpDecision.HoldUnsupportedServer -> {
-                        queue.markBlocked(
-                            account, item.operationId, InventoryQueueStatus.FAILED, "WORKER_MIGRATION_REQUIRED",
-                            InventoryRetryPolicy.MIGRATION_REQUIRED_MESSAGE,
-                        )
-                        return Result.success()
+                    when (decision) {
+                        InventoryHttpDecision.Retry -> return Result.retry()
+                        is InventoryHttpDecision.RetryAfter -> {
+                            queue.markRateLimitedRetry(account, item.operationId, decision.seconds)
+                            return Result.success()
+                        }
+                        InventoryHttpDecision.ParkRateLimited -> {
+                            queue.markBlocked(account, item.operationId, InventoryQueueStatus.FAILED,
+                                "RATE_LIMITED", InventoryRetryPolicy.RATE_LIMIT_PARKED_MESSAGE)
+                            return Result.success()
+                        }
+                        InventoryHttpDecision.HoldUnsupportedServer -> {
+                            queue.holdQueuedWrites(
+                                account, "WORKER_MIGRATION_REQUIRED", InventoryRetryPolicy.MIGRATION_REQUIRED_MESSAGE,
+                            )
+                            return Result.success()
+                        }
+                        is InventoryHttpDecision.Terminal -> {
+                            val message = result.errorMessage ?: "Inventory operation needs review (${result.statusCode})."
+                            queue.markBlocked(
+                                account, item.operationId,
+                                if (decision.status == InventoryTerminalStatus.CONFLICT) InventoryQueueStatus.CONFLICT
+                                else InventoryQueueStatus.REJECTED,
+                                result.errorCode ?: "HTTP_${result.statusCode}", message,
+                            )
+                            if (decision.status == InventoryTerminalStatus.REJECTED) continue
+                            return Result.success()
+                        }
                     }
-                    is InventoryHttpDecision.Terminal -> {
-                        val message = result.errorMessage ?: "Inventory operation needs review (${result.statusCode})."
-                        queue.markBlocked(
-                            account, item.operationId,
-                            if (decision.conflict) InventoryQueueStatus.CONFLICT else InventoryQueueStatus.FAILED,
-                            result.errorCode ?: "HTTP_${result.statusCode}", message,
-                        )
-                        return Result.success()
-                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: IOException) {
+                    return Result.retry()
+                } catch (_: Throwable) {
+                    return Result.retry()
                 }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: IOException) {
-                return Result.retry()
-            } catch (_: Throwable) {
-                return Result.retry()
             }
+        } finally {
+            queue.endReplay()
         }
     }
 

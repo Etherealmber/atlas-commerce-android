@@ -99,6 +99,7 @@ class ScanViewModel @Inject constructor(
     val scanFeedbackEvents: SharedFlow<Unit> = _scanFeedbackEvents.asSharedFlow()
     val inventoryQueueEntries: StateFlow<List<InventoryQueueEntry>> = inventoryWriteQueue.entries
     val inventoryQueueReadError: StateFlow<String?> = inventoryWriteQueue.readError
+    val inventoryQueueReplaying: StateFlow<Boolean> = inventoryWriteQueue.isReplaying
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -261,10 +262,60 @@ class ScanViewModel @Inject constructor(
         }
     }
 
-    fun discardBlockedInventoryOperation(operationId: String) {
+    fun dismissRejectedInventoryOperation(operationId: String) {
         viewModelScope.launch {
+            val item = inventoryWriteQueue.entries.value.firstOrNull { it.operationId == operationId }
+            if (item?.status != "REJECTED") return@launch
+            val removed = runCatching { inventoryWriteQueue.discardBlockedOperation(operationId) }
+                .getOrElse { error -> _messages.tryEmit(error.message ?: "Could not update the inventory queue."); false }
+            if (removed) _messages.tryEmit("Rejected inventory write dismissed.")
+        }
+    }
+
+    fun dismissFailedInventoryOperation(operationId: String) {
+        viewModelScope.launch {
+            if (inventoryWriteQueue.entries.value.none { it.operationId == operationId && it.status == "FAILED" }) return@launch
             runCatching { inventoryWriteQueue.discardBlockedOperation(operationId) }
                 .onFailure { error -> _messages.tryEmit(error.message ?: "Could not update the inventory queue.") }
+        }
+    }
+
+    fun recountAndResendInventoryOperation(operationId: String) {
+        val requestedScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity ?: return
+        viewModelScope.launch {
+            val entry = inventoryWriteQueue.entries.value.firstOrNull { it.operationId == operationId }
+                ?.takeIf { it.status == "CONFLICT" } ?: return@launch
+            val placement = if (entry.kind == "count") {
+                when (val result = commerceRepository.inventoryPlacements(entry.productId)) {
+                    is ApiResult.Success -> result.data.placements.firstOrNull { it.locationId == entry.locationId }
+                    is ApiResult.Failure -> {
+                        _messages.tryEmit(result.message)
+                        return@launch
+                    }
+                }
+            } else null
+            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
+            val success = runCatching { inventoryWriteQueue.retryConflict(operationId, placement) }
+                .getOrElse { error -> _messages.tryEmit(error.message ?: "Could not retry the inventory write."); false }
+            if (success) _messages.tryEmit("A fresh inventory write was queued for resend.")
+            else _messages.tryEmit("Could not refresh the count revision; connect and try again.")
+        }
+    }
+
+    fun exportHeldInventoryWrites(onExport: (String) -> Unit) {
+        viewModelScope.launch {
+            val json = runCatching { inventoryWriteQueue.exportHeldWrites() }
+                .getOrElse { error -> _messages.tryEmit(error.message ?: "Could not export held inventory writes."); null }
+            if (json == null) _messages.tryEmit("Held writes cannot be copied while the queue is replaying, or there are no held writes.")
+            else onExport(json)
+        }
+    }
+
+    fun discardHeldInventoryWrites(typedCount: Int) {
+        viewModelScope.launch {
+            val discarded = runCatching { inventoryWriteQueue.discardHeldWrites(typedCount) }
+                .getOrElse { error -> _messages.tryEmit(error.message ?: "Could not discard held inventory writes."); false }
+            _messages.tryEmit(if (discarded) "Held inventory writes discarded." else "Queue changed or is replaying; no held writes were discarded.")
         }
     }
 

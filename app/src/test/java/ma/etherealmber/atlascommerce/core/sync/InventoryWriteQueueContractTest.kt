@@ -126,10 +126,94 @@ class InventoryWriteQueueContractTest {
             val (result, decision) = exchange
 
             assertEquals(code, result.errorCode)
-            assertTrue("$code must be terminal", decision is InventoryHttpDecision.Terminal)
-            assertTrue("$code must surface as a conflict", (decision as InventoryHttpDecision.Terminal).conflict)
-            assertEquals("terminal conflict must not retry", 1, requests)
+            assertEquals(
+                InventoryHttpDecision.Terminal(InventoryTerminalStatus.CONFLICT),
+                decision,
+            )
+            assertTrue("$code must surface as a conflict", InventoryQueueConflictAction.canRetry("CONFLICT", replaying = false))
+            assertEquals("terminal conflict must not retry automatically", 1, requests)
         }
+    }
+
+    @Test
+    fun `rejected write does not stall later FIFO work`() {
+        val rejected = InventoryQueueEntryFactory { "rejected-write" }
+            .movement(3L, 42, "Marble", "Warehouse", "receive", 5.0, "", OCCURRED_AT)
+            .copy(status = InventoryQueueStatus.REJECTED.name, failureMessage = "Quantité invalide")
+        val following = InventoryQueueEntryFactory { "following-write" }
+            .movement(3L, 43, "Granite", "Warehouse", "receive", 2.0, "", OCCURRED_AT)
+        assertEquals(
+            InventoryHttpDecision.Terminal(InventoryTerminalStatus.REJECTED),
+            InventoryRetryPolicy.decide(422, "QTY_INVALID", 0),
+        )
+        assertEquals(following, InventoryQueueReplayOrder.nextReplayable(listOf(rejected, following)))
+        assertNull(InventoryQueueReplayOrder.nextReplayable(listOf(rejected)))
+    }
+
+    @Test
+    fun `conflict write offers recount and resend but rejected write does not`() {
+        assertEquals(
+            InventoryHttpDecision.Terminal(InventoryTerminalStatus.CONFLICT),
+            InventoryRetryPolicy.decide(409, "COUNT_CONFLICT", 0),
+        )
+        assertTrue(InventoryQueueConflictAction.canRetry("CONFLICT", replaying = false))
+        assertFalse(InventoryQueueConflictAction.canRetry("REJECTED", replaying = false))
+    }
+
+    @Test
+    fun `rejected and conflict statuses and French messages survive process death`() {
+        val directory = temporaryFolder.newFolder("terminal-process-death")
+        val rejected = InventoryQueueEntryFactory { "rejected-persisted" }
+            .movement(3L, 42, "Marble", "Warehouse", "receive", 5.0, "", OCCURRED_AT)
+            .copy(status = InventoryQueueStatus.REJECTED.name, failureCode = "QTY_INVALID", failureMessage = "Quantité insuffisante — veuillez vérifier le stock.")
+        val conflict = InventoryQueueEntryFactory { "conflict-persisted" }
+            .count(3L, 43, "Granite", "Warehouse", 7.0,
+                InventoryLocationPlacementDto(locationId = 3, quantity = 5.0, revision = 8), "", OCCURRED_AT)
+            .copy(status = InventoryQueueStatus.CONFLICT.name, failureCode = "COUNT_CONFLICT", failureMessage = "Le stock a changé.")
+
+        fileStore(directory).save("server-account", listOf(rejected, conflict))
+        val restored = fileStore(directory).load("server-account")
+
+        assertEquals(listOf("REJECTED", "CONFLICT"), restored.map { it.status })
+        assertEquals(rejected.failureMessage, restored.first().failureMessage)
+        assertEquals(conflict.failureMessage, restored.last().failureMessage)
+    }
+
+    @Test
+    fun `held export contains one JSON payload per held write with operation ids`() {
+        val entries = listOf(
+            InventoryQueueEntryFactory { "held-one" }.movement(3L, 42, "A", "Warehouse", "receive", 1.0, "", OCCURRED_AT)
+                .copy(status = InventoryQueueStatus.HELD.name),
+            InventoryQueueEntryFactory { "held-two" }.movement(3L, 43, "B", "Warehouse", "issue", 2.0, "", OCCURRED_AT)
+                .copy(status = InventoryQueueStatus.HELD.name),
+            InventoryQueueEntryFactory { "still-queued" }.movement(3L, 44, "C", "Warehouse", "receive", 3.0, "", OCCURRED_AT),
+        )
+        val adapter = Moshi.Builder().build().adapter<List<InventoryOfflineOperationRequest>>(
+            Types.newParameterizedType(List::class.java, InventoryOfflineOperationRequest::class.java),
+        )
+
+        val payload = InventoryHeldWriteActions.exportJson(entries, adapter::toJson)
+        val decoded = adapter.fromJson(payload).orEmpty()
+
+        assertEquals(2, decoded.size)
+        assertEquals(listOf("held-one", "held-two"), decoded.map { it.operationId })
+    }
+
+    @Test
+    fun `held discard requires exact count and held actions are unavailable during replay`() {
+        val gate = InventoryQueueReplayGate()
+        assertTrue(InventoryHeldWriteActions.canExport(3, replaying = false))
+        assertFalse(InventoryHeldWriteActions.canDiscard(3, typedCount = 2, replaying = false))
+        assertTrue(InventoryHeldWriteActions.canDiscard(3, typedCount = 3, replaying = false))
+        assertFalse(InventoryHeldWriteActions.canDiscard(3, typedCount = 3, replaying = true))
+
+        assertTrue(gate.begin())
+        assertTrue(gate.isActive())
+        assertFalse(InventoryHeldWriteActions.canExport(3, replaying = gate.isActive()))
+        assertFalse(InventoryHeldWriteActions.canDiscard(3, typedCount = 3, replaying = gate.isActive()))
+        assertFalse(InventoryQueueConflictAction.canRetry("CONFLICT", replaying = gate.isActive()))
+        gate.end()
+        assertTrue(InventoryHeldWriteActions.canExport(3, replaying = gate.isActive()))
     }
 
     @Test
@@ -149,7 +233,17 @@ class InventoryWriteQueueContractTest {
         )
         listOf(400, 401, 403, 409, 422).forEach { code ->
             val decision = InventoryRetryPolicy.decide(code, "VALIDATION_ERROR", rateLimitAttempts = 0)
-            assertTrue("HTTP $code must be terminal", decision is InventoryHttpDecision.Terminal)
+            assertEquals(
+                "HTTP $code must be a visible rejection",
+                InventoryHttpDecision.Terminal(InventoryTerminalStatus.REJECTED),
+                decision,
+            )
+        }
+        listOf("QTY_INVALID", "LOCATION_NOT_FOUND", "PRODUCT_NOT_FOUND").forEach { errorCode ->
+            assertEquals(
+                InventoryHttpDecision.Terminal(InventoryTerminalStatus.REJECTED),
+                InventoryRetryPolicy.decide(if (errorCode == "QTY_INVALID") 422 else 404, errorCode, 0),
+            )
         }
     }
 

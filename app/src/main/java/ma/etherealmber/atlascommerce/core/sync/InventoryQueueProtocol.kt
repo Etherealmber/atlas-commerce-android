@@ -59,12 +59,57 @@ internal object InventoryReplayScope {
     }
 }
 
+internal enum class InventoryTerminalStatus { CONFLICT, REJECTED }
+
 internal sealed interface InventoryHttpDecision {
     data object Retry : InventoryHttpDecision
     data class RetryAfter(val seconds: Long, val attempt: Int) : InventoryHttpDecision
     data object ParkRateLimited : InventoryHttpDecision
     data object HoldUnsupportedServer : InventoryHttpDecision
-    data class Terminal(val conflict: Boolean) : InventoryHttpDecision
+    data class Terminal(val status: InventoryTerminalStatus) : InventoryHttpDecision
+}
+
+/** Serializes and guards the operator-only actions for migration-held writes. */
+internal object InventoryHeldWriteActions {
+    fun exportJson(entries: List<InventoryQueueEntry>, serialize: (List<InventoryOfflineOperationRequest>) -> String): String =
+        serialize(entries.filter { it.status == InventoryQueueStatus.HELD.name }.map { it.toRequest() })
+
+    fun canExport(heldCount: Int, replaying: Boolean): Boolean = heldCount > 0 && !replaying
+
+    fun canDiscard(heldCount: Int, typedCount: Int, replaying: Boolean): Boolean =
+        !replaying && heldCount > 0 && typedCount == heldCount
+}
+
+internal object InventoryQueueReplayOrder {
+    fun nextReplayable(items: List<InventoryQueueEntry>): InventoryQueueEntry? {
+        for (entry in items) {
+            when (entry.status) {
+                InventoryQueueStatus.REJECTED.name, InventoryQueueStatus.HELD.name -> continue
+                InventoryQueueStatus.QUEUED.name -> return entry
+                else -> return null
+            }
+        }
+        return null
+    }
+}
+
+internal object InventoryQueueConflictAction {
+    fun canRetry(status: String, replaying: Boolean): Boolean =
+        status == InventoryQueueStatus.CONFLICT.name && !replaying
+}
+
+/** Shared process-local gate, protected by the queue mutex at each production call site. */
+internal class InventoryQueueReplayGate {
+    @Volatile private var replaying = false
+
+    fun begin(): Boolean {
+        if (replaying) return false
+        replaying = true
+        return true
+    }
+
+    fun end() { replaying = false }
+    fun isActive(): Boolean = replaying
 }
 
 internal object InventoryRetryPolicy {
@@ -88,11 +133,10 @@ internal object InventoryRetryPolicy {
             attempt = rateLimitAttempts + 1,
         )
         statusCode >= 500 || statusCode <= 0 -> InventoryHttpDecision.Retry
-        statusCode == 409 -> InventoryHttpDecision.Terminal(
-            conflict = errorCode == "COUNT_CONFLICT" || errorCode == "IDEMPOTENCY_KEY_REUSED",
-        )
-        statusCode in 400..499 -> InventoryHttpDecision.Terminal(conflict = false)
-        else -> InventoryHttpDecision.Terminal(conflict = false)
+        statusCode == 409 && errorCode in setOf("COUNT_CONFLICT", "IDEMPOTENCY_KEY_REUSED") ->
+            InventoryHttpDecision.Terminal(InventoryTerminalStatus.CONFLICT)
+        statusCode in 400..499 -> InventoryHttpDecision.Terminal(InventoryTerminalStatus.REJECTED)
+        else -> InventoryHttpDecision.Terminal(InventoryTerminalStatus.REJECTED)
     }
 
     fun retryAfterSeconds(header: String?, now: Instant = Instant.now()): Long = parseRetryAfter(header, now)
