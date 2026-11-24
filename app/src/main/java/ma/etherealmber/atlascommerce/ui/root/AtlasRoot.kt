@@ -69,6 +69,7 @@ import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AppUpdateBanner
 import ma.etherealmber.atlascommerce.ui.components.AtlasBootSplashScreen
 import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
+import ma.etherealmber.atlascommerce.ui.components.TabletNavigationLayout
 import ma.etherealmber.atlascommerce.ui.components.AtlasWelcomeOnboardingScreen
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.MandatoryUpdateScreen
@@ -611,7 +612,12 @@ private fun AtlasGate(
                                 user = activeUser,
                                 defaultStartTab = defaultStartTab,
                                 activeTabOverride = savedShellTab,
-                                onActiveTabChange = { savedShellTab = it },
+                                onActiveTabChange = { nextTab ->
+                                    if (overlay != null && savedShellTab != null && savedShellTab != nextTab) {
+                                        overlay = null
+                                    }
+                                    savedShellTab = nextTab
+                                },
                                 lastBottomTabOverride = savedLastBottomTab,
                                 onLastBottomTabChange = { savedLastBottomTab = it },
                                 sidebarCollapsed = sidebarCollapsed,
@@ -656,6 +662,12 @@ private fun AtlasGate(
                 lastOverlay = overlay
             }
             val visibleOverlay = overlay ?: lastOverlay
+            val overlaySidebarWidth = if (baseStage == RootStage.SHELL && activeUser != null) {
+                TabletNavigationLayout.sidebarWidthDp(
+                    windowWidthDp = LocalConfiguration.current.screenWidthDp,
+                    collapsed = sidebarCollapsed,
+                ).dp
+            } else 0.dp
             AnimatedVisibility(
                 visible = bootSplashFinished && onboardingDone && !loadingBackend && overlay != null,
                 enter = slideInHorizontally(initialOffsetX = { it / 6 }) + fadeIn(),
@@ -663,7 +675,7 @@ private fun AtlasGate(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().padding(start = overlaySidebarWidth),
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     when (visibleOverlay) {
