@@ -85,6 +85,11 @@ fun NotificationsScreen(
     val context = LocalContext.current
     val density = Atlas.density
     val roleLabel = atlasRoleLabel(state.role)
+    val notificationSettingsErrorMessage = atlasText(
+        "Impossible d’ouvrir les paramètres de notification Android.",
+        "Could not open Android notification settings.",
+        "تعذّر فتح إعدادات إشعارات Android.",
+    )
     var showComposeDialog by remember { mutableStateOf(false) }
     var productActionToCreateId by remember { mutableStateOf<Long?>(null) }
     fun readSystemNotificationsEnabled(): Boolean = runCatching {
@@ -158,7 +163,7 @@ fun NotificationsScreen(
                                     context.startActivity(intent)
                                 }.onFailure {
                                     enablePromptDismissed = false
-                                    onToast(atlasText("Impossible d’ouvrir les paramètres de notification Android.", "Could not open Android notification settings.", "تعذّر فتح إعدادات إشعارات Android."))
+                                    onToast(notificationSettingsErrorMessage)
                                 }
                             },
                             icon = Icons.Outlined.NotificationsActive,
