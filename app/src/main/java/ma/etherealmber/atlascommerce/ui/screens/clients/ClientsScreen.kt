@@ -51,6 +51,8 @@ import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.ClientDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasFinanceBarChart
+import ma.etherealmber.atlascommerce.ui.components.AtlasFinanceBarEntry
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
@@ -339,7 +341,11 @@ private fun ClientSituationDialog(
                     value = atlasMoney(client.balanceDue, currency),
                     valueColor = if (client.balanceDue > 0.009) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 )
-                Text(atlasText("${invoices.size} facture(s)", "${invoices.size} invoice(s)", "${invoices.size} فاتورة"), style = MaterialTheme.typography.labelLarge)
+                Text(atlasText("${invoices.size} facture(s) · ${invoices.count { it.remaining > 0.009 }} avec un solde", "${invoices.size} invoice(s) · ${invoices.count { it.remaining > 0.009 }} with a balance", "${invoices.size} فاتورة · ${invoices.count { it.remaining > 0.009 }} برصيد"), style = MaterialTheme.typography.labelLarge)
+                ClientMetric(
+                    label = atlasText("Total encaissé dans l’historique", "Collected in history", "المحصل في السجل"),
+                    value = atlasMoney(invoices.sumOf { it.amountPaid.coerceAtLeast(0.0) }, currency),
+                )
                 AtlasDivider()
                 if (invoices.isEmpty()) {
                     Text(atlasText("Aucune facture liée à ce client.", "No invoices linked to this client.", "لا توجد فواتير مرتبطة بهذا العميل."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -362,8 +368,13 @@ private fun ClientSituationDialog(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
+                                atlasText("Total ${atlasMoney(invoice.total, currency)} · Payé ${atlasMoney(invoice.amountPaid, currency)}", "Total ${atlasMoney(invoice.total, currency)} · Paid ${atlasMoney(invoice.amountPaid, currency)}", "الإجمالي ${atlasMoney(invoice.total, currency)} · المدفوع ${atlasMoney(invoice.amountPaid, currency)}"),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Text(
                                 atlasText("Reste dû : ${atlasMoney(invoice.remaining, currency)}", "Remaining: ${atlasMoney(invoice.remaining, currency)}", "المتبقي: ${atlasMoney(invoice.remaining, currency)}"),
                                 style = MaterialTheme.typography.bodySmall,
+                                color = if (invoice.remaining > 0.009) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                             )
                         }
                         AtlasDivider()
@@ -375,6 +386,17 @@ private fun ClientSituationDialog(
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(atlasText("Fermer", "Close", "إغلاق")) } },
+    )
+}
+
+@Composable
+private fun ClientProfileInfo(label: String, value: String) {
+    Text(
+        "$label: ${value.takeIf(String::isNotBlank) ?: atlasText("Non renseigné", "Not provided", "غير متوفر")}",
+        style = MaterialTheme.typography.bodySmall,
+        color = if (value.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+        maxLines = 3,
+        overflow = TextOverflow.Ellipsis,
     )
 }
 
@@ -413,6 +435,11 @@ private fun ClientCreditDetails(
                     }
                     client.email?.takeIf(String::isNotBlank)?.let {
                         Text("Email: $it", style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    ClientProfileInfo(atlasText("ICE", "Tax / ICE ID", "المعرف الضريبي / ICE"), client.ice.orEmpty())
+                    ClientProfileInfo(atlasText("Adresse", "Address", "العنوان"), client.address.orEmpty())
+                    client.creditLimit?.let { limit ->
+                        ClientProfileInfo(atlasText("Limite de crédit", "Credit limit", "حد الائتمان"), atlasMoney(limit, currency))
                     }
                     Spacer(Modifier.height(14.dp))
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -460,6 +487,27 @@ private fun ClientCreditDetails(
                 }
             }
             item { Text(atlasText("Crédits et historique", "Credit and invoice history", "الائتمان وسجل الفواتير"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+            if (history.isNotEmpty()) item {
+                val invoiced = history.sumOf { it.total.coerceAtLeast(0.0) }
+                val received = history.sumOf { it.amountPaid.coerceAtLeast(0.0) }
+                val remaining = history.sumOf { it.remaining.coerceAtLeast(0.0) }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AtlasFinanceBarChart(
+                        title = atlasText("Facturé, encaissé et restant", "Invoiced, collected and remaining", "المفوتر والمحصل والمتبقي"),
+                        entries = listOf(
+                            AtlasFinanceBarEntry(atlasText("Total facturé", "Invoiced", "المفوتر"), invoiced, MaterialTheme.colorScheme.primary),
+                            AtlasFinanceBarEntry(atlasText("Encaissé", "Collected", "المحصل"), received, MaterialTheme.colorScheme.tertiary),
+                            AtlasFinanceBarEntry(atlasText("À recevoir", "Receivable", "المستحق"), remaining, MaterialTheme.colorScheme.error),
+                        ),
+                        currency = currency,
+                    )
+                    Text(
+                        atlasText("Synthèse des ${history.size} factures chargées · créance actuelle ${atlasMoney(client.balanceDue, currency)}", "Summary of ${history.size} loaded invoices · current receivable ${atlasMoney(client.balanceDue, currency)}", "ملخص ${history.size} فاتورة محملة · المستحق الحالي ${atlasMoney(client.balanceDue, currency)}"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             if (history.isEmpty()) item {
                 AtlasEmptyState(title = atlasText("Aucun historique de facture", "No invoice history", "لا يوجد سجل فواتير"), message = atlasText("Aucune facture liée à ce nom de client n’est disponible.", "No invoices linked to this client name are available.", "لا تتوفر فواتير مرتبطة باسم هذا العميل."), icon = Icons.Outlined.History)
             }
