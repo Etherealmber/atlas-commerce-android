@@ -537,18 +537,18 @@ private fun EmployeeProfilePage(
                             val left = listOf(
                                 atlasText("Contrat", "Contract", "العقد") to employee.contractType,
                                 atlasText("Heures par semaine", "Weekly hours", "ساعات أسبوعياً") to employee.weeklyHours?.let { atlasText("$it h", "$it h", "$it س") }.orEmpty(),
-                                atlasText("Date d’entrée", "Start date", "تاريخ البدء") to employee.joinedDate.takeIf(String::isNotBlank)?.let(::atlasShortDate).orEmpty(),
+                                atlasText("Date d’entrée", "Start date", "تاريخ البدء") to employee.joinedDate.takeIf(String::isNotBlank)?.let { atlasShortDate(it) }.orEmpty(),
                                 atlasText("Salaire du cycle", "Cycle salary", "راتب الدورة") to atlasMoney(employee.payAmount, "MAD"),
                                 atlasText("Cycle de paie", "Pay cycle", "دورة الدفع") to if (employee.payCycleType == "monthly") atlasText("Mensuel (30 jours)", "Monthly (30 days)", "شهري (30 يوماً)") else atlasText("Tous les ${employee.payCycleDays} jours", "Every ${employee.payCycleDays} days", "كل ${employee.payCycleDays} يوم"),
                                 atlasText("Salaire journalier", "Daily pay", "الأجر اليومي") to atlasMoney(employee.dailyRate, "MAD"),
-                                atlasText("Prochain paiement", "Next payment", "الدفعة التالية") to if (employee.active == 0) atlasText("Ancien employé", "Former employee", "موظف سابق") else employee.nextDue?.let(::atlasShortDate).orEmpty(),
-                                atlasText("Dernier paiement", "Last payment", "آخر دفعة") to employee.lastPaidAt?.let(::atlasShortDate).orEmpty(),
+                                atlasText("Prochain paiement", "Next payment", "الدفعة التالية") to if (employee.active == 0) atlasText("Ancien employé", "Former employee", "موظف سابق") else employee.nextDue?.let { atlasShortDate(it) }.orEmpty(),
+                                atlasText("Dernier paiement", "Last payment", "آخر دفعة") to employee.lastPaidAt?.let { atlasShortDate(it) }.orEmpty(),
                             )
                             val right = listOf(
                                 atlasText("Téléphone", "Phone", "الهاتف") to employee.phone,
                                 "Email" to employee.email,
                                 atlasText("Nationalité", "Nationality", "الجنسية") to employee.nationality,
-                                atlasText("Date de naissance", "Date of birth", "تاريخ الميلاد") to employee.dateOfBirth.takeIf(String::isNotBlank)?.let(::atlasShortDate).orEmpty(),
+                                atlasText("Date de naissance", "Date of birth", "تاريخ الميلاد") to employee.dateOfBirth.takeIf(String::isNotBlank)?.let { atlasShortDate(it) }.orEmpty(),
                                 atlasText("CIN / passeport", "National ID / passport", "رقم البطاقة / جواز السفر") to employee.nationalId,
                                 atlasText("Identifiant fiscal", "Tax ID", "المعرف الضريبي") to employee.taxId,
                                 atlasText("CNSS / assurance sociale", "CNSS / social insurance", "الضمان الاجتماعي") to employee.socialInsurance,
@@ -586,7 +586,7 @@ private fun EmployeeProfilePage(
                         title = atlasText("Paiements récents", "Recent payments", "الدفعات الأخيرة"),
                         entries = employee.payments.take(6).reversed().mapIndexed { index, payment ->
                             AtlasFinanceBarEntry(
-                                label = payment.periodLabel.ifBlank { payment.paidAt.takeIf(String::isNotBlank)?.let(::atlasShortDate) ?: "#${index + 1}" },
+                                label = payment.periodLabel.ifBlank { payment.paidAt.takeIf(String::isNotBlank)?.let { atlasShortDate(it) } ?: "#${index + 1}" },
                                 amount = payment.amount,
                                 color = MaterialTheme.colorScheme.primary,
                             )
