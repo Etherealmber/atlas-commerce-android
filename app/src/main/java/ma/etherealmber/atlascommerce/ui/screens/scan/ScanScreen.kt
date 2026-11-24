@@ -2,6 +2,8 @@ package ma.etherealmber.atlascommerce.ui.screens.scan
 
 import ma.etherealmber.atlascommerce.ui.theme.AtlasIllustrationPalette as ArtPalette
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -114,6 +116,7 @@ fun ScanScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val queuedInventoryOperations by viewModel.inventoryQueueEntries.collectAsStateWithLifecycle()
     val inventoryQueueReadError by viewModel.inventoryQueueReadError.collectAsStateWithLifecycle()
+    val inventoryQueueReplaying by viewModel.inventoryQueueReplaying.collectAsStateWithLifecycle()
     val autoOpenCamera by viewModel.autoOpenCamera.collectAsStateWithLifecycle()
     val scanHaptic by viewModel.scanHapticEnabled.collectAsStateWithLifecycle()
     val scanSound by viewModel.scanSoundEnabled.collectAsStateWithLifecycle()
@@ -127,6 +130,8 @@ fun ScanScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     var showScannedProductDialog by remember { mutableStateOf(false) }
     var showStockAdjustDialog by remember { mutableStateOf(false) }
+    var showDiscardHeldConfirmation by remember { mutableStateOf(false) }
+    var typedHeldDiscardCount by remember { mutableStateOf("") }
 
     val isAdmin = Roles.canCreateProductDirectly(user.role)
     val canSell = Roles.canCreateDocuments(user.role)
@@ -189,8 +194,65 @@ fun ScanScreen(
     }
 
     val hardwareActive = isActive && granted && state.cameraEnabled && !showCreateDialog
+    val heldWrites = queuedInventoryOperations.filter { it.status == "HELD" }
+    val terminalWrites = queuedInventoryOperations.filter { it.status in setOf("REJECTED", "CONFLICT", "FAILED") }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        if (heldWrites.isNotEmpty()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    "${heldWrites.size} writes held — this server needs migration 0020",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        enabled = !inventoryQueueReplaying,
+                        onClick = {
+                            viewModel.exportHeldInventoryWrites { payloads ->
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                clipboard?.setPrimaryClip(ClipData.newPlainText("Held inventory writes", payloads))
+                                onToast("Held write payloads copied as JSON.")
+                            }
+                        },
+                    ) { Text(atlasText("Copier les écritures", "Copy held writes", "نسخ العمليات المتوقفة")) }
+                    TextButton(
+                        enabled = !inventoryQueueReplaying,
+                        onClick = { typedHeldDiscardCount = ""; showDiscardHeldConfirmation = true },
+                    ) { Text(atlasText("Supprimer les écritures", "Discard held writes", "حذف العمليات المتوقفة")) }
+                }
+            }
+        }
+        terminalWrites.forEach { blocked ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "${blocked.productName} · ${blocked.locationName}: ${blocked.failureMessage.orEmpty()}",
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                when (blocked.status) {
+                    "CONFLICT" -> TextButton(
+                        enabled = !inventoryQueueReplaying,
+                        onClick = { viewModel.recountAndResendInventoryOperation(blocked.operationId) },
+                    ) { Text(atlasText("Recompter et renvoyer", "Recount and resend", "إعادة الجرد والإرسال")) }
+                    "REJECTED" -> TextButton(
+                        enabled = !inventoryQueueReplaying,
+                        onClick = { viewModel.dismissRejectedInventoryOperation(blocked.operationId) },
+                    ) { Text(atlasText("Ignorer", "Dismiss", "تجاهل")) }
+                    else -> TextButton(
+                        enabled = !inventoryQueueReplaying,
+                        onClick = { viewModel.dismissFailedInventoryOperation(blocked.operationId) },
+                    ) { Text(atlasText("Écarter", "Dismiss", "تجاهل")) }
+                }
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -630,18 +692,9 @@ fun ScanScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     inventoryQueueReadError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                    val blocked = queuedInventoryOperations.firstOrNull { it.status != "QUEUED" }
-                    if (blocked != null) {
-                        Text(
-                            "${blocked.productName} · ${blocked.locationName}: ${blocked.failureMessage.orEmpty()}",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        TextButton(onClick = { viewModel.discardBlockedInventoryOperation(blocked.operationId) }) {
-                            Text(atlasText("Écarter l'opération bloquée", "Discard blocked operation", "تجاهل العملية المتوقفة"))
-                        }
-                    } else if (queuedInventoryOperations.isNotEmpty()) {
-                        Text(atlasText("${queuedInventoryOperations.size} opération(s) en attente de synchronisation.", "${queuedInventoryOperations.size} operation(s) waiting to sync.", "${queuedInventoryOperations.size} عملية بانتظار المزامنة."), style = MaterialTheme.typography.bodySmall)
+                    val pendingCount = queuedInventoryOperations.count { it.status == "QUEUED" }
+                    if (pendingCount > 0) {
+                        Text(atlasText("$pendingCount opération(s) en attente de synchronisation.", "$pendingCount operation(s) waiting to sync.", "$pendingCount عملية بانتظار المزامنة."), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             },
@@ -665,6 +718,42 @@ fun ScanScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showStockAdjustDialog = false }) {
+                    Text(atlasText("Annuler", "Cancel", "إلغاء"))
+                }
+            },
+        )
+    }
+
+    if (showDiscardHeldConfirmation) {
+        val heldCount = queuedInventoryOperations.count { it.status == "HELD" }
+        AlertDialog(
+            onDismissRequest = { showDiscardHeldConfirmation = false },
+            title = { Text(atlasText("Confirmer la suppression", "Confirm discard", "تأكيد الحذف")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Type $heldCount to permanently discard all held writes.")
+                    OutlinedTextField(
+                        value = typedHeldDiscardCount,
+                        onValueChange = { typedHeldDiscardCount = it.filter { character -> character.isDigit() }.take(6) },
+                        label = { Text(atlasText("Nombre d'écritures", "Number of writes", "عدد العمليات")) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !inventoryQueueReplaying && heldCount > 0 && typedHeldDiscardCount.toIntOrNull() == heldCount,
+                    onClick = {
+                        val exactCount = typedHeldDiscardCount.toIntOrNull() ?: return@TextButton
+                        viewModel.discardHeldInventoryWrites(exactCount)
+                        showDiscardHeldConfirmation = false
+                    },
+                ) { Text(atlasText("Supprimer définitivement", "Discard permanently", "حذف نهائي")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardHeldConfirmation = false }) {
                     Text(atlasText("Annuler", "Cancel", "إلغاء"))
                 }
             },

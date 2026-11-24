@@ -159,6 +159,7 @@ class SaleViewModel @Inject constructor(
                     lines = lines,
                     total = created.total,
                     currency = current.currency,
+                    vatFreeVr = true,
                 )
             }.onSuccess {
                 _messages.tryEmit("Receipt sent to printer.")

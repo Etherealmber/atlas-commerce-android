@@ -34,6 +34,7 @@
 
 1. **Step 1 — Deploy Atlas Commerce Web FIRST**:
    - Follow the instructions in **[Etherealmber/atlas-commerce](https://github.com/Etherealmber/atlas-commerce)** to deploy your own Cloudflare Worker + D1 database + R2 storage bucket on your HTTPS domain (for example `https://erp.your-company.com`).
+   - **Queued offline inventory writes require a Worker with migration 0020 or newer.** Older servers return 404 for the offline-operations route; Atlas keeps those writes on the device, marks them held, and explains that migration 0020 is required. Do not clear app data to resolve a held write.
    - Open your web domain in a browser first and create your administrator account to make sure the web platform is live.
 2. **Step 2 — Install the Android App**:
    - Download **`atlas-commerce.apk`** from **[GitHub Releases](https://github.com/Etherealmber/atlas-commerce-android/releases)** onto your Android 11+ phone or handheld scanner.

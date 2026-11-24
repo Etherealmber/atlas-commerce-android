@@ -41,13 +41,11 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
-import java.time.Instant
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-internal enum class InventoryQueueStatus { QUEUED, CONFLICT, FAILED }
+internal enum class InventoryQueueStatus { QUEUED, CONFLICT, REJECTED, HELD, FAILED }
 
 @JsonClass(generateAdapter = true)
 data class InventoryQueueEntry(
@@ -66,6 +64,8 @@ data class InventoryQueueEntry(
     val status: String = InventoryQueueStatus.QUEUED.name,
     val failureCode: String? = null,
     val failureMessage: String? = null,
+    val rateLimitAttempts: Int = 0,
+    val retryNotBeforeEpochMillis: Long? = null,
 ) {
     fun toRequest() = InventoryOfflineOperationRequest(
         operationId = operationId,
@@ -98,16 +98,34 @@ class InventoryWriteQueue @Inject constructor(
 ) {
     private val directory = File(context.noBackupFilesDir, "atlas-inventory-outbox").apply { mkdirs() }
     private val mutex = Mutex()
+    private val replayGate = InventoryQueueReplayGate()
     private val activeEntries = MutableStateFlow<List<InventoryQueueEntry>>(emptyList())
     private val activeReadError = MutableStateFlow<String?>(null)
+    private val activeReplay = MutableStateFlow(false)
     val entries: StateFlow<List<InventoryQueueEntry>> = activeEntries.asStateFlow()
     val readError: StateFlow<String?> = activeReadError.asStateFlow()
+    val isReplaying: StateFlow<Boolean> = activeReplay.asStateFlow()
     private val listAdapter by lazy {
         moshi.adapter<List<InventoryQueueEntry>>(
             Types.newParameterizedType(List::class.java, InventoryQueueEntry::class.java),
         )
     }
     private val contextAdapter by lazy { moshi.adapter(CachedInventoryContext::class.java) }
+    private val requestListAdapter by lazy {
+        moshi.adapter<List<InventoryOfflineOperationRequest>>(
+            Types.newParameterizedType(List::class.java, InventoryOfflineOperationRequest::class.java),
+        )
+    }
+    private val entryFactory = InventoryQueueEntryFactory()
+    private val fileStore by lazy {
+        InventoryQueueFileStore(
+            directory = directory,
+            serialize = { listAdapter.toJson(it) },
+            deserialize = { listAdapter.fromJson(it) },
+            encrypt = { crypto.encryptAtRest(it) },
+            decrypt = { crypto.decryptAtRest(it) },
+        )
+    }
 
     init {
         applicationScope.launch {
@@ -129,14 +147,15 @@ class InventoryWriteQueue @Inject constructor(
                             if (accountForActiveUser() == key) {
                                 activeEntries.value = emptyList()
                                 activeReadError.value = "Saved inventory queue could not be read. Existing operations were preserved; do not clear app data."
-                                schedule(key)
                             }
                             return@collect
                         }
                         if (accountForActiveUser() != key) return@collect
                         activeEntries.value = loaded
                         activeReadError.value = null
-                        if (loaded.any { it.status == InventoryQueueStatus.QUEUED.name }) schedule(key)
+                        InventoryQueueReplayOrder.nextReplayable(loaded)?.let { first ->
+                            schedule(key, first.locationId, retryDelaySeconds(first))
+                        }
                     }
                 }
             }
@@ -179,25 +198,12 @@ class InventoryWriteQueue @Inject constructor(
         quantity: Double,
         note: String,
     ): InventoryQueueEntry {
-        require(kind == "receive" || kind == "issue")
-        require(productId > 0 && locationId > 0 && quantity.isFinite() && quantity > 0.0)
         val user = (sessionManager.state.value as? SessionState.Active)?.user
             ?: error("Sign in before queueing an inventory operation.")
         require(user.scopeIdentity == expectedScopeIdentity) { "The active account changed; retry this operation." }
         val account = accountKey(user.serverUrl, user.username)
-        return enqueue(account,
-            InventoryQueueEntry(
-                operationId = UUID.randomUUID().toString(),
-                kind = kind,
-                productId = productId,
-                productName = productName,
-                locationId = locationId,
-                locationName = locationName,
-                quantityDelta = quantity,
-                note = note.trim().take(200),
-                clientOccurredAt = Instant.now().toString(),
-            ),
-        )
+        val entry = entryFactory.movement(locationId, productId, productName, locationName, kind, quantity, note)
+        return enqueue(account, entry)
     }
 
     suspend fun enqueueCount(
@@ -207,36 +213,21 @@ class InventoryWriteQueue @Inject constructor(
         locationId: Long,
         locationName: String,
         countedQuantity: Double,
-        observedQuantity: Double,
-        observedRevision: Long?,
+        observedPlacement: InventoryLocationPlacementDto,
         note: String,
     ): InventoryQueueEntry {
-        require(productId > 0 && locationId > 0)
-        require(countedQuantity.isFinite() && countedQuantity >= 0.0)
-        require(observedQuantity.isFinite())
-        require(observedRevision != null) { "A location revision is required for offline cycle counts." }
         val user = (sessionManager.state.value as? SessionState.Active)?.user
             ?: error("Sign in before queueing an inventory operation.")
         require(user.scopeIdentity == expectedScopeIdentity) { "The active account changed; retry this operation." }
         val account = accountKey(user.serverUrl, user.username)
-        return enqueue(account,
-            InventoryQueueEntry(
-                operationId = UUID.randomUUID().toString(),
-                kind = "count",
-                productId = productId,
-                productName = productName,
-                locationId = locationId,
-                locationName = locationName,
-                countedQuantity = countedQuantity,
-                observedQuantity = observedQuantity,
-                observedRevision = observedRevision,
-                note = note.trim().take(200),
-                clientOccurredAt = Instant.now().toString(),
-            ),
+        val entry = entryFactory.count(
+            locationId, productId, productName, locationName, countedQuantity, observedPlacement, note,
         )
+        return enqueue(account, entry)
     }
 
     suspend fun discardBlockedOperation(operationId: String): Boolean = mutex.withLock {
+        if (replayGate.isActive()) return@withLock false
         val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return@withLock false
         val key = accountKey(user.serverUrl, user.username)
         val current = load(key)
@@ -246,27 +237,143 @@ class InventoryWriteQueue @Inject constructor(
         val remaining = current.toMutableList().also { it.removeAt(index) }
         save(key, remaining)
         publishIfActive(key, remaining)
-        if (remaining.firstOrNull()?.status == InventoryQueueStatus.QUEUED.name) schedule(key)
+        InventoryQueueReplayOrder.nextReplayable(remaining)?.let { schedule(key, it.locationId) }
         true
+    }
+
+    suspend fun exportHeldWrites(): String? = mutex.withLock {
+        if (replayGate.isActive()) return@withLock null
+        val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return@withLock null
+        val key = accountKey(user.serverUrl, user.username)
+        val current = load(key)
+        publishIfActive(key, current)
+        val heldCount = current.count { it.status == InventoryQueueStatus.HELD.name }
+        if (!InventoryHeldWriteActions.canExport(heldCount, replayGate.isActive())) return@withLock null
+        InventoryHeldWriteActions.exportJson(current, requestListAdapter::toJson)
+    }
+
+    suspend fun discardHeldWrites(typedCount: Int): Boolean = mutex.withLock {
+        val currentReplay = replayGate.isActive()
+        val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return@withLock false
+        val key = accountKey(user.serverUrl, user.username)
+        val current = load(key)
+        val heldCount = current.count { it.status == InventoryQueueStatus.HELD.name }
+        if (!InventoryHeldWriteActions.canDiscard(heldCount, typedCount, currentReplay)) return@withLock false
+        val remaining = current.filterNot { it.status == InventoryQueueStatus.HELD.name }
+        save(key, remaining)
+        publishIfActive(key, remaining)
+        InventoryQueueReplayOrder.nextReplayable(remaining)?.let { schedule(key, it.locationId) }
+        true
+    }
+
+    suspend fun retryConflict(operationId: String, freshPlacement: InventoryLocationPlacementDto?): Boolean = mutex.withLock {
+        if (replayGate.isActive()) return@withLock false
+        val user = (sessionManager.state.value as? SessionState.Active)?.user ?: return@withLock false
+        val key = accountKey(user.serverUrl, user.username)
+        val current = load(key)
+        val index = current.indexOfFirst {
+            it.operationId == operationId && InventoryQueueConflictAction.canRetry(it.status, replayGate.isActive())
+        }
+        if (index < 0) return@withLock false
+        val old = current[index]
+        val updated = if (old.kind == "count") {
+            val placement = freshPlacement?.takeIf { it.locationId == old.locationId && it.revision != null }
+                ?: return@withLock false
+            old.copy(
+                operationId = java.util.UUID.randomUUID().toString(),
+                observedQuantity = placement.quantity,
+                observedRevision = placement.revision,
+                clientOccurredAt = java.time.Instant.now().toString(),
+                status = InventoryQueueStatus.QUEUED.name,
+                failureCode = null,
+                failureMessage = null,
+                rateLimitAttempts = 0,
+                retryNotBeforeEpochMillis = null,
+            )
+        } else {
+            old.copy(
+                operationId = java.util.UUID.randomUUID().toString(),
+                status = InventoryQueueStatus.QUEUED.name,
+                failureCode = null,
+                failureMessage = null,
+                rateLimitAttempts = 0,
+                retryNotBeforeEpochMillis = null,
+            )
+        }
+        val next = current.toMutableList().also { it[index] = updated }
+        save(key, next)
+        publishIfActive(key, next)
+        schedule(key, updated.locationId)
+        true
+    }
+
+    internal suspend fun beginReplay(account: String): Boolean = mutex.withLock {
+        if (accountForActiveUser() != account || !replayGate.begin()) return@withLock false
+        activeReplay.value = true
+        true
+    }
+
+    internal suspend fun endReplay() = mutex.withLock {
+        replayGate.end()
+        activeReplay.value = false
+    }
+
+    internal suspend fun holdQueuedWrites(account: String, code: String, message: String) = mutex.withLock {
+        val current = load(account)
+        val next = current.map { entry ->
+            if (entry.status == InventoryQueueStatus.QUEUED.name) {
+                entry.copy(status = InventoryQueueStatus.HELD.name, failureCode = code, failureMessage = message)
+            } else entry
+        }
+        save(account, next)
+        publishIfActive(account, next)
     }
 
     private suspend fun enqueue(account: String, entry: InventoryQueueEntry): InventoryQueueEntry = mutex.withLock {
         val current = load(account)
-        require(current.none { it.status != InventoryQueueStatus.QUEUED.name }) {
+        require(current.none {
+            it.status in setOf(InventoryQueueStatus.CONFLICT.name, InventoryQueueStatus.HELD.name, InventoryQueueStatus.FAILED.name)
+        }) {
             "Resolve the earlier blocked inventory operation before adding another."
         }
         require(current.size < 500) { "The offline inventory queue is full; reconnect and sync it before adding more." }
         val next = current + entry
         save(account, next)
         publishIfActive(account, next)
-        schedule(account)
+        schedule(account, entry.locationId)
         entry
     }
 
-    internal suspend fun nextQueued(account: String): InventoryQueueEntry? = mutex.withLock {
+    internal suspend fun nextQueued(account: String, scheduledLocationId: Long): InventoryQueueEntry? = mutex.withLock {
         val items = load(account)
         publishIfActive(account, items)
-        if (items.any { it.status != InventoryQueueStatus.QUEUED.name }) null else items.firstOrNull()
+        val first = InventoryQueueReplayOrder.nextReplayable(items) ?: return@withLock null
+        val delaySeconds = retryDelaySeconds(first)
+        if (first.locationId != scheduledLocationId || delaySeconds > 0L) {
+            schedule(account, first.locationId, delaySeconds)
+            return@withLock null
+        }
+        first
+    }
+
+    internal suspend fun markRateLimitedRetry(account: String, operationId: String, delaySeconds: Long) = mutex.withLock {
+        val current = load(account)
+        val item = current.firstOrNull { it.operationId == operationId } ?: return@withLock
+        val retryAt = System.currentTimeMillis() + delaySeconds.coerceAtLeast(0L) * 1_000L
+        val next = current.map {
+            if (it.operationId == operationId) it.copy(
+                rateLimitAttempts = it.rateLimitAttempts + 1,
+                retryNotBeforeEpochMillis = retryAt,
+            ) else it
+        }
+        save(account, next)
+        publishIfActive(account, next)
+        schedule(account, item.locationId, delaySeconds)
+    }
+
+    private fun retryDelaySeconds(entry: InventoryQueueEntry): Long {
+        val remainingMillis = (entry.retryNotBeforeEpochMillis ?: return 0L) - System.currentTimeMillis()
+        return if (remainingMillis <= 0L) 0L else (remainingMillis + 999L) / 1_000L
     }
 
     internal suspend fun markApplied(account: String, operationId: String) = mutex.withLock {
@@ -303,43 +410,22 @@ class InventoryWriteQueue @Inject constructor(
     }
 
     private suspend fun load(account: String): List<InventoryQueueEntry> = withContext(Dispatchers.IO) {
-        val file = File(directory, "queue_$account.json")
-        if (!file.exists()) return@withContext emptyList()
-        val encrypted = file.readText()
-        val plain = crypto.decryptAtRest(encrypted)
-            ?: throw IOException("Could not decrypt an existing inventory queue file.")
-        listAdapter.fromJson(plain)
-            ?: throw IOException("Could not deserialize an existing inventory queue file.")
+        fileStore.load(account)
     }
 
     private suspend fun save(account: String, items: List<InventoryQueueEntry>) = withContext(Dispatchers.IO) {
-        val file = File(directory, "queue_$account.json")
-        if (items.isEmpty()) {
-            runCatching { file.delete() }
-            return@withContext
-        }
-        val encrypted = crypto.encryptAtRest(listAdapter.toJson(items))
-        val temp = File(directory, "queue_$account.tmp")
-        temp.writeText(encrypted)
-        try {
-            java.nio.file.Files.move(
-                temp.toPath(), file.toPath(),
-                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
-                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-            )
-        } catch (_: Throwable) {
-            if (!temp.renameTo(file)) {
-                file.writeText(encrypted)
-                temp.delete()
-            }
-        }
+        fileStore.save(account, items)
     }
 
-    private fun schedule(account: String) {
+    private fun schedule(account: String, locationId: Long, initialDelaySeconds: Long = 0L) {
         val request = OneTimeWorkRequestBuilder<InventoryWriteWorker>()
-            .setInputData(workDataOf(InventoryWriteWorker.INPUT_ACCOUNT to account))
+            .setInputData(workDataOf(
+                InventoryWriteWorker.INPUT_ACCOUNT to account,
+                InventoryWriteWorker.INPUT_LOCATION_ID to locationId,
+            ))
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 20, TimeUnit.SECONDS)
+            .setInitialDelay(initialDelaySeconds.coerceAtLeast(0L), TimeUnit.SECONDS)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork("inventory-outbox-$account", ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
@@ -354,59 +440,108 @@ class InventoryWriteQueue @Inject constructor(
 class InventoryWriteWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val account = inputData.getString(INPUT_ACCOUNT) ?: return Result.failure()
+        val locationId = inputData.getLong(INPUT_LOCATION_ID, 0L).takeIf { it > 0 } ?: return Result.failure()
         val entryPoint = EntryPointAccessors.fromApplication(applicationContext, WorkerEntryPoint::class.java)
         val queue = entryPoint.inventoryWriteQueue()
         val activeUser = queue.activeUser() ?: return Result.success()
         if (queue.accountForActiveUser() != account) return Result.success()
         val api = entryPoint.apiProvider().apiForSession(activeUser.serverUrl) ?: return Result.retry()
         val bearer = entryPoint.tokenHolder().token?.takeIf(String::isNotBlank) ?: return Result.retry()
-
-        while (true) {
-            if (queue.accountForActiveUser() != account) return Result.success()
-            if (entryPoint.tokenHolder().token != bearer) return Result.retry()
-            val item = try {
-                queue.nextQueued(account)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                return Result.retry()
-            } ?: return Result.success()
-            try {
-                val response = api.submitInventoryOfflineOperation(item.operationId, "Bearer $bearer", item.toRequest())
-                if (response.isSuccessful) {
-                    val body = response.body()
-                    if (body?.success == true && body.data?.operationId == item.operationId) {
-                        queue.markApplied(account, item.operationId)
-                        continue
-                    }
-                    queue.markBlocked(account, item.operationId, InventoryQueueStatus.FAILED,
-                        body?.code ?: "INVALID_RESPONSE", body?.error ?: body?.message ?: "The server returned an incomplete inventory result.")
-                    return Result.success()
-                }
-                if (response.code() >= 500 || response.code() == 429) return Result.retry()
+        val gateway = InventoryOperationGateway { idempotencyKey, body ->
+            val response = api.submitInventoryOfflineOperation(idempotencyKey, "Bearer $bearer", body)
+            if (response.isSuccessful) {
+                InventoryHttpResult(
+                    statusCode = response.code(),
+                    responseOperationId = response.body()?.takeIf { it.success }?.data?.operationId,
+                    errorCode = response.body()?.code,
+                    errorMessage = response.body()?.error ?: response.body()?.message,
+                )
+            } else {
                 val raw = runCatching { response.errorBody()?.string().orEmpty() }.getOrDefault("")
                 val json = runCatching { JSONObject(raw) }.getOrNull()
-                val code = json?.optString("code")?.takeIf(String::isNotBlank) ?: "HTTP_${response.code()}"
-                // Keep queued writes intact when the Worker route has not been deployed yet.
-                if (response.code() == 404 && code == "HTTP_404") return Result.retry()
-                val message = json?.optString("error")?.takeIf(String::isNotBlank)
-                    ?: json?.optString("message")?.takeIf(String::isNotBlank)
-                    ?: "Inventory operation needs review (${response.code()})."
-                queue.markBlocked(account, item.operationId,
-                    if (response.code() == 409 && code == "COUNT_CONFLICT") InventoryQueueStatus.CONFLICT else InventoryQueueStatus.FAILED,
-                    code, message)
-                return Result.success()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: IOException) {
-                return Result.retry()
-            } catch (_: Throwable) {
-                return Result.retry()
+                InventoryHttpResult(
+                    statusCode = response.code(),
+                    errorCode = json?.optString("code")?.takeIf(String::isNotBlank) ?: "HTTP_${response.code()}",
+                    errorMessage = json?.optString("error")?.takeIf(String::isNotBlank)
+                        ?: json?.optString("message")?.takeIf(String::isNotBlank),
+                    retryAfter = response.headers()["Retry-After"],
+                )
             }
+        }
+
+        if (!queue.beginReplay(account)) return Result.success()
+        return try {
+            while (true) {
+                if (queue.accountForActiveUser() != account) return Result.success()
+                if (entryPoint.tokenHolder().token != bearer) return Result.retry()
+                val item = try {
+                    queue.nextQueued(account, locationId)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    return Result.retry()
+                } ?: return Result.success()
+                try {
+                    val exchange = InventoryReplayScope.submitAndDecideIfAllowed(
+                        account, queue.accountForActiveUser(), locationId, item, gateway,
+                    ) ?: return Result.success()
+                    val (result, decision) = exchange
+                    if (result.statusCode in 200..299) {
+                        if (result.responseOperationId == item.operationId) {
+                            queue.markApplied(account, item.operationId)
+                            continue
+                        }
+                        queue.markBlocked(account, item.operationId, InventoryQueueStatus.FAILED,
+                            result.errorCode ?: "INVALID_RESPONSE", result.errorMessage ?: "The server returned an incomplete inventory result.")
+                        return Result.success()
+                    }
+                    when (decision) {
+                        InventoryHttpDecision.Retry -> return Result.retry()
+                        is InventoryHttpDecision.RetryAfter -> {
+                            queue.markRateLimitedRetry(account, item.operationId, decision.seconds)
+                            return Result.success()
+                        }
+                        InventoryHttpDecision.ParkRateLimited -> {
+                            queue.markBlocked(account, item.operationId, InventoryQueueStatus.FAILED,
+                                "RATE_LIMITED", InventoryRetryPolicy.RATE_LIMIT_PARKED_MESSAGE)
+                            return Result.success()
+                        }
+                        InventoryHttpDecision.HoldUnsupportedServer -> {
+                            queue.holdQueuedWrites(
+                                account, "WORKER_MIGRATION_REQUIRED", InventoryRetryPolicy.MIGRATION_REQUIRED_MESSAGE,
+                            )
+                            return Result.success()
+                        }
+                        is InventoryHttpDecision.Terminal -> {
+                            val message = result.errorMessage ?: "Inventory operation needs review (${result.statusCode})."
+                            queue.markBlocked(
+                                account, item.operationId,
+                                if (decision.status == InventoryTerminalStatus.CONFLICT) InventoryQueueStatus.CONFLICT
+                                else InventoryQueueStatus.REJECTED,
+                                result.errorCode ?: "HTTP_${result.statusCode}", message,
+                            )
+                            if (decision.status == InventoryTerminalStatus.REJECTED) continue
+                            return Result.success()
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: IOException) {
+                    return Result.retry()
+                } catch (_: Throwable) {
+                    return Result.retry()
+                }
+            }
+            Result.success()
+        } finally {
+            queue.endReplay()
         }
     }
 
-    companion object { const val INPUT_ACCOUNT = "inventory_account" }
+    companion object {
+        const val INPUT_ACCOUNT = "inventory_account"
+        const val INPUT_LOCATION_ID = "inventory_location_id"
+    }
 }
 
 @EntryPoint

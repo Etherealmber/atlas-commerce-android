@@ -1331,7 +1331,7 @@ data class QuickSaleRequest(
 data class CreatedInvoiceDto(
     val id: Long = 0,
     val number: String? = null,
-    val total: Double = 0.0,
+    val total: Double? = null,
     val status: String? = null,
     @Json(name = "client_name") val clientName: String? = null,
 )
