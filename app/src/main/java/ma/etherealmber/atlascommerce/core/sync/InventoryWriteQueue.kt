@@ -532,6 +532,7 @@ class InventoryWriteWorker(context: Context, params: WorkerParameters) : Corouti
                     return Result.retry()
                 }
             }
+            Result.success()
         } finally {
             queue.endReplay()
         }
