@@ -238,8 +238,7 @@ class ScanViewModel @Inject constructor(
                         locationId = location.id,
                         locationName = location.name,
                         countedQuantity = quantity,
-                        observedQuantity = observed.quantity,
-                        observedRevision = observed.revision,
+                        observedPlacement = observed,
                         note = note,
                     )
                 } else {

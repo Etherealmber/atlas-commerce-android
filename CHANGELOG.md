@@ -28,6 +28,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et
 
 ### Modifié
 
+- **File hors ligne de stock durcie** : rejeu strictement lié au compte et à l'emplacement planifié; `COUNT_CONFLICT` et `IDEMPOTENCY_KEY_REUSED` restent visibles comme conflits terminaux. Les `429` respectent `Retry-After` et sont mis en attente après cinq réponses de limitation; les erreurs réseau/5xx conservent la même clé. Un serveur sans migration 0020 conserve l'écriture localement et affiche l'action requise.
+- **Tickets Bluetooth vérifiés avant impression** : le total serveur absent ou non fini bloque l'impression; les noms clients longs, réductions et mentions VR sans TVA sont formatés sur les largeurs 58/80 mm.
 - **Téléchargement démarré depuis Paramètres sans notification en double** : la progression reste
   visible dans Paramètres; les alertes système de début/progression sont supprimées tant que l'app
   reste au premier plan, puis une notification est publiée si l'app passe en arrière-plan. Le retour

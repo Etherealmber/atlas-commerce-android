@@ -346,10 +346,16 @@ fun SaleScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = atlasText(
-                            "Total ${atlasMoney(created.total, state.currency)} · en attente d'encaissement.",
-                            "Total ${atlasMoney(created.total, state.currency)} · awaiting payment collection.",
-                            "الإجمالي ${atlasMoney(created.total, state.currency)} · بانتظار تحصيل المبلغ.",
+                        text = created.total?.takeIf(Double::isFinite)?.let { total ->
+                            atlasText(
+                                "Total ${atlasMoney(total, state.currency)} · en attente d'encaissement.",
+                                "Total ${atlasMoney(total, state.currency)} · awaiting payment collection.",
+                                "الإجمالي ${atlasMoney(total, state.currency)} · بانتظار تحصيل المبلغ.",
+                            )
+                        } ?: atlasText(
+                            "Total serveur indisponible — impression désactivée.",
+                            "Server total unavailable — printing disabled.",
+                            "إجمالي الخادم غير متاح — الطباعة معطلة.",
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
