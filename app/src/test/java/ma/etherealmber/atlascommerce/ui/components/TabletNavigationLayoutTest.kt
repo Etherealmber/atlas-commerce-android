@@ -16,9 +16,43 @@ class TabletNavigationLayoutTest {
     }
 
     @Test
-    fun `floating headers are phone only`() {
-        assertTrue(TabletNavigationLayout.shouldShowFloatingShellTopBar(isTablet = false))
-        assertFalse(TabletNavigationLayout.shouldShowFloatingShellTopBar(isTablet = true))
+    fun `tablet shell toolbar remains visible for toolbar destinations such as Agent`() {
+        assertTrue(
+            TabletNavigationLayout.shouldShowShellTopBar(
+                isTablet = true,
+                isForeground = true,
+                tabletDestinationHasTopBar = true,
+                profileDetailActive = false,
+                nestedPageActive = false,
+            ),
+        )
+        assertFalse(
+            TabletNavigationLayout.shouldShowShellTopBar(
+                isTablet = true,
+                isForeground = true,
+                tabletDestinationHasTopBar = false,
+                profileDetailActive = false,
+                nestedPageActive = false,
+            ),
+        )
+        assertFalse(
+            TabletNavigationLayout.shouldShowShellTopBar(
+                isTablet = true,
+                isForeground = true,
+                tabletDestinationHasTopBar = true,
+                profileDetailActive = false,
+                nestedPageActive = true,
+            ),
+        )
+        assertTrue(
+            TabletNavigationLayout.shouldShowShellTopBar(
+                isTablet = false,
+                isForeground = true,
+                tabletDestinationHasTopBar = false,
+                profileDetailActive = false,
+                nestedPageActive = false,
+            ),
+        )
         assertTrue(TabletNavigationLayout.shouldShowFloatingPageTopBar(windowWidthDp = 599))
         assertFalse(TabletNavigationLayout.shouldShowFloatingPageTopBar(windowWidthDp = 600))
     }

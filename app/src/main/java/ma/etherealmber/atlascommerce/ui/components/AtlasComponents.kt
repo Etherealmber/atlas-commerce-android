@@ -653,7 +653,7 @@ fun AtlasTopBar(
     )
 }
 
-/** Shared floating page header with extra shadow-safe gutters so rounded corners never clip. */
+/** Adaptive page header: floating on phones and docked to tablet content surfaces. */
 @Composable
 fun AtlasFloatingTopBar(
     title: String,
@@ -674,7 +674,7 @@ fun AtlasFloatingTopBar(
             modifier = modifier.fillMaxWidth().statusBarsPadding(),
             titleLeading = titleLeading,
             windowInsets = WindowInsets(0, 0, 0, 0),
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             actions = actions,
         )
         return
