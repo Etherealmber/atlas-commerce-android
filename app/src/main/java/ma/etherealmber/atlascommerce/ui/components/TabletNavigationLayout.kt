@@ -13,7 +13,14 @@ internal object TabletNavigationLayout {
         else -> RAIL_WIDTH_DP
     }
 
-    fun shouldShowFloatingShellTopBar(isTablet: Boolean): Boolean = !isTablet
+    fun shouldShowShellTopBar(
+        isTablet: Boolean,
+        isForeground: Boolean,
+        tabletDestinationHasTopBar: Boolean,
+        profileDetailActive: Boolean,
+        nestedPageActive: Boolean,
+    ): Boolean = isForeground && !profileDetailActive && !nestedPageActive &&
+        (!isTablet || tabletDestinationHasTopBar)
 
     fun shouldShowFloatingPageTopBar(windowWidthDp: Int): Boolean =
         windowWidthDp < RAIL_BREAKPOINT_DP

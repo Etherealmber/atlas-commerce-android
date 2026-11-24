@@ -118,6 +118,8 @@ val releaseStorePath = signingProperties.getProperty("storeFile")?.takeIf { it.i
 val hasReleaseKeystore = releaseStorePath != null
 
 android {
+    // Keep the APK ABI-universal: no abiFilters or ABI splits are configured here.
+    // Any native libraries supplied by dependencies are packaged for the ABIs they support.
     namespace = "ma.etherealmber.atlascommerce"
     compileSdk = 35
 

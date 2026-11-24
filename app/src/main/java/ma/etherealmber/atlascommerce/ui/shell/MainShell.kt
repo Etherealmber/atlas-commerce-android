@@ -491,8 +491,19 @@ fun MainShell(
         )
     }
 
-    val showShellTopBar = isForeground && TabletNavigationLayout.shouldShowFloatingShellTopBar(useRail) &&
-        !profileDetailActive && !pageTarget.isDataStorage && !productHistoryActive && !releaseHistorySubpageActive
+    val tabletTopBarDestination = tab in setOf(
+        MainTab.AGENT,
+        MainTab.SALE,
+        MainTab.NOTIFICATIONS,
+        MainTab.CLIENTS,
+    )
+    val showShellTopBar = TabletNavigationLayout.shouldShowShellTopBar(
+        isTablet = useRail,
+        isForeground = isForeground,
+        tabletDestinationHasTopBar = tabletTopBarDestination,
+        profileDetailActive = profileDetailActive,
+        nestedPageActive = pageTarget.isDataStorage || productHistoryActive || releaseHistorySubpageActive,
+    )
     var shellTopBarVisible by remember { mutableStateOf(false) }
     LaunchedEffect(showShellTopBar) {
         shellTopBarVisible = showShellTopBar
@@ -504,6 +515,7 @@ fun MainShell(
         ?: roleTabs.firstOrNull()
         ?: MainTab.HOME
     val floatingTopBarExpanded = remember(tab) { mutableStateOf(true) }
+    val shellTopBarExpanded = useRail || floatingTopBarExpanded.value
     val collapsedHeaderDescription = atlasText("Développer l’en-tête", "Expand header", "توسيع الرأس")
     val scrollDelta = remember(tab) { mutableFloatStateOf(0f) }
     LaunchedEffect(tab, productHistoryActive, releaseHistorySubpageActive, isForeground) {
@@ -519,7 +531,7 @@ fun MainShell(
                 source: NestedScrollSource,
             ): Offset {
                 val verticalDelta = if (consumed.y != 0f) consumed.y else available.y
-                if ((useRail && tab != MainTab.AGENT) || verticalDelta == 0f) return Offset.Zero
+                if (useRail || verticalDelta == 0f) return Offset.Zero
                 scrollDelta.floatValue += verticalDelta
                 when {
                     scrollDelta.floatValue <= -scrollDirectionThresholdPx -> {
@@ -553,14 +565,14 @@ fun MainShell(
                 // immediately instead of letting its exit animation cover that page toolbar.
                 visible = shellTopBarVisible && !profileDetailActive,
                 modifier = Modifier.graphicsLayer { clip = false },
-                enter = if (motionEnabled) {
+                enter = if (motionEnabled && !useRail) {
                     fadeIn(tween(220, easing = FastOutSlowInEasing)) +
                         slideInVertically(
                             animationSpec = tween(260, easing = FastOutSlowInEasing),
                             initialOffsetY = { height -> -height / 4 },
                         ) + scaleIn(tween(220, easing = FastOutSlowInEasing), initialScale = 0.98f)
                 } else EnterTransition.None,
-                exit = if (motionEnabled && !profileDetailActive) {
+                exit = if (motionEnabled && !useRail && !profileDetailActive) {
                     fadeOut(tween(150, easing = FastOutSlowInEasing)) +
                         slideOutVertically(
                             animationSpec = tween(180, easing = FastOutSlowInEasing),
@@ -572,11 +584,9 @@ fun MainShell(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(
-                            start = if (useRail) sidebarWidth + 20.dp else 20.dp,
-                            end = 20.dp,
-                            top = 18.dp,
-                            bottom = 18.dp,
+                        .then(
+                            if (useRail) Modifier.padding(start = sidebarWidth)
+                            else Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
                         )
                         .graphicsLayer { clip = false },
                 ) {
@@ -584,7 +594,7 @@ fun MainShell(
                         modifier = Modifier
                             .graphicsLayer { clip = false }
                             .then(
-                                if (floatingTopBarExpanded.value) {
+                                if (shellTopBarExpanded) {
                                     Modifier.fillMaxWidth()
                                 } else {
                                     Modifier
@@ -598,16 +608,18 @@ fun MainShell(
                                         }
                                 },
                             ),
-                        shape = RoundedCornerShape(26.dp),
-                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(if (useRail) 0.dp else 26.dp),
+                        color = if (useRail) {
+                            MaterialTheme.colorScheme.surfaceContainerLow
+                        } else MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface,
                         tonalElevation = 0.dp,
-                        shadowElevation = 8.dp,
+                        shadowElevation = if (useRail) 0.dp else 8.dp,
                     ) {
                         AnimatedContent(
-                            targetState = floatingTopBarExpanded.value,
+                            targetState = shellTopBarExpanded,
                             transitionSpec = {
-                                val contentTransform = if (motionEnabled) {
+                                val contentTransform = if (motionEnabled && !useRail) {
                                     (fadeIn(tween(180, easing = FastOutSlowInEasing)) +
                                         scaleIn(tween(220, easing = FastOutSlowInEasing), initialScale = 0.94f)) togetherWith
                                         (fadeOut(tween(130, easing = FastOutSlowInEasing)) +
@@ -935,8 +947,8 @@ fun MainShell(
         val navigationInset = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
         CompositionLocalProvider(
             LocalAtlasFloatingDockPadding provides if (showBottomNavigation) 116.dp + navigationInset else 0.dp,
-            LocalAtlasFloatingTopBarPadding provides if (showShellTopBar && shellTopBarVisible) 76.dp else 0.dp,
-            LocalAtlasFloatingTopBarExpanded provides floatingTopBarExpanded.value,
+            LocalAtlasFloatingTopBarPadding provides if (!useRail && showShellTopBar && shellTopBarVisible) 76.dp else 0.dp,
+            LocalAtlasFloatingTopBarExpanded provides shellTopBarExpanded,
         ) {
         AtlasPageTransition(
             targetState = pageTarget,
