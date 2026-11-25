@@ -1976,9 +1976,9 @@ fun SettingsScreen(
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsRow(
                 icon = Icons.Outlined.AutoAwesomeMotion,
-                title = atlasText("Revoir l'écran de bienvenue", "Replay the welcome screen", "إعادة عرض شاشة الترحيب"),
-                subtitle = atlasText("Relancer la présentation animée d'Atlas Commerce", "Replay the Atlas Commerce introduction", "إعادة عرض مقدمة Atlas Commerce"),
-                onClick = { appViewModel.replayOnboarding() },
+                title = atlasText("Refaire la bienvenue", "Redo welcome", "إعادة الترحيب"),
+                subtitle = atlasText("Reprendre les cinq étapes de bienvenue", "Go through the five welcome steps again", "إعادة خطوات الترحيب الخمس"),
+                onClick = { appViewModel.resetMobileWelcome() },
             )
             AtlasDivider(Modifier.padding(vertical = 8.dp))
             SettingsRow(
@@ -2063,6 +2063,13 @@ fun SettingsScreen(
                 onClick = {
                     if (!openExternal(context, AppDetails.GITHUB_PROFILE_URL)) {
                         onToast("Aucun navigateur disponible.")
+            SettingsRow(
+                icon = Icons.Outlined.Compass,
+                title = atlasText("Revoir la visite guidée", "Replay the guided tour", "إعادة الجولة الإرشادية"),
+                subtitle = atlasText("Relancer la démonstration mobile", "Replay the mobile demo", "إعادة العرض التوضيحي للهاتف"),
+                onClick = { appViewModel.restartMobileOnboarding() },
+            )
+            AtlasDivider(Modifier.padding(vertical = 8.dp))
                     }
                 },
             )
