@@ -331,7 +331,7 @@ public final class LegacySourceQuarantine {
             "main/res/drawable/atlas_splash_animated.xml",
             "main/res/drawable/atlas_splash_mark.xml",
             "test/java/ma/etherealmber/atlascommerce/ui/components/AtlasMarkGeometryTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/ui/components/TabletNavigationLayoutTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/ui/components/TabletNavigationLayoutTest.kt"
         )));
 
     private static final String V105_SENTINEL =
