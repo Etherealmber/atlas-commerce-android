@@ -311,7 +311,7 @@ private fun parseWordmarkPath(data: String): androidx.compose.ui.graphics.Path {
             i += 2
         }
     }
-    path
+    return path
 }
 
 @Composable
@@ -2224,6 +2224,7 @@ fun AtlasSplash(
                             scaleY = logoScale.value
                         },
                     height = 78.dp,
+                    markRotationDegrees = if (motionEnabled) logoRotation.value else 0f,
                 )
             }
 
@@ -2241,7 +2242,6 @@ fun AtlasSplash(
                     textAlign = TextAlign.Center,
                 )
             }
-                    markRotationDegrees = if (motionEnabled) logoRotation.value else 0f,
 
             Spacer(Modifier.height(28.dp))
 
