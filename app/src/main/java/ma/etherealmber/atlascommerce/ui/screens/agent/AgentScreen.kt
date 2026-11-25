@@ -124,6 +124,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdown
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
+import ma.etherealmber.atlascommerce.ui.components.AtlasLoader
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
@@ -1838,10 +1839,21 @@ private fun AgentStartupLoadingCard() {
                     )
                 }
                 Spacer(Modifier.width(8.dp))
-                AtlasTypingDots()
+                AtlasLoader(size = 22.dp, contentDescription = atlasText("Chargement", "Loading", "جارٍ التحميل"))
             }
         }
         AtlasChatSkeleton(Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun AgentShimmerLines(modifier: Modifier = Modifier) {
+    AtlasShimmer {
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            AtlasSkeletonBlock(Modifier.fillMaxWidth().height(7.dp), RoundedCornerShape(8.dp))
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.76f).height(7.dp), RoundedCornerShape(8.dp))
+            AtlasSkeletonBlock(Modifier.fillMaxWidth(0.52f).height(7.dp), RoundedCornerShape(8.dp))
+        }
     }
 }
 
@@ -1864,7 +1876,7 @@ private fun AgentTypingIndicator(
         ) {
             AtlasAgentMascot(Modifier.size(30.dp), isThinking = true)
             Spacer(Modifier.width(12.dp))
-            AtlasTypingDots()
+            AgentShimmerLines(Modifier.width(112.dp))
             Spacer(Modifier.width(12.dp))
             Text(
                 text = label,

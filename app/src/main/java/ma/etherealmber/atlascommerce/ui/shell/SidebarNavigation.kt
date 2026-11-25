@@ -65,6 +65,7 @@ import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
+import ma.etherealmber.atlascommerce.ui.components.AtlasBrandWordmark
 import ma.etherealmber.atlascommerce.ui.components.AtlasMark
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
@@ -77,109 +78,52 @@ internal fun AtlasSidebarBrand(
     onToggleCollapse: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val logoDescription = when {
-        !canCollapse -> atlasText("Logo Atlas Commerce", "Atlas Commerce logo", "شعار أطلس كوميرس")
-        expanded -> atlasText(
-            "Logo Atlas Commerce. Appuyez deux ou trois fois pour réduire le menu",
-            "Atlas Commerce logo. Double- or triple-tap to collapse navigation",
-            "شعار أطلس كوميرس. انقر مرتين أو ثلاث مرات لتصغير القائمة",
-        )
-        else -> atlasText(
-            "Logo Atlas Commerce. Appuyez deux ou trois fois pour développer le menu",
-            "Atlas Commerce logo. Double- or triple-tap to expand navigation",
-            "شعار أطلس كوميرس. انقر مرتين أو ثلاث مرات لتوسيع القائمة",
-        )
-    }
-    val toggleDescription = if (expanded) {
-        atlasText("Réduire la navigation", "Collapse navigation", "تصغير القائمة")
-    } else {
-        atlasText("Développer la navigation", "Expand navigation", "توسيع القائمة")
-    }
-    val brandModifier = if (canCollapse) {
-        Modifier
-            .atlasTapSequenceGestures(
-                onDoubleTap = onToggleCollapse,
-                onTripleTap = onToggleCollapse,
-            )
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val description = if (expanded) "Atlas Commerce, collapse navigation" else "Atlas Commerce, expand navigation"
+    val rowModifier = if (canCollapse) {
+        modifier.atlasTapSequenceGestures(onDoubleTap = onToggleCollapse, onTripleTap = onToggleCollapse)
             .semantics {
-                contentDescription = logoDescription
-                customActions = listOf(CustomAccessibilityAction(toggleDescription) {
+                contentDescription = description
+                customActions = listOf(CustomAccessibilityAction(if (expanded) "Collapse navigation" else "Expand navigation") {
                     onToggleCollapse()
                     true
                 })
             }
-    } else {
-        Modifier.semantics { contentDescription = logoDescription }
-    }
-
-    val motionEnabled = LocalAtlasAnimationsEnabled.current
-    val logoPulse by rememberInfiniteTransition(label = "sidebar-brand-glow").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "sidebar-brand-glow-pulse",
+    } else modifier.semantics { contentDescription = "Atlas Commerce" }
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 360f else 0f,
+        animationSpec = if (motionEnabled) tween(520, easing = androidx.compose.animation.core.FastOutSlowInEasing) else tween(0),
+        label = "sidebar-brand-fold",
     )
-    val logoScale by animateFloatAsState(
-        targetValue = if (expanded) 1f else 0.92f,
-        animationSpec = if (motionEnabled) spring(dampingRatio = 0.7f, stiffness = 420f) else tween(0),
-        label = "sidebar-brand-scale",
+    val lockupAlpha by animateFloatAsState(
+        targetValue = if (expanded) 1f else 0f,
+        animationSpec = if (motionEnabled) tween(300) else tween(0),
+        label = "sidebar-lockup-alpha",
     )
-    Row(
-        modifier = modifier.fillMaxWidth().heightIn(min = 58.dp).let { rowModifier ->
-            if (motionEnabled) rowModifier.animateContentSize() else rowModifier
-        },
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
+    val markAlpha by animateFloatAsState(
+        targetValue = if (expanded) 0f else 1f,
+        animationSpec = if (motionEnabled) tween(220, delayMillis = 120) else tween(0),
+        label = "sidebar-mark-alpha",
+    )
+    Box(
+        modifier = rowModifier.fillMaxWidth().height(58.dp).clip(RoundedCornerShape(8.dp)),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .size(if (expanded) 54.dp else 44.dp)
-                .clip(CircleShape)
-                .background(
-                    MaterialTheme.colorScheme.primary.copy(
-                        alpha = when {
-                            !motionEnabled -> if (expanded) 0.10f else 0.03f
-                            expanded -> 0.06f + logoPulse * 0.10f
-                            else -> 0.025f + logoPulse * 0.035f
-                        },
-                    ),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            AtlasMark(
-                modifier = brandModifier.graphicsLayer { scaleX = logoScale; scaleY = logoScale },
-                size = if (expanded) 42.dp else 32.dp,
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            AtlasBrandWordmark(
+                modifier = Modifier.width(142.dp)
+                    .graphicsLayer { alpha = lockupAlpha },
+                height = 46.dp,
                 tint = MaterialTheme.colorScheme.onSurface,
             )
-        }
-        AnimatedVisibility(
-            visible = expanded,
-            enter = if (motionEnabled) {
-                fadeIn(tween(180)) + slideInHorizontally(tween(210)) { -it / 5 }
-            } else {
-                EnterTransition.None
-            },
-            exit = if (motionEnabled) {
-                fadeOut(tween(100)) + slideOutHorizontally(tween(140)) { -it / 5 }
-            } else {
-                ExitTransition.None
-            },
-            label = "sidebar-brand-title",
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Spacer(Modifier.width(9.dp))
-                Text(
-                    "Atlas Commerce",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            AtlasMark(
+                modifier = Modifier.graphicsLayer {
+                    rotationZ = rotation
+                    alpha = markAlpha
+                },
+                size = 38.dp,
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
         }
     }
 }

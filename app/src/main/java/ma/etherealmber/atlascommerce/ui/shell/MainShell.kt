@@ -909,7 +909,7 @@ fun MainShell(
                     cartCount = cartCount,
                     notificationCount = notificationCount,
                     updateState = updateState,
-                    expanded = sidebarExpanded,
+                    expanded = !sidebarCanExpand || sidebarExpanded,
                     onOpenDataStorageManager = openDataCacheManager,
                     dataStorageSelected = showDataCacheManagerDialog,
                     canCollapse = sidebarCanExpand,

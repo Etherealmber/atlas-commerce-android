@@ -67,7 +67,7 @@ import ma.etherealmber.atlascommerce.core.security.DeviceUnlockSetupPrompt
 import ma.etherealmber.atlascommerce.core.update.UpdateInfo
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AppUpdateBanner
-import ma.etherealmber.atlascommerce.ui.components.AtlasBootSplashScreen
+import ma.etherealmber.atlascommerce.ui.components.AtlasSplash
 import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
 import ma.etherealmber.atlascommerce.ui.components.AtlasWelcomeOnboardingScreen
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
@@ -230,7 +230,7 @@ fun AtlasRoot(
                     )
                 }
                 if (!appearanceLoaded && !appearanceTimedOut) {
-                    AtlasBootSplashScreen(holdUntilReady = true)
+                    AtlasSplash(holdUntilReady = true)
                 } else {
                     AtlasGate(
                         deepLinkQrToken = deepLinkQrToken,
@@ -490,7 +490,9 @@ private fun AtlasGate(
     val activeUser = (session as? SessionState.Active)?.user
     var savedShellTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
     var savedLastBottomTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
-    var sidebarCollapsed by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf(false) }
+    var sidebarCollapsed by rememberSaveable(activeUser?.scopeIdentity) {
+        mutableStateOf(baseConfiguration.screenWidthDp >= 600)
+    }
 
     val baseStage = when {
         !bootSplashFinished || loadingBackend -> RootStage.SPLASH
@@ -529,7 +531,7 @@ private fun AtlasGate(
                 indexSelector = { it.rank },
             ) { currentStage ->
                 when (currentStage) {
-                    RootStage.SPLASH -> AtlasBootSplashScreen(
+                    RootStage.SPLASH -> AtlasSplash(
                         onFinished = { bootSplashFinished = true },
                         holdUntilReady = loadingBackend,
                     )
@@ -642,7 +644,7 @@ private fun AtlasGate(
                                 onStartUpdateDownload = startSettingsDownloadWithNotificationPermission,
                             )
                         } else {
-                            AtlasBootSplashScreen(holdUntilReady = true)
+                            AtlasSplash(holdUntilReady = true)
                         }
                     }
                 }
