@@ -25,7 +25,9 @@ fun profileTimeZoneOptions(@Suppress("UNUSED_PARAMETER") current: String): List<
     ProfileTimeZoneOptions
 
 fun profileTimeZoneLabel(id: String): String =
-    ProfileTimeZoneOptions.firstOrNull { it.id == id }?.label ?: id.takeIf(String::isNotBlank) ?: "Africa/Casablanca"
+    ProfileTimeZoneOptions.firstOrNull { it.id == id }?.label
+        ?: id.takeIf(String::isNotBlank)
+        ?: ProfileTimeZoneOptions.first().label
 
 fun editableProfileTimeZone(id: String): String =
     id.takeIf { value -> ProfileTimeZoneOptions.any { it.id == value } } ?: "Africa/Casablanca"
