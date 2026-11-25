@@ -123,7 +123,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasSkeletonBlock
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdown
-import ma.etherealmber.atlascommerce.ui.components.AtlasMark
+import ma.etherealmber.atlascommerce.ui.components.AtlasAnimatedBrand
 import ma.etherealmber.atlascommerce.ui.components.AtlasLoader
 import ma.etherealmber.atlascommerce.ui.components.AtlasSectionHeader
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
@@ -1807,7 +1807,12 @@ private fun AgentAvatar() {
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
     ) {
         Box(contentAlignment = Alignment.Center) {
-            AtlasMark(size = 19.dp)
+            AtlasAnimatedBrand(
+                height = 19.dp,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                markOnly = true,
+                animateWhenVisible = true,
+            )
         }
     }
 }

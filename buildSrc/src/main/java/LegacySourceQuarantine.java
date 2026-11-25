@@ -331,7 +331,22 @@ public final class LegacySourceQuarantine {
             "main/res/drawable/atlas_splash_animated.xml",
             "main/res/drawable/atlas_splash_mark.xml",
             "test/java/ma/etherealmber/atlascommerce/ui/components/AtlasMarkGeometryTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/ui/components/TabletNavigationLayoutTest.kt"
+            "test/java/ma/etherealmber/atlascommerce/ui/components/TabletNavigationLayoutTest.kt",
+            "androidTest/java/ma/etherealmber/atlascommerce/ui/components/AtlasAnimatedBrandTest.kt",
+            "androidTest/java/ma/etherealmber/atlascommerce/ui/i18n/AtlasToolbarPillsTest.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/components/AtlasAnimatedBrand.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/components/ThemedShots.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/i18n/AtlasToolbarPills.kt",
+            "main/res/drawable-nodpi/android_scan_demo.webp",
+            "main/res/drawable-nodpi/desktop_products_demo.webp",
+            "main/res/drawable-nodpi/desktop_products_demo_dark.webp",
+            "main/res/drawable-nodpi/phone_balance_demo.webp",
+            "main/res/drawable-nodpi/phone_balance_demo_dark.webp",
+            "main/res/drawable-nodpi/phone_home_demo.webp",
+            "main/res/drawable-nodpi/phone_home_demo_dark.webp",
+            "main/res/drawable-nodpi/phone_products_demo.webp",
+            "main/res/drawable-nodpi/phone_products_demo_dark.webp",
+            "test/java/ma/etherealmber/atlascommerce/ui/components/ThemedShotsTest.kt"
         )));
 
     private static final String V105_SENTINEL =

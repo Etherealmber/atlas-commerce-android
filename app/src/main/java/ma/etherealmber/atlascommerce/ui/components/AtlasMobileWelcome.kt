@@ -71,7 +71,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ma.etherealmber.atlascommerce.R
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
@@ -82,14 +81,14 @@ private enum class WelcomeStep(val id: String) {
     HELLO("hello"), THEME("theme"), FEATURES("features"), SHOTS("shots"), READY("ready"),
 }
 
-private data class WelcomeShot(val title: String, val caption: String, val image: Int)
+private data class WelcomeShot(val title: String, val caption: String, val imageName: String)
 private data class WelcomeFeature(val title: String, val body: String, val icon: ImageVector)
 
 private val welcomeShots = listOf(
-    WelcomeShot("Accueil", "Trésorerie, stock et alertes en un coup d’œil.", R.drawable.welcome_shot_home),
-    WelcomeShot("Produits", "Catalogue, seuils bas et réapprovisionnement.", R.drawable.welcome_shot_products),
-    WelcomeShot("Scan", "Code-barres → fiche produit en une seconde.", R.drawable.welcome_shot_scan),
-    WelcomeShot("Balance", "Recettes, dépenses et caisse au même endroit.", R.drawable.welcome_shot_balance),
+    WelcomeShot("Accueil", "Trésorerie, stock et alertes en un coup d’œil.", "phone-home-demo"),
+    WelcomeShot("Produits", "Catalogue, seuils bas et réapprovisionnement.", "phone-products-demo"),
+    WelcomeShot("Scan", "Code-barres → fiche produit en une seconde.", "android-scan-demo"),
+    WelcomeShot("Balance", "Recettes, dépenses et caisse au même endroit.", "phone-balance-demo"),
 )
 
 private fun welcomeFeatures(role: String): List<WelcomeFeature> = buildList {
@@ -195,7 +194,11 @@ fun AtlasMobileWelcomeScreen(
             modifier = Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AtlasMark(size = 28.dp)
+            AtlasAnimatedBrand(
+                height = 28.dp,
+                tint = if (dark) Color.White else Color(0xFF0F1115),
+                markOnly = true,
+            )
             Spacer(Modifier.weight(1f))
             Row(
                 modifier = Modifier.semantics {
@@ -265,7 +268,14 @@ fun AtlasMobileWelcomeScreen(
                                 Box(
                                     Modifier.size(62.dp).clip(RoundedCornerShape(20.dp)).background(colors.soft),
                                     contentAlignment = Alignment.Center,
-                                ) { AtlasMark(size = 34.dp) }
+                                ) {
+                                    AtlasAnimatedBrand(
+                                        height = 34.dp,
+                                        tint = if (dark) Color.White else Color(0xFF0F1115),
+                                        markOnly = true,
+                                        animateWhenVisible = true,
+                                    )
+                                }
                                 WelcomeHeading(
                                     text = if (firstName.isBlank()) "Bonjour" else "Bonjour, ${firstName.trim().substringBefore(' ')}",
                                     modifier = Modifier.focusRequester(focusRequester),
@@ -356,7 +366,7 @@ fun AtlasMobileWelcomeScreen(
                                         verticalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         androidx.compose.foundation.Image(
-                                            painter = painterResource(shot.image),
+                                            painter = painterResource(themedShot(shot.imageName, dark)),
                                             contentDescription = "Capture réelle : ${shot.title} sur mobile",
                                             modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(colors.card),
                                             contentScale = ContentScale.Fit,

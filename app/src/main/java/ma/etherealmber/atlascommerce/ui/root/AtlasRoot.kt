@@ -74,6 +74,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasWelcomeOnboardingScreen
 import ma.etherealmber.atlascommerce.ui.components.AtlasMobileWelcomeScreen
 import ma.etherealmber.atlascommerce.ui.components.AtlasMobileTourOverlay
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
+import ma.etherealmber.atlascommerce.ui.components.rememberSystemAnimatorEnabled
+import ma.etherealmber.atlascommerce.ui.components.LocalSystemAnimatorEnabled
 import ma.etherealmber.atlascommerce.ui.components.MandatoryUpdateScreen
 import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
@@ -94,6 +96,8 @@ import ma.etherealmber.atlascommerce.ui.shell.MainShell
 import ma.etherealmber.atlascommerce.ui.shell.MainTab
 import ma.etherealmber.atlascommerce.ui.theme.AtlasTheme
 import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
+import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasThemeMode
+import ma.etherealmber.atlascommerce.ui.theme.LocalSetAtlasThemeMode
 import ma.etherealmber.atlascommerce.ui.util.findActivity
 
 private object Overlay {
@@ -156,6 +160,7 @@ fun AtlasRoot(
     val updateServer by viewModel.server.collectAsStateWithLifecycle()
     val appearanceLoaded by viewModel.appearanceLoaded.collectAsStateWithLifecycle()
     val animationsEnabled by viewModel.animationsEnabled.collectAsStateWithLifecycle()
+    val systemAnimatorEnabled = rememberSystemAnimatorEnabled()
     var appearanceTimedOut by remember { mutableStateOf(false) }
 
     LaunchedEffect(appearanceLoaded) {
@@ -189,11 +194,14 @@ fun AtlasRoot(
     }
 
     CompositionLocalProvider(
-        LocalAtlasAnimationsEnabled provides animationsEnabled,
+        LocalAtlasAnimationsEnabled provides (animationsEnabled && systemAnimatorEnabled),
+        LocalSystemAnimatorEnabled provides systemAnimatorEnabled,
         LocalAtlasLanguage provides appLanguage,
         LocalSetAtlasLanguage provides viewModel::setAppLanguage,
         LocalAtlasUsesSystemLanguage provides appLanguageFollowsSystem,
         LocalUseSystemAtlasLanguage provides viewModel::followSystemAppLanguage,
+        LocalAtlasThemeMode provides themeMode,
+        LocalSetAtlasThemeMode provides viewModel::setThemeMode,
     ) {
         CompositionLocalProvider(
             LocalConfiguration provides localizedConfiguration,

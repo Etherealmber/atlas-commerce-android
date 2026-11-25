@@ -66,8 +66,7 @@ import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
-import ma.etherealmber.atlascommerce.ui.components.AtlasBrandWordmark
-import ma.etherealmber.atlascommerce.ui.components.AtlasMark
+import ma.etherealmber.atlascommerce.ui.components.AtlasAnimatedBrand
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.i18n.atlasRoleLabel
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
@@ -91,11 +90,6 @@ internal fun AtlasSidebarBrand(
                 })
             }
     } else modifier.semantics { contentDescription = "Atlas Commerce" }
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) 360f else 0f,
-        animationSpec = if (motionEnabled) tween(520, easing = androidx.compose.animation.core.FastOutSlowInEasing) else tween(0),
-        label = "sidebar-brand-fold",
-    )
     val lockupAlpha by animateFloatAsState(
         targetValue = if (expanded) 1f else 0f,
         animationSpec = if (motionEnabled) tween(300) else tween(0),
@@ -111,19 +105,21 @@ internal fun AtlasSidebarBrand(
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            AtlasBrandWordmark(
+            AtlasAnimatedBrand(
                 modifier = Modifier.width(142.dp)
                     .graphicsLayer { alpha = lockupAlpha },
                 height = 46.dp,
                 tint = MaterialTheme.colorScheme.onSurface,
+                morphKey = expanded,
+                contentDescription = "Atlas Commerce",
             )
-            AtlasMark(
-                modifier = Modifier.graphicsLayer {
-                    rotationZ = rotation
-                    alpha = markAlpha
-                },
-                size = 38.dp,
+            AtlasAnimatedBrand(
+                modifier = Modifier.graphicsLayer { alpha = markAlpha },
+                height = 30.dp,
                 tint = MaterialTheme.colorScheme.onSurface,
+                markOnly = true,
+                morphKey = expanded,
+                contentDescription = "Atlas Commerce",
             )
         }
     }

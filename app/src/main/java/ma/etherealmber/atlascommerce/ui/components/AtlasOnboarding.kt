@@ -184,7 +184,11 @@ fun AtlasWelcomeOnboardingScreen(
                 Modifier.fillMaxWidth().height(60.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AtlasMark(size = 28.dp)
+                AtlasAnimatedBrand(
+                    height = 28.dp,
+                    tint = MaterialTheme.colorScheme.onBackground,
+                    markOnly = true,
+                )
                 Spacer(Modifier.width(8.dp))
                 Row(
                     Modifier.weight(1f),
@@ -748,7 +752,12 @@ private fun TutorialDemoCard(step: Int, modifier: Modifier = Modifier) {
     ) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AtlasMark(size = 22.dp)
+                AtlasAnimatedBrand(
+                    height = 22.dp,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    markOnly = true,
+                    animateWhenVisible = true,
+                )
                 Spacer(Modifier.width(8.dp))
                 Text("Atlas Commerce", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
@@ -971,7 +980,12 @@ private fun WorkspaceIllustration(bob: Float, drop: Float, motion: Boolean) {
         ) {
             Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    AtlasMark(size = 17.dp)
+                    AtlasAnimatedBrand(
+                        height = 17.dp,
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        markOnly = true,
+                        animateWhenVisible = true,
+                    )
                     Spacer(Modifier.width(6.dp))
                     Text("Atlas", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))
@@ -1070,7 +1084,12 @@ private fun ConnectionIllustration(bob: Float, motion: Boolean) {
             shadowElevation = 14.dp,
         ) {
             Box(contentAlignment = Alignment.Center) {
-                AtlasMark(size = 58.dp)
+                AtlasAnimatedBrand(
+                    height = 58.dp,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    markOnly = true,
+                    animateWhenVisible = true,
+                )
                 Box(Modifier.align(Alignment.BottomEnd).padding(end = 11.dp, bottom = 9.dp).size(13.dp).clip(CircleShape).background(ArtPalette.onboardingMint))
             }
         }
@@ -1283,7 +1302,14 @@ private fun RecapIllustration(bob: Float, motion: Boolean) {
             Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.fillMaxWidth().height(62.dp).clip(RoundedCornerShape(15.dp)).background(ArtPalette.onboardingPurple.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
                     Surface(Modifier.size(42.dp), shape = CircleShape, color = MaterialTheme.colorScheme.background, border = BorderStroke(1.dp, ArtPalette.onboardingPurple.copy(alpha = .55f))) {
-                        Box(contentAlignment = Alignment.Center) { AtlasMark(size = 25.dp) }
+                        Box(contentAlignment = Alignment.Center) {
+                            AtlasAnimatedBrand(
+                                height = 25.dp,
+                                tint = MaterialTheme.colorScheme.onBackground,
+                                markOnly = true,
+                                animateWhenVisible = true,
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(11.dp))

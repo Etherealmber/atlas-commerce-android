@@ -228,32 +228,29 @@ fun AtlasLoader(
     contentDescription: String? = null,
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
-    val transition = rememberInfiniteTransition(label = "atlas-loader")
-    val rotation by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing)),
-        label = "atlas-loader-rotation",
+    val accessibleModifier = modifier.then(
+        if (contentDescription != null) {
+            Modifier.semantics { this.contentDescription = contentDescription }
+        } else Modifier,
     )
-    val pulse by transition.animateFloat(
-        initialValue = 0.55f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(800, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
-        label = "atlas-loader-opacity",
-    )
-    AtlasMark(
-        modifier = modifier
-            .graphicsLayer { alpha = if (motionEnabled) 1f else pulse }
-            .then(
-                if (contentDescription != null) {
-                    Modifier.semantics { this.contentDescription = contentDescription }
-                } else Modifier,
-            ),
-        size = size,
-        tint = tint,
-        rotationDegrees = if (motionEnabled) rotation else 0f,
-        rayProgress = 1f,
-    )
+    if (motionEnabled) {
+        val transition = rememberInfiniteTransition(label = "atlas-loader")
+        val rotation by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing)),
+            label = "atlas-loader-rotation",
+        )
+        AtlasMark(
+            modifier = accessibleModifier,
+            size = size,
+            tint = tint,
+            rotationDegrees = rotation,
+            rayProgress = 1f,
+        )
+    } else {
+        AtlasMark(modifier = accessibleModifier, size = size, tint = tint)
+    }
 }
 
 /** Full Atlas lockup rendered from vector glyphs in the same coordinate space as AtlasMark. */

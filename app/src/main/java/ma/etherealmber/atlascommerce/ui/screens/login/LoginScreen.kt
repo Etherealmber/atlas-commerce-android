@@ -100,7 +100,7 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
-import ma.etherealmber.atlascommerce.ui.components.AtlasBrandWordmark
+import ma.etherealmber.atlascommerce.ui.components.AtlasAnimatedBrand
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasUsesSystemLanguage
@@ -108,6 +108,7 @@ import ma.etherealmber.atlascommerce.ui.i18n.LocalSetAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.LocalUseSystemAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.util.findActivity
+import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 
 @Composable
 fun LoginScreen(
@@ -241,7 +242,11 @@ private fun LoginScreenContent(
         val tabletLayout = maxWidth >= 600.dp
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         val compact = maxWidth < 600.dp || maxHeight < 640.dp || keyboardVisible
-        val heroHeight = if (keyboardVisible) 82.dp else if (compact) 108.dp else 136.dp
+        val heroHeight = if (tabletLayout) {
+            if (keyboardVisible) 82.dp else 96.dp
+        } else {
+            64.dp
+        }
 
         Column(
             modifier = Modifier
@@ -255,7 +260,7 @@ private fun LoginScreenContent(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             LoginAtlasHero(
-                compact = compact || keyboardVisible,
+                tabletLayout = tabletLayout,
                 updateState = updateState,
                 onShowUpdateProgress = onShowUpdateProgress,
                 onOpenHelpServices = { helpServicesOpen = true },
@@ -265,25 +270,53 @@ private fun LoginScreenContent(
                     .height(heroHeight),
             )
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(horizontal = if (compact) 12.dp else if (tabletLayout) 24.dp else 18.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)), RoundedCornerShape(28.dp))
-                    .graphicsLayer {
-                        val progress = loginPanelProgress.value
-                        alpha = progress
-                        translationY = (1f - progress) * loginPanelOffsetPx
-                        scaleX = 0.985f + 0.015f * progress
-                        scaleY = 0.985f + 0.015f * progress
-                    }
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = if (compact) 20.dp else if (tabletLayout) 40.dp else 28.dp, vertical = if (tabletLayout && !compact) 28.dp else 18.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            val tabletCard = Color(0xFF18181B)
+            val loginCardScheme = if (tabletLayout) {
+                MaterialTheme.colorScheme.copy(
+                    background = tabletCard,
+                    surface = tabletCard,
+                    surfaceVariant = Color(0xFF27272A),
+                    onBackground = Color.White,
+                    onSurface = Color.White,
+                    onSurfaceVariant = Color(0xFFD4D4D8),
+                    outlineVariant = Color(0xFF3F3F46),
+                )
+            } else MaterialTheme.colorScheme
+            MaterialTheme(
+                colorScheme = loginCardScheme,
+                typography = MaterialTheme.typography,
+                shapes = MaterialTheme.shapes,
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = if (compact) 12.dp else if (tabletLayout) 24.dp else 18.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(if (tabletLayout) tabletCard else MaterialTheme.colorScheme.surface)
+                        .border(
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)),
+                            RoundedCornerShape(28.dp),
+                        )
+                        .graphicsLayer {
+                            val progress = loginPanelProgress.value
+                            alpha = progress
+                            translationY = (1f - progress) * loginPanelOffsetPx
+                            scaleX = 0.985f + 0.015f * progress
+                            scaleY = 0.985f + 0.015f * progress
+                        }
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = if (compact) 20.dp else if (tabletLayout) 40.dp else 28.dp, vertical = if (tabletLayout && !compact) 28.dp else 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    if (tabletLayout) {
+                        AtlasAnimatedBrand(
+                            height = if (maxWidth < 420.dp) 56.dp else 72.dp,
+                            tint = Color.White,
+                            onClick = {},
+                        )
+                        Spacer(Modifier.height(14.dp))
+                    }
                 val welcomeTitle = when {
                     state.step == LoginViewModel.Step.OTP -> atlasText("Vérification", "Verification", "التحقق")
                     rememberedAccount != null -> atlasText("Bon retour", "Welcome back", "مرحباً بعودتك")
@@ -387,6 +420,7 @@ private fun LoginScreenContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                }
             }
         }
 
@@ -436,29 +470,33 @@ private fun LoginScreenContent(
 
 @Composable
 private fun LoginAtlasHero(
-    compact: Boolean,
+    tabletLayout: Boolean,
     updateState: UpdateState,
     onShowUpdateProgress: () -> Unit,
     onOpenHelpServices: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val dark = LocalAtlasDarkTheme.current
     Row(
         modifier = modifier
             .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surface)))
-            .padding(horizontal = 22.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AtlasEntrance(delayMillis = 0) {
-            AtlasBrandWordmark(
+        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+            UpdateMiniProgressBall(state = updateState, onClick = onShowUpdateProgress)
+        }
+        Spacer(Modifier.weight(1f))
+        if (!tabletLayout) {
+            AtlasAnimatedBrand(
                 modifier = Modifier.widthIn(max = 185.dp),
-                height = if (compact) 28.dp else 36.dp,
-                tint = MaterialTheme.colorScheme.onBackground,
+                height = 54.dp,
+                tint = if (dark) Color.White else Color(0xFF0F1115),
+                onClick = {},
             )
         }
         Spacer(Modifier.weight(1f))
-        UpdateMiniProgressBall(state = updateState, onClick = onShowUpdateProgress)
-        Spacer(Modifier.width(8.dp))
-        IconButton(onClick = onOpenHelpServices) {
+        IconButton(onClick = onOpenHelpServices, modifier = Modifier.size(48.dp)) {
             Icon(
                 Icons.Outlined.MoreVert,
                 contentDescription = atlasText("Aide et services", "Help and services", "المساعدة والخدمات"),

@@ -1,28 +1,14 @@
 package ma.etherealmber.atlascommerce.ui.i18n
 
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
-import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ma.etherealmber.atlascommerce.core.AppDetails
-import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 import ma.etherealmber.atlascommerce.core.AppLanguage
 import ma.etherealmber.atlascommerce.core.Roles
+import ma.etherealmber.atlascommerce.core.format.AtlasFormat
 
 val LocalAtlasLanguage = staticCompositionLocalOf { AppLanguage.FRENCH }
 val LocalSetAtlasLanguage = staticCompositionLocalOf<(AppLanguage) -> Unit> { {} }
@@ -1066,53 +1052,5 @@ fun AtlasLanguageSelector(
     modifier: Modifier = Modifier,
     contentColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface,
 ) {
-    val language = LocalAtlasLanguage.current
-    val setLanguage = LocalSetAtlasLanguage.current
-    val followsSystem = LocalAtlasUsesSystemLanguage.current
-    val useSystemLanguage = LocalUseSystemAtlasLanguage.current
-    var expanded by remember { mutableStateOf(false) }
-
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = { expanded = true }) {
-            Icon(
-                imageVector = Icons.Outlined.Language,
-                contentDescription = atlasText("Langue", "Language", "اللغة"),
-                tint = contentColor,
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(language.tag.uppercase(), color = contentColor)
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        atlasText(
-                            "Suivre la langue du téléphone",
-                            "Follow phone language (${AppLanguage.fromSystemLocale().nativeLabel})",
-                            "اتباع لغة الهاتف (${AppLanguage.fromSystemLocale().nativeLabel})",
-                        ),
-                    )
-                },
-                onClick = {
-                    expanded = false
-                    useSystemLanguage()
-                },
-                leadingIcon = if (followsSystem) {
-                    { Text("✓", color = MaterialTheme.colorScheme.primary) }
-                } else null,
-            )
-            AppLanguage.entries.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option.nativeLabel) },
-                    onClick = {
-                        expanded = false
-                        setLanguage(option)
-                    },
-                    leadingIcon = if (option == language) {
-                        { Text("✓", color = MaterialTheme.colorScheme.primary) }
-                    } else null,
-                )
-            }
-        }
-    }
+    AtlasLanguageToolbarPill(modifier = modifier, contentColor = contentColor)
 }
