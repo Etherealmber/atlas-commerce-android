@@ -106,6 +106,15 @@ private object Overlay {
     const val DEVELOPER = "developer"
 }
 
+private fun mobileTourDestination(step: Int): String = when (step.coerceIn(0, 5)) {
+    1 -> MainTab.PRODUCTS.name
+    2 -> MainTab.SCAN.name
+    3 -> MainTab.NOTIFICATIONS.name
+    4 -> MainTab.AGENT.name
+    5 -> MainTab.PROFILE.name
+    else -> MainTab.HOME.name
+}
+
 private enum class RootStage(val rank: Int) {
     SPLASH(0),
     SERVER_SETUP(1),
@@ -510,6 +519,11 @@ private fun AtlasGate(
         activeUser != null && !mobileWelcomeCompleted -> RootStage.MOBILE_WELCOME
         activeUser != null -> RootStage.SHELL
         else -> RootStage.SPLASH
+    }
+    LaunchedEffect(baseStage, mobileOnboarding.status, mobileOnboarding.step) {
+        if (baseStage == RootStage.SHELL && mobileOnboarding.status == "pending") {
+            requestedTab = mobileTourDestination(mobileOnboarding.step)
+        }
     }
     val darkTheme = LocalAtlasDarkTheme.current
     val rootView = LocalView.current

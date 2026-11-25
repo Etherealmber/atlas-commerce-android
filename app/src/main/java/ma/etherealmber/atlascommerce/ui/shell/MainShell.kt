@@ -667,14 +667,14 @@ fun MainShell(
                                             is UpdateState.ReadyToInstall -> state.dismissedBanner && !state.info.mandatory
                                             else -> false
                                         }
-                                        if (isForeground && !useRail && tab != MainTab.AGENT) {
+                                        if (isForeground && !useRail && tab != MainTab.AGENT && tab != MainTab.SCAN) {
                                             UpdateMiniProgressBall(
                                                 state = updateState,
                                                 onClick = onShowUpdateProgress,
                                             )
                                         }
-                                        if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
-                                        if (!useRail && tab !in BackStackTabs) {
+                                        if (hasHiddenUpdate && isForeground && tab != MainTab.SCAN) Spacer(Modifier.width(6.dp))
+                                        if (!useRail && tab !in BackStackTabs && tab != MainTab.SCAN) {
                                             IconButton(
                                                 onClick = { switchTab(MainTab.AGENT) },
                                                 modifier = Modifier.semantics {
@@ -719,7 +719,7 @@ fun MainShell(
                                             }
                                         }
                                         when (tab) {
-                                            MainTab.AGENT, MainTab.SALE -> Unit
+                                            MainTab.AGENT, MainTab.SALE, MainTab.SCAN -> Unit
 
                                             MainTab.SETTINGS -> {
                                                 if (!useRail && isForeground) {
@@ -817,7 +817,7 @@ fun MainShell(
                                     is UpdateState.Error -> updateState.info != null
                                     else -> false
                                 }
-                                val showCompactUpdate = isForeground && compactUpdateVisible
+                                val showCompactUpdate = isForeground && compactUpdateVisible && tab != MainTab.SCAN
                                 val showCompactAccessories = tab == MainTab.AGENT || showCompactUpdate
                                 Row(
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -1014,6 +1014,7 @@ fun MainShell(
                         onOpenProducts = { switchTab(MainTab.PRODUCTS) },
                         onOpenQrDevice = onOpenQrDevice,
                         onToast = onToast,
+                        showMobileProductAction = !useRail,
                     )
 
                     MainTab.SALE -> SaleScreen(
