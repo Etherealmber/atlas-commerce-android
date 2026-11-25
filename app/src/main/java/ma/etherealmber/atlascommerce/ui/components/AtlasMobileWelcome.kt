@@ -347,16 +347,19 @@ fun AtlasMobileWelcomeScreen(
                                 HorizontalPager(
                                     state = pagerState,
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 380.dp, max = 520.dp),
-                                    pageSpacing = 12.dp,
-                                    contentPadding = PaddingValues(horizontal = 22.dp),
+                                    pageSpacing = 0.dp,
+                                    contentPadding = PaddingValues(horizontal = 0.dp),
                                 ) { imagePage ->
                                     val shot = welcomeShots[imagePage]
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
                                         androidx.compose.foundation.Image(
                                             painter = painterResource(shot.image),
                                             contentDescription = "Capture réelle : ${shot.title} sur mobile",
                                             modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(colors.card),
-                                            contentScale = ContentScale.Crop,
+                                            contentScale = ContentScale.Fit,
                                         )
                                         Text(shot.title, color = colors.foreground, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
                                         Text(shot.caption, color = colors.muted, style = MaterialTheme.typography.bodySmall)
