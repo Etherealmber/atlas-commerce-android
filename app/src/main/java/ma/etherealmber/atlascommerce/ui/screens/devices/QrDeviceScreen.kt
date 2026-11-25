@@ -918,7 +918,39 @@ private fun SecurityDeviceRow(
     onToggleDetails: () -> Unit,
     onRevoke: () -> Unit,
 ) {
-    val isAndroid = device.userAgent.orEmpty().contains("Android", ignoreCase = true)
+    val userAgent = device.userAgent.orEmpty()
+    val isNativeAndroid = userAgent.contains("Atlas-Android", ignoreCase = true) || userAgent.contains("okhttp", ignoreCase = true)
+    val isNativeDesktop = userAgent.contains("Atlas-Desktop", ignoreCase = true)
+    val browserName = when {
+        userAgent.contains("Edg/", ignoreCase = true) -> "Edge"
+        userAgent.contains("OPR/", ignoreCase = true) || userAgent.contains("Opera", ignoreCase = true) -> "Opera"
+        userAgent.contains("Firefox/", ignoreCase = true) -> "Firefox"
+        userAgent.contains("Chrome/", ignoreCase = true) || userAgent.contains("CriOS/", ignoreCase = true) -> "Chrome"
+        userAgent.contains("Safari/", ignoreCase = true) -> "Safari"
+        userAgent.contains("Mozilla/", ignoreCase = true) -> atlasText("Navigateur", "Browser", "متصفح")
+        else -> null
+    }
+    val isBrowserSession = browserName != null
+    val isMobileBrowser = isBrowserSession && (
+        userAgent.contains("Mobile", ignoreCase = true) ||
+            userAgent.contains("Android", ignoreCase = true) ||
+            userAgent.contains("iPhone", ignoreCase = true) ||
+            userAgent.contains("iPad", ignoreCase = true)
+        )
+    val androidModel = Regex("Atlas-Android/[^ ]+ \(Android [^;]+; (.+)\)", RegexOption.IGNORE_CASE)
+        .find(userAgent)?.groupValues?.getOrNull(1)?.trim()?.takeIf(String::isNotBlank)
+    val deviceLabel = when {
+        isNativeAndroid -> listOf(atlasText("Téléphone Android", "Android phone", "هاتف أندرويد"), androidModel).filterNotNull().joinToString(" · ")
+        isNativeDesktop -> atlasText("Application Atlas pour ordinateur", "Atlas desktop app", "تطبيق Atlas للحاسوب")
+        isBrowserSession -> "${if (isMobileBrowser) atlasText("Mobile", "Mobile", "هاتف") else atlasText("PC", "PC", "حاسوب")} · $browserName"
+        else -> atlasText("Session Atlas", "Atlas session", "جلسة Atlas")
+    }
+    val deviceIcon = when {
+        isNativeAndroid -> Icons.Outlined.Phone
+        isNativeDesktop -> Icons.Outlined.Computer
+        isBrowserSession -> Icons.Outlined.Language
+        else -> Icons.Outlined.Computer
+    }
     val lastSeen = device.lastSeen?.takeIf(String::isNotBlank)?.let { atlasDateTime(it) }
     val metadata = listOfNotNull(device.lastIp?.takeIf(String::isNotBlank)?.let { "IP $it" }, lastSeen).joinToString(" · ")
 
@@ -930,7 +962,7 @@ private fun SecurityDeviceRow(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = if (isAndroid) Icons.Outlined.Devices else Icons.Outlined.Computer,
+                        imageVector = deviceIcon,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(19.dp),
@@ -940,7 +972,7 @@ private fun SecurityDeviceRow(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = atlasText(device.friendlyLabel),
+                            text = deviceLabel,
                             modifier = Modifier.weight(1f),
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurface,

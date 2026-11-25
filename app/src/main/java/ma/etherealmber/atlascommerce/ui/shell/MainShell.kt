@@ -597,19 +597,8 @@ fun MainShell(
                         modifier = Modifier
                             .graphicsLayer { clip = false }
                             .then(
-                                if (shellTopBarExpanded) {
-                                    Modifier.fillMaxWidth()
-                                } else {
-                                    Modifier
-                                        .align(Alignment.Center)
-                                        .clickable(role = Role.Button) {
-                                            scrollDelta.floatValue = 0f
-                                            floatingTopBarExpanded.value = true
-                                        }
-                                        .semantics {
-                                            contentDescription = collapsedHeaderDescription
-                                        }
-                                },
+                                if (shellTopBarExpanded) Modifier.fillMaxWidth()
+                                else Modifier.align(Alignment.Center),
                             ),
                         shape = RoundedCornerShape(if (useRail) 0.dp else 26.dp),
                         color = if (useRail) {
@@ -855,7 +844,14 @@ fun MainShell(
                                 val showCompactUpdate = isForeground && compactUpdateVisible && tab != MainTab.SCAN
                                 val showCompactAccessories = tab == MainTab.AGENT || showCompactUpdate
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    modifier = Modifier
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                        .clip(RoundedCornerShape(if (useRail) 0.dp else 26.dp))
+                                        .clickable(role = Role.Button) {
+                                            scrollDelta.floatValue = 0f
+                                            floatingTopBarExpanded.value = true
+                                        }
+                                        .semantics { contentDescription = collapsedHeaderDescription },
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     if (showCompactAccessories) {

@@ -65,6 +65,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasFinanceBarEntry
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasPaginationControls
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
 import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
@@ -157,7 +158,7 @@ fun EmployeeDirectoryScreen(
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + LocalAtlasFloatingTopBarPadding.current, bottom = 30.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + LocalAtlasFloatingTopBarPadding.current, bottom = 28.dp + LocalAtlasFloatingDockPadding.current),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
@@ -360,7 +361,7 @@ private fun EmployeeDirectoryCard(
     }
     var actionsExpanded by rememberSaveable(employee.id) { mutableStateOf(false) }
 
-    AtlasCard(onClick = onDetails) {
+    AtlasCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Surface(
                 modifier = Modifier.size(44.dp),

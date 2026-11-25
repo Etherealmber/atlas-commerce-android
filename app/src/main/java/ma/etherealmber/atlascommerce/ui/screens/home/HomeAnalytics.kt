@@ -5,7 +5,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,9 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -68,12 +65,6 @@ import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
-
-private val StockGreen = Color(0xFF16A34A)
-private val StockAmber = Color(0xFFF59E0B)
-private val StockRed = Color(0xFFDC2626)
-private val CashBlue = Color(0xFF3B82F6)
-private val CashAmber = Color(0xFFF59E0B)
 
 internal data class MetricsValue(val value: Double, val points: List<Double>, val deltaPercent: Double?, val isNew: Boolean)
 
@@ -137,12 +128,9 @@ internal fun DailyKpiCarousel(
     currency: String,
 ) {
     if (metrics == null) {
-        if (loading) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(5) { Surface(Modifier.size(width = 160.dp, height = 112.dp), shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant) {} }
-            }
-        } else if (error != null) {
-            AtlasErrorCard(
+        when {
+            loading -> KpiGridSkeleton()
+            error != null -> AtlasErrorCard(
                 title = atlasText("Indicateurs indisponibles", "Metrics unavailable", "المؤشرات غير متاحة"),
                 message = error,
                 onRetry = onRetry,
@@ -168,64 +156,83 @@ internal fun DailyKpiCarousel(
         }) to it) }
     }
     if (cards.isEmpty()) return
-    val listState = rememberLazyListState()
-    LazyRow(
-        state = listState,
-        flingBehavior = rememberSnapFlingBehavior(lazyListState = listState),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        items(cards, key = { it.first }) { (key, pair) ->
-            val (label, data) = pair
-            val isCurrency = key in setOf("sales", "money_in")
-            val unfavorableRise = key in setOf("low_stock", "pending_actions")
-            val positive = when {
-                data.isNew && unfavorableRise -> data.value <= 0.0
-                data.deltaPercent == null -> true
-                unfavorableRise -> data.deltaPercent <= 0.0
-                else -> data.deltaPercent >= 0.0
-            }
-            val deltaLabel = when {
-                data.isNew -> atlasText("Nouveau", "New", "جديد")
-                data.deltaPercent == null -> atlasText("—", "—", "—")
-                else -> "${if ((data.deltaPercent ?: 0.0) >= 0) "↑" else "↓"} ${chartNumber(abs(data.deltaPercent ?: 0.0), 0, locale)}%"
-            }
-            val valueLabel = if (isCurrency) chartMoney(data.value, currency, locale) else chartNumber(data.value, locale = locale)
-            val cardDescription = "$label, $valueLabel, $deltaLabel, ${atlasText("tendance sur 7 jours", "7-day trend", "اتجاه 7 أيام")}"
-            AtlasCard(
-                modifier = Modifier.size(width = 160.dp, height = 112.dp).semantics { contentDescription = cardDescription },
-                padding = 10.dp,
-            ) {
-                val periodLabel = atlasText("7 j", "7 d", "7 أيام")
-            Text(
-                "$label · $periodLabel",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Clip,
-            )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    if (isCurrency) chartMoney(data.value, currency, locale) else chartNumber(data.value, locale = locale),
-                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 20.sp, fontFeatureSettings = "tnum"),
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Clip,
-                )
-                Surface(
-                    color = (if (positive) StockGreen else StockRed).copy(alpha = 0.11f),
-                    shape = CircleShape,
-                ) {
-                    Text(
-                        deltaLabel,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
-                        color = if (positive) StockGreen else StockRed,
-                        maxLines = 1,
-                    )
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        cards.chunked(2).forEach { rowCards ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                rowCards.forEach { (key, pair) ->
+                    val (label, data) = pair
+                    val isCurrency = key in setOf("sales", "money_in")
+                    val unfavorableRise = key in setOf("low_stock", "pending_actions")
+                    val positive = when {
+                        data.isNew && unfavorableRise -> data.value <= 0.0
+                        data.deltaPercent == null -> true
+                        unfavorableRise -> data.deltaPercent <= 0.0
+                        else -> data.deltaPercent >= 0.0
+                    }
+                    val palette = Atlas.palette
+                    val trendColor = if (positive) palette.positive else palette.danger
+                    val trendContainer = if (positive) palette.positiveSoft else palette.dangerSoft
+                    val deltaLabel = when {
+                        data.isNew -> atlasText("Nouveau", "New", "جديد")
+                        data.deltaPercent == null -> atlasText("—", "—", "—")
+                        else -> "${if ((data.deltaPercent ?: 0.0) >= 0) "↑" else "↓"} ${chartNumber(abs(data.deltaPercent ?: 0.0), 0, locale)}%"
+                    }
+                    val valueLabel = if (isCurrency) chartMoney(data.value, currency, locale) else chartNumber(data.value, locale = locale)
+                    val cardDescription = "$label, $valueLabel, $deltaLabel, ${atlasText("tendance sur 7 jours", "7-day trend", "اتجاه 7 أيام")}"
+                    AtlasCard(
+                        modifier = Modifier.weight(1f).height(128.dp).semantics { contentDescription = cardDescription },
+                        padding = 10.dp,
+                    ) {
+                        Text(
+                            "$label · ${atlasText("7 j", "7 d", "7 أيام")}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            valueLabel,
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, fontFeatureSettings = "tnum"),
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(color = trendContainer, shape = RoundedCornerShape(8.dp)) {
+                                Text(
+                                    deltaLabel,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                    color = trendColor,
+                                    maxLines = 1,
+                                )
+                            }
+                            Spacer(Modifier.weight(1f))
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Sparkline(data.points, trendColor, LocalAtlasAnimationsEnabled.current)
+                    }
                 }
-                Spacer(Modifier.weight(1f))
-                Sparkline(data.points, if (positive) StockGreen else StockRed, LocalAtlasAnimationsEnabled.current)
+                if (rowCards.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun KpiGridSkeleton() {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        repeat(3) { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                repeat(if (row == 2) 1 else 2) {
+                    Surface(
+                        Modifier.weight(1f).height(128.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {}
+                }
+                if (row == 2) Spacer(Modifier.weight(1f))
             }
         }
     }
@@ -271,6 +278,9 @@ internal fun MoneyFlowChart(metrics: DailyMetricsDto?, currency: String) {
     val barsProgress by animateFloatAsState(if (!motionEnabled || barsRevealed) 1f else 0f, tween(if (motionEnabled) 250 else 0), label = "daily-flow-bars")
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val locale = atlasLocale()
+    val palette = Atlas.palette
+    val incomingColor = palette.chartIncome
+    val outgoingColor = palette.chartExpense
     val description = atlasText(
         "Encaissé ${chartMoney(inTotal, currency, locale)}, décaissé ${chartMoney(outTotal, currency, locale)} sur 14 jours",
         "Received ${chartMoney(inTotal, currency, locale)}, paid out ${chartMoney(outTotal, currency, locale)} over 14 days",
@@ -279,14 +289,14 @@ internal fun MoneyFlowChart(metrics: DailyMetricsDto?, currency: String) {
     AtlasCard(Modifier.semantics { contentDescription = description }, padding = 14.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(atlasText("Entrées & sorties", "Money in & out", "المقبوضات والمدفوعات"), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Surface(color = if (net >= 0) StockGreen.copy(alpha = 0.13f) else StockRed.copy(alpha = 0.13f), shape = CircleShape) {
-                Text("${if (net >= 0) "+" else "−"}${chartMoney(abs(net), currency, locale)}", Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = if (net >= 0) StockGreen else StockRed, style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"), fontWeight = FontWeight.Bold)
+            Surface(color = if (net >= 0) palette.positiveSoft else palette.dangerSoft, shape = CircleShape) {
+                Text("${if (net >= 0) "+" else "−"}${chartMoney(abs(net), currency, locale)}", Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = if (net >= 0) palette.positive else palette.danger, style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"), fontWeight = FontWeight.Bold)
             }
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            LegendDot(CashBlue, "${atlasText("Encaissé", "Received", "مقبوض")}: ${chartCompact(inTotal, currency, locale)}")
-            LegendDot(CashAmber, "${atlasText("Décaissé", "Paid out", "مدفوع")}: ${chartCompact(outTotal, currency, locale)}")
+            LegendDot(incomingColor, "${atlasText("Encaissé", "Received", "مقبوض")}: ${chartCompact(inTotal, currency, locale)}")
+            LegendDot(outgoingColor, "${atlasText("Décaissé", "Paid out", "مدفوع")}: ${chartCompact(outTotal, currency, locale)}")
         }
         Spacer(Modifier.height(8.dp))
         Canvas(Modifier.fillMaxWidth().height(108.dp).pointerInput(count, rtl) {
@@ -306,8 +316,8 @@ internal fun MoneyFlowChart(metrics: DailyMetricsDto?, currency: String) {
                 val alpha = if (selected == null || selected == i) 1f else 0.24f
                 val hIn = (incoming[i] / maxValue).toFloat() * size.height * 0.88f * barsProgress
                 val hOut = (outgoing[i] / maxValue).toFloat() * size.height * 0.88f * barsProgress
-                drawRoundRect(CashBlue.copy(alpha = alpha), Offset(x0 + groupWidth * .18f, size.height - hIn), Size(barWidth, hIn), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
-                drawRoundRect(CashAmber.copy(alpha = alpha), Offset(x0 + groupWidth * .55f, size.height - hOut), Size(barWidth, hOut), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
+                drawRoundRect(incomingColor.copy(alpha = alpha), Offset(x0 + groupWidth * .18f, size.height - hIn), Size(barWidth, hIn), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
+                drawRoundRect(outgoingColor.copy(alpha = alpha), Offset(x0 + groupWidth * .55f, size.height - hOut), Size(barWidth, hOut), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -351,7 +361,8 @@ internal fun StockHealthChart(metrics: DailyMetricsDto?, onViewAlerts: () -> Uni
     val values = listOf(inStock.coerceAtLeast(0.0), low.coerceAtLeast(0.0), out.coerceAtLeast(0.0))
     val total = values.sum()
     if (total <= 0) return
-    val colors = listOf(StockGreen, StockAmber, StockRed)
+    val palette = Atlas.palette
+    val colors = listOf(palette.positive, palette.warning, palette.danger)
     val names = listOf(atlasText("En stock", "In stock", "متوفر"), atlasText("Stock bas", "Low stock", "مخزون منخفض"), atlasText("Rupture", "Out of stock", "نفد المخزون"))
     var selected by remember(metrics.dates) { mutableStateOf<Int?>(null) }
     val percentage = (values[0] / total * 100).roundToInt()
@@ -385,11 +396,34 @@ internal fun StockHealthChart(metrics: DailyMetricsDto?, onViewAlerts: () -> Uni
                         if (clicked != null) selected = if (selected == clicked) null else clicked
                     }
                 }) {
-                    var start = -90f
-                    values.forEachIndexed { index, value ->
-                        val sweep = (value / total * 360.0 * donutProgress.toDouble()).toFloat()
-                        drawArc(colors[index], start, sweep, false, style = Stroke(width = 18.dp.toPx(), cap = StrokeCap.Butt))
-                        start += sweep
+                    val strokeWidth = 16.dp.toPx()
+                    val diameter = (size.minDimension - strokeWidth).coerceAtLeast(0f)
+                    val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+                    val nonZeroSlices = values.indices.filter { values[it] > 0.0 }
+                    if (nonZeroSlices.size == 1 && donutProgress >= 1f) {
+                        drawCircle(
+                            color = colors[nonZeroSlices.single()],
+                            radius = diameter / 2f,
+                            center = Offset(size.width / 2f, size.height / 2f),
+                            style = Stroke(width = strokeWidth),
+                        )
+                    } else {
+                        var start = -90f
+                        values.forEachIndexed { index, value ->
+                            val sweep = (value / total * 360.0 * donutProgress.toDouble()).toFloat()
+                            if (sweep > 0f) {
+                                drawArc(
+                                    color = colors[index],
+                                    startAngle = start,
+                                    sweepAngle = sweep,
+                                    useCenter = false,
+                                    topLeft = topLeft,
+                                    size = Size(diameter, diameter),
+                                    style = Stroke(width = strokeWidth, cap = StrokeCap.Butt),
+                                )
+                            }
+                            start += sweep
+                        }
                     }
                 }
                 val centerText = selected?.let { chartNumber(values[it], locale = locale) } ?: atlasText("$percentage %\nen stock", "$percentage %\nin stock", "$percentage %\nمتوفر")
@@ -471,11 +505,12 @@ internal fun HomeMetricsChartSkeleton(height: androidx.compose.ui.unit.Dp) {
 
 @Composable
 internal fun FinanceMovementFlowChart(summary: ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto) {
+    val palette = Atlas.palette
     val entries = listOf(
-        Triple(atlasText("Ventes encaissées", "Sales received", "مبيعات محصلة"), summary.salesReceived, CashBlue),
-        Triple(atlasText("Dépenses", "Expenses", "المصروفات"), summary.expenses, CashAmber),
-        Triple(atlasText("Salaires versés", "Payroll paid", "رواتب مدفوعة"), summary.payrollPaid, Color(0xFF8B5CF6)),
-        Triple(atlasText("Fournisseurs réglés", "Suppliers paid", "الموردون المدفوعون"), summary.supplierPaid, Color(0xFF0EA5E9)),
+        Triple(atlasText("Ventes encaissées", "Sales received", "مبيعات محصلة"), summary.salesReceived, palette.chartSales),
+        Triple(atlasText("Dépenses", "Expenses", "المصروفات"), summary.expenses, palette.chartExpense),
+        Triple(atlasText("Salaires versés", "Payroll paid", "رواتب مدفوعة"), summary.payrollPaid, palette.chartReceivable),
+        Triple(atlasText("Fournisseurs réglés", "Suppliers paid", "الموردون المدفوعون"), summary.supplierPaid, palette.chartPayable),
     )
     val maximum = entries.maxOfOrNull { it.second }?.coerceAtLeast(1.0) ?: 1.0
     val net = summary.salesReceived - (summary.expenses + summary.payrollPaid + summary.supplierPaid)
@@ -508,7 +543,7 @@ internal fun FinanceMovementFlowChart(summary: ma.etherealmber.atlascommerce.dat
                 chartMoney(net, summary.currency, locale),
                 style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum"),
                 fontWeight = FontWeight.Bold,
-                color = if (net >= 0) StockGreen else StockRed,
+                color = if (net >= 0) palette.positive else palette.danger,
             )
         }
     }
