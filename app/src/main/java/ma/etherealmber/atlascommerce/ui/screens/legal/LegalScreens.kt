@@ -48,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -73,9 +74,8 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasEntrance
-import ma.etherealmber.atlascommerce.ui.components.AtlasMark
+import ma.etherealmber.atlascommerce.ui.components.AtlasAnimatedBrand
 import ma.etherealmber.atlascommerce.ui.components.AtlasOutlinedButton
-import ma.etherealmber.atlascommerce.ui.components.AtlasPulseHalo
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
@@ -85,6 +85,7 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.root.AppViewModel
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
+import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 import ma.etherealmber.atlascommerce.ui.util.openExternal
 
 private val DiagnosticCategories = listOf(
@@ -660,6 +661,13 @@ private fun LegalPage(
             onBack = onBack,
             expanded = headerExpanded,
             onCollapsedClick = { headerExpanded = true },
+            titleLeading = {
+                AtlasAnimatedBrand(
+                    height = if (LocalConfiguration.current.screenWidthDp < 760) 28.dp else 30.dp,
+                    tint = if (LocalAtlasDarkTheme.current) Color.White else Color(0xFF0F1115),
+                    markOnly = true,
+                )
+            },
             modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
         )
     }
@@ -855,7 +863,12 @@ fun SecurityScreen(onBack: () -> Unit) {
         AtlasEntrance(delayMillis = 0) {
             AtlasCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    AtlasMark(size = 36.dp)
+                    AtlasAnimatedBrand(
+                        height = 30.dp,
+                        tint = if (LocalAtlasDarkTheme.current) Color.White else Color(0xFF0F1115),
+                        markOnly = true,
+                        animateWhenVisible = true,
+                    )
                     Spacer(Modifier.width(8.dp))
                     Column {
                         Text(atlasText("Confidentialité de l'application", "App privacy", "خصوصية التطبيق"), style = MaterialTheme.typography.titleSmall)
@@ -1073,9 +1086,12 @@ fun AboutScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                AtlasPulseHalo(size = 104.dp) {
-                    AtlasMark(size = 68.dp)
-                }
+                AtlasAnimatedBrand(
+                    height = 68.dp,
+                    tint = if (LocalAtlasDarkTheme.current) Color.White else Color(0xFF0F1115),
+                    markOnly = true,
+                    animateWhenVisible = true,
+                )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = AppDetails.NAME,

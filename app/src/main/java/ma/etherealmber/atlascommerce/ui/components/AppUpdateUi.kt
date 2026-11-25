@@ -434,7 +434,12 @@ fun MandatoryUpdateScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        AtlasMark(size = 68.dp)
+        AtlasAnimatedBrand(
+            height = 68.dp,
+            tint = MaterialTheme.colorScheme.onBackground,
+            markOnly = true,
+            animateWhenVisible = true,
+        )
         Spacer(Modifier.height(18.dp))
         Text(
             text = atlasText("Mise à jour requise", "Update required", "التحديث مطلوب"),

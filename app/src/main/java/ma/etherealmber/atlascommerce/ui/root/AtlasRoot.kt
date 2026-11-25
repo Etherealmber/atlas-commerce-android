@@ -67,13 +67,15 @@ import ma.etherealmber.atlascommerce.core.security.DeviceUnlockSetupPrompt
 import ma.etherealmber.atlascommerce.core.update.UpdateInfo
 import ma.etherealmber.atlascommerce.core.update.UpdateState
 import ma.etherealmber.atlascommerce.ui.components.AppUpdateBanner
-import ma.etherealmber.atlascommerce.ui.components.AtlasBootSplashScreen
+import ma.etherealmber.atlascommerce.ui.components.AtlasSplash
 import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
 import ma.etherealmber.atlascommerce.ui.components.TabletNavigationLayout
 import ma.etherealmber.atlascommerce.ui.components.AtlasWelcomeOnboardingScreen
 import ma.etherealmber.atlascommerce.ui.components.AtlasMobileWelcomeScreen
 import ma.etherealmber.atlascommerce.ui.components.AtlasMobileTourOverlay
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
+import ma.etherealmber.atlascommerce.ui.components.rememberSystemAnimatorEnabled
+import ma.etherealmber.atlascommerce.ui.components.LocalSystemAnimatorEnabled
 import ma.etherealmber.atlascommerce.ui.components.MandatoryUpdateScreen
 import ma.etherealmber.atlascommerce.ui.components.UpdateMiniProgressBall
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
@@ -94,6 +96,8 @@ import ma.etherealmber.atlascommerce.ui.shell.MainShell
 import ma.etherealmber.atlascommerce.ui.shell.MainTab
 import ma.etherealmber.atlascommerce.ui.theme.AtlasTheme
 import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
+import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasThemeMode
+import ma.etherealmber.atlascommerce.ui.theme.LocalSetAtlasThemeMode
 import ma.etherealmber.atlascommerce.ui.util.findActivity
 
 private object Overlay {
@@ -156,6 +160,7 @@ fun AtlasRoot(
     val updateServer by viewModel.server.collectAsStateWithLifecycle()
     val appearanceLoaded by viewModel.appearanceLoaded.collectAsStateWithLifecycle()
     val animationsEnabled by viewModel.animationsEnabled.collectAsStateWithLifecycle()
+    val systemAnimatorEnabled = rememberSystemAnimatorEnabled()
     var appearanceTimedOut by remember { mutableStateOf(false) }
 
     LaunchedEffect(appearanceLoaded) {
@@ -189,11 +194,14 @@ fun AtlasRoot(
     }
 
     CompositionLocalProvider(
-        LocalAtlasAnimationsEnabled provides animationsEnabled,
+        LocalAtlasAnimationsEnabled provides (animationsEnabled && systemAnimatorEnabled),
+        LocalSystemAnimatorEnabled provides systemAnimatorEnabled,
         LocalAtlasLanguage provides appLanguage,
         LocalSetAtlasLanguage provides viewModel::setAppLanguage,
         LocalAtlasUsesSystemLanguage provides appLanguageFollowsSystem,
         LocalUseSystemAtlasLanguage provides viewModel::followSystemAppLanguage,
+        LocalAtlasThemeMode provides themeMode,
+        LocalSetAtlasThemeMode provides viewModel::setThemeMode,
     ) {
         CompositionLocalProvider(
             LocalConfiguration provides localizedConfiguration,
@@ -243,7 +251,7 @@ fun AtlasRoot(
                     )
                 }
                 if (!appearanceLoaded && !appearanceTimedOut) {
-                    AtlasBootSplashScreen(holdUntilReady = true)
+                    AtlasSplash(holdUntilReady = true)
                 } else {
                     AtlasGate(
                         deepLinkQrToken = deepLinkQrToken,
@@ -504,9 +512,12 @@ private fun AtlasGate(
 
     val loadingBackend = !serverLoaded || session is SessionState.Loading
     val activeUser = (session as? SessionState.Active)?.user
+    val windowWidthDp = LocalConfiguration.current.screenWidthDp
     var savedShellTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
     var savedLastBottomTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
-    var sidebarCollapsed by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf(false) }
+    var sidebarCollapsed by rememberSaveable(activeUser?.scopeIdentity) {
+        mutableStateOf(windowWidthDp >= 600)
+    }
 
     val baseStage = when {
         !bootSplashFinished || loadingBackend -> RootStage.SPLASH
@@ -551,7 +562,7 @@ private fun AtlasGate(
                 indexSelector = { it.rank },
             ) { currentStage ->
                 when (currentStage) {
-                    RootStage.SPLASH -> AtlasBootSplashScreen(
+                    RootStage.SPLASH -> AtlasSplash(
                         onFinished = { bootSplashFinished = true },
                         holdUntilReady = loadingBackend,
                     )
@@ -644,12 +655,7 @@ private fun AtlasGate(
                                 user = activeUser,
                                 defaultStartTab = defaultStartTab,
                                 activeTabOverride = savedShellTab,
-                                onActiveTabChange = { nextTab ->
-                                    if (overlay != null && savedShellTab != null && savedShellTab != nextTab) {
-                                        overlay = null
-                                    }
-                                    savedShellTab = nextTab
-                                },
+                                onActiveTabChange = { savedShellTab = it },
                                 lastBottomTabOverride = savedLastBottomTab,
                                 onLastBottomTabChange = { savedLastBottomTab = it },
                                 sidebarCollapsed = sidebarCollapsed,
@@ -680,7 +686,7 @@ private fun AtlasGate(
                                 onStartUpdateDownload = startSettingsDownloadWithNotificationPermission,
                             )
                         } else {
-                            AtlasBootSplashScreen(holdUntilReady = true)
+                            AtlasSplash(holdUntilReady = true)
                         }
                     }
                 }
@@ -690,7 +696,10 @@ private fun AtlasGate(
                 AtlasMobileTourOverlay(
                     currentStep = mobileOnboarding.step,
                     onStep = viewModel::setMobileOnboardingStep,
-                    onFinish = viewModel::finishMobileOnboarding,
+                    onFinish = {
+                        viewModel.finishMobileOnboarding()
+                        requestedTab = MainTab.HOME.name
+                    },
                 )
             }
 

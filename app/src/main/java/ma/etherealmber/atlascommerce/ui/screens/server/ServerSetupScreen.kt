@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
@@ -59,6 +60,7 @@ import ma.etherealmber.atlascommerce.core.net.discoverDefaultGatewayIpv4
 import ma.etherealmber.atlascommerce.core.net.isLikelyVirtualAndroidRuntime
 import ma.etherealmber.atlascommerce.core.net.suggestedLocalEndpoint
 import ma.etherealmber.atlascommerce.core.persist.SavedServerEntry
+import ma.etherealmber.atlascommerce.ui.components.AtlasAnimatedBrand
 import ma.etherealmber.atlascommerce.ui.components.AtlasButton
 import ma.etherealmber.atlascommerce.ui.components.AtlasChip
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
@@ -70,10 +72,12 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.toneBackground
 import ma.etherealmber.atlascommerce.ui.components.toneForeground
 import ma.etherealmber.atlascommerce.ui.i18n.AtlasLanguageSelector
+import ma.etherealmber.atlascommerce.ui.i18n.AtlasThemeToolbarControl
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
+import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 
 private enum class ServerSetupStep { PICK_SAVED, ADDRESS }
 
@@ -383,8 +387,23 @@ private fun ServerSetupScreenContent(
             }) else null,
             expanded = headerExpanded,
             onCollapsedClick = { headerExpanded = true },
+            titleLeading = {
+                AtlasAnimatedBrand(
+                    height = if (LocalConfiguration.current.screenWidthDp < 760) 28.dp else 30.dp,
+                    tint = if (LocalAtlasDarkTheme.current) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color(0xFF0F1115),
+                    markOnly = true,
+                )
+            },
             modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
-            actions = { AtlasLanguageSelector(contentColor = foreground) },
+            actions = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    AtlasThemeToolbarControl()
+                    AtlasLanguageSelector(contentColor = foreground)
+                }
+            },
         )
     }
 

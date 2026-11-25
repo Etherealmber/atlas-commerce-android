@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ class MainActivity : FragmentActivity() {
     private var notificationInstallRequested by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) (application as AtlasApp).prepareLanguageForFreshLaunch()
         deepLinkQrToken = extractQrFromIntent(intent)
