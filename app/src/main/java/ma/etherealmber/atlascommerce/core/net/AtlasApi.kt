@@ -148,7 +148,7 @@ interface AtlasApi {
     suspend fun submitUserReport(@Body body: UserReportRequest): ApiEnvelope<UserReportReceiptDto>
 
     @PATCH("api/auth/me")
-    suspend fun updateMe(@Body body: ProfileUpdateRequest): ActionAckDto
+    suspend fun updateMe(@Body body: ProfileUpdateRequest): ApiEnvelope<MeDto>
 
     /** v0.7.5 — voluntary logout marks this device resumable for password-only return. */
     @POST("api/auth/logout")

@@ -81,6 +81,13 @@ data class SavedServerEntry(
     val savedAtMs: Long = 0L,
 )
 
+data class MobileOnboardingProgress(
+    val status: String? = null,
+    val step: Int = 0,
+) {
+    val pending: Boolean get() = status == "pending"
+}
+
 data class SavedAccountEntry(
     val serverUrl: String,
     val username: String,
@@ -153,6 +160,10 @@ class AtlasPreferences @Inject constructor(
         val SESSION_AVATAR = stringPreferencesKey("session_avatar_url")
         val SESSION_RESTORE_DISABLED = booleanPreferencesKey("session_restore_disabled")
         val ONBOARDING_DONE = booleanPreferencesKey("server_onboarding_done")
+        val MOBILE_WELCOME_COMPLETED = booleanPreferencesKey("mobile_welcome_completed")
+        val MOBILE_WELCOME_STEP = intPreferencesKey("mobile_welcome_step")
+        val MOBILE_ONBOARDING_STATUS = stringPreferencesKey("mobile_onboarding_status")
+        val MOBILE_ONBOARDING_STEP = intPreferencesKey("mobile_onboarding_step")
         val ENCRYPTED_PAYLOAD = stringPreferencesKey("atlas_encrypted_preferences_v1")
     }
 
@@ -663,6 +674,27 @@ class AtlasPreferences @Inject constructor(
         .map { it.safeBoolean(Keys.ONBOARDING_DONE.name) ?: false }
         .distinctUntilChanged()
 
+    val mobileWelcomeCompleted: Flow<Boolean> = safeData
+        .map { it[Keys.MOBILE_WELCOME_COMPLETED] ?: false }
+        .distinctUntilChanged()
+
+    val mobileWelcomeStep: Flow<Int> = safeData
+        .map { (it[Keys.MOBILE_WELCOME_STEP] ?: 0).coerceIn(0, 4) }
+        .distinctUntilChanged()
+
+    val mobileOnboardingPending: Flow<Boolean> = safeData
+        .map { it[Keys.MOBILE_ONBOARDING_STATUS] == "pending" }
+        .distinctUntilChanged()
+
+    val mobileOnboardingState: Flow<MobileOnboardingProgress> = safeData
+        .map { prefs ->
+            MobileOnboardingProgress(
+                status = prefs[Keys.MOBILE_ONBOARDING_STATUS],
+                step = (prefs[Keys.MOBILE_ONBOARDING_STEP] ?: 0).coerceIn(0, 5),
+            )
+        }
+        .distinctUntilChanged()
+
     suspend fun setApiBase(url: String?) {
         safeEdit { prefs ->
             prefs.removeByName(Keys.API_BASE.name)
@@ -907,6 +939,60 @@ class AtlasPreferences @Inject constructor(
     suspend fun setOnboardingDone(done: Boolean) {
         safeEdit { prefs -> prefs.putClean(Keys.ONBOARDING_DONE, done) }
         persistCurrentMobileSettingsAsDirty()
+    }
+
+    suspend fun setMobileWelcomeStep(step: Int) {
+        safeEdit { prefs -> prefs.putClean(Keys.MOBILE_WELCOME_STEP, step.coerceIn(0, 4)) }
+    }
+
+    suspend fun queueMobileOnboarding() {
+        safeEdit { prefs ->
+            if (prefs[Keys.MOBILE_ONBOARDING_STATUS] != "done") {
+                prefs.putClean(Keys.MOBILE_ONBOARDING_STATUS, "pending")
+                prefs.putClean(Keys.MOBILE_ONBOARDING_STEP, 0)
+            }
+        }
+    }
+
+    suspend fun restartMobileOnboarding() {
+        safeEdit { prefs ->
+            prefs.putClean(Keys.MOBILE_ONBOARDING_STATUS, "pending")
+            prefs.putClean(Keys.MOBILE_ONBOARDING_STEP, 0)
+        }
+    }
+
+    suspend fun setMobileOnboardingStep(step: Int) {
+        safeEdit { prefs ->
+            prefs.putClean(Keys.MOBILE_ONBOARDING_STATUS, "pending")
+            prefs.putClean(Keys.MOBILE_ONBOARDING_STEP, step.coerceIn(0, 5))
+        }
+    }
+
+    suspend fun finishMobileOnboarding() {
+        safeEdit { prefs ->
+            prefs.putClean(Keys.MOBILE_ONBOARDING_STATUS, "done")
+            prefs.putClean(Keys.MOBILE_ONBOARDING_STEP, 0)
+        }
+    }
+
+    /** Atomically complete welcome and either restart the demo tour or mark it skipped. */
+    suspend fun finishMobileWelcome(withTour: Boolean) {
+        safeEdit { prefs ->
+            prefs.putClean(Keys.MOBILE_WELCOME_COMPLETED, true)
+            prefs.remove(Keys.MOBILE_WELCOME_STEP)
+            prefs.putClean(Keys.MOBILE_ONBOARDING_STATUS, if (withTour) "pending" else "done")
+            prefs.putClean(Keys.MOBILE_ONBOARDING_STEP, 0)
+        }
+    }
+
+    /** Redoing welcome also forgets any previous tour completion/progress. */
+    suspend fun resetMobileWelcome() {
+        safeEdit { prefs ->
+            prefs.putClean(Keys.MOBILE_WELCOME_COMPLETED, false)
+            prefs.putClean(Keys.MOBILE_WELCOME_STEP, 0)
+            prefs.remove(Keys.MOBILE_ONBOARDING_STATUS)
+            prefs.remove(Keys.MOBILE_ONBOARDING_STEP)
+        }
     }
 
     suspend fun readSession(): StoredSession? {

@@ -227,6 +227,10 @@ data class MeDto(
     val email: String? = null,
     val phone: String? = null,
     @Json(name = "avatar_url") val avatarUrl: String? = null,
+    @Json(name = "job_title") val jobTitle: String? = null,
+    @Json(name = "working_hours") val workingHours: String? = null,
+    val timezone: String? = null,
+    @Json(name = "profile_updated_at") val profileUpdatedAt: String? = null,
     @Json(name = "reputationScore") val reputationScore: Int? = null,
     /** Set only by the startup validator after the legacy role-refresh endpoint succeeds. */
     @Json(ignore = true) val startupRoleRefreshValidated: Boolean = false,
@@ -238,6 +242,9 @@ data class ProfileUpdateRequest(
     val email: String? = null,
     val phone: String? = null,
     @Json(name = "avatar_url") val avatarUrl: String? = null,
+    @Json(name = "job_title") val jobTitle: String? = null,
+    @Json(name = "working_hours") val workingHours: String? = null,
+    val timezone: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
