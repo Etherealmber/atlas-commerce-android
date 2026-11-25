@@ -278,6 +278,7 @@ fun MainShell(
     var showAvatarSurprise by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showAgentSurprise by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var agentHistoryRequested by remember { mutableStateOf(false) }
+    var scanCreateProductRequest by remember { mutableStateOf(0) }
     val agentViewModel: AgentViewModel? = if (tab == MainTab.AGENT) hiltViewModel() else null
     val refreshAgentContext = rememberApiRefreshAction(
         key = "agent-context",
@@ -493,6 +494,7 @@ fun MainShell(
 
     val tabletTopBarDestination = tab in setOf(
         MainTab.AGENT,
+        MainTab.SCAN,
         MainTab.SALE,
         MainTab.NOTIFICATIONS,
         MainTab.CLIENTS,
@@ -531,7 +533,7 @@ fun MainShell(
                 source: NestedScrollSource,
             ): Offset {
                 val verticalDelta = if (consumed.y != 0f) consumed.y else available.y
-                if (useRail || verticalDelta == 0f) return Offset.Zero
+                if (useRail || tab == MainTab.SCAN || verticalDelta == 0f) return Offset.Zero
                 scrollDelta.floatValue += verticalDelta
                 when {
                     scrollDelta.floatValue <= -scrollDirectionThresholdPx -> {
@@ -633,7 +635,7 @@ fun MainShell(
                         ) { expanded ->
                             if (expanded) {
                                 AtlasTopBar(
-                                    title = if (!useRail || tab in setOf(MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS, MainTab.CLIENTS)) tab.localizedLabel() else "",
+                                    title = if (!useRail || tab in setOf(MainTab.AGENT, MainTab.SCAN, MainTab.SALE, MainTab.NOTIFICATIONS, MainTab.CLIENTS)) tab.localizedLabel() else "",
                                     subtitle = null,
                                     windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal),
                                     containerColor = Color.Transparent,
@@ -719,7 +721,39 @@ fun MainShell(
                                             }
                                         }
                                         when (tab) {
-                                            MainTab.AGENT, MainTab.SALE, MainTab.SCAN -> Unit
+                                            MainTab.AGENT, MainTab.SALE -> Unit
+
+                                            MainTab.SCAN -> {
+                                                Surface(
+                                                    onClick = { scanCreateProductRequest += 1 },
+                                                    modifier = Modifier.padding(end = 8.dp),
+                                                    shape = CircleShape,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                                    ) {
+                                                        Icon(
+                                                            if (Roles.canCreateProductDirectly(user.role)) Icons.Outlined.Add else Icons.Outlined.Send,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.size(16.dp),
+                                                        )
+                                                        Text(
+                                                            if (Roles.canCreateProductDirectly(user.role)) {
+                                                                atlasText("Nouveau produit", "New product", "منتج جديد")
+                                                            } else {
+                                                                atlasText("Demander à l'Admin", "Ask an admin", "طلب من المسؤول")
+                                                            },
+                                                            style = MaterialTheme.typography.labelMedium,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            maxLines = 1,
+                                                        )
+                                                    }
+                                                }
+                                            }
 
                                             MainTab.SETTINGS -> {
                                                 if (!useRail && isForeground) {
@@ -1014,7 +1048,8 @@ fun MainShell(
                         onOpenProducts = { switchTab(MainTab.PRODUCTS) },
                         onOpenQrDevice = onOpenQrDevice,
                         onToast = onToast,
-                        showMobileProductAction = !useRail,
+                        createProductRequest = scanCreateProductRequest,
+                        onCreateProductRequestHandled = { scanCreateProductRequest = 0 },
                     )
 
                     MainTab.SALE -> SaleScreen(
