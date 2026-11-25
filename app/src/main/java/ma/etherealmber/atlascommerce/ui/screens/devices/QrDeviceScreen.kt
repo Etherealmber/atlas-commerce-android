@@ -937,7 +937,7 @@ private fun SecurityDeviceRow(
             userAgent.contains("iPhone", ignoreCase = true) ||
             userAgent.contains("iPad", ignoreCase = true)
         )
-    val androidModel = Regex("Atlas-Android/[^ ]+ \(Android [^;]+; (.+)\)", RegexOption.IGNORE_CASE)
+    val androidModel = Regex("""Atlas-Android/[^ ]+ \(Android [^;]+; (.+)\)""", RegexOption.IGNORE_CASE)
         .find(userAgent)?.groupValues?.getOrNull(1)?.trim()?.takeIf(String::isNotBlank)
     val deviceLabel = when {
         isNativeAndroid -> listOf(atlasText("Téléphone Android", "Android phone", "هاتف أندرويد"), androidModel).filterNotNull().joinToString(" · ")
