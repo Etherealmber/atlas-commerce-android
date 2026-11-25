@@ -326,7 +326,7 @@ public final class LegacySourceQuarantine {
             "main/res/drawable-nodpi/welcome_shot_products.webp",
             "main/res/drawable-nodpi/welcome_shot_scan.webp",
             "test/java/ma/etherealmber/atlascommerce/core/session/SessionProfileFieldsTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/ui/screens/settings/ProfileTimeZoneTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/ui/screens/settings/ProfileTimeZoneTest.kt"
         )));
 
     private static final String V105_SENTINEL =
