@@ -326,7 +326,11 @@ public final class LegacySourceQuarantine {
             "main/res/drawable-nodpi/welcome_shot_products.webp",
             "main/res/drawable-nodpi/welcome_shot_scan.webp",
             "test/java/ma/etherealmber/atlascommerce/core/session/SessionProfileFieldsTest.kt",
-            "test/java/ma/etherealmber/atlascommerce/ui/screens/settings/ProfileTimeZoneTest.kt"
+            "test/java/ma/etherealmber/atlascommerce/ui/screens/settings/ProfileTimeZoneTest.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/components/AtlasFinanceBarChart.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/components/TabletNavigationLayout.kt",
+            "test/java/ma/etherealmber/atlascommerce/data/model/EmployeeClientProfileContractTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/ui/components/TabletNavigationLayoutTest.kt"
         )));
 
     private static final String V105_SENTINEL =
