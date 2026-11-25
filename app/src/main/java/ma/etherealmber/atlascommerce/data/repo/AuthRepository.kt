@@ -122,21 +122,21 @@ class AuthRepository @Inject constructor(
         email: String? = null,
         phone: String? = null,
         avatarUrl: String? = null,
-    ): ApiResult<Unit> {
-        val res = runner.status {
-            apiProvider.api().updateMe(
-                ProfileUpdateRequest(
-                    displayName = displayName,
-                    email = email,
-                    phone = phone,
-                    avatarUrl = avatarUrl,
-                ),
-            )
-        }
-        return when (res) {
-            is ApiResult.Failure -> res
-            is ApiResult.Success -> ApiResult.Success(Unit)
-        }
+        jobTitle: String? = null,
+        workingHours: String? = null,
+        timezone: String? = null,
+    ): ApiResult<MeDto> = runner.envelope {
+        apiProvider.api().updateMe(
+            ProfileUpdateRequest(
+                displayName = displayName,
+                email = email,
+                phone = phone,
+                avatarUrl = avatarUrl,
+                jobTitle = jobTitle,
+                workingHours = workingHours,
+                timezone = timezone,
+            ),
+        )
     }
 
     suspend fun devices(): ApiResult<List<TrustedDeviceDto>> =

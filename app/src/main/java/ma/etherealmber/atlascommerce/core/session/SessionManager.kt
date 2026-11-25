@@ -52,6 +52,10 @@ data class SessionUser(
     val phone: String = "",
     val avatarUrl: String = "",
     val serverUrl: String = "",
+    val jobTitle: String = "",
+    val workingHours: String = "",
+    val timezone: String = "Africa/Casablanca",
+    val profileUpdatedAt: String = "",
 ) {
     val isOwner: Boolean get() = role.equals("owner", ignoreCase = true)
 
@@ -68,6 +72,10 @@ internal fun SessionUser.withRefreshedProfile(me: MeDto): SessionUser = copy(
     email = me.email ?: email,
     phone = me.phone ?: phone,
     avatarUrl = me.avatarUrl?.takeIf { it.isNotBlank() } ?: avatarUrl,
+    jobTitle = me.jobTitle ?: jobTitle,
+    workingHours = me.workingHours ?: workingHours,
+    timezone = me.timezone?.takeIf { it.isNotBlank() } ?: timezone,
+    profileUpdatedAt = me.profileUpdatedAt ?: profileUpdatedAt,
 )
 
 sealed interface SessionState {
@@ -289,6 +297,10 @@ class SessionManager @Inject constructor(
             phone = profile.phone.orEmpty(),
             avatarUrl = profile.avatarUrl?.takeIf { it.isNotBlank() } ?: stored.avatarUrl,
             serverUrl = request.serverUrl,
+            jobTitle = profile.jobTitle.orEmpty(),
+            workingHours = profile.workingHours.orEmpty(),
+            timezone = profile.timezone?.takeIf { it.isNotBlank() } ?: "Africa/Casablanca",
+            profileUpdatedAt = profile.profileUpdatedAt.orEmpty(),
         )
         val sessionToken = validatedSessionToken(profile.token, request.bearerToken)
         return sessionTransitionMutex.withLock {
@@ -778,7 +790,10 @@ class SessionManager @Inject constructor(
         email: String? = null,
         phone: String? = null,
         avatarUrl: String? = null,
-    ): ApiResult<Unit> {
+        jobTitle: String? = null,
+        workingHours: String? = null,
+        timezone: String? = null,
+    ): ApiResult<MeDto> {
         val startingUser = (_state.value as? SessionState.Active)?.user
         val startingToken = tokenHolder.token
         val res = authRepository.updateProfile(
@@ -786,9 +801,11 @@ class SessionManager @Inject constructor(
             email = email,
             phone = phone,
             avatarUrl = avatarUrl,
+            jobTitle = jobTitle,
+            workingHours = workingHours,
+            timezone = timezone,
         )
         if (res is ApiResult.Success && startingUser != null && !startingToken.isNullOrBlank()) {
-            var stillCurrent = false
             sessionTransitionMutex.withLock {
                 if (!isProfileRefreshCurrent(
                         expectedScopeIdentity = startingUser.scopeIdentity,
@@ -797,14 +814,9 @@ class SessionManager @Inject constructor(
                         activeToken = tokenHolder.token,
                     )
                 ) return@withLock
-                val updated = startingUser.copy(
-                    displayName = displayName ?: startingUser.displayName,
-                    email = email ?: startingUser.email,
-                    phone = phone ?: startingUser.phone,
-                    avatarUrl = avatarUrl ?: startingUser.avatarUrl,
-                )
+                // Adopt the authoritative PATCH response; never persist optimistic local-only values.
+                val updated = startingUser.withRefreshedProfile(res.data)
                 _state.value = SessionState.Active(updated)
-                stillCurrent = true
                 runCatching {
                     preferences.writeSession(
                         serverUrl = updated.serverUrl,
@@ -817,7 +829,6 @@ class SessionManager @Inject constructor(
                     )
                 }
             }
-            if (stillCurrent) runCatching { refreshProfile() }
         }
         return res
     }

@@ -23,6 +23,7 @@ object AtlasIcons {
         val AutoFixHigh: ImageVector by lazy { atlasLucideVector(LucideIcons.All.WandSparklesDefinition) }
         val BookmarkBorder: ImageVector by lazy { atlasLucideVector(LucideIcons.All.BookmarkDefinition) }
         val Bot: ImageVector by lazy { atlasLucideVector(LucideIcons.All.BotDefinition) }
+        val Compass: ImageVector by lazy { atlasLucideVector(LucideIcons.All.CompassDefinition) }
         val BugReport: ImageVector by lazy { atlasLucideVector(LucideIcons.All.BugDefinition) }
         val CameraAlt: ImageVector by lazy { atlasLucideVector(LucideIcons.All.CameraDefinition) }
         val CheckBox: ImageVector by lazy { atlasLucideVector(LucideIcons.All.SquareCheckDefinition) }
@@ -34,6 +35,8 @@ object AtlasIcons {
         val Close: ImageVector by lazy { atlasLucideVector(LucideIcons.All.XDefinition) }
         val CloudOff: ImageVector by lazy { atlasLucideVector(LucideIcons.All.CloudOffDefinition) }
         val Computer: ImageVector by lazy { atlasLucideVector(LucideIcons.All.MonitorDefinition) }
+        val Sun: ImageVector by lazy { atlasLucideVector(LucideIcons.All.SunDefinition) }
+        val Moon: ImageVector by lazy { atlasLucideVector(LucideIcons.All.MoonDefinition) }
         val ContentCopy: ImageVector by lazy { atlasLucideVector(LucideIcons.All.CopyDefinition) }
         val CreditCard: ImageVector by lazy { atlasLucideVector(LucideIcons.All.CreditCardDefinition) }
         val Delete: ImageVector by lazy { atlasLucideVector(LucideIcons.All.Trash2Definition) }

@@ -279,6 +279,19 @@ class AppViewModel @Inject constructor(
     val onboardingDone: StateFlow<Boolean> = preferences.onboardingDone
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    val mobileWelcomeCompleted: StateFlow<Boolean> = preferences.mobileWelcomeCompleted
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val mobileWelcomeStep: StateFlow<Int> = preferences.mobileWelcomeStep
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val mobileOnboardingPending: StateFlow<Boolean> = preferences.mobileOnboardingPending
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val mobileOnboardingState: StateFlow<ma.etherealmber.atlascommerce.core.persist.MobileOnboardingProgress> =
+        preferences.mobileOnboardingState.stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            ma.etherealmber.atlascommerce.core.persist.MobileOnboardingProgress(),
+        )
+
     val server: StateFlow<ServerSelection?> = serverConfig.selection
     val serverLoaded: StateFlow<Boolean> = serverConfig.loaded
     val session: StateFlow<SessionState> = sessionManager.state
@@ -730,6 +743,9 @@ class AppViewModel @Inject constructor(
         displayName: String,
         email: String,
         phone: String,
+        jobTitle: String? = null,
+        workingHours: String? = null,
+        timezone: String? = null,
         onDone: (String, Boolean) -> Unit,
     ) {
         val cleanName = displayName.trim()
@@ -744,6 +760,9 @@ class AppViewModel @Inject constructor(
                     displayName = cleanName,
                     email = email.trim(),
                     phone = phone.trim(),
+                    jobTitle = jobTitle?.trim()?.take(60),
+                    workingHours = workingHours?.trim()?.take(40),
+                    timezone = timezone?.trim(),
                 )
             ) {
                 is ApiResult.Failure -> {
@@ -1036,6 +1055,30 @@ class AppViewModel @Inject constructor(
 
     fun replayOnboarding() {
         viewModelScope.launch { preferences.setOnboardingDone(false) }
+    }
+
+    fun saveMobileWelcomeStep(step: Int) {
+        viewModelScope.launch { preferences.setMobileWelcomeStep(step) }
+    }
+
+    fun completeMobileWelcome(withTour: Boolean) {
+        viewModelScope.launch { preferences.finishMobileWelcome(withTour) }
+    }
+
+    fun restartMobileOnboarding() {
+        viewModelScope.launch { preferences.restartMobileOnboarding() }
+    }
+
+    fun setMobileOnboardingStep(step: Int) {
+        viewModelScope.launch { preferences.setMobileOnboardingStep(step) }
+    }
+
+    fun finishMobileOnboarding() {
+        viewModelScope.launch { preferences.finishMobileOnboarding() }
+    }
+
+    fun resetMobileWelcome() {
+        viewModelScope.launch { preferences.resetMobileWelcome() }
     }
 
     fun signOut() {
