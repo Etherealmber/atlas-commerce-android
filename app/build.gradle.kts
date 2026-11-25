@@ -118,6 +118,8 @@ val releaseStorePath = signingProperties.getProperty("storeFile")?.takeIf { it.i
 val hasReleaseKeystore = releaseStorePath != null
 
 android {
+    // Keep the APK ABI-universal: no abiFilters or ABI splits are configured here.
+    // Any native libraries supplied by dependencies are packaged for the ABIs they support.
     namespace = "ma.etherealmber.atlascommerce"
     compileSdk = 35
 
@@ -146,8 +148,8 @@ android {
             ?.takeIf { it.isNotEmpty() }
             ?: "$effectiveRepoUrl/releases/latest/download/atlas-commerce.apk"
 
-        versionCode = overrideVersionCode ?: 181
-        versionName = overrideVersionName ?: "1.8.1"
+        versionCode = overrideVersionCode ?: 182
+        versionName = overrideVersionName ?: "1.8.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // The server is chosen by the user on first launch (see ServerSetupScreen).

@@ -79,8 +79,10 @@ jobs:
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
           python3 - <<'PYEOF'
-          import glob, hashlib, json, os, re, subprocess, urllib.request
+          import glob, hashlib, json, os, re, subprocess, sys, urllib.request
           import xml.etree.ElementTree as ET
+          sys.path.insert(0, "scripts")
+          from worker_route_audit import worker_has_route
 
           repo = os.environ["GITHUB_REPOSITORY"]
           dry_run = os.environ.get("DRY_RUN", "false").lower() == "true" or os.environ.get("GITHUB_ACTIONS") != "true"
@@ -295,7 +297,7 @@ jobs:
                       raw_route = "/" + m.group(1).lstrip("/")
                       # Normalize Retrofit `{id}` path params to prefix match
                       clean_prefix = re.sub(r"/\{[^}]+\}.*$", "", raw_route)
-                      if joined_worker and clean_prefix not in joined_worker:
+                      if joined_worker and not worker_has_route(clean_prefix, joined_worker):
                           missing_routes.append(f"- `{raw_route}` (declared in `AtlasApi.kt`, prefix `{clean_prefix}` not found in `Etherealmber/atlas-commerce/worker/**/*.ts`)")
                   if missing_routes:
                       findings.append({

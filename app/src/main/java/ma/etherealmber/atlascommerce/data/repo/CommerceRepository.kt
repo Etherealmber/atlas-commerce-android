@@ -51,6 +51,8 @@ import ma.etherealmber.atlascommerce.data.model.ExpenseDeleteRequest
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.FinanceStatementDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
+import ma.etherealmber.atlascommerce.data.model.InventoryLocationDto
+import ma.etherealmber.atlascommerce.data.model.InventoryPlacementDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionDto
 import ma.etherealmber.atlascommerce.data.model.MobileActionMetaDto
@@ -111,6 +113,12 @@ class CommerceRepository @Inject constructor(
 
     suspend fun productUnits(): ApiResult<List<ProductUnitDto>> =
         runner.envelope { apiProvider.api().productUnits() }
+
+    suspend fun inventoryLocations(): ApiResult<List<InventoryLocationDto>> =
+        runner.envelope { apiProvider.api().inventoryLocations() }
+
+    suspend fun inventoryPlacements(productId: Long): ApiResult<InventoryPlacementDto> =
+        runner.envelope { apiProvider.api().inventoryPlacements(productId) }
 
     suspend fun clients(): ApiResult<List<ClientDto>> =
         runner.envelope { apiProvider.api().clients() }
@@ -630,6 +638,7 @@ class CommerceRepository @Inject constructor(
 
         return runner.envelope {
             apiProvider.api().assistChat(
+                responseLanguage.tag,
                 AssistChatRequest(
                     message = outboundPrompt,
                     userMessage = cleanQuestion,
@@ -668,7 +677,7 @@ class CommerceRepository @Inject constructor(
         )
         return withContext(Dispatchers.IO) {
             try {
-                val response = apiProvider.api().assistChatStream(request)
+                val response = apiProvider.api().assistChatStream(responseLanguage.tag, request)
                 if (response.code() == 404) {
                     // Compatibility fallback is only used before an SSE body has opened.
                     response.errorBody()?.close()

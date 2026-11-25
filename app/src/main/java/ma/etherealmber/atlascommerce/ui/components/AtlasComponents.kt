@@ -116,6 +116,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalDensity
@@ -599,12 +600,14 @@ fun AtlasTopBar(
     title: String,
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
     titleLeading: (@Composable () -> Unit)? = null,
     windowInsets: WindowInsets? = null,
     containerColor: Color = MaterialTheme.colorScheme.background,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
+        modifier = modifier,
         title = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -650,7 +653,7 @@ fun AtlasTopBar(
     )
 }
 
-/** Shared floating page header with extra shadow-safe gutters so rounded corners never clip. */
+/** Adaptive page header: floating on phones and docked to tablet content surfaces. */
 @Composable
 fun AtlasFloatingTopBar(
     title: String,
@@ -663,6 +666,20 @@ fun AtlasFloatingTopBar(
     titleLeading: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
+    if (!TabletNavigationLayout.shouldShowFloatingPageTopBar(LocalConfiguration.current.screenWidthDp)) {
+        AtlasTopBar(
+            title = title,
+            subtitle = subtitle,
+            onBack = onBack,
+            modifier = modifier.fillMaxWidth().statusBarsPadding(),
+            titleLeading = titleLeading,
+            windowInsets = WindowInsets(0, 0, 0, 0),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            actions = actions,
+        )
+        return
+    }
+
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val collapsedInteractionSource = remember { MutableInteractionSource() }
     Box(
