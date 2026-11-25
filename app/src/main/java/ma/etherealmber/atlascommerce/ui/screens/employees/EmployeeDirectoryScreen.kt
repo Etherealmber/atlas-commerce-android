@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -59,6 +60,8 @@ import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.data.model.EmployeeDto
 import ma.etherealmber.atlascommerce.data.model.EmployeeUpdateRequest
 import ma.etherealmber.atlascommerce.ui.components.AtlasCard
+import ma.etherealmber.atlascommerce.ui.components.AtlasFinanceBarChart
+import ma.etherealmber.atlascommerce.ui.components.AtlasFinanceBarEntry
 import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasPaginationControls
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
@@ -530,15 +533,46 @@ private fun EmployeeProfilePage(
                     AtlasCard {
                         Text(atlasText("Profil et cycle de paie", "Profile and pay cycle", "الملف ودورة الدفع"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(8.dp))
-                        listOfNotNull(
-                            employee.phone.takeIf(String::isNotBlank)?.let { "${atlasText("Téléphone", "Phone", "الهاتف")}: $it" },
-                            employee.email.takeIf(String::isNotBlank)?.let { "Email: $it" },
-                            employee.joinedDate.takeIf(String::isNotBlank)?.let { "${atlasText("Date d’entrée", "Start date", "تاريخ البدء")}: ${atlasShortDate(it)}" },
-                            employee.lastPaidAt?.takeIf(String::isNotBlank)?.let { "${atlasText("Dernier paiement", "Last payment", "آخر دفعة")}: ${atlasShortDate(it)}" },
-                            "${atlasText("Cycle de paie", "Pay cycle", "دورة الدفع")}: ${if (employee.payCycleType == "monthly") atlasText("Mensuel (30 jours)", "Monthly (30 days)", "شهري (30 يوماً)") else atlasText("Tous les ${employee.payCycleDays} jours", "Every ${employee.payCycleDays} days", "كل ${employee.payCycleDays} يوم")}",
-                            "${atlasText("Montant journalier", "Daily pay", "الأجر اليومي")}: ${atlasMoney(employee.dailyRate, "MAD")}",
-                            if (employee.active == 0) atlasText("Statut : ancien employé", "Status: former employee", "الحالة: موظف سابق") else "${atlasText("Prochain paiement", "Next payment", "الدفعة التالية")}: ${employee.nextDue?.let { atlasShortDate(it) } ?: "—"}",
-                        ).forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            val left = listOf(
+                                atlasText("Contrat", "Contract", "العقد") to employee.contractType,
+                                atlasText("Heures par semaine", "Weekly hours", "ساعات أسبوعياً") to employee.weeklyHours?.let { atlasText("$it h", "$it h", "$it س") }.orEmpty(),
+                                atlasText("Date d’entrée", "Start date", "تاريخ البدء") to employee.joinedDate.takeIf(String::isNotBlank)?.let { atlasShortDate(it) }.orEmpty(),
+                                atlasText("Salaire du cycle", "Cycle salary", "راتب الدورة") to atlasMoney(employee.payAmount, "MAD"),
+                                atlasText("Cycle de paie", "Pay cycle", "دورة الدفع") to if (employee.payCycleType == "monthly") atlasText("Mensuel (30 jours)", "Monthly (30 days)", "شهري (30 يوماً)") else atlasText("Tous les ${employee.payCycleDays} jours", "Every ${employee.payCycleDays} days", "كل ${employee.payCycleDays} يوم"),
+                                atlasText("Salaire journalier", "Daily pay", "الأجر اليومي") to atlasMoney(employee.dailyRate, "MAD"),
+                                atlasText("Prochain paiement", "Next payment", "الدفعة التالية") to if (employee.active == 0) atlasText("Ancien employé", "Former employee", "موظف سابق") else employee.nextDue?.let { atlasShortDate(it) }.orEmpty(),
+                                atlasText("Dernier paiement", "Last payment", "آخر دفعة") to employee.lastPaidAt?.let { atlasShortDate(it) }.orEmpty(),
+                            )
+                            val right = listOf(
+                                atlasText("Téléphone", "Phone", "الهاتف") to employee.phone,
+                                "Email" to employee.email,
+                                atlasText("Nationalité", "Nationality", "الجنسية") to employee.nationality,
+                                atlasText("Date de naissance", "Date of birth", "تاريخ الميلاد") to employee.dateOfBirth.takeIf(String::isNotBlank)?.let { atlasShortDate(it) }.orEmpty(),
+                                atlasText("CIN / passeport", "National ID / passport", "رقم البطاقة / جواز السفر") to employee.nationalId,
+                                atlasText("Identifiant fiscal", "Tax ID", "المعرف الضريبي") to employee.taxId,
+                                atlasText("CNSS / assurance sociale", "CNSS / social insurance", "الضمان الاجتماعي") to employee.socialInsurance,
+                                atlasText("Assurance maladie", "Health insurance", "التأمين الصحي") to employee.healthInsurance,
+                                "RIB" to employee.rib,
+                            )
+                            if (maxWidth >= 600.dp) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                                    Column(Modifier.weight(1f)) { left.forEach { (label, value) -> EmployeeProfileInfo(label, value) } }
+                                    Column(Modifier.weight(1f)) { right.forEach { (label, value) -> EmployeeProfileInfo(label, value) } }
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                    (left + right).forEach { (label, value) -> EmployeeProfileInfo(label, value) }
+                                }
+                            }
+                        }
+                        if (employee.grossAccrued != null || employee.suggestedPay != null || employee.advancesInPeriod > 0) {
+                            AtlasDivider(Modifier.padding(vertical = 8.dp))
+                            Text(atlasText("Situation du cycle", "Current cycle", "وضع الدورة"), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                            employee.grossAccrued?.let { EmployeeProfileInfo(atlasText("Accumulation brute", "Gross accrued", "المستحق الإجمالي"), atlasMoney(it, "MAD")) }
+                            employee.suggestedPay?.let { EmployeeProfileInfo(atlasText("Reste suggéré à payer", "Suggested amount due", "المبلغ المقترح للدفع"), atlasMoney(it, "MAD")) }
+                            if (employee.advancesInPeriod > 0) EmployeeProfileInfo(atlasText("Acomptes du cycle", "Advances this cycle", "التسبيقات في الدورة"), atlasMoney(employee.advancesInPeriod, "MAD"))
+                        }
                         if (canMarkFormer && employee.active != 0) {
                             TextButton(onClick = onMarkFormer, enabled = !saving) {
                                 if (saving) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -546,6 +580,19 @@ private fun EmployeeProfilePage(
                             }
                         }
                     }
+                }
+                if (employee.payments.isNotEmpty()) item {
+                    AtlasFinanceBarChart(
+                        title = atlasText("Paiements récents", "Recent payments", "الدفعات الأخيرة"),
+                        entries = employee.payments.take(6).reversed().mapIndexed { index, payment ->
+                            AtlasFinanceBarEntry(
+                                label = payment.periodLabel.ifBlank { payment.paidAt.takeIf(String::isNotBlank)?.let { atlasShortDate(it) } ?: "#${index + 1}" },
+                                amount = payment.amount,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                        currency = "MAD",
+                    )
                 }
                 item { Text(atlasText("Historique des paiements", "Payment history", "سجل المدفوعات"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
                 if (employee.payments.isEmpty()) item {
@@ -575,6 +622,23 @@ private fun EmployeeProfilePage(
                     Icon(Icons.Outlined.Edit, contentDescription = atlasText("Modifier l’employé", "Edit employee", "تعديل الموظف"))
                 }
             },
+        )
+    }
+}
+
+@Composable
+private fun EmployeeProfileInfo(label: String, value: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            value.takeIf(String::isNotBlank) ?: atlasText("Non renseigné", "Not provided", "غير متوفر"),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (value.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

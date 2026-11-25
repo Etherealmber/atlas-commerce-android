@@ -57,6 +57,10 @@ import androidx.compose.foundation.verticalScroll
 import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Icon
@@ -113,6 +117,7 @@ import ma.etherealmber.atlascommerce.core.persist.SavedAccountEntry
 import ma.etherealmber.atlascommerce.core.security.DeviceUnlockAuthenticator
 import ma.etherealmber.atlascommerce.core.session.SessionUser
 import ma.etherealmber.atlascommerce.ui.components.AtlasAvatar
+import ma.etherealmber.atlascommerce.ui.components.AtlasInfoRow
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasMarkdown
@@ -225,6 +230,11 @@ fun ProfileScreen(
     var draftDisplayName by remember(user.displayName) { mutableStateOf(user.displayName) }
     var draftEmail by remember(user.email) { mutableStateOf(user.email) }
     var draftPhone by remember(user.phone) { mutableStateOf(user.phone) }
+    var draftJobTitle by remember(user.scopeIdentity) { mutableStateOf(user.jobTitle) }
+    var draftWorkingHours by remember(user.scopeIdentity) { mutableStateOf(user.workingHours) }
+    var draftTimezone by remember(user.scopeIdentity) { mutableStateOf(editableProfileTimeZone(user.timezone)) }
+    var profileSaveError by remember { mutableStateOf<String?>(null) }
+    var timezoneMenuExpanded by remember { mutableStateOf(false) }
     var draftClientName by remember(savedClientName) { mutableStateOf(savedClientName) }
 
     LaunchedEffect(isForeground, user.scopeIdentity) {
@@ -419,6 +429,10 @@ fun ProfileScreen(
                             draftDisplayName = user.displayName
                             draftEmail = user.email
                             draftPhone = user.phone
+                            draftJobTitle = user.jobTitle
+                            draftWorkingHours = user.workingHours
+                            draftTimezone = editableProfileTimeZone(user.timezone)
+                            profileSaveError = null
                             showEditProfile = true
                         },
                     ) {
@@ -446,6 +460,18 @@ fun ProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+        }
+
+        AtlasCard {
+            Text(atlasText("Compte", "Account", "الحساب"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            if (user.jobTitle.isNotBlank()) AtlasInfoRow(atlasText("Fonction", "Job title", "الوظيفة"), user.jobTitle)
+            if (user.workingHours.isNotBlank()) AtlasInfoRow(atlasText("Horaires", "Working hours", "ساعات العمل"), user.workingHours)
+            AtlasInfoRow(atlasText("Fuseau horaire", "Time zone", "المنطقة الزمنية"), profileTimeZoneLabel(user.timezone))
+            val updatedAt = formatProfileUpdatedAt(user.profileUpdatedAt)
+            AtlasInfoRow(
+                atlasText("Mis à jour", "Updated", "آخر تحديث"),
+                if (updatedAt.isNotBlank()) updatedAt else atlasText("Pas encore enregistré", "Not saved yet", "لم يُحفظ بعد"),
+            )
         }
 
         if (supportsStrongBiometricUnlock) currentSavedAccount?.let { account ->
@@ -917,8 +943,63 @@ fun ProfileScreen(
                             placeholder = "+212 …",
                             leadingIcon = Icons.Outlined.Phone,
                             keyboardType = KeyboardType.Phone,
+                            imeAction = ImeAction.Next,
+                        )
+                        AtlasTextField(
+                            value = draftJobTitle,
+                            onValueChange = { draftJobTitle = it.take(60) },
+                            label = atlasText("Fonction", "Job title", "الوظيفة"),
+                            placeholder = "Gérant, comptable…",
+                            leadingIcon = Icons.Outlined.Person,
+                            imeAction = ImeAction.Next,
+                        )
+                        AtlasTextField(
+                            value = draftWorkingHours,
+                            onValueChange = { draftWorkingHours = it.take(40) },
+                            label = atlasText("Horaires", "Working hours", "ساعات العمل"),
+                            placeholder = "09:00 – 18:00",
+                            leadingIcon = Icons.Outlined.History,
                             imeAction = ImeAction.Done,
                         )
+                        Box {
+                            OutlinedTextField(
+                                value = profileTimeZoneLabel(draftTimezone),
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text(atlasText("Fuseau horaire", "Time zone", "المنطقة الزمنية")) },
+                                trailingIcon = {
+                                    IconButton(onClick = { timezoneMenuExpanded = true }) {
+                                        Icon(Icons.Outlined.ExpandMore, contentDescription = atlasText("Choisir le fuseau horaire", "Choose time zone", "اختر المنطقة الزمنية"))
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().clickable { timezoneMenuExpanded = true },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                ),
+                                singleLine = true,
+                            )
+                            DropdownMenu(
+                                expanded = timezoneMenuExpanded,
+                                onDismissRequest = { timezoneMenuExpanded = false },
+                            ) {
+                                profileTimeZoneOptions(draftTimezone).forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                                        onClick = {
+                                            draftTimezone = option.id
+                                            timezoneMenuExpanded = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        profileSaveError?.let { error ->
+                            Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                     AtlasDivider()
                     Row(
@@ -932,14 +1013,22 @@ fun ProfileScreen(
                             text = atlasText("Enregistrer", "Save", "حفظ"),
                             loading = savingProfile,
                             onClick = {
-                                appViewModel.updateProfileDetails(draftDisplayName, draftEmail, draftPhone) { msg, success ->
-                                    val toastMessage = when {
-                                        success -> profileUpdatedToast
-                                        msg == "Le nom affiché ne peut pas être vide." -> emptyDisplayNameToast
-                                        else -> msg
+                                profileSaveError = null
+                                appViewModel.updateProfileDetails(
+                                    draftDisplayName,
+                                    draftEmail,
+                                    draftPhone,
+                                    draftJobTitle,
+                                    draftWorkingHours,
+                                    draftTimezone,
+                                ) { msg, success ->
+                                    if (success) {
+                                        profileSaveError = null
+                                        showEditProfile = false
+                                        onToast(profileUpdatedToast)
+                                    } else {
+                                        profileSaveError = if (msg == "Le nom affiché ne peut pas être vide.") emptyDisplayNameToast else msg
                                     }
-                                    onToast(toastMessage)
-                                    if (success) showEditProfile = false
                                 }
                             },
                             modifier = Modifier.weight(1f),

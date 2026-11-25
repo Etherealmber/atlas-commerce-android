@@ -65,6 +65,8 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/core/server/ServerConfig.kt",
             "main/java/ma/etherealmber/atlascommerce/core/session/FreshProcessStartup.kt",
             "main/java/ma/etherealmber/atlascommerce/core/session/SessionManager.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/sync/InventoryQueueProtocol.kt",
+            "main/java/ma/etherealmber/atlascommerce/core/sync/InventoryWriteQueue.kt",
             "main/java/ma/etherealmber/atlascommerce/core/sync/MobilePreferenceBackup.kt",
             "main/java/ma/etherealmber/atlascommerce/core/sync/MobilePreferenceJson.kt",
             "main/java/ma/etherealmber/atlascommerce/core/sync/MobilePreferencesSync.kt",
@@ -79,6 +81,7 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/data/CartStore.kt",
             "main/java/ma/etherealmber/atlascommerce/data/FinanceReportCache.kt",
             "main/java/ma/etherealmber/atlascommerce/data/OfflineCache.kt",
+            "main/java/ma/etherealmber/atlascommerce/data/ThermalPrinter.kt",
             "main/java/ma/etherealmber/atlascommerce/data/model/Models.kt",
             "main/java/ma/etherealmber/atlascommerce/data/model/ProductUnit.kt",
             "main/java/ma/etherealmber/atlascommerce/data/model/StartupRoleRefresh.kt",
@@ -297,10 +300,12 @@ public final class LegacySourceQuarantine {
             "test/java/ma/etherealmber/atlascommerce/core/security/DeviceIdentityTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/session/FreshProcessStartupTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/session/ProfileRefreshRoleSafetyTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/core/sync/InventoryWriteQueueContractTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/sync/MobilePreferenceBackupTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/sync/MobilePreferenceFailureParsingTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/sync/MobilePreferenceSchedulingTest.kt",
             "test/java/ma/etherealmber/atlascommerce/core/update/UpdateApkTrustTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/data/ThermalPrinterFormattingTest.kt",
             "test/java/ma/etherealmber/atlascommerce/data/model/MobilePreferencesContractTest.kt",
             "test/java/ma/etherealmber/atlascommerce/data/model/ProductRequestWireContractTest.kt",
             "test/java/ma/etherealmber/atlascommerce/data/repo/AgentContextNeedsTest.kt",
@@ -324,6 +329,7 @@ public final class LegacySourceQuarantine {
             "main/java/ma/etherealmber/atlascommerce/ui/icons/lucide/all/Moon.kt",
             "main/java/ma/etherealmber/atlascommerce/ui/icons/lucide/all/Sun.kt",
             "main/res/animator/atlas_splash_rotation.xml",
+            "main/java/ma/etherealmber/atlascommerce/ui/screens/settings/ProfileTimeZone.kt",
             "main/res/drawable-nodpi/welcome_shot_balance.webp",
             "main/res/drawable-nodpi/welcome_shot_home.webp",
             "main/res/drawable-nodpi/welcome_shot_products.webp",
@@ -347,6 +353,12 @@ public final class LegacySourceQuarantine {
             "main/res/drawable-nodpi/phone_products_demo.webp",
             "main/res/drawable-nodpi/phone_products_demo_dark.webp",
             "test/java/ma/etherealmber/atlascommerce/ui/components/ThemedShotsTest.kt"
+            "test/java/ma/etherealmber/atlascommerce/core/session/SessionProfileFieldsTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/ui/screens/settings/ProfileTimeZoneTest.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/components/AtlasFinanceBarChart.kt",
+            "main/java/ma/etherealmber/atlascommerce/ui/components/TabletNavigationLayout.kt",
+            "test/java/ma/etherealmber/atlascommerce/data/model/EmployeeClientProfileContractTest.kt",
+            "test/java/ma/etherealmber/atlascommerce/ui/components/TabletNavigationLayoutTest.kt"
         )));
 
     private static final String V105_SENTINEL =
