@@ -296,7 +296,7 @@ internal fun MoneyFlowChart(metrics: DailyMetricsDto?, currency: String) {
                 selected = if (selected == index) null else index
             }
         }) {
-            val maxValue = max(1.0, (incoming + outgoing).maxOfOrNull { it.maxOrNull() ?: 0.0 } ?: 1.0)
+            val maxValue = max(1.0, (incoming + outgoing).maxOrNull() ?: 1.0)
             val groupWidth = size.width / count
             val barWidth = groupWidth * 0.28f
             val visibleIndex = { slot: Int -> if (rtl) count - 1 - slot else slot }
@@ -387,7 +387,7 @@ internal fun StockHealthChart(metrics: DailyMetricsDto?, onViewAlerts: () -> Uni
                 }) {
                     var start = -90f
                     values.forEachIndexed { index, value ->
-                        val sweep = value / total * 360f * donutProgress
+                        val sweep = (value / total * 360.0 * donutProgress.toDouble()).toFloat()
                         drawArc(colors[index], start, sweep, false, style = Stroke(width = 18.dp.toPx(), cap = StrokeCap.Butt))
                         start += sweep
                     }
