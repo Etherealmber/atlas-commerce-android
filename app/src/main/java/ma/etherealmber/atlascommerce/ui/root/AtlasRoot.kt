@@ -507,7 +507,7 @@ private fun AtlasGate(
     var savedShellTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
     var savedLastBottomTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
     var sidebarCollapsed by rememberSaveable(activeUser?.scopeIdentity) {
-        mutableStateOf(baseConfiguration.screenWidthDp >= 600)
+        mutableStateOf(LocalConfiguration.current.screenWidthDp >= 600)
     }
 
     val baseStage = when {

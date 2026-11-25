@@ -1051,12 +1051,6 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { preferences.setOnboardingDone(false) }
     }
 
-    fun signOut() {
-        viewModelScope.launch { sessionManager.signOut(notifyServer = true) }
-    }
-}
-
-internal fun shouldRefreshForegroundData(lastRefreshMs: Long, nowMs: Long, minimumIntervalMs: Long): Boolean =
     fun saveMobileWelcomeStep(step: Int) {
         viewModelScope.launch { preferences.setMobileWelcomeStep(step) }
     }
@@ -1081,4 +1075,10 @@ internal fun shouldRefreshForegroundData(lastRefreshMs: Long, nowMs: Long, minim
         viewModelScope.launch { preferences.resetMobileWelcome() }
     }
 
+    fun signOut() {
+        viewModelScope.launch { sessionManager.signOut(notifyServer = true) }
+    }
+}
+
+internal fun shouldRefreshForegroundData(lastRefreshMs: Long, nowMs: Long, minimumIntervalMs: Long): Boolean =
     lastRefreshMs <= 0L || nowMs < lastRefreshMs || nowMs - lastRefreshMs >= minimumIntervalMs
