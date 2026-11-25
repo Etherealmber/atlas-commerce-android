@@ -683,11 +683,6 @@ private fun AtlasGate(
                 }
             }
 
-            // Full-screen overlay host layered above MainShell so opening License, Security,
-            // About, Devices (QR), or Server Setup NEVER destroys MainShell's
-            // active tab (e.g. Paramètres) or scroll position when tapping Retour / Back!
-            var lastOverlay by remember { mutableStateOf<String?>(null) }
-            if (overlay != null) {
             if (baseStage == RootStage.SHELL && activeUser != null && mobileOnboarding.status == "pending" && overlay == null) {
                 AtlasMobileTourOverlay(
                     currentStep = mobileOnboarding.step,
@@ -699,20 +694,25 @@ private fun AtlasGate(
                 )
             }
 
+            // Full-screen overlay host layered above MainShell so opening License, Security,
+            // About, Devices (QR), or Server Setup NEVER destroys MainShell's
+            // active tab (e.g. Paramètres) or scroll position when tapping Retour / Back!
+            var lastOverlay by remember { mutableStateOf<String?>(null) }
+            if (overlay != null) {
                 lastOverlay = overlay
             }
             val visibleOverlay = overlay ?: lastOverlay
-            AnimatedVisibility(
-                visible = bootSplashFinished && onboardingDone && !loadingBackend && overlay != null,
-                enter = slideInHorizontally(initialOffsetX = { it / 6 }) + fadeIn(),
-                exit = slideOutHorizontally(targetOffsetX = { it / 6 }) + fadeOut(),
-                modifier = Modifier.fillMaxSize(),
             val overlaySidebarWidth = if (baseStage == RootStage.SHELL && activeUser != null) {
                 TabletNavigationLayout.sidebarWidthDp(
                     windowWidthDp = LocalConfiguration.current.screenWidthDp,
                     collapsed = sidebarCollapsed,
                 ).dp
             } else 0.dp
+            AnimatedVisibility(
+                visible = bootSplashFinished && onboardingDone && !loadingBackend && overlay != null,
+                enter = slideInHorizontally(initialOffsetX = { it / 6 }) + fadeIn(),
+                exit = slideOutHorizontally(targetOffsetX = { it / 6 }) + fadeOut(),
+                modifier = Modifier.fillMaxSize(),
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize().padding(start = overlaySidebarWidth),
