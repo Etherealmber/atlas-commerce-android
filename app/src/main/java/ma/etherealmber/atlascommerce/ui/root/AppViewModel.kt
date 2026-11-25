@@ -743,9 +743,9 @@ class AppViewModel @Inject constructor(
         displayName: String,
         email: String,
         phone: String,
-        jobTitle: String,
-        workingHours: String,
-        timezone: String,
+        jobTitle: String? = null,
+        workingHours: String? = null,
+        timezone: String? = null,
         onDone: (String, Boolean) -> Unit,
     ) {
         val cleanName = displayName.trim()
@@ -760,9 +760,9 @@ class AppViewModel @Inject constructor(
                     displayName = cleanName,
                     email = email.trim(),
                     phone = phone.trim(),
-                    jobTitle = jobTitle.trim().take(60),
-                    workingHours = workingHours.trim().take(40),
-                    timezone = timezone.trim(),
+                    jobTitle = jobTitle?.trim()?.take(60),
+                    workingHours = workingHours?.trim()?.take(40),
+                    timezone = timezone?.trim(),
                 )
             ) {
                 is ApiResult.Failure -> {

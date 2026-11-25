@@ -50,12 +50,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -93,7 +93,7 @@ private val welcomeShots = listOf(
 )
 
 private fun welcomeFeatures(role: String): List<WelcomeFeature> = buildList {
-    if (Roles.canManageStock(role) || Roles.normalize(role) == Roles.STOCK) {
+    if (Roles.canAdjustStock(role) || Roles.normalize(role) == Roles.STOCK) {
         add(WelcomeFeature("Scanner", "Visez un code-barres : la fiche produit, le stock et l’historique s’ouvrent.", Icons.Outlined.QrCodeScanner))
     }
     add(WelcomeFeature("Produits & stock", "Cherchez, filtrez les ruptures et proposez un ajustement au bureau.", Icons.Outlined.Inventory2))
@@ -164,9 +164,6 @@ fun AtlasMobileWelcomeScreen(
         onStepChanged(stepIndex)
         androidx.compose.runtime.withFrameNanos { }
         runCatching { focusRequester.requestFocus() }
-    }
-    LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage }.distinctUntilChanged().collectLatest { }
     }
     BackHandler(enabled = true) {
         if (stepIndex > 0) stepIndex = (stepIndex - 1).coerceAtLeast(0)
