@@ -604,12 +604,20 @@ fun BalanceScreen(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        MonthSelector(selectedPeriod = state.selectedPeriod, onSelect = viewModel::selectPeriod)
-                        IconButton(onClick = refreshBalance, enabled = !state.refreshing) {
-                            if (state.refreshing) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
-                            else Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les soldes"))
+                        MonthSelector(
+                            selectedPeriod = state.selectedPeriod,
+                            onSelect = viewModel::selectPeriod,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(
+                            onClick = refreshBalance,
+                            enabled = !state.refreshing,
+                            modifier = Modifier.size(48.dp),
+                        ) {
+                            if (state.refreshing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.Outlined.Refresh, contentDescription = atlasText("Actualiser les soldes"), modifier = Modifier.size(22.dp))
                         }
                     }
                 }
@@ -902,15 +910,29 @@ fun BalanceScreen(
     }
 
 @Composable
-private fun MonthSelector(selectedPeriod: String?, onSelect: (String) -> Unit) {
+private fun MonthSelector(
+    selectedPeriod: String?,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val locale = atlasLocale()
     val now = remember { YearMonth.now() }
     val periods = remember(now) { (0..23).map { now.minusMonths(it.toLong()) } }
     var expanded by remember { mutableStateOf(false) }
     val current = selectedPeriod?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
-    Box {
-        FilledTonalButton(onClick = { expanded = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp)) {
-            Text(current?.let { monthLabel(it, locale) } ?: atlasText("Mois"), style = MaterialTheme.typography.labelLarge)
+    Box(modifier) {
+        FilledTonalButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+            Text(
+                current?.let { monthLabel(it, locale) } ?: atlasText("Mois"),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Icon(Icons.Outlined.ExpandMore, contentDescription = atlasText("Choisir un mois"))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {

@@ -58,6 +58,7 @@ import ma.etherealmber.atlascommerce.ui.components.AtlasDivider
 import ma.etherealmber.atlascommerce.ui.components.AtlasEmptyState
 import ma.etherealmber.atlascommerce.ui.components.AtlasErrorCard
 import ma.etherealmber.atlascommerce.ui.components.AtlasFloatingTopBar
+import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.AtlasTextField
 import ma.etherealmber.atlascommerce.ui.components.AtlasTone
 import ma.etherealmber.atlascommerce.ui.components.rememberAtlasFloatingTopBarScrollConnection
@@ -170,7 +171,7 @@ private fun ClientsListContent(
     val currentPageClients = clients.drop((page - 1) * CLIENT_PAGE_SIZE).take(CLIENT_PAGE_SIZE)
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + topInset, bottom = 28.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + topInset, bottom = 28.dp + LocalAtlasFloatingDockPadding.current),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
@@ -242,7 +243,7 @@ private fun ClientDirectoryCard(
         .mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
     var showSituation by rememberSaveable(client.id) { mutableStateOf(false) }
 
-    AtlasCard(onClick = onDetails) {
+    AtlasCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Surface(
                 modifier = Modifier.size(44.dp),

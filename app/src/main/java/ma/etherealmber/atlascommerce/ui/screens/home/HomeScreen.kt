@@ -35,6 +35,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -280,10 +282,20 @@ fun HomeScreen(
         if (state.offline) onToast("Hors ligne — dernières données affichées.")
     }
 
+    val pullToRefreshState = rememberPullToRefreshState()
     PullToRefreshBox(
         isRefreshing = state.refreshing,
         onRefresh = refreshDashboard,
         modifier = Modifier.fillMaxSize(),
+        state = pullToRefreshState,
+        indicator = {
+            PullToRefreshDefaults.Indicator(
+                state = pullToRefreshState,
+                isRefreshing = state.refreshing,
+                modifier = Modifier.align(Alignment.TopCenter)
+                    .padding(top = LocalAtlasFloatingTopBarPadding.current + 8.dp),
+            )
+        },
     ) {
     when {
         state.loading && dashboard == null -> AtlasDashboardSkeleton(
@@ -533,85 +545,6 @@ private fun HomeContent(
                 currency = state.currency,
             )
         }
-        item(key = "home_money_flow") {
-            if (state.metricsLoading && state.dailyMetrics == null) HomeMetricsChartSkeleton(188.dp)
-            else MoneyFlowChart(state.dailyMetrics, state.currency)
-        }
-        item(key = "home_stock_health") {
-            if (state.metricsLoading && state.dailyMetrics == null) HomeMetricsChartSkeleton(198.dp)
-            else StockHealthChart(state.dailyMetrics, onOpenProductsAlerts)
-        }
-
-        // Primary role-gated action bar
-        item {
-            AtlasEntrance(delayMillis = 45) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (canSell) {
-                        AtlasButton(
-                            text = atlasText("Nouvelle vente", "New sale", "بيع جديد"),
-                            onClick = onOpenSale,
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Outlined.PointOfSale,
-                        )
-                    } else {
-                        AtlasButton(
-                            text = atlasText("Scanner", "Scan", "مسح ضوئي"),
-                            onClick = onOpenScan,
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Outlined.QrCodeScanner,
-                        )
-                    }
-                    AtlasOutlinedButton(
-                        text = atlasText("Produits", "Products", "المنتجات"),
-                        onClick = onOpenProducts,
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Outlined.Inventory2,
-                    )
-                }
-            }
-        }
-
-        // Role Info Box quick card
-        item {
-            AtlasEntrance(delayMillis = 75) {
-                AtlasCard(onClick = onOpenNotifications, padding = 12.dp) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (isAdmin) {
-                                Icons.Outlined.AdminPanelSettings
-                            } else {
-                                Icons.Outlined.NotificationsActive
-                            },
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = if (isAdmin) atlasText("Demandes & notifications", "Requests & notifications", "الطلبات والإشعارات") else atlasText("Notifications", "Notifications", "الإشعارات"),
-
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = atlasText(
-                                    "Retrouvez ici vos demandes et notifications récentes.",
-                                    "Your recent requests and notifications appear here.",
-                                    "ستظهر طلباتك وإشعاراتك الأخيرة هنا.",
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        AtlasChip(
-                            text = atlasText("Ouvrir", "Open", "فتح"),
-                            tone = AtlasTone.INFO,
-                        )
-                    }
-                }
-            }
-        }
 
         item {
             AtlasEntrance(delayMillis = 105) {
@@ -670,6 +603,83 @@ private fun HomeContent(
                 }
             }
         }
+
+
+        // Primary role-gated action bar
+        item {
+            AtlasEntrance(delayMillis = 45) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (canSell) {
+                        AtlasButton(
+                            text = atlasText("Nouvelle vente", "New sale", "بيع جديد"),
+                            onClick = onOpenSale,
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.PointOfSale,
+                        )
+                    } else {
+                        AtlasButton(
+                            text = atlasText("Scanner", "Scan", "مسح ضوئي"),
+                            onClick = onOpenScan,
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.QrCodeScanner,
+                        )
+                    }
+                    AtlasOutlinedButton(
+                        text = atlasText("Produits", "Products", "المنتجات"),
+                        onClick = onOpenProducts,
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Outlined.Inventory2,
+                    )
+                }
+            }
+        }
+
+        item(key = "home_money_flow") {
+            if (state.metricsLoading && state.dailyMetrics == null) HomeMetricsChartSkeleton(188.dp)
+            else MoneyFlowChart(state.dailyMetrics, state.currency)
+        }
+        // Role Info Box quick card
+        item {
+            AtlasEntrance(delayMillis = 75) {
+                AtlasCard(onClick = onOpenNotifications, padding = 12.dp) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isAdmin) {
+                                Icons.Outlined.AdminPanelSettings
+                            } else {
+                                Icons.Outlined.NotificationsActive
+                            },
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = if (isAdmin) atlasText("Demandes & notifications", "Requests & notifications", "الطلبات والإشعارات") else atlasText("Notifications", "Notifications", "الإشعارات"),
+
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = atlasText(
+                                    "Retrouvez ici vos demandes et notifications récentes.",
+                                    "Your recent requests and notifications appear here.",
+                                    "ستظهر طلباتك وإشعاراتك الأخيرة هنا.",
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        AtlasChip(
+                            text = atlasText("Ouvrir", "Open", "فتح"),
+                            tone = AtlasTone.INFO,
+                        )
+                    }
+                }
+            }
+        }
+
 
         if (dashboard.monthlySeries.isNotEmpty()) {
             item(key = "monthly_sales_trend") {
@@ -755,6 +765,10 @@ private fun HomeContent(
             }
         }
 
+        item(key = "home_stock_health") {
+            if (state.metricsLoading && state.dailyMetrics == null) HomeMetricsChartSkeleton(198.dp)
+            else StockHealthChart(state.dailyMetrics, onOpenProductsAlerts)
+        }
     }
 }
 
