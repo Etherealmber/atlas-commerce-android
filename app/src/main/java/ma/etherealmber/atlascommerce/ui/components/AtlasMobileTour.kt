@@ -1,6 +1,17 @@
 package ma.etherealmber.atlascommerce.ui.components
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -48,8 +59,8 @@ private data class TourStep(val id: String, val title: String, val body: String,
 private val mobileTourSteps = listOf(
     TourStep("home", "Votre accueil", "Trésorerie ou stock, alertes et derniers documents : l’essentiel de la journée, mis à jour depuis le serveur. Touchez ↻ pour actualiser.", true),
     TourStep("dock", "La barre du bas", "Accueil, Produits, Scan, puis Balance et Employés selon votre rôle. Elle reste visible sur les pages principales.", true),
-    TourStep("scan", "Scanner un code-barres", "Le bouton central ouvre la caméra : la fiche produit, le stock et l’historique s’affichent. Un ajustement part en demande vers le bureau.", true),
-    TourStep("quick", "Le menu rapide", "Notifications et actions en attente, nouvelle vente et clients, en un toucher depuis n’importe quelle page principale.", true),
+    TourStep("scan", "Scanner un code-barres", "Le bouton central ouvre la caméra : la fiche produit, le stock et l’historique s’affichent. Un ajustement part en demande vers le bureau.", false),
+    TourStep("quick", "Notifications et menu rapide", "Consultez ici les notifications et actions en attente. Les ventes et clients restent accessibles depuis le menu rapide.", false),
     TourStep("agent", "Atlas Agent", "« Rapport du jour », « Quels articles sont en rupture ? »… L’agent prépare la réponse ou l’action, vous la confirmez.", false),
     TourStep("profile", "Profil et réglages", "Photo, thème, taille du texte et page d’ouverture. Vous pourrez revoir cette visite depuis Réglages → Visite guidée.", false),
 )
@@ -89,11 +100,23 @@ fun AtlasMobileTourOverlay(
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.58f))
+            .background(Color.Black.copy(alpha = 0.18f))
             .pointerInput(Unit) { detectTapGestures(onTap = {}) }
             .semantics { dialog() },
     ) {
-        if (settled == 1) {
+        AnimatedVisibility(
+            visible = settled == 1,
+            enter = if (LocalAtlasAnimationsEnabled.current) {
+                fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+                    slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it / 12 } +
+                    scaleIn(tween(220, easing = FastOutSlowInEasing), initialScale = 0.97f)
+            } else EnterTransition.None,
+            exit = if (LocalAtlasAnimationsEnabled.current) {
+                fadeOut(tween(150, easing = FastOutSlowInEasing)) +
+                    slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { it / 18 } +
+                    scaleOut(tween(150, easing = FastOutSlowInEasing), targetScale = 0.98f)
+            } else ExitTransition.None,
+        ) {
             Surface(
                 modifier = Modifier
                     .align(if (step.targetOnLowerHalf) Alignment.TopCenter else Alignment.BottomCenter)
@@ -119,7 +142,7 @@ fun AtlasMobileTourOverlay(
                     }
                     Text(step.title, color = foreground, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(step.body, color = muted, style = MaterialTheme.typography.bodyMedium)
-                    Text("Démonstration uniquement : rien n’est ajouté à votre base de données. Vous pouvez passer la visite à tout moment.", color = muted, style = MaterialTheme.typography.bodySmall)
+                    Text("L’écran derrière cette carte est la vraie page Atlas. Démonstration uniquement : rien n’est modifié, et vous pouvez quitter à tout moment.", color = muted, style = MaterialTheme.typography.bodySmall)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                             mobileTourSteps.indices.forEach { index ->

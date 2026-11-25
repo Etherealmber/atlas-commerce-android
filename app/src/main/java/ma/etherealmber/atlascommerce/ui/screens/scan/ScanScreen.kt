@@ -9,17 +9,11 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -113,7 +107,8 @@ fun ScanScreen(
     onOpenProducts: () -> Unit,
     onOpenQrDevice: (String?) -> Unit,
     onToast: (String) -> Unit,
-    showMobileProductAction: Boolean = true,
+    createProductRequest: Int = 0,
+    onCreateProductRequestHandled: () -> Unit = {},
     viewModel: ScanViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -177,6 +172,13 @@ fun ScanScreen(
     LaunchedEffect(state.notFound, state.lastCode, state.pendingApproval) {
         if (state.notFound && !state.pendingApproval && !state.lastCode.isNullOrBlank()) {
             showCreateDialog = true
+        }
+    }
+
+    LaunchedEffect(createProductRequest) {
+        if (createProductRequest > 0) {
+            showCreateDialog = true
+            onCreateProductRequestHandled()
         }
     }
 
@@ -304,48 +306,17 @@ fun ScanScreen(
                         }
                     }
                 }
-                if (showMobileProductAction || hardwareActive) {
+                if (hardwareActive) {
                     Surface(
                         color = ArtPalette.scanControlOverlay,
                         shape = MaterialTheme.shapes.large,
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            AnimatedVisibility(
-                                visible = showMobileProductAction,
-                                enter = if (LocalAtlasAnimationsEnabled.current) {
-                                    fadeIn(tween(240, easing = FastOutSlowInEasing)) +
-                                        scaleIn(tween(240, easing = FastOutSlowInEasing), initialScale = 0.9f) +
-                                        slideInVertically(tween(240, easing = FastOutSlowInEasing)) { it / 4 }
-                                } else EnterTransition.None,
-                                exit = if (LocalAtlasAnimationsEnabled.current) {
-                                    fadeOut(tween(150, easing = FastOutSlowInEasing)) +
-                                        scaleOut(tween(150, easing = FastOutSlowInEasing), targetScale = 0.92f) +
-                                        slideOutVertically(tween(150, easing = FastOutSlowInEasing)) { it / 5 }
-                                } else ExitTransition.None,
-                            ) {
-                                TextButton(onClick = { showCreateDialog = true }) {
-                                    Icon(
-                                        if (isAdmin) Icons.Outlined.Add else Icons.Outlined.Send,
-                                        contentDescription = null,
-                                        tint = ArtPalette.white,
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        text = if (isAdmin) atlasText("Nouveau produit", "New product", "منتج جديد") else atlasText("Demander à l'Admin", "Ask an admin", "طلب من المسؤول"),
-                                        color = ArtPalette.white,
-                                    )
-                                }
-                            }
-                            if (hardwareActive) {
-                                IconButton(onClick = { viewModel.setCameraEnabled(false) }) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.VideocamOff,
-                                        contentDescription = atlasText("Fermer la caméra", "Close camera", "إغلاق الكاميرا"),
-                                        tint = ArtPalette.white,
-                                    )
-                                }
-                            }
+                        IconButton(onClick = { viewModel.setCameraEnabled(false) }) {
+                            Icon(
+                                imageVector = Icons.Outlined.VideocamOff,
+                                contentDescription = atlasText("Fermer la caméra", "Close camera", "إغلاق الكاميرا"),
+                                tint = ArtPalette.white,
+                            )
                         }
                     }
                 }
