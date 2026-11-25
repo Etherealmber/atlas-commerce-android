@@ -9,4 +9,10 @@
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
+    <style name="Theme.Atlas.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/atlas_window_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/atlas_splash_animated</item>
+        <item name="windowSplashScreenAnimationDuration">1400</item>
+        <item name="postSplashScreenTheme">@style/Theme.Atlas</item>
+    </style>
 </resources>

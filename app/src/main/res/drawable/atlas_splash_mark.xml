@@ -1,0 +1,23 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="252dp"
+    android:height="252dp"
+    android:viewportWidth="252"
+    android:viewportHeight="252">
+    <group
+        android:name="spinGroup"
+        android:pivotX="126"
+        android:pivotY="126">
+        <path
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="@color/atlas_ink"
+            android:strokeWidth="9"
+            android:strokeLineCap="butt"
+            android:pathData="M198.99,156.23 L241.48,173.84 M181.86,181.86 L214.39,214.39 M156.23,198.99 L173.84,241.48 M126.00,205.00 L126.00,251.00 M95.77,198.99 L78.16,241.48 M70.14,181.86 L37.61,214.39 M53.01,156.23 L10.52,173.84 M47.00,126.00 L1.00,126.00 M53.01,95.77 L10.52,78.16 M70.14,70.14 L37.61,37.61 M95.77,53.01 L78.16,10.52 M126.00,47.00 L126.00,1.00 M156.23,53.01 L173.84,10.52 M181.86,70.14 L214.39,37.61 M198.99,95.77 L241.48,78.16" />
+        <path
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="@color/atlas_ink"
+            android:strokeWidth="9"
+            android:strokeLineCap="butt"
+            android:pathData="M126,126 L251,126" />
+    </group>
+</vector>

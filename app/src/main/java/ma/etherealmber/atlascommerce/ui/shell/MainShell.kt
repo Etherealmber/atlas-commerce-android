@@ -119,6 +119,7 @@ import ma.etherealmber.atlascommerce.ui.components.nextSurprise
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarExpanded
+import ma.etherealmber.atlascommerce.ui.components.TabletNavigationLayout
 import ma.etherealmber.atlascommerce.ui.theme.LocalAtlasDarkTheme
 import ma.etherealmber.atlascommerce.ui.components.AtlasPageTransition
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
@@ -278,6 +279,7 @@ fun MainShell(
     var showAgentSurprise by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var agentHistoryRequested by remember { mutableStateOf(false) }
     var productAlertFilterRequest by remember { mutableStateOf(0) }
+    var scanCreateProductRequest by remember { mutableStateOf(0) }
     val agentViewModel: AgentViewModel? = if (tab == MainTab.AGENT) hiltViewModel() else null
     val refreshAgentContext = rememberApiRefreshAction(
         key = "agent-context",
@@ -471,15 +473,15 @@ fun MainShell(
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val shellMaxHeight = maxHeight
-    val useRail = maxWidth >= 600.dp
+    val useRail = maxWidth >= TabletNavigationLayout.RAIL_BREAKPOINT_DP.dp
     val useDesktopSidebar = maxWidth >= 1000.dp
     val pageTarget = ShellPageTarget(tab = tab, isDataStorage = useRail && showDataCacheManagerDialog)
     // A full drawer consumes too much of a medium-width window (especially split-screen).
     // Keep those windows on a compact rail; allow an expanded drawer from 840dp upward.
-    val sidebarCanExpand = maxWidth >= 840.dp
+    val sidebarCanExpand = maxWidth >= TabletNavigationLayout.EXPANDED_BREAKPOINT_DP.dp
     val sidebarExpanded = sidebarCanExpand && !sidebarCollapsed
     val sidebarWidth by animateDpAsState(
-        targetValue = if (!useRail) 0.dp else if (sidebarExpanded) 264.dp else 76.dp,
+        targetValue = TabletNavigationLayout.sidebarWidthDp(maxWidth.value.toInt(), sidebarCollapsed).dp,
         animationSpec = spring(dampingRatio = 0.86f, stiffness = 360f),
         label = "atlas-sidebar-width",
     )
@@ -491,10 +493,20 @@ fun MainShell(
         )
     }
 
-    val showShellTopBar = isForeground && !profileDetailActive && !pageTarget.isDataStorage && (
-        (!useRail && !productHistoryActive && !releaseHistorySubpageActive) ||
-            (useRail && tab in setOf(MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS, MainTab.CLIENTS) && !productHistoryActive)
-        )
+    val tabletTopBarDestination = tab in setOf(
+        MainTab.AGENT,
+        MainTab.SCAN,
+        MainTab.SALE,
+        MainTab.NOTIFICATIONS,
+        MainTab.CLIENTS,
+    )
+    val showShellTopBar = TabletNavigationLayout.shouldShowShellTopBar(
+        isTablet = useRail,
+        isForeground = isForeground,
+        tabletDestinationHasTopBar = tabletTopBarDestination,
+        profileDetailActive = profileDetailActive,
+        nestedPageActive = pageTarget.isDataStorage || productHistoryActive || releaseHistorySubpageActive,
+    )
     var shellTopBarVisible by remember { mutableStateOf(false) }
     LaunchedEffect(showShellTopBar) {
         shellTopBarVisible = showShellTopBar
@@ -506,6 +518,7 @@ fun MainShell(
         ?: roleTabs.firstOrNull()
         ?: MainTab.HOME
     val floatingTopBarExpanded = remember(tab) { mutableStateOf(true) }
+    val shellTopBarExpanded = useRail || floatingTopBarExpanded.value
     val collapsedHeaderDescription = atlasText("Développer l’en-tête", "Expand header", "توسيع الرأس")
     val scrollDelta = remember(tab) { mutableFloatStateOf(0f) }
     LaunchedEffect(tab, productHistoryActive, releaseHistorySubpageActive, isForeground) {
@@ -521,7 +534,7 @@ fun MainShell(
                 source: NestedScrollSource,
             ): Offset {
                 val verticalDelta = if (consumed.y != 0f) consumed.y else available.y
-                if ((useRail && tab != MainTab.AGENT) || verticalDelta == 0f) return Offset.Zero
+                if (useRail || tab == MainTab.SCAN || verticalDelta == 0f) return Offset.Zero
                 scrollDelta.floatValue += verticalDelta
                 when {
                     scrollDelta.floatValue <= -scrollDirectionThresholdPx -> {
@@ -555,14 +568,14 @@ fun MainShell(
                 // immediately instead of letting its exit animation cover that page toolbar.
                 visible = shellTopBarVisible && !profileDetailActive,
                 modifier = Modifier.graphicsLayer { clip = false },
-                enter = if (motionEnabled) {
+                enter = if (motionEnabled && !useRail) {
                     fadeIn(tween(220, easing = FastOutSlowInEasing)) +
                         slideInVertically(
                             animationSpec = tween(260, easing = FastOutSlowInEasing),
                             initialOffsetY = { height -> -height / 4 },
                         ) + scaleIn(tween(220, easing = FastOutSlowInEasing), initialScale = 0.98f)
                 } else EnterTransition.None,
-                exit = if (motionEnabled && !profileDetailActive) {
+                exit = if (motionEnabled && !useRail && !profileDetailActive) {
                     fadeOut(tween(150, easing = FastOutSlowInEasing)) +
                         slideOutVertically(
                             animationSpec = tween(180, easing = FastOutSlowInEasing),
@@ -574,11 +587,9 @@ fun MainShell(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(
-                            start = if (useRail) sidebarWidth + 20.dp else 20.dp,
-                            end = 20.dp,
-                            top = 18.dp,
-                            bottom = 18.dp,
+                        .then(
+                            if (useRail) Modifier.padding(start = sidebarWidth)
+                            else Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
                         )
                         .graphicsLayer { clip = false },
                 ) {
@@ -586,7 +597,7 @@ fun MainShell(
                         modifier = Modifier
                             .graphicsLayer { clip = false }
                             .then(
-                                if (floatingTopBarExpanded.value) {
+                                if (shellTopBarExpanded) {
                                     Modifier.fillMaxWidth()
                                 } else {
                                     Modifier
@@ -600,16 +611,18 @@ fun MainShell(
                                         }
                                 },
                             ),
-                        shape = RoundedCornerShape(26.dp),
-                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(if (useRail) 0.dp else 26.dp),
+                        color = if (useRail) {
+                            MaterialTheme.colorScheme.surfaceContainerLow
+                        } else MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface,
                         tonalElevation = 0.dp,
-                        shadowElevation = 8.dp,
+                        shadowElevation = if (useRail) 0.dp else 8.dp,
                     ) {
                         AnimatedContent(
-                            targetState = floatingTopBarExpanded.value,
+                            targetState = shellTopBarExpanded,
                             transitionSpec = {
-                                val contentTransform = if (motionEnabled) {
+                                val contentTransform = if (motionEnabled && !useRail) {
                                     (fadeIn(tween(180, easing = FastOutSlowInEasing)) +
                                         scaleIn(tween(220, easing = FastOutSlowInEasing), initialScale = 0.94f)) togetherWith
                                         (fadeOut(tween(130, easing = FastOutSlowInEasing)) +
@@ -623,7 +636,7 @@ fun MainShell(
                         ) { expanded ->
                             if (expanded) {
                                 AtlasTopBar(
-                                    title = if (!useRail || tab in setOf(MainTab.AGENT, MainTab.SALE, MainTab.NOTIFICATIONS, MainTab.CLIENTS)) tab.localizedLabel() else "",
+                                    title = if (!useRail || tab in setOf(MainTab.AGENT, MainTab.SCAN, MainTab.SALE, MainTab.NOTIFICATIONS, MainTab.CLIENTS)) tab.localizedLabel() else "",
                                     subtitle = null,
                                     windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal),
                                     containerColor = Color.Transparent,
@@ -657,14 +670,14 @@ fun MainShell(
                                             is UpdateState.ReadyToInstall -> state.dismissedBanner && !state.info.mandatory
                                             else -> false
                                         }
-                                        if (isForeground && !useRail && tab != MainTab.AGENT) {
+                                        if (isForeground && !useRail && tab != MainTab.AGENT && tab != MainTab.SCAN) {
                                             UpdateMiniProgressBall(
                                                 state = updateState,
                                                 onClick = onShowUpdateProgress,
                                             )
                                         }
-                                        if (hasHiddenUpdate && isForeground) Spacer(Modifier.width(6.dp))
-                                        if (!useRail && tab !in BackStackTabs) {
+                                        if (hasHiddenUpdate && isForeground && tab != MainTab.SCAN) Spacer(Modifier.width(6.dp))
+                                        if (!useRail && tab !in BackStackTabs && tab != MainTab.SCAN) {
                                             IconButton(
                                                 onClick = { switchTab(MainTab.AGENT) },
                                                 modifier = Modifier.semantics {
@@ -710,6 +723,38 @@ fun MainShell(
                                         }
                                         when (tab) {
                                             MainTab.AGENT, MainTab.SALE -> Unit
+
+                                            MainTab.SCAN -> {
+                                                Surface(
+                                                    onClick = { scanCreateProductRequest += 1 },
+                                                    modifier = Modifier.padding(end = 8.dp),
+                                                    shape = CircleShape,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                                    ) {
+                                                        Icon(
+                                                            if (Roles.canCreateProductDirectly(user.role)) Icons.Outlined.Add else Icons.Outlined.Send,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.size(16.dp),
+                                                        )
+                                                        Text(
+                                                            if (Roles.canCreateProductDirectly(user.role)) {
+                                                                atlasText("Nouveau produit", "New product", "منتج جديد")
+                                                            } else {
+                                                                atlasText("Demander à l'Admin", "Ask an admin", "طلب من المسؤول")
+                                                            },
+                                                            style = MaterialTheme.typography.labelMedium,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            maxLines = 1,
+                                                        )
+                                                    }
+                                                }
+                                            }
 
                                             MainTab.SETTINGS -> {
                                                 if (!useRail && isForeground) {
@@ -807,7 +852,7 @@ fun MainShell(
                                     is UpdateState.Error -> updateState.info != null
                                     else -> false
                                 }
-                                val showCompactUpdate = isForeground && compactUpdateVisible
+                                val showCompactUpdate = isForeground && compactUpdateVisible && tab != MainTab.SCAN
                                 val showCompactAccessories = tab == MainTab.AGENT || showCompactUpdate
                                 Row(
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -910,7 +955,7 @@ fun MainShell(
                     cartCount = cartCount,
                     notificationCount = notificationCount,
                     updateState = updateState,
-                    expanded = sidebarExpanded,
+                    expanded = !sidebarCanExpand || sidebarExpanded,
                     onOpenDataStorageManager = openDataCacheManager,
                     dataStorageSelected = showDataCacheManagerDialog,
                     canCollapse = sidebarCanExpand,
@@ -937,8 +982,8 @@ fun MainShell(
         val navigationInset = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
         CompositionLocalProvider(
             LocalAtlasFloatingDockPadding provides if (showBottomNavigation) 116.dp + navigationInset else 0.dp,
-            LocalAtlasFloatingTopBarPadding provides if (showShellTopBar && shellTopBarVisible) 76.dp else 0.dp,
-            LocalAtlasFloatingTopBarExpanded provides floatingTopBarExpanded.value,
+            LocalAtlasFloatingTopBarPadding provides if (!useRail && showShellTopBar && shellTopBarVisible) 76.dp else 0.dp,
+            LocalAtlasFloatingTopBarExpanded provides shellTopBarExpanded,
         ) {
         AtlasPageTransition(
             targetState = pageTarget,
@@ -1006,6 +1051,8 @@ fun MainShell(
                         onOpenProducts = { switchTab(MainTab.PRODUCTS) },
                         onOpenQrDevice = onOpenQrDevice,
                         onToast = onToast,
+                        createProductRequest = scanCreateProductRequest,
+                        onCreateProductRequestHandled = { scanCreateProductRequest = 0 },
                     )
 
                     MainTab.SALE -> SaleScreen(

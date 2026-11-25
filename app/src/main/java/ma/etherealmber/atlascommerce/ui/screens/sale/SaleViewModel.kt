@@ -1,5 +1,6 @@
 package ma.etherealmber.atlascommerce.ui.screens.sale
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,6 +23,8 @@ import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.CartLine
 import ma.etherealmber.atlascommerce.data.CartStore
+import ma.etherealmber.atlascommerce.data.ReceiptLine
+import ma.etherealmber.atlascommerce.data.ThermalPrinter
 import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
 import ma.etherealmber.atlascommerce.data.model.QuickSaleItemDto
 import ma.etherealmber.atlascommerce.data.model.QuickSaleRequest
@@ -45,6 +48,8 @@ class SaleViewModel @Inject constructor(
         val submitting: Boolean = false,
         val error: String? = null,
         val created: CreatedInvoiceDto? = null,
+        val receiptLines: List<ReceiptLine> = emptyList(),
+        val receiptClientName: String = "",
         val currency: String = "MAD",
     ) {
         val canSubmit: Boolean get() = !submitting && clientName.isNotBlank()
@@ -131,7 +136,37 @@ class SaleViewModel @Inject constructor(
     }
 
     fun dismissCreated() {
-        _state.update { it.copy(created = null) }
+        _state.update { it.copy(created = null, receiptLines = emptyList(), receiptClientName = "") }
+    }
+
+    fun printReceipt(context: Context, address: String, paperWidthMm: Int) {
+        val current = _state.value
+        val created = current.created ?: return
+        val lines = current.receiptLines
+        if (lines.isEmpty()) {
+            _messages.tryEmit("Receipt line details are no longer available. Create a new sale to print.")
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                ThermalPrinter.print(
+                    context = context,
+                    address = address,
+                    paperWidthMm = paperWidthMm,
+                    title = "Atlas Commerce",
+                    ticketNumber = created.number ?: "#${created.id}",
+                    client = created.clientName ?: current.receiptClientName,
+                    lines = lines,
+                    total = created.total,
+                    currency = current.currency,
+                    vatFreeVr = true,
+                )
+            }.onSuccess {
+                _messages.tryEmit("Receipt sent to printer.")
+            }.onFailure { error ->
+                _messages.tryEmit(error.message ?: "Could not print receipt.")
+            }
+        }
     }
 
     fun submit() {
@@ -182,6 +217,8 @@ class SaleViewModel @Inject constructor(
                             clientPhone = "",
                             note = "",
                             created = result.data,
+                            receiptLines = snapshot.map { ReceiptLine(it.product.name, it.quantity, it.product.price) },
+                            receiptClientName = current.clientName.trim(),
                             error = null,
                         )
                     }

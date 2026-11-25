@@ -49,6 +49,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -111,11 +112,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalDensity
@@ -139,6 +145,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlin.math.sqrt
 import ma.etherealmber.atlascommerce.core.AppDetails
 import ma.etherealmber.atlascommerce.ui.i18n.AtlasLanguageSelector
@@ -174,59 +181,135 @@ fun toneBackground(tone: AtlasTone): Color {
     }
 }
 
-/** The Atlas sun-ray emblem, drawn in the active theme's foreground color. */
+/** The Atlas sun-ray emblem, drawn from the shared brand geometry. */
 @Composable
 fun AtlasMark(
     modifier: Modifier = Modifier,
     size: Dp = 56.dp,
     tint: Color = MaterialTheme.colorScheme.onBackground,
+    rotationDegrees: Float = 0f,
+    rayProgress: Float = 1f,
 ) {
-    val ink = tint
     Canvas(modifier = modifier.size(size)) {
-        val diameter = this.size.minDimension
-        val center = Offset(this.size.width / 2f, this.size.height / 2f)
-        val innerRadius = diameter * 0.30f
-        val outerRadius = diameter * 0.46f
-        val strokeWidth = diameter * 0.055f
-
-        // The right-hand ray is extended into the distinctive horizontal Atlas beam.
-        for (index in 0 until 16) {
-            val degrees = -90.0 + index * 22.5
-            if (degrees == 0.0) continue
-            val radians = Math.toRadians(degrees)
-            val direction = Offset(kotlin.math.cos(radians).toFloat(), kotlin.math.sin(radians).toFloat())
-            drawLine(
-                color = ink,
-                start = Offset(center.x + direction.x * innerRadius, center.y + direction.y * innerRadius),
-                end = Offset(center.x + direction.x * outerRadius, center.y + direction.y * outerRadius),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Butt,
-            )
+        val scale = this.size.minDimension / AtlasMarkGeometry.VIEWPORT_SIZE
+        val center = Offset(AtlasMarkGeometry.CENTER * scale, AtlasMarkGeometry.CENTER * scale)
+        val strokeWidth = AtlasMarkGeometry.opticalStrokeUnits(this.size.minDimension / density) * scale
+        rotate(rotationDegrees, center) {
+            val visibleTicks = (AtlasMarkGeometry.TICK_COUNT * rayProgress.coerceIn(0f, 1f))
+            AtlasMarkGeometry.ticks.forEachIndexed { index, segment ->
+                if (index < visibleTicks) {
+                    drawLine(
+                        color = tint,
+                        start = Offset(segment.start.x * scale, segment.start.y * scale),
+                        end = Offset(segment.end.x * scale, segment.end.y * scale),
+                        strokeWidth = strokeWidth,
+                        cap = StrokeCap.Butt,
+                    )
+                }
+            }
+            if (rayProgress > 0.95f) {
+                drawLine(
+                    color = tint,
+                    start = Offset(AtlasMarkGeometry.beam.start.x * scale, AtlasMarkGeometry.beam.start.y * scale),
+                    end = Offset(AtlasMarkGeometry.beam.end.x * scale, AtlasMarkGeometry.beam.end.y * scale),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Butt,
+                )
+            }
         }
-        drawLine(
-            color = ink,
-            start = center,
-            end = Offset(center.x + diameter * 0.48f, center.y),
-            strokeWidth = strokeWidth,
-            cap = StrokeCap.Butt,
-        )
     }
 }
 
-/** Full Atlas wordmark from supplied artwork; defaults to the current foreground and accepts a custom tint. */
+/** Compact brand loader; reduced motion limits movement to an opacity pulse. */
+@Composable
+fun AtlasLoader(
+    modifier: Modifier = Modifier,
+    size: Dp = 24.dp,
+    tint: Color = MaterialTheme.colorScheme.primary,
+    contentDescription: String? = null,
+) {
+    val motionEnabled = LocalAtlasAnimationsEnabled.current
+    val accessibleModifier = modifier.then(
+        if (contentDescription != null) {
+            Modifier.semantics { this.contentDescription = contentDescription }
+        } else Modifier,
+    )
+    if (motionEnabled) {
+        val transition = rememberInfiniteTransition(label = "atlas-loader")
+        val rotation by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing)),
+            label = "atlas-loader-rotation",
+        )
+        AtlasMark(
+            modifier = accessibleModifier,
+            size = size,
+            tint = tint,
+            rotationDegrees = rotation,
+            rayProgress = 1f,
+        )
+    } else {
+        AtlasMark(modifier = accessibleModifier, size = size, tint = tint)
+    }
+}
+
+/** Full Atlas lockup rendered from vector glyphs in the same coordinate space as AtlasMark. */
 @Composable
 fun AtlasBrandWordmark(
     modifier: Modifier = Modifier,
     height: Dp = 58.dp,
     tint: Color = MaterialTheme.colorScheme.onBackground,
+    markRotationDegrees: Float = 0f,
 ) {
-    Image(
-        painter = painterResource(ma.etherealmber.atlascommerce.R.drawable.atlas_wordmark_mask),
-        contentDescription = "Atlas Commerce",
-        modifier = modifier.height(height),
-        contentScale = ContentScale.Fit,
-        colorFilter = ColorFilter.tint(tint),
-    )
+    val vectorPaths = remember { AtlasWordmarkPaths.glyphs.map(::parseWordmarkPath) }
+    Canvas(
+        modifier = modifier.height(height)
+            .aspectRatio(AtlasWordmarkPaths.VIEWPORT_WIDTH / AtlasWordmarkPaths.VIEWPORT_HEIGHT)
+            .semantics { contentDescription = "Atlas Commerce" },
+    ) {
+        val factor = size.height / AtlasWordmarkPaths.VIEWPORT_HEIGHT
+        val strokeWidth = AtlasMarkGeometry.opticalStrokeUnits(size.height / density) * factor
+        val markCenter = Offset(AtlasMarkGeometry.CENTER * factor, AtlasMarkGeometry.CENTER * factor)
+        withTransform({ rotate(markRotationDegrees, markCenter) }) {
+            AtlasMarkGeometry.ticks.forEach { segment ->
+                drawLine(tint, Offset(segment.start.x * factor, segment.start.y * factor), Offset(segment.end.x * factor, segment.end.y * factor), strokeWidth, cap = StrokeCap.Butt)
+            }
+            drawLine(tint, Offset(AtlasMarkGeometry.beam.start.x * factor, AtlasMarkGeometry.beam.start.y * factor), Offset(AtlasMarkGeometry.beam.end.x * factor, AtlasMarkGeometry.beam.end.y * factor), strokeWidth, cap = StrokeCap.Butt)
+        }
+        vectorPaths.forEach { vectorPath ->
+            withTransform({ scale(factor, factor, Offset.Zero) }) { drawPath(vectorPath, tint) }
+        }
+    }
+}
+
+private fun parseWordmarkPath(data: String): androidx.compose.ui.graphics.Path {
+    val path = androidx.compose.ui.graphics.Path()
+    val tokens = Regex("[MLZ]|-?\\d+(?:\\.\\d+)?").findAll(data).map { it.value }.toList()
+    var command = ' '
+    var i = 0
+    while (i < tokens.size) {
+        val token = tokens[i]
+        if (token.length == 1 && token[0].isLetter()) {
+            command = token[0]
+            i++
+            when (command) {
+                'Z' -> path.close()
+                'M', 'L' -> {
+                    val x = tokens[i++].toFloat()
+                    val y = tokens[i++].toFloat()
+                    if (command == 'M') path.moveTo(x, y) else path.lineTo(x, y)
+                    if (command == 'M') command = 'L'
+                }
+            }
+        } else {
+            val x = token.toFloat()
+            val y = tokens[i + 1].toFloat()
+            path.lineTo(x, y)
+            i += 2
+        }
+    }
+    return path
 }
 
 @Composable
@@ -599,12 +682,14 @@ fun AtlasTopBar(
     title: String,
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
     titleLeading: (@Composable () -> Unit)? = null,
     windowInsets: WindowInsets? = null,
     containerColor: Color = MaterialTheme.colorScheme.background,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
+        modifier = modifier,
         title = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -650,7 +735,7 @@ fun AtlasTopBar(
     )
 }
 
-/** Shared floating page header with extra shadow-safe gutters so rounded corners never clip. */
+/** Adaptive page header: floating on phones and docked to tablet content surfaces. */
 @Composable
 fun AtlasFloatingTopBar(
     title: String,
@@ -663,6 +748,20 @@ fun AtlasFloatingTopBar(
     titleLeading: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
+    if (!TabletNavigationLayout.shouldShowFloatingPageTopBar(LocalConfiguration.current.screenWidthDp)) {
+        AtlasTopBar(
+            title = title,
+            subtitle = subtitle,
+            onBack = onBack,
+            modifier = modifier.fillMaxWidth().statusBarsPadding(),
+            titleLeading = titleLeading,
+            windowInsets = WindowInsets(0, 0, 0, 0),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            actions = actions,
+        )
+        return
+    }
+
     val motionEnabled = LocalAtlasAnimationsEnabled.current
     val collapsedInteractionSource = remember { MutableInteractionSource() }
     Box(
@@ -2066,13 +2165,14 @@ private fun CodeBlockCard(
  * while rendering the theme-aware Atlas wordmark from frame 1.
  */
 @Composable
-fun AtlasBootSplashScreen(
+fun AtlasSplash(
     onFinished: () -> Unit = {},
     holdUntilReady: Boolean = false,
 ) {
     val motionEnabled = LocalAtlasAnimationsEnabled.current
-    val logoScale = remember { Animatable(if (motionEnabled) 0.72f else 1f) }
-    val barProgress = remember { Animatable(if (motionEnabled) 0.08f else 1f) }
+    val logoScale = remember(motionEnabled) { Animatable(if (motionEnabled) 0.72f else 1f) }
+    val logoRotation = remember(motionEnabled) { Animatable(0f) }
+    val barProgress = remember(motionEnabled) { Animatable(if (motionEnabled) 0.08f else 1f) }
     var revealWordmark by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
     var revealTagline by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
     var revealComplete by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
@@ -2080,6 +2180,9 @@ fun AtlasBootSplashScreen(
     LaunchedEffect(motionEnabled) {
         if (motionEnabled) {
             revealWordmark = true
+            launch {
+                logoRotation.animateTo(360f, tween(1400, easing = LinearEasing))
+            }
             logoScale.animateTo(
                 targetValue = 1f,
                 animationSpec = spring(dampingRatio = 0.68f, stiffness = 380f),
@@ -2097,8 +2200,6 @@ fun AtlasBootSplashScreen(
     LaunchedEffect(motionEnabled, holdUntilReady) {
         if (motionEnabled) {
             barProgress.animateTo(1f, tween(durationMillis = 280, easing = FastOutSlowInEasing))
-        } else {
-            delay(150)
         }
         if (!holdUntilReady) {
             snapshotFlow { revealComplete }.first { it }
@@ -2131,12 +2232,13 @@ fun AtlasBootSplashScreen(
             ) {
                 AtlasBrandWordmark(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .width(241.dp)
                         .graphicsLayer {
                             scaleX = logoScale.value
                             scaleY = logoScale.value
                         },
                     height = 78.dp,
+                    markRotationDegrees = if (motionEnabled) logoRotation.value else 0f,
                 )
             }
 
@@ -2191,3 +2293,10 @@ fun AtlasBootSplashScreen(
         }
     }
 }
+
+/** Backwards-compatible name for callers predating the brand motion system. */
+@Composable
+fun AtlasBootSplashScreen(
+    onFinished: () -> Unit = {},
+    holdUntilReady: Boolean = false,
+) = AtlasSplash(onFinished = onFinished, holdUntilReady = holdUntilReady)

@@ -26,6 +26,9 @@ import ma.etherealmber.atlascommerce.core.DensityMode
 import ma.etherealmber.atlascommerce.core.ThemeMode
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasAnimationsEnabled
 
+val LocalAtlasThemeMode = staticCompositionLocalOf { ThemeMode.SYSTEM }
+val LocalSetAtlasThemeMode = staticCompositionLocalOf<(ThemeMode) -> Unit> { {} }
+
 // ---------------------------------------------------------------------------
 // Atlas neutral scale — the supplied palette defines BOTH light and dark modes.
 // Keep all surface, text, border, and chart color decisions centralized here.

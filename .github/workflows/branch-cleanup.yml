@@ -1,0 +1,131 @@
+name: Branch cleanup (auto-delete unused branches)
+
+# Mirrors the safe cleanup policy used in Etherealmber/.github and
+# Etherealmber/atlas-commerce.
+# - On PR close: delete a merged head branch (or an unmerged branch already
+#   fully contained in the default branch), unless it is protected or has an
+#   open PR. Fork-owned branches are never deleted from this repository.
+# - Weekly/manual sweep: delete only fully merged remote branches with no open
+#   PR. Never force-delete or rewrite unmerged work.
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only report what would be deleted'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: branch-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Resolve default branch
+        id: repo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          DEFAULT=$(gh api "repos/$REPO" -q '.default_branch')
+          echo "branch=$DEFAULT" >> "$GITHUB_OUTPUT"
+          echo "Default branch: $DEFAULT"
+
+      - name: Delete the head branch of the closed PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          DEFAULT: ${{ steps.repo.outputs.branch }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          MERGED: ${{ github.event.pull_request.merged }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BRANCH:-}" ] || [ "$BRANCH" = "$DEFAULT" ]; then exit 0; fi
+          if [ "${HEAD_REPO:-}" != "$REPO" ]; then
+            echo "PR head belongs to $HEAD_REPO, not $REPO — leaving fork branch untouched."
+            exit 0
+          fi
+          OPEN=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number -q 'length')
+          if [ "$OPEN" != "0" ]; then echo "Branch $BRANCH still has an open PR — kept."; exit 0; fi
+
+          ENC=$(printf '%s' "$BRANCH" | sed 's|/|%2F|g')
+
+          if gh api "repos/$REPO/branches/$ENC" -q '.protected' 2>/dev/null | grep -q true; then
+            echo "Branch $BRANCH is protected — kept."
+            exit 0
+          fi
+
+          if [ "${MERGED:-false}" != "true" ]; then
+            DEFAULT_ENC=$(printf '%s' "$DEFAULT" | sed 's|/|%2F|g')
+            STATUS=$(gh api "repos/$REPO/compare/$DEFAULT_ENC...$ENC" -q '.status' 2>/dev/null || echo unknown)
+            if [ "$STATUS" != "behind" ] && [ "$STATUS" != "identical" ]; then
+              echo "PR closed without merge and branch is not contained in $DEFAULT ($STATUS) — kept."
+              exit 0
+            fi
+          fi
+
+          gh api -X DELETE "repos/$REPO/git/refs/heads/$ENC" \
+            && echo "Deleted branch $BRANCH" \
+            || echo "Could not delete $BRANCH (protected or already gone) — fine."
+
+      - name: Weekly sweep of fully-merged branches
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          DEFAULT: ${{ steps.repo.outputs.branch }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: |
+          set -euo pipefail
+          DEFAULT_ENC=$(printf '%s' "$DEFAULT" | sed 's|/|%2F|g')
+          BRANCHES=$(gh api "repos/$REPO/branches" --paginate -q '.[].name')
+          DELETED=0; KEPT=0
+          while IFS= read -r B; do
+            [ -z "$B" ] && continue
+            if [ "$B" = "$DEFAULT" ]; then continue; fi
+
+            OPEN=$(gh pr list --repo "$REPO" --head "$B" --state open --json number -q 'length' 2>/dev/null || echo 1)
+            if [ "$OPEN" != "0" ]; then
+              echo "KEEP   $B — open PR"
+              KEPT=$((KEPT+1)); continue
+            fi
+
+            ENC=$(printf '%s' "$B" | sed 's|/|%2F|g')
+            if gh api "repos/$REPO/branches/$ENC" -q '.protected' 2>/dev/null | grep -q true; then
+              echo "KEEP   $B — protected"
+              KEPT=$((KEPT+1)); continue
+            fi
+
+            STATUS=$(gh api "repos/$REPO/compare/$DEFAULT_ENC...$ENC" -q '.status' 2>/dev/null || echo unknown)
+            if [ "$STATUS" = "behind" ] || [ "$STATUS" = "identical" ]; then
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "WOULD DELETE $B (fully merged)"
+                DELETED=$((DELETED+1))
+              elif gh api -X DELETE "repos/$REPO/git/refs/heads/$ENC" >/dev/null 2>&1; then
+                echo "DELETE $B (fully merged)"
+                DELETED=$((DELETED+1))
+              else
+                echo "KEEP   $B — delete refused (protected?)"
+                KEPT=$((KEPT+1))
+              fi
+            else
+              echo "KEEP   $B — not fully merged ($STATUS)"
+              KEPT=$((KEPT+1))
+            fi
+          done <<< "$BRANCHES"
+          echo "Sweep done: $DELETED $([ "$DRY_RUN" = "true" ] && echo "would be deleted" || echo "deleted"), $KEPT kept."

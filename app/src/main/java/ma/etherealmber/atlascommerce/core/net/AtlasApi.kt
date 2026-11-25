@@ -25,6 +25,10 @@ import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.DailyMetricsDto
 import ma.etherealmber.atlascommerce.data.model.HealthDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
+import ma.etherealmber.atlascommerce.data.model.InventoryLocationDto
+import ma.etherealmber.atlascommerce.data.model.InventoryPlacementDto
+import ma.etherealmber.atlascommerce.data.model.InventoryOfflineOperationRequest
+import ma.etherealmber.atlascommerce.data.model.InventoryOfflineOperationResultDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.EmployeeDto
 import ma.etherealmber.atlascommerce.data.model.EmployeeUpdateRequest
@@ -149,7 +153,7 @@ interface AtlasApi {
     suspend fun submitUserReport(@Body body: UserReportRequest): ApiEnvelope<UserReportReceiptDto>
 
     @PATCH("api/auth/me")
-    suspend fun updateMe(@Body body: ProfileUpdateRequest): ActionAckDto
+    suspend fun updateMe(@Body body: ProfileUpdateRequest): ApiEnvelope<MeDto>
 
     /** v0.7.5 — voluntary logout marks this device resumable for password-only return. */
     @POST("api/auth/logout")
@@ -259,6 +263,19 @@ interface AtlasApi {
         @Body body: ProductImageUploadRequest,
     ): ApiEnvelope<ProductImageDto>
 
+    @GET("api/inventory/locations")
+    suspend fun inventoryLocations(): ApiEnvelope<List<InventoryLocationDto>>
+
+    @GET("api/inventory/products/{id}/placements")
+    suspend fun inventoryPlacements(@Path("id") productId: Long): ApiEnvelope<InventoryPlacementDto>
+
+    @POST("api/inventory/offline-operations")
+    suspend fun submitInventoryOfflineOperation(
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Header("Authorization") authorization: String,
+        @Body body: InventoryOfflineOperationRequest,
+    ): Response<ApiEnvelope<InventoryOfflineOperationResultDto>>
+
     @POST("api/products/{id}/adjust-stock")
     suspend fun adjustStock(
         @Path("id") id: Long,
@@ -360,12 +377,18 @@ interface AtlasApi {
     suspend fun assistNextActions(): ApiEnvelope<AssistNextActionsDto>
 
     @POST("api/assist/chat")
-    suspend fun assistChat(@Body body: AssistChatRequest): ApiEnvelope<AssistChatResponseDto>
+    suspend fun assistChat(
+        @Header("Accept-Language") language: String,
+        @Body body: AssistChatRequest,
+    ): ApiEnvelope<AssistChatResponseDto>
 
     @Streaming
     @Headers("Accept: text/event-stream")
     @POST("api/assist/chat/stream")
-    suspend fun assistChatStream(@Body body: AssistChatRequest): Response<ResponseBody>
+    suspend fun assistChatStream(
+        @Header("Accept-Language") language: String,
+        @Body body: AssistChatRequest,
+    ): Response<ResponseBody>
 
     @POST("api/assist/approve")
     suspend fun assistApprove(@Body body: AssistApproveRequest): ApiEnvelope<AssistApproveDto>

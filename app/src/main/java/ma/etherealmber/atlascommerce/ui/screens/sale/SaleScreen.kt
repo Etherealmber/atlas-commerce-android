@@ -1,5 +1,13 @@
 package ma.etherealmber.atlascommerce.ui.screens.sale
 
+import android.Manifest
+import android.bluetooth.BluetoothDevice
+import android.os.Build
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import ma.etherealmber.atlascommerce.data.ThermalPrinter
 import ma.etherealmber.atlascommerce.ui.i18n.LocalAtlasLanguage
 import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
@@ -38,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -72,6 +81,25 @@ fun SaleScreen(
     val canSell = Roles.canCreateDocuments(user.role)
     val total = remember(lines) { lines.sumOf { it.lineTotal } }
     var showConfirmDialog by remember { mutableStateOf(false) }
+    var showPrinterPicker by remember { mutableStateOf(false) }
+    var printerDevices by remember { mutableStateOf<List<BluetoothDevice>>(emptyList()) }
+    var printerPaperWidth by remember { mutableStateOf(58) }
+    val context = LocalContext.current
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) printerDevices = runCatching { ThermalPrinter.pairedDevices(context) }.getOrDefault(emptyList())
+    }
+    fun openPrinterPicker() {
+        showPrinterPicker = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        ) {
+            bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            printerDevices = runCatching { ThermalPrinter.pairedDevices(context) }.getOrDefault(emptyList())
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { message -> onToast(message) }
@@ -318,10 +346,16 @@ fun SaleScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = atlasText(
-                            "Total ${atlasMoney(created.total, state.currency)} · en attente d'encaissement.",
-                            "Total ${atlasMoney(created.total, state.currency)} · awaiting payment collection.",
-                            "الإجمالي ${atlasMoney(created.total, state.currency)} · بانتظار تحصيل المبلغ.",
+                        text = created.total?.takeIf(Double::isFinite)?.let { total ->
+                            atlasText(
+                                "Total ${atlasMoney(total, state.currency)} · en attente d'encaissement.",
+                                "Total ${atlasMoney(total, state.currency)} · awaiting payment collection.",
+                                "الإجمالي ${atlasMoney(total, state.currency)} · بانتظار تحصيل المبلغ.",
+                            )
+                        } ?: atlasText(
+                            "Total serveur indisponible — impression désactivée.",
+                            "Server total unavailable — printing disabled.",
+                            "إجمالي الخادم غير متاح — الطباعة معطلة.",
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -329,10 +363,52 @@ fun SaleScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = viewModel::dismissCreated) { Text(atlasText("Nouveau ticket")) }
+                Row {
+                    TextButton(onClick = ::openPrinterPicker) { Text(atlasText("Imprimer", "Print", "طباعة")) }
+                    TextButton(onClick = viewModel::dismissCreated) { Text(atlasText("Nouveau ticket")) }
+                }
             },
             dismissButton = {
                 TextButton(onClick = viewModel::dismissCreated) { Text(atlasText("Fermer")) }
+            },
+        )
+    }
+
+    if (showPrinterPicker) {
+        AlertDialog(
+            onDismissRequest = { showPrinterPicker = false },
+            title = { Text(atlasText("Imprimante Bluetooth", "Bluetooth printer", "طابعة بلوتوث")) },
+            text = {
+                Column {
+                    Text(atlasText("Largeur du papier", "Paper width", "عرض الورق"), style = MaterialTheme.typography.labelLarge)
+                    Row {
+                        TextButton(onClick = { printerPaperWidth = 58 }) { Text(if (printerPaperWidth == 58) "✓ 58 mm" else "58 mm") }
+                        TextButton(onClick = { printerPaperWidth = 80 }) { Text(if (printerPaperWidth == 80) "✓ 80 mm" else "80 mm") }
+                    }
+                    if (printerDevices.isEmpty()) {
+                        Text(atlasText("Aucune imprimante associée. Associez votre imprimante dans les paramètres Bluetooth Android, puis réessayez.", "No paired printers. Pair your printer in Android Bluetooth settings, then try again.", "لا توجد طابعات مقترنة. اربط الطابعة من إعدادات البلوتوث ثم أعد المحاولة."))
+                    } else {
+                        printerDevices.forEach { device ->
+                            val label = runCatching { device.name?.takeIf(String::isNotBlank) ?: device.address }.getOrDefault("Bluetooth printer")
+                            TextButton(
+                                onClick = {
+                                    val address = runCatching { device.address }.getOrNull() ?: return@TextButton
+                                    viewModel.printReceipt(context, address, printerPaperWidth)
+                                    showPrinterPicker = false
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    printerDevices = runCatching { ThermalPrinter.pairedDevices(context) }.getOrDefault(emptyList())
+                }) { Text(atlasText("Actualiser", "Refresh", "تحديث")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPrinterPicker = false }) { Text(atlasText("Fermer", "Close", "إغلاق")) }
             },
         )
     }
