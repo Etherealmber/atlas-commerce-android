@@ -180,15 +180,15 @@ fun toneBackground(tone: AtlasTone): Color {
     }
 }
 
-/** The Atlas sun-ray emblem, drawn in the active theme's foreground color. */
+/** The Atlas sun-ray emblem, drawn from the shared brand geometry. */
 @Composable
 fun AtlasMark(
     modifier: Modifier = Modifier,
     size: Dp = 56.dp,
     tint: Color = MaterialTheme.colorScheme.onBackground,
-) {
     rotationDegrees: Float = 0f,
     rayProgress: Float = 1f,
+) {
     Canvas(modifier = modifier.size(size)) {
         val scale = this.size.minDimension / AtlasMarkGeometry.VIEWPORT_SIZE
         val center = Offset(AtlasMarkGeometry.CENTER * scale, AtlasMarkGeometry.CENTER * scale)
@@ -262,8 +262,8 @@ fun AtlasBrandWordmark(
     modifier: Modifier = Modifier,
     height: Dp = 58.dp,
     tint: Color = MaterialTheme.colorScheme.onBackground,
-) {
     markRotationDegrees: Float = 0f,
+) {
     val vectorPaths = remember { AtlasWordmarkPaths.glyphs.map(::parseWordmarkPath) }
     Canvas(
         modifier = modifier.height(height)
@@ -2166,6 +2166,9 @@ fun AtlasSplash(
     LaunchedEffect(motionEnabled) {
         if (motionEnabled) {
             revealWordmark = true
+            launch {
+                logoRotation.animateTo(360f, tween(1400, easing = LinearEasing))
+            }
             logoScale.animateTo(
                 targetValue = 1f,
                 animationSpec = spring(dampingRatio = 0.68f, stiffness = 380f),
@@ -2183,9 +2186,6 @@ fun AtlasSplash(
     LaunchedEffect(motionEnabled, holdUntilReady) {
         if (motionEnabled) {
             barProgress.animateTo(1f, tween(durationMillis = 280, easing = FastOutSlowInEasing))
-            launch {
-                logoRotation.animateTo(360f, tween(1400, easing = LinearEasing))
-            }
         }
         if (!holdUntilReady) {
             snapshotFlow { revealComplete }.first { it }

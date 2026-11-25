@@ -504,10 +504,11 @@ private fun AtlasGate(
 
     val loadingBackend = !serverLoaded || session is SessionState.Loading
     val activeUser = (session as? SessionState.Active)?.user
+    val windowWidthDp = LocalConfiguration.current.screenWidthDp
     var savedShellTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
     var savedLastBottomTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
     var sidebarCollapsed by rememberSaveable(activeUser?.scopeIdentity) {
-        mutableStateOf(LocalConfiguration.current.screenWidthDp >= 600)
+        mutableStateOf(windowWidthDp >= 600)
     }
 
     val baseStage = when {
