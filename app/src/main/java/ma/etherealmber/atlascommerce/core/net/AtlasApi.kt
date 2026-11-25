@@ -22,6 +22,7 @@ import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
 import ma.etherealmber.atlascommerce.data.model.CreateFinanceEntryRequest
 import ma.etherealmber.atlascommerce.data.model.FinanceEntryDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
+import ma.etherealmber.atlascommerce.data.model.DailyMetricsDto
 import ma.etherealmber.atlascommerce.data.model.HealthDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
 import ma.etherealmber.atlascommerce.data.model.InventoryLocationDto
@@ -218,6 +219,9 @@ interface AtlasApi {
 
     @GET("api/dashboard")
     suspend fun dashboard(): ApiEnvelope<DashboardDto>
+
+    @GET("api/metrics/daily")
+    suspend fun dailyMetrics(): ApiEnvelope<DailyMetricsDto>
 
     @GET("api/settings")
     suspend fun settings(): ApiEnvelope<CompanySettingsDto>

@@ -22,17 +22,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,7 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,7 +56,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.LocalTime
 import java.time.YearMonth
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import ma.etherealmber.atlascommerce.core.Roles
 import ma.etherealmber.atlascommerce.core.net.ApiResult
@@ -64,7 +64,6 @@ import ma.etherealmber.atlascommerce.data.model.DashboardDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.FinanceOutstandingDocumentDto
 import ma.etherealmber.atlascommerce.data.model.InvoiceDto
-import ma.etherealmber.atlascommerce.data.model.MonthlyPointDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingDockPadding
 import ma.etherealmber.atlascommerce.ui.components.LocalAtlasFloatingTopBarPadding
@@ -97,15 +96,14 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasNotice
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 import ma.etherealmber.atlascommerce.ui.i18n.atlasLocale
 import ma.etherealmber.atlascommerce.ui.i18n.atlasShortDate
-import ma.etherealmber.atlascommerce.ui.i18n.atlasMoney
-import ma.etherealmber.atlascommerce.ui.i18n.atlasMoneyCompact
-import ma.etherealmber.atlascommerce.ui.i18n.atlasInteger
 import ma.etherealmber.atlascommerce.ui.theme.Atlas
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     user: SessionUser,
     onOpenProducts: () -> Unit,
+    onOpenProductsAlerts: () -> Unit = onOpenProducts,
     onOpenSale: () -> Unit,
     onOpenScan: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
@@ -282,6 +280,11 @@ fun HomeScreen(
         if (state.offline) onToast("Hors ligne — dernières données affichées.")
     }
 
+    PullToRefreshBox(
+        isRefreshing = state.refreshing,
+        onRefresh = refreshDashboard,
+        modifier = Modifier.fillMaxSize(),
+    ) {
     when {
         state.loading && dashboard == null -> AtlasDashboardSkeleton(
             modifier = Modifier.fillMaxSize(),
@@ -313,6 +316,7 @@ fun HomeScreen(
             onRefresh = refreshDashboard,
             onRefreshFinance = refreshHomeFinance,
             onOpenProducts = onOpenProducts,
+            onOpenProductsAlerts = onOpenProductsAlerts,
             onOpenSale = onOpenSale,
             onOpenScan = onOpenScan,
             onOpenNotifications = onOpenNotifications,
@@ -336,6 +340,7 @@ fun HomeScreen(
             },
         )
     }
+    }
 }
 
 @Composable
@@ -353,12 +358,12 @@ private fun HomeErrorContent(
     val canSell = Roles.canCreateDocuments(user.role)
     LazyColumn(
         contentPadding = PaddingValues(
-            start = density.screenPadding,
-            end = density.screenPadding,
+            start = 16.dp,
+            end = 16.dp,
             top = density.cardMargin + LocalAtlasFloatingTopBarPadding.current,
             bottom = 28.dp + dockPadding,
         ),
-        verticalArrangement = Arrangement.spacedBy(density.itemGap),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (offline) {
             item { AtlasOfflineBanner() }
@@ -417,6 +422,7 @@ private fun HomeContent(
     onRefresh: () -> Unit,
     onRefreshFinance: () -> Unit,
     onOpenProducts: () -> Unit,
+    onOpenProductsAlerts: () -> Unit,
     onOpenSale: () -> Unit,
     onOpenScan: () -> Unit,
     onOpenNotifications: () -> Unit,
@@ -444,13 +450,13 @@ private fun HomeContent(
 
     LazyColumn(
         contentPadding = PaddingValues(
-            start = density.screenPadding,
-            end = density.screenPadding,
+            start = 16.dp,
+            end = 16.dp,
             top = density.cardMargin + LocalAtlasFloatingTopBarPadding.current,
             // Keep the final cards scrollable clear of the floating dock while intermediate content passes behind it.
             bottom = 48.dp + dockPadding,
         ),
-        verticalArrangement = Arrangement.spacedBy(density.itemGap),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "dashboard_greeting") {
             AtlasEntrance(delayMillis = 0) {
@@ -475,7 +481,7 @@ private fun HomeContent(
                     IconButton(
                         onClick = onRefresh,
                         enabled = !state.refreshing,
-                        modifier = Modifier.size(56.dp),
+                        modifier = Modifier.size(48.dp),
                     ) {
                         if (state.refreshing) {
                             androidx.compose.material3.CircularProgressIndicator(
@@ -518,20 +524,38 @@ private fun HomeContent(
             }
         }
 
+        item(key = "home_kpi_carousel") {
+            DailyKpiCarousel(
+                metrics = state.dailyMetrics,
+                loading = state.metricsLoading,
+                error = state.metricsError,
+                onRetry = onRefresh,
+                currency = state.currency,
+            )
+        }
+        item(key = "home_money_flow") {
+            if (state.metricsLoading && state.dailyMetrics == null) HomeMetricsChartSkeleton(188.dp)
+            else MoneyFlowChart(state.dailyMetrics, state.currency)
+        }
+        item(key = "home_stock_health") {
+            if (state.metricsLoading && state.dailyMetrics == null) HomeMetricsChartSkeleton(198.dp)
+            else StockHealthChart(state.dailyMetrics, onOpenProductsAlerts)
+        }
+
         // Primary role-gated action bar
         item {
             AtlasEntrance(delayMillis = 45) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (canSell) {
                         AtlasButton(
-                            text = "Nouvelle vente",
+                            text = atlasText("Nouvelle vente", "New sale", "بيع جديد"),
                             onClick = onOpenSale,
                             modifier = Modifier.weight(1f),
                             icon = Icons.Outlined.PointOfSale,
                         )
                     } else {
                         AtlasButton(
-                            text = "Scanner un article",
+                            text = atlasText("Scanner", "Scan", "مسح ضوئي"),
                             onClick = onOpenScan,
                             modifier = Modifier.weight(1f),
                             icon = Icons.Outlined.QrCodeScanner,
@@ -594,21 +618,21 @@ private fun HomeContent(
                 Row(horizontalArrangement = Arrangement.spacedBy(density.itemGap)) {
                     AtlasStatTile(
                         label = atlasText("Produits", "Products", "المنتجات"),
-                        value = atlasInteger(dashboard.productCount.toDouble()),
+                        value = homeInteger(dashboard.productCount.toDouble()),
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.Inventory2,
                     )
                     if (canDisplayFinance) {
                         AtlasStatTile(
                             label = atlasText("Valeur du stock", "Inventory value", "قيمة المخزون"),
-                            value = atlasMoneyCompact(dashboard.stockValue, state.currency),
+                            value = homeMoneyCompact(dashboard.stockValue, state.currency),
                             modifier = Modifier.weight(1f),
                             icon = Icons.Outlined.TrendingUp,
                         )
                     } else {
                         AtlasStatTile(
                             label = atlasText("Stock faible", "Low stock", "مخزون منخفض"),
-                            value = atlasInteger(dashboard.lowStockCount.toDouble()),
+                            value = homeInteger(dashboard.lowStockCount.toDouble()),
                             modifier = Modifier.weight(1f),
                             hint = if (dashboard.lowStockCount > 0) atlasText("À vérifier", "Needs review", "يحتاج إلى مراجعة") else atlasText("Optimal", "Optimal", "مثالي"),
                             tone = if (dashboard.lowStockCount > 0) AtlasTone.WARNING else AtlasTone.POSITIVE,
@@ -628,7 +652,7 @@ private fun HomeContent(
                     ) {
                         AtlasStatTile(
                             label = atlasText("Stock faible", "Low stock", "مخزون منخفض"),
-                            value = atlasInteger(dashboard.lowStockCount.toDouble()),
+                            value = homeInteger(dashboard.lowStockCount.toDouble()),
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                             hint = if (dashboard.lowStockCount > 0) atlasText("À réapprovisionner", "Reorder needed", "يلزم إعادة الطلب") else atlasText("Tout est bon", "All good", "كل شيء على ما يرام"),
                             tone = if (dashboard.lowStockCount > 0) AtlasTone.WARNING else AtlasTone.POSITIVE,
@@ -636,7 +660,7 @@ private fun HomeContent(
                         )
                         AtlasStatTile(
                             label = atlasText("Créances clients", "Customer receivables", "مستحقات العملاء"),
-                            value = atlasMoneyCompact(dashboard.unpaidSales.total, state.currency),
+                            value = homeMoneyCompact(dashboard.unpaidSales.total, state.currency),
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                             hint = atlasText("${dashboard.unpaidSales.count} facture(s)", "${dashboard.unpaidSales.count} invoice(s)", "${dashboard.unpaidSales.count} فاتورة"),
                             tone = if (dashboard.unpaidSales.overdue > 0) AtlasTone.DANGER else AtlasTone.INFO,
@@ -647,7 +671,7 @@ private fun HomeContent(
             }
         }
 
-        if (canDisplayFinance && dashboard.monthlySeries.isNotEmpty()) {
+        if (dashboard.monthlySeries.isNotEmpty()) {
             item(key = "monthly_sales_trend") {
                 AtlasEntrance(delayMillis = 165) {
                     MonthlySalesTrendCard(
@@ -688,7 +712,7 @@ private fun HomeContent(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AtlasChip(text = atlasText("Alerte stock", "Low-stock alert", "تنبيه انخفاض المخزون"), tone = AtlasTone.WARNING, icon = Icons.Outlined.Warning)
                         Spacer(Modifier.weight(1f))
-                        TextButton(onClick = onOpenProducts) { Text(atlasText("Voir", "View", "عرض")) }
+                        TextButton(onClick = onOpenProductsAlerts, modifier = Modifier.height(48.dp)) { Text(atlasText("Voir", "View", "عرض")) }
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
@@ -732,148 +756,6 @@ private fun HomeContent(
         }
 
     }
-}
-
-@Composable
-private fun MonthlySalesTrendCard(points: List<MonthlyPointDto>, currency: String) {
-    val recent = points.takeLast(6)
-    if (recent.isEmpty()) return
-    val peak = recent.maxOfOrNull { it.sales.coerceAtLeast(0.0) }?.takeIf { it > 0.0 } ?: 1.0
-    val palette = Atlas.palette
-
-    AtlasCard(padding = 14.dp) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(atlasText("Tendance des ventes", "Sales trend", "اتجاه المبيعات"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(atlasText("Données réelles · ${recent.size} périodes", "Live data · ${recent.size} periods", "بيانات مباشرة · ${recent.size} فترة"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Icon(Icons.Outlined.TrendingUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth().height(112.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            recent.forEach { point ->
-                val value = point.sales.coerceAtLeast(0.0)
-                val barFraction = (value / peak).toFloat().coerceIn(0.04f, 1f)
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = atlasMoneyCompact(value, currency),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Clip,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(62.dp),
-                        contentAlignment = Alignment.BottomCenter,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.52f)
-                                .fillMaxHeight(barFraction)
-                                .clip(RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp))
-                                .background(Brush.verticalGradient(listOf(palette.chartSales.copy(alpha = 0.58f), palette.chartSales))),
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = point.label.ifBlank { point.key },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-        }
-    }
-}
-
-private data class FinanceChartEntry(
-    val label: String,
-    val amount: Double,
-    val color: Color,
-)
-
-@Composable
-private fun FinanceMiniBarChart(
-    title: String,
-    entries: List<FinanceChartEntry>,
-    currency: String,
-) {
-    if (entries.isEmpty()) return
-    val peak = entries.maxOfOrNull { kotlin.math.abs(it.amount) }?.takeIf { it > 0.0 } ?: 1.0
-    AtlasCard(padding = 12.dp) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        entries.forEach { entry ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = entry.label,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = atlasMoneyCompact(entry.amount, currency),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth((kotlin.math.abs(entry.amount) / peak).toFloat().coerceIn(0f, 1f))
-                        .fillMaxHeight()
-                        .background(entry.color),
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-    }
-}
-
-@Composable
-private fun FinanceAdminCharts(summary: FinanceMonthlyDto) {
-    val palette = Atlas.palette
-    FinanceMiniBarChart(
-        title = atlasText("Trésorerie · ouverture et clôture", "Cash position · opening and closing", "النقد المتاح · الافتتاح والإغلاق"),
-        currency = summary.currency,
-        entries = listOf(
-            FinanceChartEntry(atlasText("Solde d'ouverture", "Opening balance", "رصيد الافتتاح"), summary.openingBalance, palette.chartSales),
-            FinanceChartEntry(atlasText("Solde de clôture", "Closing balance", "رصيد الإغلاق"), summary.closingBalance, palette.chartIncome),
-        ),
-    )
-    FinanceMiniBarChart(
-        title = atlasText("Factures ouvertes · clients et fournisseurs", "Open invoices · receivables and payables", "الفواتير المفتوحة · العملاء والموردون"),
-        currency = summary.currency,
-        entries = listOf(
-            FinanceChartEntry(atlasText("Clients · encours", "Receivables · outstanding", "مستحقات العملاء"), summary.receivables.totalOutstanding, palette.chartReceivable),
-            FinanceChartEntry(atlasText("Clients · en retard", "Receivables · overdue", "مستحقات العملاء المتأخرة"), summary.receivables.totalOverdue, palette.chartExpense),
-            FinanceChartEntry(atlasText("Fournisseurs · encours", "Payables · outstanding", "مستحقات الموردين"), summary.payables.totalOutstanding, palette.chartPayable),
-            FinanceChartEntry(atlasText("Fournisseurs · en retard", "Payables · overdue", "مستحقات الموردين المتأخرة"), summary.payables.totalOverdue, palette.chartExpense),
-        ),
-    )
 }
 
 @Composable
@@ -935,6 +817,7 @@ private fun FinanceAdminCard(
             Spacer(Modifier.height(8.dp))
             Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
+        summary?.let { FinanceMovementFlowChart(it) }
         Spacer(Modifier.height(8.dp))
         AtlasDivider()
         Text(atlasText("Rapports PDF"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -982,14 +865,14 @@ private fun FinanceAdminCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AtlasStatTile(
                     label = atlasText("Solde clôture"),
-                    value = atlasMoneyCompact(summary.closingBalance, summary.currency),
+                    value = homeMoneyCompact(summary.closingBalance, summary.currency),
                     modifier = Modifier.weight(1f),
-                    hint = atlasText("Ouverture ${atlasMoneyCompact(summary.openingBalance, summary.currency)}", "Opening ${atlasMoneyCompact(summary.openingBalance, summary.currency)}", "الافتتاحي ${atlasMoneyCompact(summary.openingBalance, summary.currency)}"),
+                    hint = atlasText("Ouverture ${homeMoneyCompact(summary.openingBalance, summary.currency)}", "Opening ${homeMoneyCompact(summary.openingBalance, summary.currency)}", "الافتتاحي ${homeMoneyCompact(summary.openingBalance, summary.currency)}"),
                     tone = AtlasTone.POSITIVE,
                 )
                 AtlasStatTile(
                     label = atlasText("Paie à verser"),
-                    value = atlasMoneyCompact(summary.payroll.totalDue, summary.currency),
+                    value = homeMoneyCompact(summary.payroll.totalDue, summary.currency),
                     modifier = Modifier.weight(1f),
                     hint = atlasText("${summary.payroll.employees} employé(s)", "${summary.payroll.employees} employees", "${summary.payroll.employees} موظف"),
                     tone = if (summary.payroll.totalDue > 0.0) AtlasTone.WARNING else AtlasTone.POSITIVE,
@@ -999,28 +882,26 @@ private fun FinanceAdminCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AtlasStatTile(
                     label = atlasText("Clients à recevoir"),
-                    value = atlasMoneyCompact(summary.receivables.totalOutstanding, summary.currency),
+                    value = homeMoneyCompact(summary.receivables.totalOutstanding, summary.currency),
                     modifier = Modifier.weight(1f),
-                    hint = atlasText("${summary.receivables.count} facture(s) · ${atlasMoneyCompact(summary.receivables.totalOverdue, summary.currency)} en retard", "${summary.receivables.count} invoices · ${atlasMoneyCompact(summary.receivables.totalOverdue, summary.currency)} overdue", "${summary.receivables.count} فاتورة · ${atlasMoneyCompact(summary.receivables.totalOverdue, summary.currency)} متأخر"),
+                    hint = atlasText("${summary.receivables.count} facture(s) · ${homeMoneyCompact(summary.receivables.totalOverdue, summary.currency)} en retard", "${summary.receivables.count} invoices · ${homeMoneyCompact(summary.receivables.totalOverdue, summary.currency)} overdue", "${summary.receivables.count} فاتورة · ${homeMoneyCompact(summary.receivables.totalOverdue, summary.currency)} متأخر"),
                     tone = if (summary.receivables.totalOverdue > 0.0) AtlasTone.DANGER else AtlasTone.INFO,
                 )
                 AtlasStatTile(
                     label = atlasText("Fournisseurs à payer"),
-                    value = atlasMoneyCompact(summary.payables.totalOutstanding, summary.currency),
+                    value = homeMoneyCompact(summary.payables.totalOutstanding, summary.currency),
                     modifier = Modifier.weight(1f),
-                    hint = atlasText("${summary.payables.count} facture(s) · ${atlasMoneyCompact(summary.payables.totalOverdue, summary.currency)} en retard", "${summary.payables.count} invoices · ${atlasMoneyCompact(summary.payables.totalOverdue, summary.currency)} overdue", "${summary.payables.count} فاتورة · ${atlasMoneyCompact(summary.payables.totalOverdue, summary.currency)} متأخر"),
+                    hint = atlasText("${summary.payables.count} facture(s) · ${homeMoneyCompact(summary.payables.totalOverdue, summary.currency)} en retard", "${summary.payables.count} invoices · ${homeMoneyCompact(summary.payables.totalOverdue, summary.currency)} overdue", "${summary.payables.count} فاتورة · ${homeMoneyCompact(summary.payables.totalOverdue, summary.currency)} متأخر"),
                     tone = if (summary.payables.totalOverdue > 0.0) AtlasTone.DANGER else AtlasTone.WARNING,
                 )
             }
             Spacer(Modifier.height(10.dp))
-            FinanceAdminCharts(summary)
-            Spacer(Modifier.height(10.dp))
             AtlasDivider()
-            AtlasInfoRow(atlasText("Recettes encaissées", "Receipts collected", "الإيرادات المحصّلة"), atlasMoney(summary.salesReceived, summary.currency))
-            AtlasInfoRow(atlasText("Dépenses (remboursements inclus)", "Expenses (including refunds)", "المصروفات (بما فيها المبالغ المستردة)"), atlasMoney(summary.expenses, summary.currency))
-            AtlasInfoRow(atlasText("Remboursements", "Refunds", "المبالغ المستردة"), atlasMoney(summary.refunds, summary.currency))
-            AtlasInfoRow(atlasText("Salaires versés ce mois", "Salaries paid this month", "الرواتب المدفوعة هذا الشهر"), atlasMoney(summary.payrollPaid, summary.currency))
-            AtlasInfoRow(atlasText("Fournisseurs réglés ce mois", "Suppliers paid this month", "مدفوعات الموردين هذا الشهر"), atlasMoney(summary.supplierPaid, summary.currency))
+            AtlasInfoRow(atlasText("Recettes encaissées", "Receipts collected", "الإيرادات المحصّلة"), homeMoney(summary.salesReceived, summary.currency))
+            AtlasInfoRow(atlasText("Dépenses (remboursements inclus)", "Expenses (including refunds)", "المصروفات (بما فيها المبالغ المستردة)"), homeMoney(summary.expenses, summary.currency))
+            AtlasInfoRow(atlasText("Remboursements", "Refunds", "المبالغ المستردة"), homeMoney(summary.refunds, summary.currency))
+            AtlasInfoRow(atlasText("Salaires versés ce mois", "Salaries paid this month", "الرواتب المدفوعة هذا الشهر"), homeMoney(summary.payrollPaid, summary.currency))
+            AtlasInfoRow(atlasText("Fournisseurs réglés ce mois", "Suppliers paid this month", "مدفوعات الموردين هذا الشهر"), homeMoney(summary.supplierPaid, summary.currency))
 
             FinanceObligationsList(
                 title = atlasText("Clients à encaisser", "Customer payments to collect", "مستحقات العملاء للتحصيل"),
@@ -1044,6 +925,18 @@ private fun FinanceAdminCard(
                     Spacer(Modifier.height(4.dp))
                     Text(atlasText("La liste de paie n'a pas pu être chargée."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                payroll == null && summary.payroll.totalDue > 0.0 -> {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        atlasText("${homeMoney(summary.payroll.totalDue, summary.currency)} dus pour ${summary.payroll.employees} employé(s).", "${homeMoney(summary.payroll.totalDue, summary.currency)} due for ${summary.payroll.employees} employee(s).", "${homeMoney(summary.payroll.totalDue, summary.currency)} مستحقة لـ ${summary.payroll.employees} موظف."),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(onClick = onLoadMorePayroll, enabled = !payrollLoadingMore, modifier = Modifier.height(48.dp)) {
+                        if (payrollLoadingMore) androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        else Text(atlasText("Afficher les détails", "Load payroll details", "عرض تفاصيل الرواتب"))
+                    }
+                }
                 payroll == null || payroll.rows.isEmpty() -> {
                     Spacer(Modifier.height(4.dp))
                     Text(atlasText("Aucun versement dû pour cette période."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1065,7 +958,7 @@ private fun FinanceAdminCard(
                             )
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(atlasMoney(employee.amountDue, payroll.currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(homeMoney(employee.amountDue, payroll.currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             val isFutureDue = employee.status.equals("paid", ignoreCase = true) &&
                                 employee.dueDate?.let { it > payroll.asOf } == true
                             val statusLabel = when {
@@ -1131,6 +1024,7 @@ private fun FinanceAdminCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FinancePeriodPicker(
     period: String,
@@ -1139,25 +1033,29 @@ private fun FinancePeriodPicker(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val currentPeriod = financeCurrentPeriod(timezone)
-    Box {
-        TextButton(onClick = { expanded = true }) {
-            Text(financeMonthLabel(period, atlasLocale()))
-            Text("  ▾")
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            val currentMonth = YearMonth.parse(currentPeriod)
-            for (offset in 0L..35L) {
-                val option = currentMonth.minusMonths(offset).toString()
-                DropdownMenuItem(
-                    text = { Text(financeMonthLabel(option, atlasLocale())) },
-                    onClick = {
-                        expanded = false
-                        onSelect(option)
-                    },
-                )
+    TextButton(onClick = { expanded = true }, modifier = Modifier.height(48.dp)) {
+        Text(financeMonthLabel(period, atlasLocale()))
+        Text("  ▾")
+    }
+    if (expanded) {
+        val currentMonth = YearMonth.parse(currentPeriod)
+        val options = (0L..35L).map { currentMonth.minusMonths(it).toString() }
+        ModalBottomSheet(onDismissRequest = { expanded = false }) {
+            Text(
+                atlasText("Choisir un mois", "Choose a month", "اختر شهراً"),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            LazyColumn {
+                items(options) { option ->
+                    TextButton(
+                        onClick = { expanded = false; onSelect(option) },
+                        modifier = Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp),
+                    ) {
+                        Text(financeMonthLabel(option, atlasLocale()), Modifier.fillMaxWidth())
+                    }
+                }
             }
         }
     }
@@ -1219,7 +1117,7 @@ private fun FinanceObligationsList(
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(atlasMoney(document.remaining, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                Text(homeMoney(document.remaining, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                 val tone = when (document.state.lowercase()) {
                     "overdue" -> AtlasTone.DANGER
                     "partial" -> AtlasTone.WARNING
@@ -1263,15 +1161,15 @@ private fun BalanceHero(
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = atlasMoney(balance, currency),
+            text = homeMoney(balance, currency),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = palette.heroText,
         )
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HeroPill(text = atlasText("Stock ${atlasMoneyCompact(stockValue, currency)}", "Inventory ${atlasMoneyCompact(stockValue, currency)}", "المخزون ${atlasMoneyCompact(stockValue, currency)}"), modifier = Modifier.weight(1f))
-            HeroPill(text = atlasText("Créances ${atlasMoneyCompact(receivable, currency)}", "Receivables ${atlasMoneyCompact(receivable, currency)}", "المستحقات ${atlasMoneyCompact(receivable, currency)}"), modifier = Modifier.weight(1f))
+            HeroPill(text = atlasText("Stock ${homeMoneyCompact(stockValue, currency)}", "Inventory ${homeMoneyCompact(stockValue, currency)}", "المخزون ${homeMoneyCompact(stockValue, currency)}"), modifier = Modifier.weight(1f))
+            HeroPill(text = atlasText("Créances ${homeMoneyCompact(receivable, currency)}", "Receivables ${homeMoneyCompact(receivable, currency)}", "المستحقات ${homeMoneyCompact(receivable, currency)}"), modifier = Modifier.weight(1f))
         }
     }
 }
@@ -1297,9 +1195,9 @@ private fun OperationsHero(
         Spacer(Modifier.height(6.dp))
         Text(
             text = atlasText(
-                "${atlasInteger(productCount.toDouble())} articles actifs",
-                "${atlasInteger(productCount.toDouble())} active products",
-                "${atlasInteger(productCount.toDouble())} منتج نشط",
+                "${homeInteger(productCount.toDouble())} articles actifs",
+                "${homeInteger(productCount.toDouble())} active products",
+                "${homeInteger(productCount.toDouble())} منتج نشط",
             ),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
@@ -1313,8 +1211,8 @@ private fun OperationsHero(
                 } else {
                     atlasText("Aucune rupture critique", "No critical stock shortages", "لا يوجد نقص حرج في المخزون")
                 },
+                modifier = Modifier.weight(1f),
             )
-            HeroPill(text = atlasText("Demandes → Admin", "Requests → Admin", "الطلبات ← المسؤول"))
         }
     }
 }
@@ -1365,7 +1263,7 @@ private fun InvoiceRow(invoice: InvoiceDto, currency: String) {
         Spacer(Modifier.width(10.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = atlasMoney(invoice.total, currency),
+                text = homeMoney(invoice.total, currency),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
             )

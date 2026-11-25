@@ -26,6 +26,7 @@ import ma.etherealmber.atlascommerce.core.session.SessionManager
 import ma.etherealmber.atlascommerce.core.session.SessionState
 import ma.etherealmber.atlascommerce.data.OfflineCache
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
+import ma.etherealmber.atlascommerce.data.model.DailyMetricsDto
 import ma.etherealmber.atlascommerce.data.model.FinanceMonthlyDto
 import ma.etherealmber.atlascommerce.data.model.PayrollPageDto
 import ma.etherealmber.atlascommerce.data.repo.CommerceRepository
@@ -45,6 +46,9 @@ class HomeViewModel @Inject constructor(
         val loading: Boolean = true,
         val refreshing: Boolean = false,
         val dashboard: DashboardDto? = null,
+        val dailyMetrics: DailyMetricsDto? = null,
+        val metricsLoading: Boolean = true,
+        val metricsError: String? = null,
         val currency: String = "MAD",
         val finance: FinanceMonthlyDto? = null,
         val selectedFinancePeriod: String? = null,
@@ -77,94 +81,94 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    /** Refresh only the dashboard endpoint; finance has its own refresh action. */
+    /** Refresh the three home data sources together; no request is made per card. */
     fun refresh() {
         val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return
         val scopeIdentity = activeUser.scopeIdentity
-        _state.update { it.copy(loading = it.dashboard == null, refreshing = true, error = null, offline = false) }
+        val cacheKey = homeCacheKey(activeUser.scopeIdentity, activeUser.role)
+        val selectedPeriod = _state.value.selectedFinancePeriod
+        val isAdmin = Roles.isAdmin(activeUser.role)
+        _state.update { it.copy(
+            loading = it.dashboard == null,
+            refreshing = true,
+            financeLoading = isAdmin,
+            error = null,
+            offline = false,
+        ) }
         viewModelScope.launch {
-            val result = commerceRepository.dashboard()
-            val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
-            if (!stillSameScope) return@launch
-            val dashboard = result.successOrNull()
-            val failure = result.failureOrNull()
+            val dashboardJob = async { commerceRepository.dashboard(cacheKey, forceRefresh = true) }
+            val metricsJob = async { commerceRepository.dailyMetrics(cacheKey, forceRefresh = true) }
+            val financeJob = if (isAdmin) async {
+                commerceRepository.financeMonthly(selectedPeriod, cacheKey, forceRefresh = true)
+            } else null
+            val dashboardResult = dashboardJob.await()
+            val metricsResult = metricsJob.await()
+            val financeResult = financeJob?.await()
+            val sameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
+            if (!sameScope) return@launch
+            val dashboard = dashboardResult.successOrNull()
+            val metrics = metricsResult.successOrNull()
+            val finance = financeResult?.successOrNull()
+            val dashboardFailure = dashboardResult.failureOrNull()
+            val financeFailure = financeResult?.failureOrNull()
             val deviceOnline = hasDeviceInternetCapability(applicationContext)
-            _state.update { current ->
-                current.copy(
-                    loading = false,
-                    refreshing = false,
-                    dashboard = dashboard ?: current.dashboard,
-                    currency = dashboard?.activeCurrency ?: current.currency,
-                    error = if (dashboard == null && failure != null &&
-                        (failure.code != ApiRunner.CODE_NETWORK || deviceOnline)
-                    ) failure.message else null,
-                    offline = failure?.code == ApiRunner.CODE_NETWORK && !deviceOnline,
-                )
-            }
+            _state.update { current -> current.copy(
+                loading = false,
+                refreshing = false,
+                financeLoading = false,
+                dashboard = dashboard ?: current.dashboard,
+                dailyMetrics = metrics ?: current.dailyMetrics,
+                metricsLoading = false,
+                metricsError = metricsResult.failureOrNull()?.message?.takeIf { metrics == null && current.dailyMetrics == null },
+                finance = finance ?: current.finance,
+                serverCurrentFinancePeriod = finance?.period ?: current.serverCurrentFinancePeriod,
+                currency = finance?.currency?.takeIf(String::isNotBlank) ?: dashboard?.activeCurrency ?: current.currency,
+                financeError = financeFailure?.message?.takeIf { finance == null && current.finance == null },
+                error = if (dashboard == null && dashboardFailure != null &&
+                    (dashboardFailure.code != ApiRunner.CODE_NETWORK || deviceOnline)
+                ) dashboardFailure.message else null,
+                offline = dashboardFailure?.code == ApiRunner.CODE_NETWORK && !deviceOnline,
+            ) }
         }
     }
 
-    /** Refresh only the finance/payroll data shared by the Home summary and Employees page. */
+    /** Refresh the selected monthly summary with one endpoint call. */
     fun refreshFinance() {
         val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return
         if (!Roles.isAdmin(activeUser.role)) return
         val requestedScope = activeUser.scopeIdentity
+        val homeCacheKey = homeCacheKey(activeUser.scopeIdentity, activeUser.role)
         val cacheScope = offlineCache.scopeFor(activeUser.serverUrl, activeUser.username)
         val previous = _state.value
         val requestedPeriod = previous.selectedFinancePeriod
         _state.update { it.copy(financeLoading = true, financeError = null) }
         viewModelScope.launch {
-            val currentFinanceResult = commerceRepository.financeMonthly()
-            val currentFinance = currentFinanceResult.successOrNull()
-            val serverPeriod = currentFinance?.period
-                ?.takeIf { it.matches(Regex("\\d{4}-(0[1-9]|1[0-2])")) }
-            val targetPeriod = requestedPeriod ?: serverPeriod
-            val financeResult = when {
-                targetPeriod == null || targetPeriod == serverPeriod -> currentFinanceResult
-                else -> commerceRepository.financeMonthly(targetPeriod)
-            }
+            val financeResult = commerceRepository.financeMonthly(requestedPeriod, homeCacheKey, forceRefresh = true)
             val finance = financeResult.successOrNull()
-            val payrollResult = finance?.period?.takeIf { it.isNotBlank() }?.let { period ->
-                commerceRepository.employeePayroll(period = period, pageSize = 20)
-            }
-            val payroll = payrollResult?.successOrNull()
-            val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope
-            val selectionStillCurrent = _state.value.selectedFinancePeriod == requestedPeriod
-            if (!stillSameScope || !selectionStillCurrent) return@launch
-
+            val payroll = previous.payroll?.takeIf { it.period == finance?.period }
+            val sameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope
+            if (!sameScope || _state.value.selectedFinancePeriod != requestedPeriod) return@launch
             if (finance != null && payroll != null) {
-                offlineCache.saveFinanceBundle(
-                    finance,
-                    payroll,
-                    isLatest = serverPeriod == finance.period,
-                    scope = cacheScope,
-                )
+                offlineCache.saveFinanceBundle(finance, payroll, isLatest = requestedPeriod == null, scope = cacheScope)
             }
-            if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope ||
-                _state.value.selectedFinancePeriod != requestedPeriod
-            ) return@launch
-
-            val failure = financeResult.failureOrNull() ?: payrollResult?.failureOrNull()
-            val hasFallback = previous.finance != null || previous.payroll != null
+            val failure = financeResult.failureOrNull()
+            val hasFallback = previous.finance != null
             val deviceOffline = !hasDeviceInternetCapability(applicationContext)
-            _state.update { current ->
-                current.copy(
-                    financeLoading = false,
-                    serverCurrentFinancePeriod = serverPeriod ?: current.serverCurrentFinancePeriod,
-                    selectedFinancePeriod = if (requestedPeriod == null) null else finance?.period ?: requestedPeriod,
-                    finance = finance ?: current.finance,
-                    payroll = payroll ?: current.payroll,
-                    currency = finance?.currency?.takeIf { it.isNotBlank() } ?: current.currency,
-                    financeError = failure?.let {
-                        if (it.code == "FIN_FORBIDDEN") "Réservé aux administrateurs (owner/admin)."
-                        else if ((it.code == ApiRunner.CODE_NETWORK || it.httpStatus?.let { status -> status in 500..599 } == true) && hasFallback) null
-                        else it.message
-                    },
-                    financeFromCache = if (finance != null && payroll != null) false else current.financeFromCache ||
-                        ((failure?.code == ApiRunner.CODE_NETWORK || failure?.httpStatus?.let { it in 500..599 } == true) && hasFallback),
-                    financeOffline = failure?.code == ApiRunner.CODE_NETWORK && deviceOffline && hasFallback,
-                )
-            }
+            _state.update { current -> current.copy(
+                financeLoading = false,
+                serverCurrentFinancePeriod = finance?.period ?: current.serverCurrentFinancePeriod,
+                selectedFinancePeriod = if (requestedPeriod == null) null else finance?.period ?: requestedPeriod,
+                finance = finance ?: current.finance,
+                payroll = payroll ?: current.payroll,
+                currency = finance?.currency?.takeIf(String::isNotBlank) ?: current.currency,
+                financeError = failure?.let {
+                    if (it.code == "FIN_FORBIDDEN") "Réservé aux administrateurs (owner/admin)."
+                    else if ((it.code == ApiRunner.CODE_NETWORK || it.httpStatus?.let { status -> status in 500..599 } == true) && hasFallback) null
+                    else it.message
+                },
+                financeFromCache = finance == null && current.financeFromCache,
+                financeOffline = failure?.code == ApiRunner.CODE_NETWORK && deviceOffline && hasFallback,
+            ) }
         }
     }
 
@@ -176,6 +180,7 @@ class HomeViewModel @Inject constructor(
         if (current.selectedFinancePeriod == period && current.finance?.period == period) return
 
         val requestedScope = activeUser.scopeIdentity
+        val homeCacheKey = homeCacheKey(activeUser.scopeIdentity, activeUser.role)
         val cacheScope = offlineCache.scopeFor(activeUser.serverUrl, activeUser.username)
         _state.update {
             it.copy(
@@ -205,12 +210,9 @@ class HomeViewModel @Inject constructor(
                 }
             }
 
-            val financeResult = commerceRepository.financeMonthly(period)
+            val financeResult = commerceRepository.financeMonthly(period, homeCacheKey, forceRefresh = true)
             val finance = financeResult.successOrNull()
-            val payrollResult = if (finance != null && finance.period.isNotBlank()) {
-                commerceRepository.employeePayroll(period = finance.period, pageSize = 20)
-            } else null
-            val payroll = payrollResult?.successOrNull()
+            val payroll = _state.value.payroll?.takeIf { it.period == finance?.period }
             val sameRequest = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope &&
                 _state.value.selectedFinancePeriod == period
             if (!sameRequest) return@launch
@@ -222,7 +224,7 @@ class HomeViewModel @Inject constructor(
                 _state.value.selectedFinancePeriod != period
             ) return@launch
 
-            val failure = financeResult.failureOrNull() ?: payrollResult?.failureOrNull()
+            val failure = financeResult.failureOrNull()
             val fallbackFinance = finance ?: cached?.finance
             val fallbackPayroll = payroll ?: cached?.payroll
             val hasFallback = fallbackFinance != null || fallbackPayroll != null
@@ -246,43 +248,40 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /** Payroll detail stays lazy so opening Home remains capped at its three summary requests. */
     fun loadMorePayroll() {
         val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return
-        if (!Roles.isAdmin(activeUser.role)) return
-        val current = _state.value.payroll ?: return
-        if (!current.hasMore || _state.value.payrollLoadingMore) return
-        val scopeIdentity = activeUser.scopeIdentity
+        if (!Roles.isAdmin(activeUser.role) || _state.value.payrollLoadingMore) return
+        val current = _state.value.payroll
+        if (current != null && !current.hasMore) return
+        val period = _state.value.finance?.period ?: current?.period ?: return
+        val requestedScope = activeUser.scopeIdentity
         val cacheScope = offlineCache.scopeFor(activeUser.serverUrl, activeUser.username)
+        val page = current?.page?.plus(1) ?: 1
+        val pageSize = current?.pageSize ?: 20
         viewModelScope.launch {
             _state.update { it.copy(payrollLoadingMore = true, financeError = null) }
-            val result = commerceRepository.employeePayroll(
-                period = current.period,
-                page = current.page + 1,
-                pageSize = current.pageSize,
-            )
-            val stillSameUser = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == scopeIdentity
-            if (!stillSameUser) return@launch
-            val displayedPayroll = _state.value.payroll
-            if (displayedPayroll == null || displayedPayroll.period != current.period) return@launch
+            val result = commerceRepository.employeePayroll(period = period, page = page, pageSize = pageSize)
+            val sameUser = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope
+            if (!sameUser || _state.value.finance?.period != period) return@launch
+            val displayedPayroll = _state.value.payroll?.takeIf { it.period == period }
             val nextPage = result.successOrNull()
-            val mergedPayroll = nextPage?.copy(rows = displayedPayroll.rows + nextPage.rows)
+            val mergedPayroll = nextPage?.copy(rows = displayedPayroll?.rows.orEmpty() + nextPage.rows)
             val failure = result.failureOrNull()
-            val hasFallback = _state.value.payroll != null
+            val hasFallback = displayedPayroll != null
             val deviceOnline = hasDeviceInternetCapability(applicationContext)
-            _state.update { state ->
-                state.copy(
-                    payrollLoadingMore = false,
-                    payroll = mergedPayroll ?: state.payroll,
-                    financeError = failure?.let {
-                        if (it.code == "FIN_FORBIDDEN") "Réservé aux administrateurs (owner/admin)."
-                        else if ((it.code == ApiRunner.CODE_NETWORK || it.httpStatus?.let { status -> status in 500..599 } == true) && hasFallback) null
-                        else it.message
-                    },
-                    financeFromCache = if (nextPage != null) false else state.financeFromCache ||
-                        ((failure?.code == ApiRunner.CODE_NETWORK || failure?.httpStatus?.let { it in 500..599 } == true) && hasFallback),
-                    financeOffline = failure?.code == ApiRunner.CODE_NETWORK && !deviceOnline && hasFallback,
-                )
-            }
+            _state.update { state -> state.copy(
+                payrollLoadingMore = false,
+                payroll = mergedPayroll ?: state.payroll,
+                financeError = failure?.let {
+                    if (it.code == "FIN_FORBIDDEN") "Réservé aux administrateurs (owner/admin)."
+                    else if ((it.code == ApiRunner.CODE_NETWORK || it.httpStatus?.let { status -> status in 500..599 } == true) && hasFallback) null
+                    else it.message
+                },
+                financeFromCache = if (nextPage != null) false else state.financeFromCache ||
+                    ((failure?.code == ApiRunner.CODE_NETWORK || failure?.httpStatus?.let { it in 500..599 } == true) && hasFallback),
+                financeOffline = failure?.code == ApiRunner.CODE_NETWORK && !deviceOnline && hasFallback,
+            ) }
             val finance = _state.value.finance
             if (finance != null && mergedPayroll != null) {
                 offlineCache.saveFinanceBundle(
@@ -299,10 +298,10 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val activeUser = (sessionManager.state.value as? SessionState.Active)?.user ?: return@launch
             val requestedScope = activeUser.scopeIdentity
+            val homeCacheKey = homeCacheKey(activeUser.scopeIdentity, activeUser.role)
             val cacheScope = offlineCache.scopeFor(activeUser.serverUrl, activeUser.username)
             val isAdmin = Roles.isAdmin(activeUser.role)
             val requestedFinancePeriod = _state.value.selectedFinancePeriod
-            val knownServerCurrentPeriod = _state.value.serverCurrentFinancePeriod
             _state.update {
                 it.copy(
                     loading = initial && it.dashboard == null,
@@ -331,22 +330,14 @@ class HomeViewModel @Inject constructor(
                 }
             }
 
-            val dashboardJob = async { commerceRepository.dashboard() }
-            val serverCurrentFinanceJob = if (isAdmin) async { commerceRepository.financeMonthly() } else null
-            val financeJob = when {
-                !isAdmin -> null
-                requestedFinancePeriod == null || requestedFinancePeriod == knownServerCurrentPeriod -> serverCurrentFinanceJob
-                else -> async { commerceRepository.financeMonthly(requestedFinancePeriod) }
-            }
+            val dashboardJob = async { commerceRepository.dashboard(homeCacheKey) }
+            val metricsJob = async { commerceRepository.dailyMetrics(homeCacheKey) }
+            val financeJob = if (isAdmin) async { commerceRepository.financeMonthly(requestedFinancePeriod, homeCacheKey) } else null
             val dashboardResult = dashboardJob.await()
-            val serverCurrentFinanceResult = serverCurrentFinanceJob?.await()
-            val serverCurrentFinance = serverCurrentFinanceResult?.successOrNull()
+            val metricsResult = metricsJob.await()
             val financeResult = financeJob?.await()
             val finance = financeResult?.successOrNull()
-            val payrollResult = if (finance != null && finance.period.isNotBlank()) {
-                commerceRepository.employeePayroll(period = finance.period, pageSize = 20)
-            } else null
-            val payroll = payrollResult?.successOrNull()
+            val payroll = cachedBundle?.payroll?.takeIf { it.period == finance?.period }
 
             val stillSameScope = (sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity == requestedScope
             if (!stillSameScope) return@launch
@@ -358,15 +349,16 @@ class HomeViewModel @Inject constructor(
                 offlineCache.saveFinanceBundle(
                     finance,
                     payroll,
-                    isLatest = serverCurrentFinance?.period == finance.period,
+                    isLatest = requestedFinancePeriod == null,
                     scope = cacheScope,
                 )
             }
             if ((sessionManager.state.value as? SessionState.Active)?.user?.scopeIdentity != requestedScope) return@launch
 
             val failure = dashboardResult.failureOrNull()
-            val financeFailure = financeResult?.failureOrNull() ?: payrollResult?.failureOrNull()
+            val financeFailure = financeResult?.failureOrNull()
             val dashboard = dashboardResult.successOrNull()
+            val dailyMetrics = metricsResult.successOrNull()
             val financeFallback = finance ?: cachedForFinancePeriod?.finance
             val payrollFallback = payroll ?: cachedForFinancePeriod?.payroll
             val hasFinanceFallback = financeFallback != null || payrollFallback != null
@@ -391,6 +383,9 @@ class HomeViewModel @Inject constructor(
                     loading = false,
                     refreshing = false,
                     dashboard = dashboard ?: current.dashboard,
+                    dailyMetrics = dailyMetrics ?: current.dailyMetrics,
+                    metricsLoading = false,
+                    metricsError = metricsResult.failureOrNull()?.message?.takeIf { dailyMetrics == null && current.dailyMetrics == null },
                     currency = (if (financeIsCurrent) displayedFinance?.currency?.takeIf { it.isNotBlank() } else null)
                         ?: dashboard?.activeCurrency
                         ?: current.currency,
@@ -400,8 +395,7 @@ class HomeViewModel @Inject constructor(
                         else -> current.selectedFinancePeriod
                     },
                     serverCurrentFinancePeriod = if (!isAdmin) null else {
-                        serverCurrentFinance?.period
-                            ?.takeIf { it.matches(Regex("\\d{4}-(0[1-9]|1[0-2])")) }
+                        finance?.period?.takeIf { it.matches(Regex("\\d{4}-(0[1-9]|1[0-2])")) }
                             ?: current.serverCurrentFinancePeriod
                     },
                     finance = displayedFinance,
@@ -415,7 +409,7 @@ class HomeViewModel @Inject constructor(
                             else -> failed.message
                         }
                     } else current.financeError,
-                    financeFromCache = if (!isAdmin) false else if (finance != null && payroll != null) false else financeStillCached,
+                    financeFromCache = if (!isAdmin) false else if (finance != null) false else financeStillCached,
                     financeOffline = financeIsCurrent && networkFailureWithFallback && !deviceOnline,
                     error = if (dashboard == null && failure != null &&
                         (failure.code != ApiRunner.CODE_NETWORK || deviceOnline)
@@ -492,6 +486,9 @@ class HomeViewModel @Inject constructor(
             }
         }
     }
+
+    private fun homeCacheKey(scopeIdentity: String, role: String): String =
+        "$scopeIdentity:${role.trim().lowercase()}"
 
     private fun financeReportDirectory(cacheDirectory: File, scopeIdentity: String): File =
         File(File(cacheDirectory, "finance"), scopeCacheKey(scopeIdentity))

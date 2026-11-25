@@ -107,6 +107,7 @@ fun ProductsScreen(
     onToast: (String) -> Unit,
     onHistoryPageVisibilityChanged: (Boolean) -> Unit = {},
     showPageTitle: Boolean = false,
+    initialAlertsFilterRequest: Int = 0,
     viewModel: ProductsViewModel = hiltViewModel(),
 ) {
     val dockPadding = LocalAtlasFloatingDockPadding.current
@@ -136,6 +137,9 @@ fun ProductsScreen(
     val canChangeStock = canAdjustStock || canRequestStockAdjustment
     val canEditProductImage = Roles.isAdmin(user.role) || Roles.normalize(user.role) == Roles.SECRETARY
 
+    LaunchedEffect(initialAlertsFilterRequest) {
+        if (initialAlertsFilterRequest > 0) viewModel.setFilter(ProductsViewModel.FilterMode.NEEDED)
+    }
     LaunchedEffect(Unit) {
         viewModel.messages.collect { message -> onToast(message) }
     }

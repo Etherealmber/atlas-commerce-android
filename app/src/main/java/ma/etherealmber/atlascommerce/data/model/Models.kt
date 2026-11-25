@@ -376,6 +376,18 @@ data class CompanySettingsDto(
 )
 
 // ---------------------------------------------------------------------------
+// Daily dashboard analytics
+// ---------------------------------------------------------------------------
+
+@JsonClass(generateAdapter = true)
+data class DailyMetricsDto(
+    val days: Int = 0,
+    val dates: List<String> = emptyList(),
+    val series: Map<String, List<Double?>> = emptyMap(),
+    val kinds: Map<String, String> = emptyMap(),
+)
+
+// ---------------------------------------------------------------------------
 // Dashboard
 // ---------------------------------------------------------------------------
 

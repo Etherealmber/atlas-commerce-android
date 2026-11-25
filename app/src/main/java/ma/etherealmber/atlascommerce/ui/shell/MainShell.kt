@@ -278,6 +278,7 @@ fun MainShell(
     var showAvatarSurprise by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var showAgentSurprise by rememberSaveable(user.scopeIdentity) { mutableStateOf(false) }
     var agentHistoryRequested by remember { mutableStateOf(false) }
+    var productAlertFilterRequest by remember { mutableStateOf(0) }
     var scanCreateProductRequest by remember { mutableStateOf(0) }
     val agentViewModel: AgentViewModel? = if (tab == MainTab.AGENT) hiltViewModel() else null
     val refreshAgentContext = rememberApiRefreshAction(
@@ -1026,6 +1027,7 @@ fun MainShell(
                     MainTab.HOME -> HomeScreen(
                         user = user,
                         onOpenProducts = { switchTab(MainTab.PRODUCTS) },
+                        onOpenProductsAlerts = { productAlertFilterRequest += 1; switchTab(MainTab.PRODUCTS) },
                         onOpenSale = { switchTab(MainTab.SALE) },
                         onOpenScan = { switchTab(MainTab.SCAN) },
                         onOpenNotifications = openNotificationsForLayout,
@@ -1039,6 +1041,7 @@ fun MainShell(
                         onToast = onToast,
                         onHistoryPageVisibilityChanged = { productHistoryActive = it },
                         showPageTitle = false,
+                        initialAlertsFilterRequest = productAlertFilterRequest,
                     )
 
                     MainTab.SCAN -> ScanScreen(
