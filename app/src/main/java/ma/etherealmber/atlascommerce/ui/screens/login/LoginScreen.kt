@@ -240,6 +240,7 @@ private fun LoginScreenContent(
         contentAlignment = Alignment.TopCenter,
     ) {
         val tabletLayout = maxWidth >= 600.dp
+        val loginLockupHeight = if (maxWidth < 420.dp) 56.dp else 72.dp
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         val compact = maxWidth < 600.dp || maxHeight < 640.dp || keyboardVisible
         val heroHeight = if (tabletLayout) {
@@ -311,7 +312,7 @@ private fun LoginScreenContent(
                 ) {
                     if (tabletLayout) {
                         AtlasAnimatedBrand(
-                            height = if (maxWidth < 420.dp) 56.dp else 72.dp,
+                            height = loginLockupHeight,
                             tint = Color.White,
                             onClick = {},
                         )

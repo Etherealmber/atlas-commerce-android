@@ -64,6 +64,7 @@ fun AtlasLanguageToolbarPill(
     val dark = LocalAtlasDarkTheme.current
     val compact = widthDp <= 480
     val visualHeight = if (compact) 28.dp else 32.dp
+    val languageContentDescription = atlasText("Langue", "Language", "اللغة")
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -85,7 +86,7 @@ fun AtlasLanguageToolbarPill(
                 .minimumInteractiveComponentSize()
                 .defaultMinSize(minWidth = if (compact) 48.dp else 68.dp, minHeight = 48.dp)
                 .semantics {
-                    contentDescription = atlasText("Langue", "Language", "اللغة")
+                    contentDescription = languageContentDescription
                     this[AtlasToolbarPillMotionKey] = AtlasToolbarPillMotion(scale, background)
                 }
                 .clickable(
