@@ -43,6 +43,7 @@ import ma.etherealmber.atlascommerce.data.model.FinancePeriodDto
 import ma.etherealmber.atlascommerce.data.model.CreateProductRequest
 import ma.etherealmber.atlascommerce.data.model.CreatedInvoiceDto
 import ma.etherealmber.atlascommerce.data.model.DashboardDto
+import ma.etherealmber.atlascommerce.data.model.DailyMetricsDto
 import ma.etherealmber.atlascommerce.data.model.EmployeeDto
 import ma.etherealmber.atlascommerce.data.model.EmployeeUpdateRequest
 import ma.etherealmber.atlascommerce.data.model.EmployeeResignRequest
@@ -89,8 +90,45 @@ class CommerceRepository @Inject constructor(
     private val moshi: Moshi,
 ) {
 
-    suspend fun dashboard(): ApiResult<DashboardDto> =
-        runner.envelope { apiProvider.api().dashboard() }
+    private data class TimedValue<T>(val savedAt: Long, val value: T)
+    private val dashboardCache = java.util.concurrent.ConcurrentHashMap<String, TimedValue<DashboardDto>>()
+    private val dailyMetricsCache = java.util.concurrent.ConcurrentHashMap<String, TimedValue<DailyMetricsDto>>()
+    private val financeMonthlyCache = java.util.concurrent.ConcurrentHashMap<String, TimedValue<FinanceMonthlyDto>>()
+    private val homeCacheTtlMillis = 60_000L
+
+    suspend fun dashboard(cacheKey: String? = null, forceRefresh: Boolean = false): ApiResult<DashboardDto> {
+        val key = cacheKey?.let { "dashboard:$it" }
+        if (!forceRefresh && key != null) dashboardCache[key]?.takeIf { System.currentTimeMillis() - it.savedAt < homeCacheTtlMillis }?.let {
+            return ApiResult.Success(it.value)
+        }
+        val result = runner.envelope { apiProvider.api().dashboard() }
+        if (result is ApiResult.Success && key != null) dashboardCache[key] = TimedValue(System.currentTimeMillis(), result.data)
+        return result
+    }
+
+    suspend fun dailyMetrics(cacheKey: String? = null, forceRefresh: Boolean = false): ApiResult<DailyMetricsDto> {
+        val key = cacheKey?.let { "daily-metrics:$it" }
+        if (!forceRefresh && key != null) dailyMetricsCache[key]?.takeIf { System.currentTimeMillis() - it.savedAt < homeCacheTtlMillis }?.let {
+            return ApiResult.Success(it.value)
+        }
+        val result = runner.envelope { apiProvider.api().dailyMetrics() }
+        if (result is ApiResult.Success && key != null) dailyMetricsCache[key] = TimedValue(System.currentTimeMillis(), result.data)
+        return result
+    }
+
+    suspend fun financeMonthly(
+        period: String? = null,
+        cacheKey: String? = null,
+        forceRefresh: Boolean = false,
+    ): ApiResult<FinanceMonthlyDto> {
+        val key = cacheKey?.let { "finance:$it:${period ?: "current"}" }
+        if (!forceRefresh && key != null) financeMonthlyCache[key]?.takeIf { System.currentTimeMillis() - it.savedAt < homeCacheTtlMillis }?.let {
+            return ApiResult.Success(it.value)
+        }
+        val result = runner.envelope { apiProvider.api().financeMonthly(period) }
+        if (result is ApiResult.Success && key != null) financeMonthlyCache[key] = TimedValue(System.currentTimeMillis(), result.data)
+        return result
+    }
 
     /** Fetches only the authenticated user's work page. This endpoint is not cached offline. */
     suspend fun mobileWorkStatus(
@@ -117,9 +155,6 @@ class CommerceRepository @Inject constructor(
 
     suspend fun invoices(kind: String = "all", clientId: Long? = null): ApiResult<List<InvoiceDto>> =
         runner.envelope { apiProvider.api().invoices(kind, clientId) }
-
-    suspend fun financeMonthly(period: String? = null): ApiResult<FinanceMonthlyDto> =
-        runner.envelope { apiProvider.api().financeMonthly(period) }
 
     suspend fun financePeriod(period: String): ApiResult<FinancePeriodDto> =
         runner.envelope { apiProvider.api().financePeriod(period) }
