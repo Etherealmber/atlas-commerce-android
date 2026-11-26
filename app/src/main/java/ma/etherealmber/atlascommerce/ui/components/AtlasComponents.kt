@@ -1209,22 +1209,11 @@ fun <S> AtlasPageTransition(
                 val targetOrder = indexSelector(targetState)
                 when {
                     tabletMode && initialOrder < 100 && targetOrder < 100 -> {
-                        // A directional, short slide makes tablet navigation feel intentional
-                        // without sending wide page surfaces sweeping across the whole screen.
-                        val forward = targetOrder > initialOrder
-                        (
-                            slideInHorizontally(
-                                animationSpec = tween(260, easing = FastOutSlowInEasing),
-                                initialOffsetX = { width -> if (forward) width / 18 else -width / 18 },
-                            ) +
-                                fadeIn(tween(230, easing = FastOutSlowInEasing)) +
-                                scaleIn(tween(260, easing = FastOutSlowInEasing), initialScale = 0.985f)
-                            ) togetherWith (
-                            slideOutHorizontally(
-                                animationSpec = tween(210, easing = FastOutSlowInEasing),
-                                targetOffsetX = { width -> if (forward) -width / 24 else width / 24 },
-                            ) + fadeOut(tween(190, easing = FastOutSlowInEasing))
-                            )
+                        // Keep wide tablet pages stationary while switching destinations. Sliding
+                        // and scaling two full-width screens can expose clipped/overlapping content
+                        // (especially nested LazyColumns) during the transition.
+                        fadeIn(tween(160, easing = FastOutSlowInEasing)) togetherWith
+                            fadeOut(tween(100, easing = FastOutSlowInEasing))
                     }
 
                     // Overlay / Settings pushed vertically

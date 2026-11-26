@@ -629,7 +629,7 @@ fun MainShell(
                                     subtitle = null,
                                     windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal),
                                     containerColor = Color.Transparent,
-                                    titleLeading = if (tab == MainTab.AGENT) {
+                                    titleLeading = if (tab == MainTab.AGENT && !useRail) {
                                         {
                                             AtlasAgentSurpriseMascot(
                                                 modifier = Modifier.size(30.dp),
@@ -681,7 +681,7 @@ fun MainShell(
                                                 )
                                             }
                                         }
-                                        if (tab == MainTab.AGENT) {
+                                        if (tab == MainTab.AGENT && !useRail) {
                                             IconButton(onClick = { agentHistoryRequested = true }) {
                                                 Icon(
                                                     imageVector = Icons.Outlined.History,

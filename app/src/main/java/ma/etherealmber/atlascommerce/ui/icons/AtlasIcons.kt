@@ -84,6 +84,7 @@ object AtlasIcons {
         val Remove: ImageVector by lazy { atlasLucideVector(LucideIcons.All.MinusDefinition) }
         val Search: ImageVector by lazy { atlasLucideVector(LucideIcons.All.SearchDefinition) }
         val Security: ImageVector by lazy { atlasLucideVector(LucideIcons.All.ShieldDefinition) }
+        val Smartphone: ImageVector by lazy { atlasLucideVector(LucideIcons.All.SmartphoneDefinition) }
         val Send: ImageVector by lazy { atlasLucideVector(LucideIcons.All.SendDefinition) }
         val Settings: ImageVector by lazy { atlasLucideVector(LucideIcons.All.SettingsDefinition) }
         val Share: ImageVector by lazy { atlasLucideVector(LucideIcons.All.Share2Definition) }
