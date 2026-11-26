@@ -12,6 +12,7 @@ import ma.etherealmber.atlascommerce.ui.i18n.atlasInteger
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
@@ -115,16 +117,20 @@ fun NotificationsScreen(
         viewModel.messages.collect { msg -> onToast(msg) }
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = density.screenPadding,
-            end = density.screenPadding,
-            top = density.cardMargin + LocalAtlasFloatingTopBarPadding.current,
-            bottom = 28.dp + LocalAtlasFloatingDockPadding.current,
-        ),
-        verticalArrangement = Arrangement.spacedBy(density.itemGap),
-    ) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val tabletLayout = maxWidth >= 600.dp
+        LazyColumn(
+            modifier = if (tabletLayout) {
+                Modifier.align(Alignment.TopCenter).widthIn(max = 1_000.dp).fillMaxSize()
+            } else Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = if (tabletLayout) 24.dp else density.screenPadding,
+                end = if (tabletLayout) 24.dp else density.screenPadding,
+                top = density.cardMargin + LocalAtlasFloatingTopBarPadding.current,
+                bottom = 28.dp + LocalAtlasFloatingDockPadding.current,
+            ),
+            verticalArrangement = Arrangement.spacedBy(density.itemGap),
+        ) {
             // Role-Based Info Box Banner + Send Role Notification CTA
             if (shouldShowNotificationEnablePrompt(systemNotificationsEnabled, enablePromptDismissed)) {
                 item {
@@ -318,6 +324,7 @@ fun NotificationsScreen(
                 }
             }
         }
+    }
 
     val productActionId = productActionToCreateId
     LaunchedEffect(productActionId, state.loadingProductActionId, state.productActionDetails) {

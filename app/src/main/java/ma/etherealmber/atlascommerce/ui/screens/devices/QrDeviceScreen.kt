@@ -946,7 +946,7 @@ private fun SecurityDeviceRow(
         else -> atlasText("Session Atlas", "Atlas session", "جلسة Atlas")
     }
     val deviceIcon = when {
-        isNativeAndroid -> Icons.Outlined.Phone
+        isNativeAndroid -> Icons.Outlined.Smartphone
         isNativeDesktop -> Icons.Outlined.Computer
         isBrowserSession -> Icons.Outlined.Language
         else -> Icons.Outlined.Computer

@@ -1913,6 +1913,9 @@ private suspend fun LazyListState.scrollToConversationEnd() {
     val finalIndex = (layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
     val lastItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == finalIndex }
     val viewportSize = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).coerceAtLeast(1)
-    val overflow = ((lastItem?.size ?: 0) - viewportSize).coerceAtLeast(0)
-    scrollToItem(finalIndex, scrollOffset = overflow)
+    // scrollToItem places the target at the viewport top by default. A negative offset
+    // aligns short (or zero-height trailing) items at the viewport bottom; without it,
+    // the last chat row can be pushed above the visible tablet viewport.
+    val bottomAlignedOffset = (lastItem?.size ?: 0) - viewportSize
+    scrollToItem(finalIndex, scrollOffset = bottomAlignedOffset)
 }

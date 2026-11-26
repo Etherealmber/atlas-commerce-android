@@ -517,6 +517,35 @@ private fun HomeContent(
             item { AtlasOfflineBanner() }
         }
 
+        // Primary role-gated action bar
+        item {
+            AtlasEntrance(delayMillis = 45) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (canSell) {
+                        AtlasButton(
+                            text = atlasText("Nouvelle vente", "New sale", "بيع جديد"),
+                            onClick = onOpenSale,
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.PointOfSale,
+                        )
+                    } else {
+                        AtlasButton(
+                            text = atlasText("Scanner", "Scan", "مسح ضوئي"),
+                            onClick = onOpenScan,
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.QrCodeScanner,
+                        )
+                    }
+                    AtlasOutlinedButton(
+                        text = atlasText("Produits", "Products", "المنتجات"),
+                        onClick = onOpenProducts,
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Outlined.Inventory2,
+                    )
+                }
+            }
+        }
+
         // Treasury is restricted to Owner/Admin; other roles get operational stock data only.
         item {
             AtlasEntrance(delayMillis = 0) {
@@ -605,35 +634,6 @@ private fun HomeContent(
         }
 
 
-        // Primary role-gated action bar
-        item {
-            AtlasEntrance(delayMillis = 45) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (canSell) {
-                        AtlasButton(
-                            text = atlasText("Nouvelle vente", "New sale", "بيع جديد"),
-                            onClick = onOpenSale,
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Outlined.PointOfSale,
-                        )
-                    } else {
-                        AtlasButton(
-                            text = atlasText("Scanner", "Scan", "مسح ضوئي"),
-                            onClick = onOpenScan,
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Outlined.QrCodeScanner,
-                        )
-                    }
-                    AtlasOutlinedButton(
-                        text = atlasText("Produits", "Products", "المنتجات"),
-                        onClick = onOpenProducts,
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Outlined.Inventory2,
-                    )
-                }
-            }
-        }
-
         item(key = "home_money_flow") {
             if (state.metricsLoading && state.dailyMetrics == null) HomeMetricsChartSkeleton(188.dp)
             else MoneyFlowChart(state.dailyMetrics, state.currency)
@@ -681,14 +681,12 @@ private fun HomeContent(
         }
 
 
-        if (dashboard.monthlySeries.isNotEmpty()) {
-            item(key = "monthly_sales_trend") {
-                AtlasEntrance(delayMillis = 165) {
-                    MonthlySalesTrendCard(
-                        points = dashboard.monthlySeries,
-                        currency = state.currency,
-                    )
-                }
+        item(key = "monthly_sales_trend") {
+            AtlasEntrance(delayMillis = 165) {
+                MonthlySalesTrendCard(
+                    points = dashboard.monthlySeries,
+                    currency = state.currency,
+                )
             }
         }
 
@@ -738,6 +736,11 @@ private fun HomeContent(
             }
         }
 
+        item(key = "home_stock_health") {
+            if (state.metricsLoading && state.dailyMetrics == null) HomeMetricsChartSkeleton(198.dp)
+            else StockHealthChart(state.dailyMetrics, onOpenProductsAlerts)
+        }
+
         if (canViewInvoices) {
             item {
                 AtlasCard {
@@ -765,10 +768,7 @@ private fun HomeContent(
             }
         }
 
-        item(key = "home_stock_health") {
-            if (state.metricsLoading && state.dailyMetrics == null) HomeMetricsChartSkeleton(198.dp)
-            else StockHealthChart(state.dailyMetrics, onOpenProductsAlerts)
-        }
+
     }
 }
 
