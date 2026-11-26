@@ -127,18 +127,6 @@ internal fun DailyKpiCarousel(
     onRetry: () -> Unit,
     currency: String,
 ) {
-    if (metrics == null) {
-        when {
-            loading -> KpiGridSkeleton()
-            error != null -> AtlasErrorCard(
-                title = atlasText("Indicateurs indisponibles", "Metrics unavailable", "المؤشرات غير متاحة"),
-                message = error,
-                onRetry = onRetry,
-            )
-        }
-        return
-    }
-    val locale = atlasLocale()
     val definitions = listOf(
         Triple("sales", "Ventes", "Sales"),
         Triple("money_in", "Encaissements", "Receipts"),
@@ -146,39 +134,62 @@ internal fun DailyKpiCarousel(
         Triple("low_stock", "Stock bas", "Low stock"),
         Triple("pending_actions", "Demandes en attente", "Pending requests"),
     )
-    val cards = definitions.mapNotNull { (key, french, english) ->
-        metricsValue(metrics, key)?.let { key to (atlasText(french, english, when (key) {
+    if (metrics == null) {
+        when {
+            loading -> {
+                KpiGridSkeleton()
+                return
+            }
+            error != null -> {
+                AtlasErrorCard(
+                    title = atlasText("Indicateurs indisponibles", "Metrics unavailable", "المؤشرات غير متاحة"),
+                    message = error,
+                    onRetry = onRetry,
+                )
+                return
+            }
+        }
+    }
+
+    val locale = atlasLocale()
+    val cards = definitions.map { (key, french, english) ->
+        val arabic = when (key) {
             "sales" -> "المبيعات"
             "money_in" -> "المقبوضات"
             "stock_moves" -> "حركات المخزون"
             "low_stock" -> "مخزون منخفض"
             else -> "الطلبات المعلقة"
-        }) to it) }
+        }
+        Triple(key, atlasText(french, english, arabic), metrics?.let { metricsValue(it, key) })
     }
-    if (cards.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         cards.chunked(2).forEach { rowCards ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                rowCards.forEach { (key, pair) ->
-                    val (label, data) = pair
+                rowCards.forEach { (key, label, data) ->
                     val isCurrency = key in setOf("sales", "money_in")
                     val unfavorableRise = key in setOf("low_stock", "pending_actions")
                     val positive = when {
+                        data == null -> true
                         data.isNew && unfavorableRise -> data.value <= 0.0
                         data.deltaPercent == null -> true
                         unfavorableRise -> data.deltaPercent <= 0.0
                         else -> data.deltaPercent >= 0.0
                     }
                     val palette = Atlas.palette
-                    val trendColor = if (positive) palette.positive else palette.danger
-                    val trendContainer = if (positive) palette.positiveSoft else palette.dangerSoft
+                    val trendColor = if (data == null) MaterialTheme.colorScheme.onSurfaceVariant
+                        else if (positive) palette.positive else palette.danger
+                    val trendContainer = if (data == null) MaterialTheme.colorScheme.surfaceVariant
+                        else if (positive) palette.positiveSoft else palette.dangerSoft
                     val deltaLabel = when {
+                        data == null -> atlasText("—", "No data", "لا توجد بيانات")
                         data.isNew -> atlasText("Nouveau", "New", "جديد")
                         data.deltaPercent == null -> atlasText("—", "—", "—")
                         else -> "${if ((data.deltaPercent ?: 0.0) >= 0) "↑" else "↓"} ${chartNumber(abs(data.deltaPercent ?: 0.0), 0, locale)}%"
                     }
-                    val valueLabel = if (isCurrency) chartMoney(data.value, currency, locale) else chartNumber(data.value, locale = locale)
-                    val cardDescription = "$label, $valueLabel, $deltaLabel, ${atlasText("tendance sur 7 jours", "7-day trend", "اتجاه 7 أيام")}"
+                    val valueLabel = data?.let {
+                        if (isCurrency) chartMoney(it.value, currency, locale) else chartNumber(it.value, locale = locale)
+                    } ?: "—"
+                    val cardDescription = if (data == null) "$label, ${atlasText("aucune donnée", "no data yet", "لا توجد بيانات بعد")}" else "$label, $valueLabel, $deltaLabel, ${atlasText("tendance sur 7 jours", "7-day trend", "اتجاه 7 أيام")}"
                     AtlasCard(
                         modifier = Modifier.weight(1f).height(128.dp).semantics { contentDescription = cardDescription },
                         padding = 10.dp,
@@ -211,10 +222,9 @@ internal fun DailyKpiCarousel(
                             Spacer(Modifier.weight(1f))
                         }
                         Spacer(Modifier.weight(1f))
-                        Sparkline(data.points, trendColor, LocalAtlasAnimationsEnabled.current)
+                        Sparkline(data?.points.orEmpty(), trendColor, LocalAtlasAnimationsEnabled.current)
                     }
                 }
-                if (rowCards.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }
@@ -245,7 +255,10 @@ private fun Sparkline(values: List<Double>, color: Color, animate: Boolean) {
     val target = if (values.size < 2) 0f else if (!animate || revealed) 1f else 0f
     val progress by animateFloatAsState(target, animationSpec = tween(if (animate) 250 else 0), label = "sparkline")
     Canvas(Modifier.fillMaxWidth().height(32.dp)) {
-        if (values.isEmpty()) return@Canvas
+        if (values.isEmpty()) {
+            drawLine(color.copy(alpha = 0.22f), Offset(0f, size.height / 2f), Offset(size.width, size.height / 2f), 1.dp.toPx())
+            return@Canvas
+        }
         val min = values.minOrNull() ?: 0.0
         val span = (values.maxOrNull() ?: 0.0) - min
         val path = Path()
@@ -259,16 +272,43 @@ private fun Sparkline(values: List<Double>, color: Color, animate: Boolean) {
 }
 
 @Composable
+private fun EmptyAnalyticsChart(title: String) {
+    AtlasCard(Modifier.fillMaxWidth(), padding = 14.dp) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
+        Box(Modifier.fillMaxWidth().height(112.dp), contentAlignment = Alignment.Center) {
+            Text(
+                atlasText("Aucune donnée pour le moment", "No chart data yet", "لا توجد بيانات للرسم بعد"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
 internal fun MoneyFlowChart(metrics: DailyMetricsDto?, currency: String) {
-    if (metrics == null) return
-    val inSeries = metrics.series["money_in"] ?: return
-    val outSeries = metrics.series["money_out"] ?: return
-    val count = minOf(14, inSeries.size, outSeries.size)
-    val incoming = inSeries.takeLast(count).map { it ?: 0.0 }
-    val outgoing = outSeries.takeLast(count).map { it ?: 0.0 }
+    if (metrics == null) {
+        EmptyAnalyticsChart(
+            title = atlasText("Entrées & sorties", "Money in & out", "المقبوضات والمدفوعات"),
+        )
+        return
+    }
+    val inSeries = metrics.series["money_in"]
+    val outSeries = metrics.series["money_out"]
+    val count = minOf(14, inSeries?.size ?: 0, outSeries?.size ?: 0)
+    if (count == 0) {
+        EmptyAnalyticsChart(
+            title = atlasText("Entrées & sorties", "Money in & out", "المقبوضات والمدفوعات"),
+        )
+        return
+    }
+    val availableInSeries = inSeries ?: emptyList()
+    val availableOutSeries = outSeries ?: emptyList()
+    val incoming = availableInSeries.takeLast(count).map { it?.takeIf { value -> value.isFinite() } ?: 0.0 }
+    val outgoing = availableOutSeries.takeLast(count).map { it?.takeIf { value -> value.isFinite() } ?: 0.0 }
     val inTotal = incoming.sum()
     val outTotal = outgoing.sum()
-    if (count == 0 || inTotal + outTotal == 0.0) return
     val dates = metrics.dates.takeLast(count)
     val net = inTotal - outTotal
     var selected by remember(metrics.dates) { mutableStateOf<Int?>(null) }
@@ -353,14 +393,29 @@ private fun LegendDot(color: Color, label: String) {
 
 @Composable
 internal fun StockHealthChart(metrics: DailyMetricsDto?, onViewAlerts: () -> Unit) {
-    if (metrics == null) return
+    if (metrics == null) {
+        EmptyAnalyticsChart(atlasText("Santé du stock", "Stock health", "حالة المخزون"))
+        return
+    }
     val explicitInStock = latestMetric(metrics, "in_stock")
-    val low = latestMetric(metrics, "low_stock") ?: return
-    val out = latestMetric(metrics, "out_of_stock") ?: return
-    val inStock = explicitInStock ?: ((latestMetric(metrics, "products") ?: return) - low - out).coerceAtLeast(0.0)
+    val low = latestMetric(metrics, "low_stock")
+    val out = latestMetric(metrics, "out_of_stock")
+    if (low == null || out == null) {
+        EmptyAnalyticsChart(atlasText("Santé du stock", "Stock health", "حالة المخزون"))
+        return
+    }
+    val products = latestMetric(metrics, "products")
+    if (explicitInStock == null && products == null) {
+        EmptyAnalyticsChart(atlasText("Santé du stock", "Stock health", "حالة المخزون"))
+        return
+    }
+    val inStock = explicitInStock ?: ((products ?: 0.0) - low - out).coerceAtLeast(0.0)
     val values = listOf(inStock.coerceAtLeast(0.0), low.coerceAtLeast(0.0), out.coerceAtLeast(0.0))
     val total = values.sum()
-    if (total <= 0) return
+    if (total <= 0) {
+        EmptyAnalyticsChart(atlasText("Santé du stock", "Stock health", "حالة المخزون"))
+        return
+    }
     val palette = Atlas.palette
     val colors = listOf(palette.positive, palette.warning, palette.danger)
     val names = listOf(atlasText("En stock", "In stock", "متوفر"), atlasText("Stock bas", "Low stock", "مخزون منخفض"), atlasText("Rupture", "Out of stock", "نفد المخزون"))
@@ -449,8 +504,11 @@ internal fun StockHealthChart(metrics: DailyMetricsDto?, onViewAlerts: () -> Uni
 @Composable
 internal fun MonthlySalesTrendCard(points: List<MonthlyPointDto>, currency: String) {
     val recent = points.takeLast(6)
-    if (recent.isEmpty()) return
-    val maxValue = recent.maxOfOrNull { it.sales.coerceAtLeast(0.0) }?.takeIf { it > 0.0 } ?: return
+    if (recent.isEmpty()) {
+        EmptyAnalyticsChart(atlasText("Tendance des ventes", "Sales trend", "اتجاه المبيعات"))
+        return
+    }
+    val maxValue = recent.maxOfOrNull { it.sales.coerceAtLeast(0.0) }?.coerceAtLeast(1.0) ?: 1.0
     val palette = Atlas.palette
     val motion = LocalAtlasAnimationsEnabled.current
     val locale = atlasLocale()
