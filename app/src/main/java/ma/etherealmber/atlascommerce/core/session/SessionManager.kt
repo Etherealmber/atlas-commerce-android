@@ -80,6 +80,8 @@ internal fun SessionUser.withRefreshedProfile(me: MeDto): SessionUser = copy(
 
 sealed interface SessionState {
     data object Loading : SessionState
+    data object Restoring : SessionState
+    data object RestoreUnavailable : SessionState
     data object SignedOut : SessionState
     data class Active(val user: SessionUser) : SessionState
 }
@@ -98,7 +100,7 @@ internal fun isProfileRefreshCurrent(
 ): Boolean = expectedScopeIdentity == activeScopeIdentity && expectedToken == activeToken
 
 private const val STARTUP_RETRY_INITIAL_DELAY_MS = 1_000L
-private const val STARTUP_RETRY_MAX_DELAY_MS = 30_000L
+private const val STARTUP_MAX_RESUME_ATTEMPTS = 2
 private const val LOGOUT_RESUME_UNCONFIRMED_NOTICE =
     "Déconnexion effectuée, mais le serveur n’a pas confirmé la reprise par mot de passe. Une vérification OTP peut être nécessaire."
 
@@ -169,13 +171,35 @@ class SessionManager @Inject constructor(
 
     /** Revalidate an encrypted same-device token at its original selected server on cold start. */
     private suspend fun initializeFreshSession() {
-        val startupGateStartedAt = SystemClock.elapsedRealtime()
+        try {
+            restoreSavedSessionWithStartupGate()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            startupCleanup.complete(Unit)
+            if (_state.value !is SessionState.Active) _state.value = SessionState.RestoreUnavailable
+            ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
+                tag = "AUTH",
+                message = "Session startup failed (${error.javaClass.simpleName}); saved credentials were retained",
+                level = "WARN",
+            )
+        }
+    }
+
+    private suspend fun restoreSavedSessionWithStartupGate(startedAt: Long = SystemClock.elapsedRealtime()) {
+        val sessionCipherAtStart = preferences.readSession()?.tokenCipher
         val outcome = FreshProcessStartup(
             restorePreviousSession = ::restoreSavedSession,
             clearStoredSession = preferences::clearSession,
             purgeActiveState = ::purgeInMemorySession,
             publishSignedOut = { _state.value = SessionState.SignedOut },
             releaseStartupGate = { startupCleanup.complete(Unit) },
+            publishUnavailable = { _state.value = SessionState.RestoreUnavailable },
+            outcomeMutex = sessionTransitionMutex,
+            shouldApplyOutcome = {
+                val latestCipher = preferences.readSession()?.tokenCipher
+                latestCipher == sessionCipherAtStart && _state.value !is SessionState.Active
+            },
             onFailure = { error ->
                 ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
                     tag = "AUTH",
@@ -186,23 +210,36 @@ class SessionManager @Inject constructor(
         ).run()
         ma.etherealmber.atlascommerce.core.diagnostics.AtlasLogBuffer.log(
             tag = "AUTH",
-            message = "Cold-start session check completed ($outcome) in ${SystemClock.elapsedRealtime() - startupGateStartedAt} ms",
+            message = "Cold-start session check completed ($outcome) in ${SystemClock.elapsedRealtime() - startedAt} ms",
         )
     }
 
+    /** Retry an unavailable saved-session validation without clearing its encrypted token. */
+    fun retrySavedSessionRestore() {
+        if (_state.value != SessionState.RestoreUnavailable) return
+        _state.value = SessionState.Restoring
+        scope.launch { initializeFreshSession() }
+    }
+
+    /** Continue to sign-in explicitly while retaining the encrypted session for a later retry. */
+    fun continueToSignInAfterRestoreFailure() {
+        if (_state.value == SessionState.RestoreUnavailable) {
+            _state.value = SessionState.SignedOut
+        }
+    }
+
     /**
-     * Do not send a saved-token user to password/OTP because startup networking or Keystore
-     * access is temporarily unavailable. Retry the read-only /auth/me until it is verified or
-     * the server definitively rejects the token.
+     * Never trust a saved token without a successful `/auth/me`, but bound cold-start retries.
+     * Temporary network/Keystore failures preserve the encrypted token and route to a retry
+     * screen instead of holding the splash or forcing a fresh password/OTP flow.
      */
     private suspend fun restoreSavedSession(): FreshProcessSessionOutcome {
         preferences.migrateLegacyPreferencesAtRest()
         serverConfig.loaded.filter { it }.first()
         var stored = preferences.readSession()
             ?: return FreshProcessSessionOutcome.NO_SESSION
-        var retryDelayMs = STARTUP_RETRY_INITIAL_DELAY_MS
 
-        while (true) {
+        repeat(STARTUP_MAX_RESUME_ATTEMPTS) { attempt ->
             if (preferences.isSessionRestoreDisabled()) return FreshProcessSessionOutcome.REJECTED
             val selectedServerUrl = serverConfig.normalizedSelection()
             val plan = StartupResumePreparation.createRequest(
@@ -213,15 +250,17 @@ class SessionManager @Inject constructor(
             )
 
             if (plan.result == StartupResumeResult.UNDECRYPTABLE_TOKEN) {
-                kotlinx.coroutines.delay(retryDelayMs)
+                if (attempt == STARTUP_MAX_RESUME_ATTEMPTS - 1) {
+                    return FreshProcessSessionOutcome.UNAVAILABLE
+                }
+                kotlinx.coroutines.delay(STARTUP_RETRY_INITIAL_DELAY_MS)
                 val latest = preferences.readSession()
-                if (latest == null) return FreshProcessSessionOutcome.NO_SESSION
+                    ?: return FreshProcessSessionOutcome.NO_SESSION
                 if (latest.tokenCipher != stored.tokenCipher || preferences.isSessionRestoreDisabled()) {
                     return FreshProcessSessionOutcome.UNAVAILABLE
                 }
                 stored = latest
-                retryDelayMs = (retryDelayMs * 2).coerceAtMost(STARTUP_RETRY_MAX_DELAY_MS)
-                continue
+                return@repeat
             }
 
             val request = plan.request
@@ -240,6 +279,8 @@ class SessionManager @Inject constructor(
             when (
                 val verification = StartupResumePreparation.verifyWithRetry(
                     request = request,
+                    timeoutMillis = StartupResumePreparation.NETWORK_TIMEOUT_MS,
+                    maxAttempts = 1,
                     validate = { serverUrl, bearerToken ->
                         authRepository.validateStartupSession(
                             serverUrl = serverUrl,
@@ -258,9 +299,12 @@ class SessionManager @Inject constructor(
                 }
                 StartupSessionVerification.Rejected -> return FreshProcessSessionOutcome.REJECTED
                 StartupSessionVerification.Unavailable -> {
-                    kotlinx.coroutines.delay(retryDelayMs)
+                    if (attempt == STARTUP_MAX_RESUME_ATTEMPTS - 1) {
+                        return FreshProcessSessionOutcome.UNAVAILABLE
+                    }
+                    kotlinx.coroutines.delay(STARTUP_RETRY_INITIAL_DELAY_MS)
                     val latest = preferences.readSession()
-                    if (latest == null) return FreshProcessSessionOutcome.NO_SESSION
+                        ?: return FreshProcessSessionOutcome.NO_SESSION
                     if (latest.tokenCipher != stored.tokenCipher || preferences.isSessionRestoreDisabled()) {
                         return FreshProcessSessionOutcome.UNAVAILABLE
                     }
@@ -270,10 +314,10 @@ class SessionManager @Inject constructor(
                         return FreshProcessSessionOutcome.UNAVAILABLE
                     }
                     stored = latest
-                    retryDelayMs = (retryDelayMs * 2).coerceAtMost(STARTUP_RETRY_MAX_DELAY_MS)
                 }
             }
         }
+        return FreshProcessSessionOutcome.UNAVAILABLE
     }
 
     private suspend fun restoreVerifiedSession(

@@ -18,14 +18,18 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -121,12 +125,13 @@ private fun mobileTourDestination(step: Int): String = when (step.coerceIn(0, 5)
 
 private enum class RootStage(val rank: Int) {
     SPLASH(0),
-    SERVER_SETUP(1),
-    ONBOARDING(2),
-    MANDATORY_UPDATE(3),
-    LOGIN(4),
-    MOBILE_WELCOME(5),
-    SHELL(6),
+    RESTORE_SESSION(1),
+    SERVER_SETUP(2),
+    ONBOARDING(3),
+    MANDATORY_UPDATE(4),
+    LOGIN(5),
+    MOBILE_WELCOME(6),
+    SHELL(7),
 }
 
 /**
@@ -510,7 +515,7 @@ private fun AtlasGate(
         else -> false
     }
 
-    val loadingBackend = !serverLoaded || session is SessionState.Loading
+    val loadingBackend = !serverLoaded
     val activeUser = (session as? SessionState.Active)?.user
     val windowWidthDp = LocalConfiguration.current.screenWidthDp
     var savedShellTab by rememberSaveable(activeUser?.scopeIdentity) { mutableStateOf<String?>(null) }
@@ -521,6 +526,8 @@ private fun AtlasGate(
 
     val baseStage = when {
         !bootSplashFinished || loadingBackend -> RootStage.SPLASH
+        session is SessionState.Loading || session is SessionState.Restoring ||
+            session is SessionState.RestoreUnavailable -> RootStage.RESTORE_SESSION
         // Fresh installs select the backend before onboarding or login; a saved
         // selection is reused for every later sign-in unless the user switches it.
         server == null && session !is SessionState.Active -> RootStage.SERVER_SETUP
@@ -566,6 +573,41 @@ private fun AtlasGate(
                         onFinished = { bootSplashFinished = true },
                         holdUntilReady = loadingBackend,
                     )
+
+                    RootStage.RESTORE_SESSION -> {
+                        val unavailable = session is SessionState.RestoreUnavailable
+                        Column(
+                            modifier = Modifier.fillMaxSize().padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                        ) {
+                            if (!unavailable) {
+                                CircularProgressIndicator()
+                                Spacer(Modifier.height(16.dp))
+                                Text(atlasText("Vérification de votre session…", "Verifying your session…", "جارٍ التحقق من جلستك…"))
+                            } else {
+                                Text(
+                                    text = atlasText("Session impossible à vérifier", "Couldn't verify your session", "تعذر التحقق من جلستك"),
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                Text(
+                                    atlasText(
+                                        "Votre session chiffrée est conservée. Vérifiez votre connexion internet, puis réessayez. Vous pouvez aussi continuer vers la connexion sans effacer cette session.",
+                                        "Your encrypted session is kept on this device. Check your internet connection and retry, or continue to sign in without clearing the saved session.",
+                                        "تم الاحتفاظ بجلستك المشفرة على هذا الجهاز. تحقق من اتصال الإنترنت ثم أعد المحاولة، أو تابع تسجيل الدخول دون حذف الجلسة المحفوظة.",
+                                    ),
+                                )
+                                Spacer(Modifier.height(24.dp))
+                                Button(onClick = viewModel::retrySavedSessionRestore) {
+                                    Text(atlasText("Réessayer", "Retry", "إعادة المحاولة"))
+                                }
+                                TextButton(onClick = viewModel::continueToSignInAfterRestoreFailure) {
+                                    Text(atlasText("Continuer vers la connexion", "Continue to sign in", "متابعة إلى تسجيل الدخول"))
+                                }
+                            }
+                        }
+                    }
 
                     RootStage.ONBOARDING -> AtlasWelcomeOnboardingScreen(
                         isLoggedIn = activeUser != null,

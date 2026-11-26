@@ -5,6 +5,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
 import ma.etherealmber.atlascommerce.core.net.ApiResult
 import ma.etherealmber.atlascommerce.core.net.ServerUrl
 import ma.etherealmber.atlascommerce.core.persist.AtlasPreferences
@@ -157,33 +158,54 @@ internal class FreshProcessStartup(
     private val purgeActiveState: () -> Unit,
     private val publishSignedOut: () -> Unit,
     private val releaseStartupGate: () -> Unit,
+    private val publishUnavailable: () -> Unit = {},
+    private val outcomeMutex: Mutex? = null,
+    private val shouldApplyOutcome: suspend () -> Boolean = { true },
     private val onFailure: (Throwable) -> Unit = {},
 ) {
     suspend fun run(): FreshProcessSessionOutcome {
         var outcome = FreshProcessSessionOutcome.UNAVAILABLE
+        var restoreFinished = false
         try {
             outcome = restorePreviousSession()
+            restoreFinished = true
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
+            restoreFinished = true
             runCatching { onFailure(error) }
             outcome = FreshProcessSessionOutcome.UNAVAILABLE
         } finally {
             withContext(NonCancellable) {
-                if (outcome == FreshProcessSessionOutcome.UNAVAILABLE) {
-                    // Keep the encrypted token and Loading state. Login would incorrectly
-                    // invite a fresh OTP when the only problem is temporary connectivity.
-                    runCatching { purgeActiveState() }
-                    releaseStartupGate()
-                } else if (outcome != FreshProcessSessionOutcome.RESTORED) {
-                    runCatching { clearStoredSession() }
-                    runCatching { purgeActiveState() }
-                    try {
+                suspend fun finalizeOutcome() {
+                    if (!shouldApplyOutcome()) return
+                    if (outcome == FreshProcessSessionOutcome.UNAVAILABLE) {
+                        // Preserve encrypted credentials and leave Loading only after bounded recovery.
+                        runCatching { purgeActiveState() }
+                        if (restoreFinished) runCatching { publishUnavailable() }
+                    } else if (outcome != FreshProcessSessionOutcome.RESTORED) {
+                        // A missing session needs no destructive clear; this avoids deleting a
+                        // login that was persisted while a restore attempt was in flight.
+                        if (outcome != FreshProcessSessionOutcome.NO_SESSION) {
+                            runCatching { clearStoredSession() }
+                        }
+                        runCatching { purgeActiveState() }
                         publishSignedOut()
-                    } finally {
-                        releaseStartupGate()
                     }
-                } else {
+                }
+                try {
+                    val mutex = outcomeMutex
+                    if (mutex == null) {
+                        finalizeOutcome()
+                    } else {
+                        mutex.lock()
+                        try {
+                            finalizeOutcome()
+                        } finally {
+                            mutex.unlock()
+                        }
+                    }
+                } finally {
                     releaseStartupGate()
                 }
             }
