@@ -251,7 +251,7 @@ class FreshProcessStartupTest {
     }
 
     @Test
-    fun `temporary network failure preserves token and does not route to login`() = runBlocking {
+    fun `temporary failure preserves token and publishes recoverable state without routing to login`() = runBlocking {
         val events = mutableListOf<String>()
         val startup = FreshProcessStartup(
             restorePreviousSession = { FreshProcessSessionOutcome.UNAVAILABLE },
@@ -259,10 +259,28 @@ class FreshProcessStartupTest {
             purgeActiveState = { events += "purge" },
             publishSignedOut = { events += "signed-out" },
             releaseStartupGate = { events += "gate" },
+            publishUnavailable = { events += "unavailable" },
         )
 
         assertEquals(FreshProcessSessionOutcome.UNAVAILABLE, startup.run())
-        assertEquals(listOf("purge", "gate"), events)
+        assertEquals(listOf("purge", "unavailable", "gate"), events)
+    }
+
+    @Test
+    fun `stale retry does not clear or replace a newer active login`() = runBlocking {
+        val events = mutableListOf<String>()
+        val startup = FreshProcessStartup(
+            restorePreviousSession = { FreshProcessSessionOutcome.REJECTED },
+            clearStoredSession = { events += "clear" },
+            purgeActiveState = { events += "purge" },
+            publishSignedOut = { events += "signed-out" },
+            releaseStartupGate = { events += "gate" },
+            publishUnavailable = { events += "unavailable" },
+            shouldApplyOutcome = { false },
+        )
+
+        assertEquals(FreshProcessSessionOutcome.REJECTED, startup.run())
+        assertEquals(listOf("gate"), events)
     }
 
     @Test
@@ -285,18 +303,19 @@ class FreshProcessStartupTest {
     }
 
     @Test
-    fun `startup validation failure stays loading and still releases startup gate`() = runBlocking {
+    fun `startup validation exception publishes recoverable state and releases gate without clearing credentials`() = runBlocking {
         val events = mutableListOf<String>()
         val startup = FreshProcessStartup(
             restorePreviousSession = { throw IllegalStateException("validation failed") },
-            clearStoredSession = { throw IllegalStateException("datastore failure") },
+            clearStoredSession = { events += "clear" },
             purgeActiveState = { events += "purge" },
             publishSignedOut = { events += "signed-out" },
             releaseStartupGate = { events += "gate" },
+            publishUnavailable = { events += "unavailable" },
         )
 
         assertEquals(FreshProcessSessionOutcome.UNAVAILABLE, startup.run())
-        assertEquals(listOf("purge", "gate"), events)
+        assertEquals(listOf("purge", "unavailable", "gate"), events)
     }
 
     @Test

@@ -296,6 +296,10 @@ class AppViewModel @Inject constructor(
     val serverLoaded: StateFlow<Boolean> = serverConfig.loaded
     val session: StateFlow<SessionState> = sessionManager.state
     val notices: SharedFlow<String> = sessionManager.notices
+
+    fun retrySavedSessionRestore() = sessionManager.retrySavedSessionRestore()
+
+    fun continueToSignInAfterRestoreFailure() = sessionManager.continueToSignInAfterRestoreFailure()
     val updateState: StateFlow<UpdateState> = updateManager.state
     val mirrorPing: StateFlow<MirrorPingResult> = updateManager.mirrorPing
     val releaseChangelog: StateFlow<List<ReleaseChangelogEntry>> = updateManager.changelog
