@@ -6,18 +6,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -25,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import ma.etherealmber.atlascommerce.ui.icons.AtlasIcons as Icons
 import ma.etherealmber.atlascommerce.ui.i18n.atlasText
 
-/** Compact, touch-friendly local pager for fully loaded directory and catalog lists. */
+/** Compact numbered pager for fully loaded directory and catalog lists. */
 @Composable
 fun AtlasPaginationControls(
     totalItems: Int,
@@ -34,12 +29,11 @@ fun AtlasPaginationControls(
     modifier: Modifier = Modifier,
     pageSize: Int = 10,
 ) {
-    if (totalItems <= pageSize) return
+    if (totalItems <= pageSize || pageSize <= 0) return
     val pageCount = ((totalItems + pageSize - 1) / pageSize).coerceAtLeast(1)
     val page = currentPage.coerceIn(1, pageCount)
     val firstItem = (page - 1) * pageSize + 1
     val lastItem = (firstItem + pageSize - 1).coerceAtMost(totalItems)
-    var menuExpanded by remember(pageCount) { mutableStateOf(false) }
 
     androidx.compose.foundation.layout.Column(
         modifier = modifier,
@@ -59,23 +53,19 @@ fun AtlasPaginationControls(
                 ) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = atlasText("Page précédente", "Previous page", "الصفحة السابقة"))
                 }
-                androidx.compose.foundation.layout.Box {
-                    androidx.compose.material3.TextButton(onClick = { menuExpanded = true }) {
-                        Text(
-                            atlasText("Page $page sur $pageCount", "Page $page of $pageCount", "الصفحة $page من $pageCount"),
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                        )
-                    }
-                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                        (1..pageCount).forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(atlasText("Page $option", "Page $option", "الصفحة $option")) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onPageSelected(option)
-                                },
+                pageSlots(page, pageCount).forEach { slot ->
+                    if (slot == null) {
+                        Text("…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        TextButton(
+                            onClick = { onPageSelected(slot) },
+                            enabled = slot != page,
+                            shape = RoundedCornerShape(999.dp),
+                        ) {
+                            Text(
+                                slot.toString(),
+                                fontWeight = if (slot == page) FontWeight.Bold else FontWeight.Medium,
+                                color = if (slot == page) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                             )
                         }
                     }
@@ -94,5 +84,21 @@ fun AtlasPaginationControls(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/** Visible page numbers with compact gaps, matching the web list pager. */
+private fun pageSlots(current: Int, total: Int): List<Int?> {
+    if (total <= 7) return (1..total).map { it }
+    val pages = when {
+        current <= 4 -> (1..5).toList() + total
+        current >= total - 3 -> listOf(1) + (total - 4..total).toList()
+        else -> listOf(1, current - 1, current, current + 1, total)
+    }
+    return buildList {
+        pages.forEachIndexed { index, value ->
+            if (index > 0 && value - pages[index - 1] > 1) add(null)
+            add(value)
+        }
     }
 }
